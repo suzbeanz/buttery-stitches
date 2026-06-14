@@ -1,10 +1,9 @@
 import type { Hoop } from "../types/project";
 
-/** Standard hoop presets (millimeters). */
+/** Hoop presets (millimeters). Two sizes, labelled in inches. */
 export const HOOP_PRESETS: Hoop[] = [
-  { wMm: 100, hMm: 100, name: '100×100 (4×4")' },
-  { wMm: 130, hMm: 180, name: '130×180 (5×7")' },
-  { wMm: 160, hMm: 260, name: '160×260 (6×10")' },
+  { wMm: 100, hMm: 100, name: '4×4" (100×100)' },
+  { wMm: 25.4, hMm: 63.5, name: '1×2.5" (25×64)' },
 ];
 
 export const DEFAULT_HOOP: Hoop = HOOP_PRESETS[0];

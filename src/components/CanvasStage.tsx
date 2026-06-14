@@ -15,11 +15,20 @@ import { useProjectStore } from "../store/projectStore";
 import { useEditorStore, isDrawTool } from "../store/editorStore";
 import type { EmbObject, Path, Point, ThreadColor } from "../types/project";
 import { makeObject, minPointsFor } from "../lib/objects";
-import { translatePaths, dedupePath, applyMatrix, type Matrix } from "../lib/geometry";
+import {
+  translatePaths,
+  dedupePath,
+  applyMatrix,
+  pathsBounds,
+  distance,
+  type Matrix,
+  type Bounds,
+} from "../lib/geometry";
+import { snap } from "../lib/snap";
 import { smoothPath } from "../lib/smooth";
 import { computeTicks } from "../lib/ruler";
 import { mmToInch } from "../lib/units";
-import { generateDesign, generateObjectRuns } from "../lib/engine";
+import { generateDesign, generateObjectRuns, orientByDepth } from "../lib/engine";
 import { designToSegments, needleAt } from "../lib/engine/render";
 
 /**
@@ -38,6 +47,8 @@ import { designToSegments, needleAt } from "../lib/engine/render";
 
 const RULER = 22; // px thickness of the top/left rulers
 const PADDING = 28; // px breathing room around the hoop
+const SNAP_MM = 2; // snap distance (mm) for alignment to hoop/object edges
+const JOIN_SNAP_MM = 3; // snap the closing end of a fill polygon to its start
 
 const C = {
   cream: "#FFFDF3",
@@ -73,6 +84,17 @@ export default function CanvasStage() {
   // The assembled design drives both this preview and the exporter.
   const design = useMemo(() => generateDesign(project), [project]);
   useEffect(() => setSimTotal(design.length), [design, setSimTotal]);
+
+  // Bounding box of every object (mm) — snap targets while dragging.
+  const objectBounds = useMemo(
+    () =>
+      project.objects
+        .map((o) => ({ id: o.id, b: pathsBounds(o.paths) }))
+        .filter((x): x is { id: string; b: Bounds } => x.b !== null),
+    [project.objects],
+  );
+  // Active alignment guide lines (mm) shown while dragging.
+  const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] });
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -127,7 +149,15 @@ export default function CanvasStage() {
   // --- commit / cancel the in-progress drawing ---
   function finishDraft() {
     if (!isDrawTool(tool)) return;
-    const cleaned = dedupePath(draft); // drop double-click / stationary dupes
+    let cleaned = dedupePath(draft); // drop double-click / stationary dupes
+    // Smart snap-join: when closing a fill polygon, if the last point lands near
+    // the first, drop it so the closing edge meets cleanly instead of leaving a
+    // tiny overlapping sliver.
+    if (tool === "fill" && cleaned.length >= 4) {
+      const first = cleaned[0];
+      const last = cleaned[cleaned.length - 1];
+      if (distance(first, last) < JOIN_SNAP_MM) cleaned = cleaned.slice(0, -1);
+    }
     if (cleaned.length < minPointsFor(tool)) {
       clearDraft();
       return;
@@ -236,10 +266,48 @@ export default function CanvasStage() {
                         if (n) nodeRefs.current.set(o.id, n);
                         else nodeRefs.current.delete(o.id);
                       }}
-                      onSelect={() => setSelection([o.id])}
+                      onSelect={(additive) => {
+                        if (!additive) return setSelection([o.id]);
+                        const cur = useProjectStore.getState().selectedIds;
+                        setSelection(
+                          cur.includes(o.id)
+                            ? cur.filter((id) => id !== o.id)
+                            : [...cur, o.id],
+                        );
+                      }}
                       onCommitPaths={(paths) => updateObject(o.id, { paths })}
+                      selectedIds={selectedIds}
+                      onMoveSelected={(dx, dy) =>
+                        useProjectStore.getState().moveObjects(selectedIds, dx, dy)
+                      }
+                      hoopMm={{ wMm: hoop.wMm, hMm: hoop.hMm }}
+                      targets={objectBounds.filter((x) => x.id !== o.id).map((x) => x.b)}
+                      onGuides={setGuides}
                     />
                   ))}
+
+                {(guides.x.length > 0 || guides.y.length > 0) && (
+                  <Group listening={false}>
+                    {guides.x.map((gx, i) => (
+                      <Line
+                        key={`gx-${i}`}
+                        points={[px(gx), originY, px(gx), originY + hoopH]}
+                        stroke={C.butterDeep}
+                        strokeWidth={1}
+                        dash={[4, 3]}
+                      />
+                    ))}
+                    {guides.y.map((gy, i) => (
+                      <Line
+                        key={`gy-${i}`}
+                        points={[originX, py(gy), originX + hoopW, py(gy)]}
+                        stroke={C.butterDeep}
+                        strokeWidth={1}
+                        dash={[4, 3]}
+                      />
+                    ))}
+                  </Group>
+                )}
 
                 {drawing && draft.length > 0 && (
                   <DraftPreview
@@ -456,6 +524,11 @@ function ObjectShape({
   registerNode,
   onSelect,
   onCommitPaths,
+  selectedIds,
+  onMoveSelected,
+  hoopMm,
+  targets,
+  onGuides,
 }: {
   object: EmbObject;
   tool: string;
@@ -465,9 +538,18 @@ function ObjectShape({
   py: (y: number) => number;
   toMm: (sx: number, sy: number) => Point;
   registerNode: (node: Konva.Group | null) => void;
-  onSelect: () => void;
+  onSelect: (additive: boolean) => void;
   onCommitPaths: (paths: Path[]) => void;
+  selectedIds: string[];
+  onMoveSelected: (dxMm: number, dyMm: number) => void;
+  hoopMm: { wMm: number; hMm: number };
+  targets: Bounds[];
+  onGuides: (g: { x: number[]; y: number[] }) => void;
 }) {
+  // Part of a multi-selection: dragging moves every selected object together.
+  const multi = selected && selectedIds.length > 1;
+  // px per mm — for converting a snap offset (mm) back to canvas pixels.
+  const scalePx = px(1) - px(0);
   const stroke = color ? `rgb(${color.rgb.join(",")})` : "#888";
   // Faint backing so the shape still reads where stitches are sparse; the actual
   // stitch lines (below) carry the realistic look on top.
@@ -485,6 +567,10 @@ function ObjectShape({
   const [livePaths, setLivePaths] = useState<Path[] | null>(null);
   const paths = livePaths ?? object.paths;
 
+  // Rings oriented for nonzero-winding fill so counters cut and overlapping
+  // (script) contours union — no false holes.
+  const fillRings = useMemo(() => (isFill ? orientByDepth(paths) : []), [isFill, paths]);
+
   // Realistic preview: the object's actual generated stitches, so the builder
   // shows fill texture / satin throws / the running path rather than a flat
   // shape. Recomputed only when the object changes.
@@ -494,9 +580,35 @@ function ObjectShape({
     <Group
       ref={registerNode}
       draggable={movable}
-      onMouseDown={selectable ? onSelect : undefined}
-      onTap={selectable ? onSelect : undefined}
+      onMouseDown={selectable ? (e) => onSelect(e.evt.shiftKey) : undefined}
+      onTap={selectable ? () => onSelect(false) : undefined}
+      onDblClick={
+        object.text ? () => useEditorStore.getState().setEditingTextId(object.id) : undefined
+      }
+      onDblTap={
+        object.text ? () => useEditorStore.getState().setEditingTextId(object.id) : undefined
+      }
+      onDragMove={(e) => {
+        if (multi) return; // moving a group: skip per-object snapping
+        // Snap the moving object to hoop/object guide lines and show the guides.
+        const g = e.target;
+        const a = toMm(0, 0);
+        const b = toMm(g.x(), g.y());
+        const base = pathsBounds(object.paths);
+        if (!base) return;
+        const moving: Bounds = {
+          minX: base.minX + (b.x - a.x),
+          maxX: base.maxX + (b.x - a.x),
+          minY: base.minY + (b.y - a.y),
+          maxY: base.maxY + (b.y - a.y),
+        };
+        const res = snap(moving, targets, hoopMm, SNAP_MM);
+        if (res.dx !== 0) g.x(g.x() + res.dx * scalePx);
+        if (res.dy !== 0) g.y(g.y() + res.dy * scalePx);
+        onGuides({ x: res.guidesX, y: res.guidesY });
+      }}
       onDragEnd={(e) => {
+        onGuides({ x: [], y: [] });
         const g = e.target;
         const dxPx = g.x();
         const dyPx = g.y();
@@ -504,7 +616,10 @@ function ObjectShape({
         if (dxPx === 0 && dyPx === 0) return; // pure click, no move
         const a = toMm(0, 0);
         const b = toMm(dxPx, dyPx);
-        onCommitPaths(translatePaths(object.paths, b.x - a.x, b.y - a.y));
+        const dxMm = b.x - a.x;
+        const dyMm = b.y - a.y;
+        if (multi) onMoveSelected(dxMm, dyMm);
+        else onCommitPaths(translatePaths(object.paths, dxMm, dyMm));
       }}
       onTransformEnd={(e) => {
         const node = e.target;
@@ -519,10 +634,10 @@ function ObjectShape({
         onCommitPaths(movedMm);
       }}
     >
-      {/* Fill objects get a translucent body drawn with the even-odd rule, so
-          every disjoint region (e.g. each letter of a word) fills and the
-          counters of a/e/o cut out correctly. The body is listening, so clicking
-          a filled interior selects the object. */}
+      {/* Fill objects get a translucent body drawn with the nonzero rule (rings
+          oriented by depth), so every disjoint region fills, counters cut out,
+          and overlapping script letters union cleanly. The body is listening, so
+          clicking a filled interior selects the object. */}
       {isFill && (
         <Shape
           listening={selectable}
@@ -531,7 +646,7 @@ function ObjectShape({
             const native = (ctx as unknown as { _context: CanvasRenderingContext2D })
               ._context;
             native.beginPath();
-            for (const ring of paths) {
+            for (const ring of fillRings) {
               if (ring.length < 3) continue;
               native.moveTo(px(ring[0].x), py(ring[0].y));
               for (let i = 1; i < ring.length; i++) {
@@ -540,11 +655,11 @@ function ObjectShape({
               native.closePath();
             }
             native.fillStyle = fillColor;
-            native.fill("evenodd");
+            native.fill("nonzero");
           }}
           hitFunc={(ctx, shape) => {
             ctx.beginPath();
-            for (const ring of paths) {
+            for (const ring of fillRings) {
               if (ring.length < 3) continue;
               ctx.moveTo(px(ring[0].x), py(ring[0].y));
               for (let i = 1; i < ring.length; i++) {
@@ -555,8 +670,8 @@ function ObjectShape({
             ctx.fillStrokeShape(shape);
           }}
           fill={fillColor}
-          onMouseDown={selectable ? onSelect : undefined}
-          onTap={selectable ? onSelect : undefined}
+          onMouseDown={selectable ? (e) => onSelect(e.evt.shiftKey) : undefined}
+          onTap={selectable ? () => onSelect(false) : undefined}
         />
       )}
 

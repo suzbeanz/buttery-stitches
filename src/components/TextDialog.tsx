@@ -4,6 +4,7 @@ import type { Font } from "opentype.js";
 import { FONTS, DEFAULT_FONT_ID, loadFont } from "../lib/text/fonts";
 import { layoutText } from "../lib/text/layout";
 import { translatePaths, pathsBounds } from "../lib/geometry";
+import { orientByDepth } from "../lib/engine";
 import { mmToInch, inchToMm } from "../lib/units";
 import { newId } from "../lib/id";
 
@@ -36,23 +37,27 @@ const SIZE_PRESETS: Record<"in" | "mm", number[]> = {
 export default function TextDialog({
   hoop,
   colors,
+  editObject,
   onAdd,
   onClose,
 }: {
   hoop: Hoop;
   colors: ThreadColor[];
+  /** when set, the dialog edits this existing text object in place. */
+  editObject?: EmbObject;
   onAdd: (result: AddTextResult) => void;
   onClose: () => void;
 }) {
-  const [text, setText] = useState("Hello");
-  const [fontId, setFontId] = useState(DEFAULT_FONT_ID);
+  const initial = editObject?.text;
+  const [text, setText] = useState(initial?.content ?? "Hello");
+  const [fontId, setFontId] = useState(initial?.fontId ?? DEFAULT_FONT_ID);
   const [unit, setUnit] = useState<"in" | "mm">("in"); // default to inches
-  const [heightMm, setHeightMm] = useState(DEFAULT_HEIGHT_MM);
-  const [letterSpacingMm, setLetterSpacingMm] = useState(0);
+  const [heightMm, setHeightMm] = useState(initial?.heightMm ?? DEFAULT_HEIGHT_MM);
+  const [letterSpacingMm, setLetterSpacingMm] = useState(initial?.letterSpacingMm ?? 0);
 
   // Color: either an existing project color id, or "__new" to add one.
   const [colorChoice, setColorChoice] = useState<string>(
-    colors[0]?.id ?? "__new",
+    editObject?.colorId ?? colors[0]?.id ?? "__new",
   );
   const [newColorHex, setNewColorHex] = useState("#1f3a5f");
 
@@ -115,18 +120,24 @@ export default function TextDialog({
       colorId = newColor.id;
     }
 
-    // Center the centered-on-origin geometry in the hoop.
+    // Place the centered-on-origin geometry: keep an edited object where it sits,
+    // otherwise center a new one in the hoop.
     const centered = layout.object.paths;
-    const b = pathsBounds(centered);
-    const dx = hoop.wMm / 2;
-    const dy = hoop.hMm / 2;
-    const paths = b ? translatePaths(centered, dx, dy) : centered;
+    const editBounds = editObject ? pathsBounds(editObject.paths) : null;
+    const target = editBounds
+      ? { x: (editBounds.minX + editBounds.maxX) / 2, y: (editBounds.minY + editBounds.maxY) / 2 }
+      : { x: hoop.wMm / 2, y: hoop.hMm / 2 };
+    const paths = pathsBounds(centered)
+      ? translatePaths(centered, target.x, target.y)
+      : centered;
 
     const object: EmbObject = {
       ...layout.object,
-      id: newId("obj"),
+      id: editObject?.id ?? newId("obj"),
       colorId,
       paths,
+      params: editObject ? editObject.params : layout.object.params,
+      text: { content: text, fontId, heightMm, letterSpacingMm },
     };
     onAdd({ object, newColor });
     onClose();
@@ -142,7 +153,7 @@ export default function TextDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="mb-3 font-butter text-lg font-semibold text-navy">
-          Add text
+          {editObject ? "Edit text" : "Add text"}
         </h2>
 
         <label className="mb-3 block text-sm text-navy">
@@ -280,7 +291,7 @@ export default function TextDialog({
             disabled={!font || !layout || layout.object.paths.length === 0}
             className="rounded bg-navy px-3 py-1.5 text-sm text-butter-200 hover:bg-navy-light disabled:opacity-50"
           >
-            Add text
+            {editObject ? "Update text" : "Add text"}
           </button>
         </div>
       </div>
@@ -318,9 +329,9 @@ function TextPreview({
           preserveAspectRatio="xMidYMid meet"
         >
           <path
-            d={ringsToSvgPath(layout.object.paths)}
+            d={ringsToSvgPath(orientByDepth(layout.object.paths))}
             fill={colorHex}
-            fillRule="evenodd"
+            fillRule="nonzero"
           />
         </svg>
       ) : (

@@ -1,5 +1,8 @@
 import type { Path, Point } from "../../types/project";
-import { rotatePoint } from "./resample";
+import { rotatePoint, capSegmentLength } from "./resample";
+
+/** Longest single satin throw (mm) before it is split for safety. */
+const MAX_THROW_MM = 7;
 
 export interface FillOptions {
   /** mm between scan rows */
@@ -28,61 +31,140 @@ function pointInRing(p: Point, ring: Path): boolean {
   return inside;
 }
 
-/** Absolute polygon area (shoelace). */
-function ringArea(ring: Path): number {
+/** Signed polygon area (shoelace); the sign encodes winding direction. */
+function signedRingArea(ring: Path): number {
   let s = 0;
   for (let i = 0; i < ring.length; i++) {
     const a = ring[i];
     const b = ring[(i + 1) % ring.length];
     s += a.x * b.y - b.x * a.y;
   }
-  return Math.abs(s / 2);
+  return s / 2;
+}
+
+function ringArea(ring: Path): number {
+  return Math.abs(signedRingArea(ring));
+}
+
+interface BBox {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+function bboxOf(ring: Path): BBox {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of ring) {
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+  return { minX, minY, maxX, maxY };
+}
+
+function bboxOverlap(a: BBox, b: BBox): boolean {
+  return a.minX <= b.maxX && b.minX <= a.maxX && a.minY <= b.maxY && b.minY <= a.maxY;
+}
+
+/** Whether `outer` contains `inner` — sampled, so partial overlap (touching
+ *  script letters) is NOT mistaken for containment (which only true counters are). */
+function ringContains(outer: Path, inner: Path): boolean {
+  const n = inner.length;
+  const step = Math.max(1, Math.floor(n / 9));
+  let tested = 0;
+  let inside = 0;
+  for (let i = 0; i < n; i += step) {
+    tested++;
+    if (pointInRing(inner[i], outer)) inside++;
+  }
+  return tested > 0 && inside === tested;
+}
+
+/** Containment depth of each ring (how many larger rings fully contain it). */
+function depthsOf(rings: Path[]): number[] {
+  const areas = rings.map(ringArea);
+  return rings.map((r, i) => {
+    let d = 0;
+    rings.forEach((o, j) => {
+      if (j !== i && areas[j] > areas[i] && ringContains(o, r)) d++;
+    });
+    return d;
+  });
+}
+
+function orientRing(ring: Path, wantPositive: boolean): Path {
+  const out = ring.map((p) => ({ ...p }));
+  const positive = signedRingArea(ring) > 0;
+  if (positive !== wantPositive) out.reverse();
+  return out;
 }
 
 /**
- * Split a fill's rings into connected regions, each `[outer, ...holes]`. A ring
- * counts as a hole when it sits inside a larger ring (its smallest container);
- * disjoint outers — e.g. separate letters of a word, or a logo's separate blobs —
- * become separate regions. The fill engine then stitches each region on its own,
- * so the assembler can jump between them instead of dragging one long stitch
- * across the gap.
+ * Orient rings for nonzero-winding fill: outer contours (even containment depth)
+ * one way and holes/counters (odd depth) the opposite way. This makes a fill
+ * correct for nested counters (a/e/o) AND for OVERLAPPING contours — touching
+ * script letters union cleanly instead of even-odd punching false holes where
+ * they cross.
+ */
+export function orientByDepth(rings: Path[]): Path[] {
+  const usable = rings.filter((r) => r.length >= 3);
+  const d = depthsOf(usable);
+  return usable.map((r, i) => orientRing(r, d[i] % 2 === 0));
+}
+
+/**
+ * Split a fill's rings into connected regions with nonzero-consistent winding.
+ * Outer contours (even depth) whose bounding boxes overlap are one region (a
+ * connected blob, e.g. touching script letters); disjoint blobs are separate
+ * regions so the assembler can jump between them. Counters attach to the
+ * smallest outer that contains them.
  */
 export function splitFillRegions(rings: Path[]): Path[][] {
   const usable = rings.filter((r) => r.length >= 3);
-  if (usable.length <= 1) return usable.length ? [usable.map((r) => r)] : [];
+  if (usable.length === 0) return [];
 
   const areas = usable.map(ringArea);
-  // For each ring, the index of the smallest ring strictly containing it (-1 = none).
-  const containerOf = usable.map((ring, i) => {
+  const d = depthsOf(usable);
+  const bb = usable.map(bboxOf);
+
+  const parent = usable.map((_, i) => i);
+  const find = (x: number): number => {
+    while (parent[x] !== x) {
+      parent[x] = parent[parent[x]];
+      x = parent[x];
+    }
+    return x;
+  };
+
+  const outers = usable.map((_, i) => i).filter((i) => d[i] % 2 === 0);
+  for (let a = 0; a < outers.length; a++) {
+    for (let b = a + 1; b < outers.length; b++) {
+      if (bboxOverlap(bb[outers[a]], bb[outers[b]])) parent[find(outers[a])] = find(outers[b]);
+    }
+  }
+
+  const regionOf = new Map<number, Path[]>();
+  outers.forEach((i) => {
+    const root = find(i);
+    if (!regionOf.has(root)) regionOf.set(root, []);
+    regionOf.get(root)!.push(orientRing(usable[i], true));
+  });
+  usable.forEach((r, i) => {
+    if (d[i] % 2 === 0) return; // outer, handled above
     let best = -1;
     let bestArea = Infinity;
-    usable.forEach((other, j) => {
-      if (j === i || areas[j] <= areas[i]) return;
-      if (pointInRing(ring[0], other) && areas[j] < bestArea) {
+    usable.forEach((o, j) => {
+      if (j !== i && d[j] % 2 === 0 && areas[j] > areas[i] && areas[j] < bestArea && ringContains(o, r)) {
         best = j;
         bestArea = areas[j];
       }
     });
-    return best;
+    const root = best >= 0 ? find(best) : outers.length ? find(outers[0]) : -1;
+    if (root >= 0 && regionOf.has(root)) regionOf.get(root)!.push(orientRing(r, false));
   });
-
-  const regions: Path[][] = [];
-  const outerRegion = new Map<number, number>();
-  usable.forEach((ring, i) => {
-    if (containerOf[i] === -1) {
-      outerRegion.set(i, regions.length);
-      regions.push([ring]);
-    }
-  });
-  // Attach each contained ring to its top-level outer as a hole.
-  usable.forEach((ring, i) => {
-    if (containerOf[i] === -1) return;
-    let top = containerOf[i];
-    while (containerOf[top] !== -1) top = containerOf[top];
-    const r = outerRegion.get(top);
-    if (r !== undefined) regions[r].push(ring);
-  });
-  return regions;
+  return [...regionOf.values()];
 }
 
 function centroid(ring: Path): Point {
@@ -96,11 +178,13 @@ function centroid(ring: Path): Point {
 }
 
 /**
- * Intersection spans of a horizontal line `y` with all rings, using the
- * even-odd rule (so inner rings act as holes). Returns sorted [x0, x1] pairs.
+ * Nonzero-winding spans of the horizontal line `y` across all rings. The rings
+ * must be consistently wound (run them through `orientByDepth`): a span is open
+ * where the running winding number is non-zero, so counters cut out and
+ * overlapping outers merge.
  */
 function rowSpans(rings: Path[], y: number): [number, number][] {
-  const xs: number[] = [];
+  const crossings: { x: number; dir: number }[] = [];
   for (const ring of rings) {
     const m = ring.length;
     for (let i = 0; i < m; i++) {
@@ -109,13 +193,20 @@ function rowSpans(rings: Path[], y: number): [number, number][] {
       // Half-open test avoids counting a shared vertex twice.
       if ((a.y <= y && b.y > y) || (b.y <= y && a.y > y)) {
         const t = (y - a.y) / (b.y - a.y);
-        xs.push(a.x + t * (b.x - a.x));
+        crossings.push({ x: a.x + t * (b.x - a.x), dir: b.y > a.y ? 1 : -1 });
       }
     }
   }
-  xs.sort((p, q) => p - q);
+  crossings.sort((p, q) => p.x - q.x);
   const spans: [number, number][] = [];
-  for (let i = 0; i + 1 < xs.length; i += 2) spans.push([xs[i], xs[i + 1]]);
+  let wind = 0;
+  let startX = 0;
+  for (const c of crossings) {
+    const prev = wind;
+    wind += c.dir;
+    if (prev === 0 && wind !== 0) startX = c.x;
+    else if (prev !== 0 && wind === 0) spans.push([startX, c.x]);
+  }
   return spans;
 }
 
@@ -140,20 +231,24 @@ function alongRow(x0: number, x1: number, y: number, spacing: number, phase: num
  * Returns an ordered list of penetrations in millimeters.
  */
 export function tatamiFill(rings: Path[], opts: FillOptions): Path {
-  const outer = rings[0];
-  if (!outer || outer.length < 3) return [];
+  // Orient for nonzero winding so counters cut and overlapping outers merge.
+  const oriented = orientByDepth(rings);
+  if (oriented.length === 0 || oriented[0].length < 3) return [];
   const spacing = opts.stitchLength ?? FILL_STITCH_LENGTH;
   const density = Math.max(0.05, opts.density);
 
   // Work in a rotated frame where rows are horizontal.
-  const pivot = centroid(outer);
-  const rrings = rings.map((r) => r.map((p) => rotatePoint(p, -opts.angle, pivot)));
+  const pivot = centroid(oriented[0]);
+  const rrings = oriented.map((r) => r.map((p) => rotatePoint(p, -opts.angle, pivot)));
 
+  // Span the whole region (every ring), not just the first.
   let minY = Infinity,
     maxY = -Infinity;
-  for (const p of rrings[0]) {
-    if (p.y < minY) minY = p.y;
-    if (p.y > maxY) maxY = p.y;
+  for (const ring of rrings) {
+    for (const p of ring) {
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
   }
 
   const rotated: Point[] = [];
@@ -170,4 +265,45 @@ export function tatamiFill(rings: Path[], opts: FillOptions): Path {
 
   // Back to the original orientation.
   return rotated.map((p) => rotatePoint(p, opts.angle, pivot));
+}
+
+/**
+ * Column (satin) fill: like tatami, but each scan row emits only the two span
+ * edges as a zig-zag throw across the shape. That gives the smooth, shiny satin
+ * look used for lettering. Best for narrow strokes (text); broad areas should
+ * use tatamiFill. Density is the row spacing (a satin's stitch spacing).
+ */
+export function columnSatinFill(rings: Path[], opts: FillOptions): Path {
+  const oriented = orientByDepth(rings);
+  if (oriented.length === 0 || oriented[0].length < 3) return [];
+  const density = Math.max(0.05, opts.density);
+
+  const pivot = centroid(oriented[0]);
+  const rrings = oriented.map((r) => r.map((p) => rotatePoint(p, -opts.angle, pivot)));
+
+  let minY = Infinity,
+    maxY = -Infinity;
+  for (const ring of rrings) {
+    for (const p of ring) {
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+  }
+
+  const rotated: Point[] = [];
+  let k = 0;
+  for (let y = minY + density / 2; y <= maxY; y += density, k++) {
+    const spans = rowSpans(rrings, y);
+    if (spans.length === 0) continue;
+    // Alternate the leading edge each row so consecutive throws chain into a
+    // continuous zig-zag column (the satin).
+    for (const [x0, x1] of spans) {
+      if (k % 2 === 0) rotated.push({ x: x0, y }, { x: x1, y });
+      else rotated.push({ x: x1, y }, { x: x0, y });
+    }
+  }
+  // Split throws wider than a safe length (split satin) before rotating back.
+  return capSegmentLength(rotated, MAX_THROW_MM).map((p) =>
+    rotatePoint(p, opts.angle, pivot),
+  );
 }

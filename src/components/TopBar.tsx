@@ -18,12 +18,14 @@ import {
   Star,
   Heart,
   Minus,
+  Wand2,
   type LucideIcon,
 } from "lucide-react";
 import { useProjectStore, useTemporalStore } from "../store/projectStore";
 import { useEditorStore } from "../store/editorStore";
 import { downloadProject, loadProjectFromFile } from "../lib/embproj";
 import { buildWorksheet, worksheetHtml } from "../lib/worksheet";
+import { fixStitches } from "../lib/fix";
 import { makeShapeObject, type ShapeKind } from "../lib/shapes";
 import type { Project } from "../types/project";
 import ExportMenu from "./ExportMenu";
@@ -62,10 +64,16 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
   const [showShapes, setShowShapes] = useState(false);
   const activeColorId = useEditorStore((s) => s.activeColorId);
 
+  const updateObject = useProjectStore((s) => s.updateObject);
   const layersOpen = useEditorStore((s) => s.layersOpen);
   const propertiesOpen = useEditorStore((s) => s.propertiesOpen);
   const toggleLayers = useEditorStore((s) => s.toggleLayers);
   const toggleProperties = useEditorStore((s) => s.toggleProperties);
+  const editingTextId = useEditorStore((s) => s.editingTextId);
+  const setEditingTextId = useEditorStore((s) => s.setEditingTextId);
+  const editingTextObject = editingTextId
+    ? project.objects.find((o) => o.id === editingTextId && o.text)
+    : undefined;
 
   const { undo, redo, pastStates, futureStates } = useTemporalStore((t) => ({
     undo: t.undo,
@@ -104,6 +112,17 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
     // Adds to the existing design (does not replace it).
     if (newColor) addColor(newColor);
     addObject(object);
+  }
+
+  function applyTextEdit({ object, newColor }: AddTextResult) {
+    if (newColor) addColor(newColor);
+    updateObject(object.id, {
+      paths: object.paths,
+      text: object.text,
+      name: object.name,
+      colorId: object.colorId,
+    });
+    setEditingTextId(null);
   }
 
   function insertShape(kind: ShapeKind) {
@@ -196,6 +215,12 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
       </div>
 
       <ExportMenu />
+      <BarButton
+        label="Fix stitches (smart cleanup)"
+        onClick={() => setProject(fixStitches(project))}
+      >
+        <Wand2 size={18} />
+      </BarButton>
       <BarButton label="Thread worksheet" onClick={openWorksheet}>
         <ClipboardList size={18} />
       </BarButton>
@@ -261,6 +286,18 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
             colors={project.colors}
             onAdd={applyText}
             onClose={() => setShowText(false)}
+          />
+        </Suspense>
+      )}
+
+      {editingTextObject && (
+        <Suspense fallback={null}>
+          <TextDialog
+            hoop={project.hoop}
+            colors={project.colors}
+            editObject={editingTextObject}
+            onAdd={applyTextEdit}
+            onClose={() => setEditingTextId(null)}
           />
         </Suspense>
       )}

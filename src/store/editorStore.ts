@@ -43,6 +43,8 @@ interface EditorState {
   /** whether the left (layers) and right (properties) panels are open. */
   layersOpen: boolean;
   propertiesOpen: boolean;
+  /** id of the text object being re-edited (double-click), or null. */
+  editingTextId: string | null;
 
   // ---- preview / stitch simulator ----
   viewMode: ViewMode;
@@ -67,6 +69,7 @@ interface EditorState {
   setPropertiesOpen: (open: boolean) => void;
   toggleLayers: () => void;
   toggleProperties: () => void;
+  setEditingTextId: (id: string | null) => void;
 
   setViewMode: (mode: ViewMode) => void;
   setSimTotal: (total: number) => void;
@@ -85,6 +88,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   clipboard: [],
   layersOpen: true,
   propertiesOpen: true,
+  editingTextId: null,
 
   viewMode: "edit",
   simTotal: 0,
@@ -105,6 +109,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   setPropertiesOpen: (propertiesOpen) => set({ propertiesOpen }),
   toggleLayers: () => set((s) => ({ layersOpen: !s.layersOpen })),
   toggleProperties: () => set((s) => ({ propertiesOpen: !s.propertiesOpen })),
+  setEditingTextId: (editingTextId) => set({ editingTextId }),
 
   setViewMode: (viewMode) =>
     set((s) => ({

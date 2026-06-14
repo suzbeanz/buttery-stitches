@@ -35,6 +35,15 @@ export default function App() {
   const [showHelp, setShowHelp] = useState(false);
   useGlobalShortcuts(setShowHelp);
 
+  // The help overlay closes on any key press (any button dismisses it); a click
+  // anywhere outside the panel closes it too (handled in HelpOverlay).
+  useEffect(() => {
+    if (!showHelp) return;
+    const close = () => setShowHelp(false);
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [showHelp]);
+
   // Collapsible side panels: on narrow screens they slide over the canvas
   // (so it's never squeezed) and default to closed; on wide screens they sit
   // inline. The top bar's panel toggles flip the same store state.
