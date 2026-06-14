@@ -222,7 +222,7 @@ function BarButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      title={label}
+      data-tip={label}
       aria-label={label}
       aria-pressed={active}
       className={`grid h-9 w-9 place-items-center rounded-lg text-butter-100 hover:bg-butter-200/15 disabled:cursor-not-allowed disabled:text-butter-200/40 disabled:hover:bg-transparent ${

@@ -46,10 +46,10 @@ export default function ToolStrip() {
 
   return (
     <div className="flex items-center gap-1 border-b border-navy/15 bg-butter-100 px-2 py-1.5">
-      {TOOLS.map(({ id, label, hint, Icon }) => (
+      {TOOLS.map(({ id, label, Icon }) => (
         <button
           key={id}
-          title={locked ? "Switch to Edit view to use tools" : `${label} — ${hint}`}
+          data-tip={locked ? "Switch to Edit view to use tools" : label}
           aria-label={label}
           aria-pressed={tool === id && !locked}
           onClick={() => setTool(id)}
@@ -68,10 +68,10 @@ export default function ToolStrip() {
 
       {/* Curve / smooth toggle — applies to the running, satin and fill tools. */}
       <button
-        title={
+        data-tip={
           locked
             ? "Switch to Edit view to use tools"
-            : "Curve — smooth placed points into a curve while drawing"
+            : "Smooth points into a curve (use with Running / Satin / Fill)"
         }
         aria-label="Curve"
         aria-pressed={smooth && !locked}
@@ -112,7 +112,7 @@ export default function ToolStrip() {
       {drawing && draft.length > 0 && (
         <button
           onClick={() => clearDraft()}
-          title="Cancel (Esc)"
+          data-tip="Cancel (Esc)"
           aria-label="Cancel"
           className="ml-1 grid h-8 w-8 place-items-center rounded-lg text-navy hover:bg-butter-300/60"
         >

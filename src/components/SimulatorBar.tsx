@@ -68,7 +68,8 @@ export default function SimulatorBar() {
           <button
             key={m}
             onClick={() => setViewMode(m)}
-            title={label}
+            data-tip={label}
+            data-tip-side="top"
             aria-label={label}
             aria-pressed={viewMode === m}
             className={`flex items-center gap-1 px-2.5 py-1 ${
@@ -88,7 +89,8 @@ export default function SimulatorBar() {
           <button
             onClick={togglePlay}
             disabled={simTotal === 0}
-            title={simPlaying ? "Pause" : "Play"}
+            data-tip={simPlaying ? "Pause" : "Play"}
+            data-tip-side="top"
             aria-label={simPlaying ? "Pause" : "Play"}
             className="grid h-8 w-8 place-items-center rounded-lg bg-navy text-butter-200 hover:bg-navy-light disabled:opacity-40"
           >

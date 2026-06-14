@@ -65,8 +65,10 @@ export default function CanvasStage() {
   const smooth = useEditorStore((s) => s.smooth);
 
   const viewMode = useEditorStore((s) => s.viewMode);
-  const simIndex = useEditorStore((s) => s.simIndex);
   const setSimTotal = useEditorStore((s) => s.setSimTotal);
+  // Note: `simIndex` is intentionally NOT subscribed here. It changes every
+  // animation frame during playback; reading it inside StitchView keeps the
+  // (hidden) edit layer from re-rendering on every frame.
 
   // The assembled design drives both this preview and the exporter.
   const design = useMemo(() => generateDesign(project), [project]);
@@ -185,7 +187,6 @@ export default function CanvasStage() {
   }
 
   const drawing = viewMode === "edit" && isDrawTool(tool);
-  const needle = viewMode === "stitch" ? needleAt(design, simIndex) : null;
   const ticksX = useMemo(() => computeTicks(hoop.wMm, rulerUnit), [hoop.wMm, rulerUnit]);
   const ticksY = useMemo(() => computeTicks(hoop.hMm, rulerUnit), [hoop.hMm, rulerUnit]);
 
@@ -265,14 +266,7 @@ export default function CanvasStage() {
             )}
 
             {viewMode === "stitch" && (
-              <StitchView
-                design={design}
-                upTo={simIndex}
-                needle={needle}
-                colorById={colorById}
-                px={px}
-                py={py}
-              />
+              <StitchView design={design} colorById={colorById} px={px} py={py} />
             )}
           </Layer>
 
@@ -401,23 +395,23 @@ function DraftPreview({
 
 // ---------------------------------------------------------------------------
 
-/** Read-only render of the assembled stitches, up to the simulator cursor. */
+/** Read-only render of the assembled stitches, up to the simulator cursor.
+ * Subscribes to `simIndex` itself so playback re-renders only this view, not the
+ * whole (hidden) edit layer. */
 function StitchView({
   design,
-  upTo,
-  needle,
   colorById,
   px,
   py,
 }: {
   design: Parameters<typeof designToSegments>[0];
-  upTo: number;
-  needle: Point | null;
   colorById: Map<string, ThreadColor>;
   px: (x: number) => number;
   py: (y: number) => number;
 }) {
+  const upTo = useEditorStore((s) => s.simIndex);
   const segs = useMemo(() => designToSegments(design, upTo), [design, upTo]);
+  const needle = useMemo(() => needleAt(design, upTo), [design, upTo]);
   return (
     <Group listening={false}>
       {segs.map((seg, i) => {
