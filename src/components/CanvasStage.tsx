@@ -7,6 +7,7 @@ import {
   Text,
   Circle,
   Group,
+  Shape,
   Transformer,
 } from "react-konva";
 import type Konva from "konva";
@@ -517,19 +518,46 @@ function ObjectShape({
         onCommitPaths(movedMm);
       }}
     >
-      {/* Fill objects get a translucent body so they read as solid in the
-          editor. The first ring is the outer; the rest are holes, painted with
-          the hoop's white to punch them back out. */}
-      {isFill &&
-        paths.map((path, pi) => (
-          <Line
-            key={`fill-${pi}`}
-            points={path.flatMap((p) => [px(p.x), py(p.y)])}
-            closed
-            fill={pi === 0 ? fillColor : "#ffffff"}
-            listening={false}
-          />
-        ))}
+      {/* Fill objects get a translucent body drawn with the even-odd rule, so
+          every disjoint region (e.g. each letter of a word) fills and the
+          counters of a/e/o cut out correctly. The body is listening, so clicking
+          a filled interior selects the object. */}
+      {isFill && (
+        <Shape
+          listening={selectable}
+          perfectDrawEnabled={false}
+          sceneFunc={(ctx) => {
+            const native = (ctx as unknown as { _context: CanvasRenderingContext2D })
+              ._context;
+            native.beginPath();
+            for (const ring of paths) {
+              if (ring.length < 3) continue;
+              native.moveTo(px(ring[0].x), py(ring[0].y));
+              for (let i = 1; i < ring.length; i++) {
+                native.lineTo(px(ring[i].x), py(ring[i].y));
+              }
+              native.closePath();
+            }
+            native.fillStyle = fillColor;
+            native.fill("evenodd");
+          }}
+          hitFunc={(ctx, shape) => {
+            ctx.beginPath();
+            for (const ring of paths) {
+              if (ring.length < 3) continue;
+              ctx.moveTo(px(ring[0].x), py(ring[0].y));
+              for (let i = 1; i < ring.length; i++) {
+                ctx.lineTo(px(ring[i].x), py(ring[i].y));
+              }
+              ctx.closePath();
+            }
+            ctx.fillStrokeShape(shape);
+          }}
+          fill={fillColor}
+          onMouseDown={selectable ? onSelect : undefined}
+          onTap={selectable ? onSelect : undefined}
+        />
+      )}
 
       {paths.map((path, pi) => (
         <Line

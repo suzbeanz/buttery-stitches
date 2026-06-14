@@ -9,8 +9,47 @@ import {
 } from "./resample";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
-import { tatamiFill } from "./fill";
+import { tatamiFill, splitFillRegions } from "./fill";
 import { fillUnderlay, satinUnderlay } from "./underlay";
+
+const square = (x: number, y: number, s: number): Path => [
+  { x, y },
+  { x: x + s, y },
+  { x: x + s, y: y + s },
+  { x, y: y + s },
+];
+
+describe("splitFillRegions", () => {
+  it("keeps a single outer (no holes) as one region", () => {
+    const regions = splitFillRegions([square(0, 0, 10)]);
+    expect(regions).toHaveLength(1);
+    expect(regions[0]).toHaveLength(1);
+  });
+
+  it("attaches a hole to its containing outer", () => {
+    const regions = splitFillRegions([square(0, 0, 20), square(5, 5, 5)]);
+    expect(regions).toHaveLength(1);
+    expect(regions[0]).toHaveLength(2); // outer + hole
+  });
+
+  it("splits two disjoint outers into separate regions", () => {
+    const regions = splitFillRegions([square(0, 0, 10), square(40, 40, 10)]);
+    expect(regions).toHaveLength(2);
+    expect(regions[0]).toHaveLength(1);
+    expect(regions[1]).toHaveLength(1);
+  });
+
+  it("groups two outers each with their own hole", () => {
+    const regions = splitFillRegions([
+      square(0, 0, 20),
+      square(5, 5, 5),
+      square(40, 40, 20),
+      square(45, 45, 5),
+    ]);
+    expect(regions).toHaveLength(2);
+    for (const r of regions) expect(r).toHaveLength(2);
+  });
+});
 
 function maxSeg(path: Path): number {
   let m = 0;
