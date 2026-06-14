@@ -5,10 +5,12 @@ import {
   resampleByDistance,
   resampleByCount,
   capSegmentLength,
+  dropShortStitches,
 } from "./resample";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
 import { tatamiFill } from "./fill";
+import { fillUnderlay, satinUnderlay } from "./underlay";
 
 function maxSeg(path: Path): number {
   let m = 0;
@@ -64,6 +66,94 @@ describe("resample", () => {
       3,
     );
     expect(maxSeg(out)).toBeLessThanOrEqual(3 + 1e-9);
+  });
+});
+
+describe("dropShortStitches", () => {
+  it("merges penetrations closer than the minimum length", () => {
+    const out = dropShortStitches(
+      [
+        { x: 0, y: 0 },
+        { x: 0.2, y: 0 }, // 0.2 mm — dropped
+        { x: 0.3, y: 0 }, // still < 0.5 from origin — dropped
+        { x: 1, y: 0 },
+        { x: 2, y: 0 },
+      ],
+      0.5,
+    );
+    expect(out).toEqual([
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 2, y: 0 },
+    ]);
+  });
+
+  it("never has a gap below the minimum between kept interior points", () => {
+    const out = dropShortStitches(
+      [
+        { x: 0, y: 0 },
+        { x: 0.1, y: 0 },
+        { x: 0.2, y: 0 },
+        { x: 1.5, y: 0 },
+        { x: 1.6, y: 0 },
+        { x: 3, y: 0 },
+      ],
+      0.5,
+    );
+    for (let i = 1; i < out.length; i++) {
+      expect(distance(out[i - 1], out[i])).toBeGreaterThanOrEqual(0.5 - 1e-9);
+    }
+  });
+
+  it("keeps both endpoints even when the whole path is shorter than minLen", () => {
+    // Endpoints are sacrosanct, so a tiny path collapses to start + end only.
+    const out = dropShortStitches(
+      [
+        { x: 0, y: 0 },
+        { x: 0.1, y: 0 },
+        { x: 0.2, y: 0 },
+      ],
+      0.5,
+    );
+    expect(out).toEqual([
+      { x: 0, y: 0 },
+      { x: 0.2, y: 0 },
+    ]);
+  });
+
+  it("always preserves the first and last point", () => {
+    const path: Path = [
+      { x: 0, y: 0 },
+      { x: 0.1, y: 0 },
+      { x: 10, y: 0 },
+    ];
+    const out = dropShortStitches(path, 0.5);
+    expect(out[0]).toEqual({ x: 0, y: 0 });
+    expect(out[out.length - 1]).toEqual({ x: 10, y: 0 });
+  });
+
+  it("keeps the endpoint even when it crowds the previous point", () => {
+    // last two points are 0.1 mm apart; we drop the previous, keep the endpoint
+    const out = dropShortStitches(
+      [
+        { x: 0, y: 0 },
+        { x: 5, y: 0 },
+        { x: 5.1, y: 0 },
+      ],
+      0.5,
+    );
+    expect(out[0]).toEqual({ x: 0, y: 0 });
+    expect(out[out.length - 1]).toEqual({ x: 5.1, y: 0 });
+    expect(distance(out[out.length - 2], out[out.length - 1])).toBeGreaterThanOrEqual(0.5 - 1e-9);
+  });
+
+  it("leaves an already-legal path untouched", () => {
+    const path: Path = [
+      { x: 0, y: 0 },
+      { x: 2, y: 0 },
+      { x: 4, y: 0 },
+    ];
+    expect(dropShortStitches(path, 0.5)).toEqual(path);
   });
 });
 
@@ -157,5 +247,59 @@ describe("tatamiFill", () => {
     // No penetration should land strictly inside the hole.
     const inHole = out.filter((p) => p.x > 8.01 && p.x < 11.99 && p.y > 8.01 && p.y < 11.99);
     expect(inHole).toHaveLength(0);
+  });
+});
+
+describe("fillUnderlay", () => {
+  const square: Path = [
+    { x: 0, y: 0 },
+    { x: 20, y: 0 },
+    { x: 20, y: 20 },
+    { x: 0, y: 20 },
+  ];
+
+  it("returns an edge run plus an interior parallel pass", () => {
+    // Edge run alone (a closed 20×20 outline at 2.5 mm) is ~32 points; the
+    // combined pass must be longer because of the added parallel pass.
+    const edgeOnly = runningStitch([...square, square[0]], 2.5);
+    const out = fillUnderlay([square], 0);
+    expect(out.length).toBeGreaterThan(edgeOnly.length);
+  });
+
+  it("orients the parallel pass perpendicular to the top angle", () => {
+    // Top angle 0 → underlay rows run vertically (angle 90), so the pass spans
+    // a range of x values rather than collapsing onto one column.
+    const out = fillUnderlay([square], 0);
+    const interior = out.slice(runningStitch([...square, square[0]], 2.5).length);
+    const xs = interior.map((p) => p.x);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(5);
+  });
+
+  it("is empty for a degenerate region", () => {
+    expect(fillUnderlay([[{ x: 0, y: 0 }, { x: 1, y: 0 }]], 0)).toEqual([]);
+  });
+});
+
+describe("satinUnderlay", () => {
+  it("runs just the centerline for a narrow column", () => {
+    const left: Path = [{ x: 0, y: 0 }, { x: 20, y: 0 }];
+    const right: Path = [{ x: 0, y: 2 }, { x: 20, y: 2 }]; // 2 mm wide
+    const out = satinUnderlay(left, right);
+    // Every point sits on the centerline (y ≈ 1).
+    for (const p of out) expect(p.y).toBeCloseTo(1, 5);
+  });
+
+  it("adds an edge run on each rail for a wide column", () => {
+    const left: Path = [{ x: 0, y: 0 }, { x: 20, y: 0 }];
+    const right: Path = [{ x: 0, y: 6 }, { x: 20, y: 6 }]; // 6 mm wide
+    const out = satinUnderlay(left, right);
+    const ys = out.map((p) => p.y);
+    // Edge runs reach the rails at y≈0 and y≈6, not just the centerline.
+    expect(Math.min(...ys)).toBeCloseTo(0, 5);
+    expect(Math.max(...ys)).toBeCloseTo(6, 5);
+  });
+
+  it("is empty for a degenerate column", () => {
+    expect(satinUnderlay([{ x: 0, y: 0 }], [{ x: 0, y: 2 }])).toEqual([]);
   });
 });

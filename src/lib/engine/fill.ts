@@ -65,7 +65,7 @@ function alongRow(x0: number, x1: number, y: number, spacing: number, phase: num
  * and alternate rows are phase-shifted so needle holes don't line up — the
  * classic brick pattern that keeps a fill looking smooth instead of ribbed.
  *
- * Returns an ordered list of penetrations in millimetres.
+ * Returns an ordered list of penetrations in millimeters.
  */
 export function tatamiFill(rings: Path[], opts: FillOptions): Path {
   const outer = rings[0];

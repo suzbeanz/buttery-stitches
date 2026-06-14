@@ -10,7 +10,7 @@ export interface RenderSegment {
 
 /**
  * Split a design (up to `upTo` events) into polyline segments for drawing.
- * Jumps lift the needle and break the line; colour and underlay boundaries
+ * Jumps lift the needle and break the line; color and underlay boundaries
  * start a new segment so each can be styled independently. Pure, so the
  * simulator's frame-by-frame redraw stays predictable and testable.
  */

@@ -11,7 +11,7 @@ const design: EngineStitch[] = [
 ];
 
 describe("designToSegments", () => {
-  it("breaks segments at jumps and colour boundaries", () => {
+  it("breaks segments at jumps and color boundaries", () => {
     const segs = designToSegments(design);
     expect(segs).toHaveLength(2);
     expect(segs[0].colorId).toBe("a");
@@ -30,7 +30,7 @@ describe("designToSegments", () => {
 describe("needleAt", () => {
   it("returns the last real penetration, skipping jumps", () => {
     expect(needleAt(design, 5)).toEqual({ x: 6, y: 5 });
-    // after 4 events (0..3): index 3 is the first stitch of colour b
+    // after 4 events (0..3): index 3 is the first stitch of color b
     expect(needleAt(design, 4)).toEqual({ x: 5, y: 5 });
     // after 3 events (0..2): index 2 is a jump, so the last real one is index 1
     expect(needleAt(design, 3)).toEqual({ x: 1, y: 0 });

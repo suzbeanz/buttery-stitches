@@ -3,8 +3,37 @@ import { distance } from "../geometry";
 
 /**
  * Geometry resampling helpers used by the stitch algorithms. All pure, all in
- * millimetres.
+ * millimeters.
  */
+
+/** Default minimum stitch length (mm). Penetrations closer than this are merged. */
+export const MIN_STITCH_LENGTH = 0.5;
+
+/**
+ * Merge consecutive penetrations that fall closer together than `minLen` mm.
+ * Tiny stitches do not pull thread through cleanly: the needle can punch the
+ * same hole twice, nesting thread on the underside and stressing (or snapping)
+ * the needle. We walk the path keeping a running anchor and skipping any point
+ * within `minLen` of it, while always preserving the first and last points so
+ * an object still starts and ends exactly where it should.
+ */
+export function dropShortStitches(path: Path, minLen = MIN_STITCH_LENGTH): Path {
+  if (path.length < 2 || minLen <= 0) return path.map((p) => ({ ...p }));
+
+  const out: Point[] = [{ ...path[0] }];
+  const lastIdx = path.length - 1;
+  for (let i = 1; i < lastIdx; i++) {
+    if (distance(out[out.length - 1], path[i]) >= minLen) out.push({ ...path[i] });
+  }
+
+  // Always keep the true endpoint. If it crowds the previously kept point, drop
+  // that previous point instead (never the endpoint) so spacing stays legal,
+  // but never drop the start.
+  const last = path[lastIdx];
+  while (out.length > 1 && distance(out[out.length - 1], last) < minLen) out.pop();
+  out.push({ ...last });
+  return out;
+}
 
 /**
  * Walk a polyline and place a point every `spacing` mm of arc length. The first
