@@ -6,6 +6,7 @@ import { useProjectStore } from "../store/projectStore";
 import { resetStores } from "../test/setup";
 import { makeObject, satinWidthOf } from "../lib/objects";
 import { createEmptyProject } from "../lib/project";
+import { newId } from "../lib/id";
 
 function seedSelectedSatin() {
   const project = createEmptyProject();
@@ -15,6 +16,28 @@ function seedSelectedSatin() {
   resetStores(project);
   useProjectStore.setState({ selectedIds: [o.id] });
   return o.id;
+}
+
+function seedSelectedFill() {
+  const project = createEmptyProject();
+  const colorId = project.colors[0].id;
+  // A square fill region plus a second color to outline with.
+  const fill = makeObject(
+    "fill",
+    [
+      { x: 0, y: 0 },
+      { x: 20, y: 0 },
+      { x: 20, y: 20 },
+      { x: 0, y: 20 },
+    ],
+    colorId,
+  );
+  const outlineColorId = newId("color");
+  project.colors.push({ id: outlineColorId, rgb: [200, 0, 0], name: "Red" });
+  project.objects = [fill];
+  resetStores(project);
+  useProjectStore.setState({ selectedIds: [fill.id] });
+  return { fillId: fill.id, fillColorId: colorId, outlineColorId };
 }
 
 describe("PropertiesPanel", () => {
@@ -41,7 +64,7 @@ describe("PropertiesPanel", () => {
     fireEvent.change(select, { target: { value: "running" } });
     const o = useProjectStore.getState().project.objects.find((x) => x.id === id)!;
     expect(o.type).toBe("running");
-    // satin (2 rails) collapsed to a single centreline path
+    // satin (2 rails) collapsed to a single centerline path
     expect(o.paths).toHaveLength(1);
   });
 
@@ -55,7 +78,42 @@ describe("PropertiesPanel", () => {
     expect(satinWidthOf(o.paths)).toBeCloseTo(9, 1);
   });
 
-  it("adds a thread colour", () => {
+  it("shows the add-satin-outline control for a fill object", () => {
+    seedSelectedFill();
+    render(<PropertiesPanel />);
+    expect(screen.getByText(/Add satin outline/i)).toBeTruthy();
+  });
+
+  it("does not show the outline control for a satin object", () => {
+    seedSelectedSatin();
+    render(<PropertiesPanel />);
+    expect(screen.queryByText(/Add satin outline/i)).toBeNull();
+  });
+
+  it("adds a satin outline after the fill in the chosen color", () => {
+    const { fillId, outlineColorId } = seedSelectedFill();
+    render(<PropertiesPanel />);
+
+    // Pick the outline color (the second project color, "Red").
+    const colorSelect = screen
+      .getByText(/Outline color/i)
+      .closest("label")!
+      .querySelector("select") as HTMLSelectElement;
+    fireEvent.change(colorSelect, { target: { value: outlineColorId } });
+
+    fireEvent.click(screen.getByText(/Add satin outline/i));
+
+    const objects = useProjectStore.getState().project.objects;
+    expect(objects).toHaveLength(2);
+    const fillIndex = objects.findIndex((o) => o.id === fillId);
+    const outline = objects[fillIndex + 1];
+    expect(outline.type).toBe("satin");
+    expect(outline.colorId).toBe(outlineColorId);
+    // A satin object carries exactly two rails.
+    expect(outline.paths).toHaveLength(2);
+  });
+
+  it("adds a thread color", () => {
     resetStores();
     render(<PropertiesPanel />);
     const before = useProjectStore.getState().project.colors.length;

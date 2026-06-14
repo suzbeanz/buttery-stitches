@@ -1,14 +1,21 @@
+import { useState } from "react";
 import { useProjectStore } from "../store/projectStore";
 import { useEditorStore } from "../store/editorStore";
 import { DEFAULT_PARAMS } from "../types/project";
-import type { EmbObject, EmbObjectParams, Path } from "../types/project";
+import type {
+  EmbObject,
+  EmbObjectParams,
+  Path,
+  ThreadColor,
+} from "../types/project";
 import { newId } from "../lib/id";
 import { convertObjectType, satinWidthOf, setSatinWidth } from "../lib/objects";
+import { buildOutline, DEFAULT_OUTLINE_WIDTH } from "../lib/outline";
 import { generateObjectStitches } from "../lib/engine";
 import DesignPanel from "./DesignPanel";
 
 /**
- * Right panel: parameters for the current selection plus thread-colour
+ * Right panel: parameters for the current selection plus thread-color
  * management. Live stitch counts and validation warnings arrive with the
  * stitch engine (Phase 3).
  */
@@ -38,18 +45,27 @@ export default function PropertiesPanel() {
             {selected.length} objects selected.
           </div>
         ) : (
-          <ObjectProperties
-            object={selected[0]}
-            onName={(name) => updateObject(selected[0].id, { name })}
-            // Converting type also rebuilds geometry to satisfy the new type's
-            // invariant (satin = rail pair, running/fill = one polyline).
-            onType={(type) =>
-              updateObject(selected[0].id, convertObjectType(selected[0], type))
-            }
-            onColor={(colorId) => updateObject(selected[0].id, { colorId })}
-            onPaths={(paths) => updateObject(selected[0].id, { paths })}
-            onParam={(patch) => updateObjectParams(selected[0].id, patch)}
-          />
+          <>
+            <ObjectProperties
+              object={selected[0]}
+              onName={(name) => updateObject(selected[0].id, { name })}
+              // Converting type also rebuilds geometry to satisfy the new
+              // type's invariant (satin = rail pair, running/fill = one
+              // polyline).
+              onType={(type) =>
+                updateObject(
+                  selected[0].id,
+                  convertObjectType(selected[0], type),
+                )
+              }
+              onColor={(colorId) => updateObject(selected[0].id, { colorId })}
+              onPaths={(paths) => updateObject(selected[0].id, { paths })}
+              onParam={(patch) => updateObjectParams(selected[0].id, patch)}
+            />
+            {selected[0].type === "fill" && (
+              <OutlineControl fill={selected[0]} />
+            )}
+          </>
         )}
 
         <ThreadColors />
@@ -187,6 +203,106 @@ function ObjectProperties({
         <span>Stitches</span>
         <span className="tabular-nums">{stitchCount.toLocaleString()}</span>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+/** Sentinel value in the color picker that means "create a fresh thread color". */
+const NEW_COLOR = "__new__";
+
+/**
+ * "Add satin outline": builds a satin border around the selected fill in a
+ * chosen color and inserts it immediately after the fill in stitch order.
+ */
+function OutlineControl({ fill }: { fill: EmbObject }) {
+  const objects = useProjectStore((s) => s.project.objects);
+  const colors = useProjectStore((s) => s.project.colors);
+  const addObject = useProjectStore((s) => s.addObject);
+  const addColor = useProjectStore((s) => s.addColor);
+  const reorderObjects = useProjectStore((s) => s.reorderObjects);
+
+  const [widthMm, setWidthMm] = useState(DEFAULT_OUTLINE_WIDTH);
+  // Default to a different color than the fill so the outline is visible.
+  const [colorChoice, setColorChoice] = useState<string>(
+    colors.find((c) => c.id !== fill.colorId)?.id ?? NEW_COLOR,
+  );
+  const [includeHoles, setIncludeHoles] = useState(false);
+
+  const addOutline = () => {
+    let colorId = colorChoice;
+    if (colorChoice === NEW_COLOR) {
+      const color: ThreadColor = {
+        id: newId("color"),
+        rgb: [120, 120, 120],
+        name: "Outline",
+      };
+      addColor(color);
+      colorId = color.id;
+    }
+
+    const outlines = buildOutline(fill.paths, widthMm, colorId, {
+      includeHoles,
+    });
+    if (outlines.length === 0) return;
+
+    // addObject appends to the end, so add each outline and then move it to sit
+    // immediately after the fill (and after any earlier outlines we just added).
+    outlines.forEach((outline, i) => {
+      addObject(outline);
+      const from = useProjectStore.getState().project.objects.length - 1;
+      const fillIndex = useProjectStore
+        .getState()
+        .project.objects.findIndex((o) => o.id === fill.id);
+      reorderObjects(from, fillIndex + 1 + i);
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-2 border-b border-navy/15 p-3 text-sm">
+      <span className="text-xs font-semibold uppercase tracking-wide text-navy/60">
+        Outline
+      </span>
+
+      <NumberField
+        label="Outline width (mm)"
+        value={widthMm}
+        step={0.25}
+        min={0.5}
+        onChange={setWidthMm}
+      />
+
+      <Field label="Outline color">
+        <select
+          value={colorChoice}
+          onChange={(e) => setColorChoice(e.target.value)}
+          className="input"
+        >
+          {colors.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name ?? `rgb(${c.rgb.join(",")})`}
+            </option>
+          ))}
+          <option value={NEW_COLOR}>New color…</option>
+        </select>
+      </Field>
+
+      <label className="flex items-center gap-2 text-navy">
+        <input
+          type="checkbox"
+          checked={includeHoles}
+          onChange={(e) => setIncludeHoles(e.target.checked)}
+        />
+        Outline holes
+      </label>
+
+      <button
+        onClick={addOutline}
+        className="rounded bg-navy px-2 py-1 text-xs text-butter-200 hover:bg-navy-light"
+      >
+        Add satin outline
+      </button>
     </div>
   );
 }
