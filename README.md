@@ -1,145 +1,98 @@
 # 🧈 Buttery Stitches
 
-> A free, open-source, **fully client-side** machine-embroidery digitizer that
-> runs entirely in your browser. Upload a logo, auto-convert it to stitches,
-> clean it up in a vector-style editor, and export to PES, DST, JEF, EXP, and
-> VP3 — all without anything ever leaving your machine.
+A free machine-embroidery digitizer that runs **entirely in your browser**. Drop
+in a logo, turn it into stitches, tidy it up in a vector-style editor, and export
+a file your machine can actually read — PES, DST, JEF, EXP, or VP3. Nothing ever
+leaves your computer.
 
-> _Smooth as butter._ The app wears a butter theme: butter-yellow + navy, a
-> classic serif wordmark, and rulers styled after the measurement guides printed
-> on a stick of butter.
+**Live:** [buttery-stitches.suzie.fun](https://buttery-stitches.suzie.fun)
+
+I made this because I wanted to digitize my own designs without paying for heavy
+desktop software or uploading my art to someone's server. It's named after my
+dog, Butters — hence the butter-yellow-and-navy theme, the serif wordmark, and
+rulers styled like the marks on a stick of butter.
 
 ![Buttery Stitches editor](docs/hero.svg)
 
-Buttery Stitches is built for **clean logos, line art, text, and limited-color
-designs** (≤ ~8 colors). Photo-realistic auto-digitizing is an explicit
-non-goal — drop in a photo and you'll get a rough, aggressively quantized
-result with a warning, not a miracle.
+It's happiest with **clean logos, lettering, and limited-color artwork**. It is
+*not* a photo converter — feed it a photograph and you'll get a rough, heavily
+posterized result (with a warning). That's on purpose.
 
-## Using it
+## What you can do
 
-1. **Start a design** — draw with the Running / Satin / Fill tools, or click
-   **Import image** to auto-digitize a logo (adjust colors, remove background).
-2. **Refine** — Select to move / scale / rotate, Node to drag vertices, edit
-   stitch params on the right, drag layers to reorder the stitch sequence.
-3. **Size it** — pick a hoop and **Fit to hoop**; resizing re-densifies.
-4. **Watch it sew** — switch to **Stitch view** and press Play to redraw the
-   design stitch-by-stitch.
-5. **Export** — PES (primary) plus DST/JEF/EXP/VP3, and print a **thread
-   worksheet**.
+- **Auto-digitize an image.** Import a logo and it traces, simplifies, and turns
+  it into fill/running objects — adjustable color count, background removal,
+  despeckle.
+- **Add text.** Type something, pick a font (Poppins, Playfair Display, Pacifico,
+  Roboto Slab), set the size, drop it in.
+- **Draw by hand.** Running, satin, and fill tools, with a **Curve** mode for
+  smooth lines instead of stiff polygons.
+- **Edit like vectors.** Move, scale, rotate, drag individual nodes, reorder the
+  stitch sequence, copy/paste (⌘/Ctrl + C/V), tweak density and angles.
+- **Outline a fill** with a satin border in another color, one click.
+- **Size it to your hoop.** Hoop presets or custom, fit-to-hoop, aspect lock.
+  Measurements are in **inches** by default (switch to mm anytime).
+- **Watch it sew.** A stitch simulator redraws the design needle-by-needle so you
+  can catch problems before you hoop a single thing.
+- **Export & print.** PES/DST/JEF/EXP/VP3, plus a printable thread worksheet with
+  the color order, swatches, and stitch counts.
 
-## Why it's built this way
+## Stitch quality
 
-- **No backend.** The whole app is static files; host it on GitHub Pages or any
-  static host. Your uploaded images never touch a server.
-- **Don't reinvent the embroidery file formats.** Writing PES/DST/etc. is done
-  by [`pyembroidery`](https://github.com/EmbroideryHub/pyembroidery) — a mature,
-  pure-Python library — run in the browser via [Pyodide](https://pyodide.org/)
-  (WebAssembly). Its internal unit is 1/10 mm.
-- **Millimeters everywhere in the app.** We only convert to pyembroidery's
-  1/10 mm units at export. This keeps the stitch-math readable and testable.
+The whole point is files that actually sew well, so the engine bakes in the
+fundamentals: low-density underlay, push/pull compensation, tie-in/tie-off lock
+stitches so threads don't pull out, minimum-stitch filtering so the needle
+doesn't jam, and split throws on wide satin. The reasoning is written up in
+[`docs/embroidery-quality.md`](docs/embroidery-quality.md), and it's all pure,
+unit-tested code — the same engine drives both the on-screen simulator and the
+exported file, so what you see is what you get.
 
-## Project status
+## How it works under the hood
 
-Built in phases (see the spec). Current progress:
+- **No backend.** It's just static files. Your images and designs stay on your
+  machine.
+- **Real file formats, not my homegrown guesses.** Writing PES/DST/etc. is handled
+  by [`pyembroidery`](https://github.com/EmbroideryHub/pyembroidery), run in the
+  browser with [Pyodide](https://pyodide.org/) (WebAssembly).
+- **Everything is in millimeters internally**; it only converts to the embroidery
+  format's units at the moment of export. Keeps the math sane.
+- **The `.embproj` file is the source of truth** — plain JSON with your colors,
+  objects, and their order (which *is* the stitch sequence). It's lossless and
+  re-editable. An exported `.pes` is lossy, so don't try to round-trip it back.
 
-- [x] **Phase 0 — Scaffold.** Vite + React + TS + Tailwind + Zustand. Three-region
-      editor shell (layers / canvas / properties), project data model, undo/redo,
-      and lossless `.embproj` save/load.
-- [x] **Phase 1 — File I/O proven.** Pyodide loads from CDN, micropip installs
-      pyembroidery, and the app exports a sample square to PES/DST/JEF/EXP/VP3.
-      The WASM path is de-risked by a reproducible script — `npm run derisk` —
-      that installs pyembroidery under Pyodide and writes all five formats. **No
-      backend fallback is needed.**
-- [x] **Phase 2 — Manual editor.** Draw running/satin/fill objects; **Select**
-      tool to move + scale/rotate (transforms baked back to mm); **Node** tool to
-      drag vertices; reorder the stitch sequence; visibility/delete; editable
-      satin column width; thread-color management; butter rulers (mm/inch).
-      QA via synthetic user testing — see [`docs/QA-phase2.md`](docs/QA-phase2.md).
-- [x] **Phase 3 — Stitch engine.** Pure, unit-tested stitch generation —
-      running (exact endpoint landing), satin (zig-zag, pull comp, throw
-      splitting), tatami fill (angled scan-line clipping with holes + brick
-      stagger), and underlay. A sequencer assembles objects into one event stream
-      with jumps/trims/color-changes that drives **both** the live stitch
-      simulator (play / scrub / speed) **and** the exporter — so preview and file
-      always agree. Real designs now export (the Phase 1 sample square is gone),
-      with live stitch counts and validation warnings.
-- [x] **Phase 4 — Auto-digitize.** Import an image → quantize + trace
-      (imagetracerjs) → simplify (Douglas–Peucker) → classify (blob ⇒ fill,
-      sliver ⇒ running, holes via even-odd) → stitch objects, grouped by color,
-      sized & centered in the hoop. Adjustable color count (2–12), background
-      removal, despeckle, and a photo-complexity warning. The dialog lazy-loads
-      the tracer so it doesn't weigh down first paint. Everything stays on your
-      machine.
-- [x] **Phase 5 — Sizing, hoops, validation, worksheet.** Hoop presets + custom
-      sizes; design resize with aspect-lock and fit-to-hoop that **re-densifies**
-      (scales geometry, not stitch points — verified by test). Live design-wide
-      validation warnings in the Design panel. Thread brand/code editing and a
-      printable **thread worksheet** (color order, swatches, brand/code, stitch
-      counts, estimated run time) opened as a self-contained print/PDF page.
-- [x] **Phase 6 — Polish & deploy.** Keyboard shortcuts + in-app help (`?`),
-      empty-state guidance, a CI workflow, and a GitHub Pages deploy workflow
-      (the build is base-path-relative, so it serves from any sub-path).
-
-## Tech stack
-
-| Concern              | Choice |
-| -------------------- | ------ |
-| Framework            | React + TypeScript + Vite |
-| Styling              | Tailwind CSS |
-| State / undo-redo    | Zustand + zundo |
-| Canvas / geometry    | Konva (react-konva); path math in plain TS |
-| Raster → vector + quantize | imagetracerjs (per-color layers) |
-| Embroidery file I/O  | pyembroidery via Pyodide (WASM) _(Phase 1)_ |
-| Tests                | Vitest (stitch math) + Playwright (e2e smoke) |
-
-## The project file (`.embproj`)
-
-A `.embproj` is plain JSON describing the whole design in millimeters — colors,
-objects, and the object **order, which is the stitch sequence**. It is lossless
-and re-editable, and it is the **source of truth**. An exported `.pes` is lossy;
-never edit the PES and expect to round-trip it back.
-
-See [`src/types/project.ts`](src/types/project.ts) for the full model.
-
-## Develop
+## Run it locally
 
 ```bash
 npm install
-npm run dev        # start the dev server
-npm test           # unit + component tests (Vitest)
-npm run build      # type-check + production build
-npm run typecheck  # type-check only
-npm run e2e        # Playwright smoke (needs: npx playwright install chromium)
-npm run derisk     # prove pyembroidery works under Pyodide
+npm run dev        # dev server
+npm test           # unit + component tests
+npm run typecheck  # types
+npm run lint       # lint
+npm run build      # production build
 ```
 
-Requires Node 18+.
+Needs Node 22.
 
 ## Keyboard shortcuts
 
 | Key | Action | Key | Action |
 | --- | --- | --- | --- |
-| `V` | Select | `⌘/Ctrl Z` | Undo |
-| `N` | Node edit | `⌘/Ctrl ⇧ Z` | Redo |
-| `R` `S` `F` | Running / Satin / Fill | `⌘/Ctrl S` | Save `.embproj` |
-| `Enter` / `Esc` | Finish / cancel a shape | `P` | Toggle stitch view |
-| `Del` | Delete selection | `Space` | Play / pause simulation |
-| `?` | Shortcut help | | |
+| `V` | Select | `⌘/Ctrl Z` / `⇧Z` | Undo / Redo |
+| `N` | Node edit | `⌘/Ctrl C` / `V` | Copy / Paste |
+| `R` `S` `F` | Running / Satin / Fill | `⌘/Ctrl D` | Duplicate |
+| `Enter` / `Esc` | Finish / cancel a shape | `⌘/Ctrl S` | Save `.embproj` |
+| `Del` | Delete selection | `P` | Toggle stitch view |
+| `?` | Shortcut help | `Space` | Play / pause simulation |
 
-## Deploy (GitHub Pages)
+## Hosting
 
-Push to `main` and the included workflow builds and publishes to Pages
-automatically — just enable **Settings → Pages → Source: GitHub Actions** once.
-The Vite build uses a relative base path, so it also works from any static host
-or sub-path. Nothing talks to a server at runtime (Pyodide loads from a CDN on
-first export; self-host those files for a fully offline deployment).
+It deploys itself to GitHub Pages on every push to `main` (see
+`.github/workflows/deploy.yml`). The build uses a relative base path, so it'll
+run from any static host or sub-path too.
 
-## Licensing
+## License
 
-StitchForge is MIT-licensed (see [LICENSE](LICENSE)). Key dependencies are
-MIT/compatible: `pyembroidery` (MIT), `imagetracerjs` (Public Domain/Unlicense),
-RgbQuant.js (MIT), Konva (MIT), Zustand (MIT). Licenses are re-verified as each
-dependency is actually added.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) to get involved.
+MIT — see [LICENSE](LICENSE). Built on some lovely open-source work:
+`pyembroidery` (MIT), `imagetracerjs` (Unlicense), `opentype.js` (MIT), Konva
+(MIT), Zustand + zundo (MIT), and the bundled fonts (SIL OFL 1.1). See
+[CONTRIBUTING.md](CONTRIBUTING.md) if you'd like to poke at it.
