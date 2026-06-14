@@ -32,6 +32,12 @@ interface EditorState {
   /** colour id assigned to newly drawn objects. */
   activeColorId: string | null;
   rulerUnit: RulerUnit;
+  /**
+   * When on, the draw tools (running / satin / fill) treat placed points as
+   * control points of a smooth curve: the live preview and the committed object
+   * use a densified spline polyline instead of straight segments.
+   */
+  smooth: boolean;
 
   // ---- preview / stitch simulator ----
   viewMode: ViewMode;
@@ -49,6 +55,8 @@ interface EditorState {
   clearDraft: () => void;
   setActiveColorId: (id: string | null) => void;
   setRulerUnit: (unit: RulerUnit) => void;
+  setSmooth: (smooth: boolean) => void;
+  toggleSmooth: () => void;
 
   setViewMode: (mode: ViewMode) => void;
   setSimTotal: (total: number) => void;
@@ -63,6 +71,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   cursorMm: null,
   activeColorId: null,
   rulerUnit: "mm",
+  smooth: false,
 
   viewMode: "edit",
   simTotal: 0,
@@ -76,6 +85,8 @@ export const useEditorStore = create<EditorState>((set) => ({
   clearDraft: () => set({ draft: [], cursorMm: null }),
   setActiveColorId: (id) => set({ activeColorId: id }),
   setRulerUnit: (unit) => set({ rulerUnit: unit }),
+  setSmooth: (smooth) => set({ smooth }),
+  toggleSmooth: () => set((s) => ({ smooth: !s.smooth })),
 
   setViewMode: (viewMode) =>
     set((s) => ({

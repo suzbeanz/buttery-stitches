@@ -15,7 +15,7 @@ const TOOLS: { id: Tool; label: string; hint: string }[] = [
   { id: "select", label: "Select", hint: "Click to select; drag to move; handles to scale/rotate" },
   { id: "node", label: "Node", hint: "Select an object, then drag its vertices" },
   { id: "running", label: "Running", hint: "Click to place points; double-click to finish" },
-  { id: "satin", label: "Satin", hint: "Draw a centreline; double-click to finish" },
+  { id: "satin", label: "Satin", hint: "Draw a centerline; double-click to finish" },
   { id: "fill", label: "Fill", hint: "Click a polygon outline; double-click to finish" },
 ];
 
@@ -26,6 +26,8 @@ export default function ToolStrip() {
   const clearDraft = useEditorStore((s) => s.clearDraft);
   const rulerUnit = useEditorStore((s) => s.rulerUnit);
   const setRulerUnit = useEditorStore((s) => s.setRulerUnit);
+  const smooth = useEditorStore((s) => s.smooth);
+  const toggleSmooth = useEditorStore((s) => s.toggleSmooth);
 
   const viewMode = useEditorStore((s) => s.viewMode);
   const active = TOOLS.find((t) => t.id === tool)!;
@@ -49,6 +51,27 @@ export default function ToolStrip() {
           {t.label}
         </button>
       ))}
+
+      <div className="mx-2 h-5 w-px bg-navy/15" />
+
+      {/* Curve / smooth toggle — applies to the running, satin and fill tools. */}
+      <button
+        title={
+          locked
+            ? "Switch to Edit view to use tools"
+            : "Smooth placed points into a curve while drawing"
+        }
+        aria-pressed={smooth && !locked}
+        onClick={() => toggleSmooth()}
+        disabled={locked}
+        className={`rounded px-2.5 py-1 text-sm transition-colors disabled:opacity-40 ${
+          smooth && !locked
+            ? "bg-navy text-butter-200"
+            : "text-navy hover:bg-butter-300/60 disabled:hover:bg-transparent"
+        }`}
+      >
+        Curve
+      </button>
 
       <div className="mx-2 h-5 w-px bg-navy/15" />
 

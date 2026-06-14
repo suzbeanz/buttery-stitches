@@ -25,6 +25,18 @@ describe("ToolStrip", () => {
     expect(useEditorStore.getState().rulerUnit).toBe("inch");
   });
 
+  it("toggles curve (smooth) mode", () => {
+    useEditorStore.setState({ smooth: false });
+    render(<ToolStrip />);
+    const curve = screen.getByText("Curve");
+    expect(curve.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(curve);
+    expect(useEditorStore.getState().smooth).toBe(true);
+    expect(curve.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(curve);
+    expect(useEditorStore.getState().smooth).toBe(false);
+  });
+
   it("shows a cancel affordance only while a drawing is in progress", () => {
     render(<ToolStrip />);
     expect(screen.queryByText(/Cancel/)).toBeNull();

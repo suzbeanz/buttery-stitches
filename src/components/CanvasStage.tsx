@@ -15,6 +15,7 @@ import { useEditorStore, isDrawTool } from "../store/editorStore";
 import type { EmbObject, Path, Point, ThreadColor } from "../types/project";
 import { makeObject, minPointsFor } from "../lib/objects";
 import { translatePaths, dedupePath, applyMatrix, type Matrix } from "../lib/geometry";
+import { smoothPath } from "../lib/smooth";
 import { computeTicks } from "../lib/ruler";
 import { generateDesign } from "../lib/engine";
 import { designToSegments, needleAt } from "../lib/engine/render";
@@ -59,6 +60,7 @@ export default function CanvasStage() {
   const addDraftPoint = useEditorStore((s) => s.addDraftPoint);
   const setCursor = useEditorStore((s) => s.setCursor);
   const clearDraft = useEditorStore((s) => s.clearDraft);
+  const smooth = useEditorStore((s) => s.smooth);
 
   const viewMode = useEditorStore((s) => s.viewMode);
   const simIndex = useEditorStore((s) => s.simIndex);
@@ -128,7 +130,11 @@ export default function CanvasStage() {
     }
     const colorId = activeColorId ?? project.colors[0]?.id;
     if (!colorId) return;
-    addObject(makeObject(tool, cleaned, colorId));
+    // In curve mode the placed points are control points: feed makeObject a
+    // densified spline polyline (for satin this is the smoothed centerline,
+    // from which makeObject derives the rail pair exactly as before).
+    const finalPath = smooth ? smoothPath(cleaned) : cleaned;
+    addObject(makeObject(tool, finalPath, colorId));
     clearDraft();
   }
 
@@ -150,7 +156,7 @@ export default function CanvasStage() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tool, draft, selectedIds, activeColorId]);
+  }, [tool, draft, selectedIds, activeColorId, smooth]);
 
   // --- stage pointer handlers ---
   function stagePointMm(stage: Konva.Stage): Point | null {
@@ -237,6 +243,7 @@ export default function CanvasStage() {
                     draft={draft}
                     cursor={cursorMm}
                     closed={tool === "fill"}
+                    smooth={smooth}
                     px={px}
                     py={py}
                   />
@@ -347,16 +354,22 @@ function DraftPreview({
   draft,
   cursor,
   closed,
+  smooth,
   px,
   py,
 }: {
   draft: Point[];
   cursor: Point | null;
   closed: boolean;
+  smooth: boolean;
   px: (x: number) => number;
   py: (y: number) => number;
 }) {
-  const pts = cursor ? [...draft, cursor] : draft;
+  // Control points are the placed points plus the moving cursor; in curve mode
+  // the rubber-band shows the smoothed spline through them, otherwise straight
+  // segments exactly as before.
+  const control = cursor ? [...draft, cursor] : draft;
+  const pts = smooth ? smoothPath(control) : control;
   const flat = pts.flatMap((p) => [px(p.x), py(p.y)]);
   return (
     <Group listening={false}>
