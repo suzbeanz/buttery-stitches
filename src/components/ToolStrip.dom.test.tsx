@@ -13,9 +13,9 @@ describe("ToolStrip", () => {
 
   it("switches the active tool", () => {
     render(<ToolStrip />);
-    fireEvent.click(screen.getByText("Node"));
+    fireEvent.click(screen.getByRole("button", { name: "Node" }));
     expect(useEditorStore.getState().tool).toBe("node");
-    fireEvent.click(screen.getByText("Fill"));
+    fireEvent.click(screen.getByRole("button", { name: "Fill" }));
     expect(useEditorStore.getState().tool).toBe("fill");
   });
 
@@ -28,7 +28,7 @@ describe("ToolStrip", () => {
   it("toggles curve (smooth) mode", () => {
     useEditorStore.setState({ smooth: false });
     render(<ToolStrip />);
-    const curve = screen.getByText("Curve");
+    const curve = screen.getByRole("button", { name: "Curve" });
     expect(curve.getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(curve);
     expect(useEditorStore.getState().smooth).toBe(true);
@@ -39,10 +39,10 @@ describe("ToolStrip", () => {
 
   it("shows a cancel affordance only while a drawing is in progress", () => {
     render(<ToolStrip />);
-    expect(screen.queryByText(/Cancel/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
     useEditorStore.setState({ tool: "running", draft: [{ x: 0, y: 0 }] });
     cleanup();
     render(<ToolStrip />);
-    expect(screen.getByText(/Cancel/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
   });
 });

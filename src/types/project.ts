@@ -25,6 +25,8 @@ export interface EmbObjectParams {
   underlay?: boolean;
   /** mm added to satin width to compensate for fabric pull (default 0.2). */
   pullComp?: number;
+  /** draw the object's border outline in the editor (default true). */
+  outline?: boolean;
 }
 
 export interface EmbObject {
@@ -77,6 +79,7 @@ export const DEFAULT_PARAMS: Required<EmbObjectParams> = {
   angle: 0,
   underlay: true,
   pullComp: 0.2,
+  outline: true,
 };
 
 /** Resolve an object's params against the defaults for the engine. */
@@ -92,5 +95,6 @@ export function resolveParams(
     underlay:
       type === "running" ? false : (params.underlay ?? DEFAULT_PARAMS.underlay),
     pullComp: params.pullComp ?? DEFAULT_PARAMS.pullComp,
+    outline: params.outline ?? DEFAULT_PARAMS.outline,
   };
 }

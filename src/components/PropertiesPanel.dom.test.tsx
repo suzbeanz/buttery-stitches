@@ -113,6 +113,18 @@ describe("PropertiesPanel", () => {
     expect(outline.paths).toHaveLength(2);
   });
 
+  it("toggles a fill's outline off via the Show outline checkbox", () => {
+    const { fillId } = seedSelectedFill();
+    render(<PropertiesPanel />);
+    const checkbox = screen.getByLabelText("Show outline") as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+    fireEvent.click(checkbox);
+    const fill = useProjectStore
+      .getState()
+      .project.objects.find((o) => o.id === fillId)!;
+    expect(fill.params.outline).toBe(false);
+  });
+
   it("adds a thread color", () => {
     resetStores();
     render(<PropertiesPanel />);

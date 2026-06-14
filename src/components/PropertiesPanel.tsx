@@ -28,7 +28,7 @@ export default function PropertiesPanel() {
   const selected = objects.filter((o) => selectedIds.includes(o.id));
 
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-l border-navy/15 bg-butter-100">
+    <aside className="flex h-full w-64 shrink-0 flex-col border-l border-navy/15 bg-butter-100">
       <div className="border-b border-navy/15 px-3 py-2 font-butter text-sm font-semibold text-navy">
         Properties
       </div>
@@ -196,6 +196,17 @@ function ObjectProperties({
             onChange={(e) => onParam({ underlay: e.target.checked })}
           />
           Underlay
+        </label>
+      )}
+
+      {object.type !== "running" && (
+        <label className="flex items-center gap-2 text-navy">
+          <input
+            type="checkbox"
+            checked={p.outline ?? DEFAULT_PARAMS.outline}
+            onChange={(e) => onParam({ outline: e.target.checked })}
+          />
+          Show outline
         </label>
       )}
 

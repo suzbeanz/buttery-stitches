@@ -40,6 +40,9 @@ interface EditorState {
   smooth: boolean;
   /** deep copies of objects held for paste (transient; not undone). */
   clipboard: EmbObject[];
+  /** whether the left (layers) and right (properties) panels are open. */
+  layersOpen: boolean;
+  propertiesOpen: boolean;
 
   // ---- preview / stitch simulator ----
   viewMode: ViewMode;
@@ -60,6 +63,10 @@ interface EditorState {
   setSmooth: (smooth: boolean) => void;
   toggleSmooth: () => void;
   setClipboard: (objects: EmbObject[]) => void;
+  setLayersOpen: (open: boolean) => void;
+  setPropertiesOpen: (open: boolean) => void;
+  toggleLayers: () => void;
+  toggleProperties: () => void;
 
   setViewMode: (mode: ViewMode) => void;
   setSimTotal: (total: number) => void;
@@ -76,6 +83,8 @@ export const useEditorStore = create<EditorState>((set) => ({
   rulerUnit: "inch",
   smooth: false,
   clipboard: [],
+  layersOpen: true,
+  propertiesOpen: true,
 
   viewMode: "edit",
   simTotal: 0,
@@ -92,6 +101,10 @@ export const useEditorStore = create<EditorState>((set) => ({
   setSmooth: (smooth) => set({ smooth }),
   toggleSmooth: () => set((s) => ({ smooth: !s.smooth })),
   setClipboard: (clipboard) => set({ clipboard }),
+  setLayersOpen: (layersOpen) => set({ layersOpen }),
+  setPropertiesOpen: (propertiesOpen) => set({ propertiesOpen }),
+  toggleLayers: () => set((s) => ({ layersOpen: !s.layersOpen })),
+  toggleProperties: () => set((s) => ({ propertiesOpen: !s.propertiesOpen })),
 
   setViewMode: (viewMode) =>
     set((s) => ({

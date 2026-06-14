@@ -1,4 +1,14 @@
 import {
+  MousePointer2,
+  PenTool,
+  Minus,
+  AlignJustify,
+  PaintBucket,
+  Spline,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import {
   useEditorStore,
   isDrawTool,
   type Tool,
@@ -11,12 +21,12 @@ import {
  * digitizing is first-class — every tool here works without auto-digitize.
  */
 
-const TOOLS: { id: Tool; label: string; hint: string }[] = [
-  { id: "select", label: "Select", hint: "Click to select; drag to move; handles to scale/rotate" },
-  { id: "node", label: "Node", hint: "Select an object, then drag its vertices" },
-  { id: "running", label: "Running", hint: "Click to place points; double-click to finish" },
-  { id: "satin", label: "Satin", hint: "Draw a centerline; double-click to finish" },
-  { id: "fill", label: "Fill", hint: "Click a polygon outline; double-click to finish" },
+const TOOLS: { id: Tool; label: string; hint: string; Icon: LucideIcon }[] = [
+  { id: "select", label: "Select", hint: "Click to select; drag to move; handles to scale/rotate", Icon: MousePointer2 },
+  { id: "node", label: "Node", hint: "Select an object, then drag its vertices", Icon: PenTool },
+  { id: "running", label: "Running", hint: "Click to place points; double-click to finish", Icon: Minus },
+  { id: "satin", label: "Satin", hint: "Draw a centerline; double-click to finish", Icon: AlignJustify },
+  { id: "fill", label: "Fill", hint: "Click a polygon outline; double-click to finish", Icon: PaintBucket },
 ];
 
 export default function ToolStrip() {
@@ -36,48 +46,51 @@ export default function ToolStrip() {
 
   return (
     <div className="flex items-center gap-1 border-b border-navy/15 bg-butter-100 px-2 py-1.5">
-      {TOOLS.map((t) => (
+      {TOOLS.map(({ id, label, hint, Icon }) => (
         <button
-          key={t.id}
-          title={locked ? "Switch to Edit view to use tools" : t.hint}
-          onClick={() => setTool(t.id)}
+          key={id}
+          title={locked ? "Switch to Edit view to use tools" : `${label} — ${hint}`}
+          aria-label={label}
+          aria-pressed={tool === id && !locked}
+          onClick={() => setTool(id)}
           disabled={locked}
-          className={`rounded px-2.5 py-1 text-sm transition-colors disabled:opacity-40 ${
-            tool === t.id && !locked
+          className={`grid h-8 w-8 place-items-center rounded-lg transition-colors disabled:opacity-40 ${
+            tool === id && !locked
               ? "bg-navy text-butter-200"
               : "text-navy hover:bg-butter-300/60 disabled:hover:bg-transparent"
           }`}
         >
-          {t.label}
+          <Icon size={17} />
         </button>
       ))}
 
-      <div className="mx-2 h-5 w-px bg-navy/15" />
+      <div className="mx-1 h-5 w-px bg-navy/15" />
 
       {/* Curve / smooth toggle — applies to the running, satin and fill tools. */}
       <button
         title={
           locked
             ? "Switch to Edit view to use tools"
-            : "Smooth placed points into a curve while drawing"
+            : "Curve — smooth placed points into a curve while drawing"
         }
+        aria-label="Curve"
         aria-pressed={smooth && !locked}
         onClick={() => toggleSmooth()}
         disabled={locked}
-        className={`rounded px-2.5 py-1 text-sm transition-colors disabled:opacity-40 ${
+        className={`grid h-8 w-8 place-items-center rounded-lg transition-colors disabled:opacity-40 ${
           smooth && !locked
             ? "bg-navy text-butter-200"
             : "text-navy hover:bg-butter-300/60 disabled:hover:bg-transparent"
         }`}
       >
-        Curve
+        <Spline size={17} />
       </button>
 
-      <div className="mx-2 h-5 w-px bg-navy/15" />
+      <div className="mx-1 h-5 w-px bg-navy/15" />
 
       {/* Ruler unit toggle */}
-      <div className="flex overflow-hidden rounded border border-navy/20 text-xs">
-        {(["mm", "inch"] as RulerUnit[]).map((u) => (
+      <div className="flex overflow-hidden rounded-lg border border-navy/20 text-xs">
+        {(["inch", "mm"] as RulerUnit[]).map((u) => (
           <button
             key={u}
             onClick={() => setRulerUnit(u)}
@@ -94,20 +107,17 @@ export default function ToolStrip() {
 
       <div className="flex-1" />
 
-      {drawing ? (
-        <>
-          <span className="mr-2 text-xs text-navy/70">{active.hint}</span>
-          {draft.length > 0 && (
-            <button
-              onClick={() => clearDraft()}
-              className="rounded px-2 py-1 text-xs text-navy hover:bg-butter-300/60"
-            >
-              Cancel (Esc)
-            </button>
-          )}
-        </>
-      ) : (
-        <span className="mr-1 text-xs text-navy/60">{active.hint}</span>
+      <span className="hidden text-xs text-navy/60 md:inline">{active.hint}</span>
+
+      {drawing && draft.length > 0 && (
+        <button
+          onClick={() => clearDraft()}
+          title="Cancel (Esc)"
+          aria-label="Cancel"
+          className="ml-1 grid h-8 w-8 place-items-center rounded-lg text-navy hover:bg-butter-300/60"
+        >
+          <X size={17} />
+        </button>
       )}
     </div>
   );

@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Pencil, Eye, Play, Pause } from "lucide-react";
 import { useEditorStore } from "../store/editorStore";
 
 /**
@@ -59,18 +60,25 @@ export default function SimulatorBar() {
   return (
     <div className="flex items-center gap-3 border-t border-navy/15 bg-butter-100 px-3 py-1.5">
       {/* Edit / Stitch view toggle */}
-      <div className="flex overflow-hidden rounded border border-navy/20 text-xs">
-        {(["edit", "stitch"] as const).map((m) => (
+      <div className="flex overflow-hidden rounded-lg border border-navy/20 text-xs">
+        {([
+          { m: "edit" as const, label: "Edit", Icon: Pencil },
+          { m: "stitch" as const, label: "Stitch view", Icon: Eye },
+        ]).map(({ m, label, Icon }) => (
           <button
             key={m}
             onClick={() => setViewMode(m)}
-            className={`px-2.5 py-1 capitalize ${
+            title={label}
+            aria-label={label}
+            aria-pressed={viewMode === m}
+            className={`flex items-center gap-1 px-2.5 py-1 ${
               viewMode === m
                 ? "bg-navy text-butter-200"
                 : "bg-butter-50 text-navy hover:bg-butter-200"
             }`}
           >
-            {m === "stitch" ? "Stitch view" : "Edit"}
+            <Icon size={14} />
+            <span className="hidden sm:inline">{label}</span>
           </button>
         ))}
       </div>
@@ -80,9 +88,11 @@ export default function SimulatorBar() {
           <button
             onClick={togglePlay}
             disabled={simTotal === 0}
-            className="rounded bg-navy px-3 py-1 text-sm text-butter-200 hover:bg-navy-light disabled:opacity-40"
+            title={simPlaying ? "Pause" : "Play"}
+            aria-label={simPlaying ? "Pause" : "Play"}
+            className="grid h-8 w-8 place-items-center rounded-lg bg-navy text-butter-200 hover:bg-navy-light disabled:opacity-40"
           >
-            {simPlaying ? "❚❚ Pause" : "▶ Play"}
+            {simPlaying ? <Pause size={16} /> : <Play size={16} />}
           </button>
 
           <input

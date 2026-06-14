@@ -1,6 +1,23 @@
 import { useState } from "react";
+import {
+  GripVertical,
+  Eye,
+  EyeOff,
+  Trash2,
+  PaintBucket,
+  AlignJustify,
+  Minus,
+  type LucideIcon,
+} from "lucide-react";
 import { useProjectStore } from "../store/projectStore";
-import type { ThreadColor } from "../types/project";
+import type { StitchType, ThreadColor } from "../types/project";
+
+/** Small glyph for each stitch type, matching the tool strip's icons. */
+const TYPE_ICON: Record<StitchType, LucideIcon> = {
+  fill: PaintBucket,
+  satin: AlignJustify,
+  running: Minus,
+};
 
 /**
  * Left panel: one row per object, top-to-bottom = stitch order. Drag a row to
@@ -19,7 +36,7 @@ export default function LayerPanel() {
   const colorById = new Map<string, ThreadColor>(colors.map((c) => [c.id, c]));
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r border-navy/15 bg-butter-100">
+    <aside className="flex h-full w-60 shrink-0 flex-col border-r border-navy/15 bg-butter-100">
       <div className="border-b border-navy/15 px-3 py-2 font-butter text-sm font-semibold text-navy">
         Stitch Order
       </div>
@@ -49,9 +66,14 @@ export default function LayerPanel() {
                   selected ? "bg-butter-300" : "hover:bg-butter-200/70"
                 } ${dragIndex === index ? "opacity-50" : ""}`}
               >
-                <span className="cursor-grab select-none text-navy/30">⠿</span>
+                <GripVertical
+                  size={14}
+                  className="shrink-0 cursor-grab text-navy/30"
+                  aria-hidden
+                />
                 <button
                   onClick={() => setSelection([o.id])}
+                  title={o.type}
                   className="flex min-w-0 flex-1 items-center gap-2 text-left"
                 >
                   <span
@@ -62,24 +84,25 @@ export default function LayerPanel() {
                         : "#888",
                     }}
                   />
+                  {(() => {
+                    const Icon = TYPE_ICON[o.type];
+                    return <Icon size={13} className="shrink-0 text-navy/45" aria-hidden />;
+                  })()}
                   <span className="flex-1 truncate text-navy">{o.name}</span>
-                  <span className="text-[10px] uppercase text-navy/50">
-                    {o.type}
-                  </span>
                 </button>
                 <button
                   title={o.visible ? "Hide" : "Show"}
                   onClick={() => updateObject(o.id, { visible: !o.visible })}
-                  className="px-1 text-navy/60 hover:text-navy"
+                  className="grid h-6 w-6 place-items-center rounded text-navy/60 hover:bg-butter-300/60 hover:text-navy"
                 >
-                  {o.visible ? "👁" : "—"}
+                  {o.visible ? <Eye size={15} /> : <EyeOff size={15} />}
                 </button>
                 <button
                   title="Delete"
                   onClick={() => removeObjects([o.id])}
-                  className="px-1 text-navy/40 opacity-0 hover:text-red-600 group-hover:opacity-100"
+                  className="grid h-6 w-6 place-items-center rounded text-navy/40 opacity-0 hover:bg-red-50 hover:text-red-600 group-hover:opacity-100"
                 >
-                  ✕
+                  <Trash2 size={15} />
                 </button>
               </li>
             );
