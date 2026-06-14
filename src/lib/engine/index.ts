@@ -3,7 +3,7 @@ import { resolveParams } from "../../types/project";
 import { distance } from "../geometry";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
-import { tatamiFill, splitFillRegions } from "./fill";
+import { tatamiFill, columnSatinFill, splitFillRegions } from "./fill";
 import {
   fillEdgeUnderlay,
   fillParallelUnderlay,
@@ -114,13 +114,15 @@ export function generateObjectRuns(object: EmbObject): StitchRun[] {
 
   // fill — edge + parallel underlay, then top, per connected region. Keeping
   // each pass a separate run lets the assembler jump between them rather than
-  // dragging a long stitch from the edge run to the fill start.
+  // dragging a long stitch from the edge run to the fill start. Lettering uses
+  // satin columns (smooth + shiny); broad areas use tatami.
+  const topFill = p.fillStyle === "satin" ? columnSatinFill : tatamiFill;
   for (const region of splitFillRegions(object.paths)) {
     if (p.underlay) {
       addRun(runs, dropShortStitches(fillEdgeUnderlay(region)), true);
       addRun(runs, dropShortStitches(fillParallelUnderlay(region, p.angle)), true);
     }
-    addRun(runs, dropShortStitches(tatamiFill(region, { density: p.density, angle: p.angle })), false);
+    addRun(runs, dropShortStitches(topFill(region, { density: p.density, angle: p.angle })), false);
   }
   return runs;
 }

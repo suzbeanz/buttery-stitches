@@ -4,6 +4,7 @@ import type { Font } from "opentype.js";
 import { FONTS, DEFAULT_FONT_ID, loadFont } from "../lib/text/fonts";
 import { layoutText } from "../lib/text/layout";
 import { translatePaths, pathsBounds } from "../lib/geometry";
+import { orientByDepth } from "../lib/engine";
 import { mmToInch, inchToMm } from "../lib/units";
 import { newId } from "../lib/id";
 
@@ -328,9 +329,9 @@ function TextPreview({
           preserveAspectRatio="xMidYMid meet"
         >
           <path
-            d={ringsToSvgPath(layout.object.paths)}
+            d={ringsToSvgPath(orientByDepth(layout.object.paths))}
             fill={colorHex}
-            fillRule="evenodd"
+            fillRule="nonzero"
           />
         </svg>
       ) : (

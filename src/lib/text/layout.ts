@@ -225,5 +225,7 @@ export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
   );
 
   const object = makeObjectFromPaths("fill", rings, colorId, name ?? "Text");
+  // Lettering stitches as satin columns (smooth + shiny), not tatami.
+  object.params = { fillStyle: "satin" };
   return { object, widthMm: penX * scale };
 }

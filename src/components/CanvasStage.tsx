@@ -20,6 +20,7 @@ import {
   dedupePath,
   applyMatrix,
   pathsBounds,
+  distance,
   type Matrix,
   type Bounds,
 } from "../lib/geometry";
@@ -27,7 +28,7 @@ import { snap } from "../lib/snap";
 import { smoothPath } from "../lib/smooth";
 import { computeTicks } from "../lib/ruler";
 import { mmToInch } from "../lib/units";
-import { generateDesign, generateObjectRuns } from "../lib/engine";
+import { generateDesign, generateObjectRuns, orientByDepth } from "../lib/engine";
 import { designToSegments, needleAt } from "../lib/engine/render";
 
 /**
@@ -47,6 +48,7 @@ import { designToSegments, needleAt } from "../lib/engine/render";
 const RULER = 22; // px thickness of the top/left rulers
 const PADDING = 28; // px breathing room around the hoop
 const SNAP_MM = 2; // snap distance (mm) for alignment to hoop/object edges
+const JOIN_SNAP_MM = 3; // snap the closing end of a fill polygon to its start
 
 const C = {
   cream: "#FFFDF3",
@@ -147,7 +149,15 @@ export default function CanvasStage() {
   // --- commit / cancel the in-progress drawing ---
   function finishDraft() {
     if (!isDrawTool(tool)) return;
-    const cleaned = dedupePath(draft); // drop double-click / stationary dupes
+    let cleaned = dedupePath(draft); // drop double-click / stationary dupes
+    // Smart snap-join: when closing a fill polygon, if the last point lands near
+    // the first, drop it so the closing edge meets cleanly instead of leaving a
+    // tiny overlapping sliver.
+    if (tool === "fill" && cleaned.length >= 4) {
+      const first = cleaned[0];
+      const last = cleaned[cleaned.length - 1];
+      if (distance(first, last) < JOIN_SNAP_MM) cleaned = cleaned.slice(0, -1);
+    }
     if (cleaned.length < minPointsFor(tool)) {
       clearDraft();
       return;
@@ -557,6 +567,10 @@ function ObjectShape({
   const [livePaths, setLivePaths] = useState<Path[] | null>(null);
   const paths = livePaths ?? object.paths;
 
+  // Rings oriented for nonzero-winding fill so counters cut and overlapping
+  // (script) contours union — no false holes.
+  const fillRings = useMemo(() => (isFill ? orientByDepth(paths) : []), [isFill, paths]);
+
   // Realistic preview: the object's actual generated stitches, so the builder
   // shows fill texture / satin throws / the running path rather than a flat
   // shape. Recomputed only when the object changes.
@@ -620,10 +634,10 @@ function ObjectShape({
         onCommitPaths(movedMm);
       }}
     >
-      {/* Fill objects get a translucent body drawn with the even-odd rule, so
-          every disjoint region (e.g. each letter of a word) fills and the
-          counters of a/e/o cut out correctly. The body is listening, so clicking
-          a filled interior selects the object. */}
+      {/* Fill objects get a translucent body drawn with the nonzero rule (rings
+          oriented by depth), so every disjoint region fills, counters cut out,
+          and overlapping script letters union cleanly. The body is listening, so
+          clicking a filled interior selects the object. */}
       {isFill && (
         <Shape
           listening={selectable}
@@ -632,7 +646,7 @@ function ObjectShape({
             const native = (ctx as unknown as { _context: CanvasRenderingContext2D })
               ._context;
             native.beginPath();
-            for (const ring of paths) {
+            for (const ring of fillRings) {
               if (ring.length < 3) continue;
               native.moveTo(px(ring[0].x), py(ring[0].y));
               for (let i = 1; i < ring.length; i++) {
@@ -641,11 +655,11 @@ function ObjectShape({
               native.closePath();
             }
             native.fillStyle = fillColor;
-            native.fill("evenodd");
+            native.fill("nonzero");
           }}
           hitFunc={(ctx, shape) => {
             ctx.beginPath();
-            for (const ring of paths) {
+            for (const ring of fillRings) {
               if (ring.length < 3) continue;
               ctx.moveTo(px(ring[0].x), py(ring[0].y));
               for (let i = 1; i < ring.length; i++) {

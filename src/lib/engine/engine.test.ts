@@ -9,7 +9,7 @@ import {
 } from "./resample";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
-import { tatamiFill, splitFillRegions } from "./fill";
+import { tatamiFill, columnSatinFill, splitFillRegions, orientByDepth } from "./fill";
 import { fillUnderlay, satinUnderlay } from "./underlay";
 
 const square = (x: number, y: number, s: number): Path => [
@@ -18,6 +18,50 @@ const square = (x: number, y: number, s: number): Path => [
   { x: x + s, y: y + s },
   { x, y: y + s },
 ];
+
+describe("columnSatinFill", () => {
+  // A narrow vertical stroke — like a letter stem.
+  const stroke: Path = [
+    { x: 0, y: 0 },
+    { x: 2, y: 0 },
+    { x: 2, y: 20 },
+    { x: 0, y: 20 },
+  ];
+
+  it("emits zig-zag throws across the stroke width", () => {
+    const pts = columnSatinFill([stroke], { density: 0.4, angle: 0 });
+    expect(pts.length).toBeGreaterThan(10);
+    // Every penetration lands within the stroke's x-range (throws span the width).
+    for (const p of pts) {
+      expect(p.x).toBeGreaterThanOrEqual(-0.01);
+      expect(p.x).toBeLessThanOrEqual(2.01);
+    }
+  });
+
+  it("is deterministic", () => {
+    const a = columnSatinFill([stroke], { density: 0.4, angle: 0 });
+    const b = columnSatinFill([stroke], { density: 0.4, angle: 0 });
+    expect(a).toEqual(b);
+  });
+});
+
+describe("orientByDepth", () => {
+  it("orients an outer and its hole to opposite winding", () => {
+    const out = orientByDepth([square(0, 0, 20), square(5, 5, 5)]);
+    expect(out).toHaveLength(2);
+    // The two rings end up with opposite winding (one positive, one negative).
+    const sign = (r: Path) => {
+      let s = 0;
+      for (let i = 0; i < r.length; i++) {
+        const a = r[i];
+        const b = r[(i + 1) % r.length];
+        s += a.x * b.y - b.x * a.y;
+      }
+      return Math.sign(s);
+    };
+    expect(sign(out[0])).not.toBe(sign(out[1]));
+  });
+});
 
 describe("splitFillRegions", () => {
   it("keeps a single outer (no holes) as one region", () => {
