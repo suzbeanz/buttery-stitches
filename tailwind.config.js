@@ -27,6 +27,11 @@ export default {
         // gracefully to widely-installed serifs so the app needs no network.
         butter: ['"Playfair Display"', "Georgia", '"Times New Roman"', "serif"],
       },
+      boxShadow: {
+        // Warm, soft shadows so panels and dialogs feel pillowy, not harsh.
+        butter: "0 8px 24px -12px rgba(22, 35, 74, 0.25)",
+        card: "0 1px 2px rgba(22, 35, 74, 0.06), 0 6px 20px -10px rgba(22, 35, 74, 0.18)",
+      },
     },
   },
   plugins: [],

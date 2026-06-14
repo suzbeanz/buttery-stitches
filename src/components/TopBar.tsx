@@ -66,9 +66,13 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
   }
 
   return (
-    <header className="flex items-center gap-1 border-b border-navy-dark bg-navy px-3 py-2 text-butter-100">
-      <span className="mr-3 select-none font-butter text-lg font-semibold tracking-wide text-butter-200">
-        🧈 Buttery Stitches
+    <header className="flex items-center gap-1 border-b border-navy-dark bg-navy px-3 py-2 text-butter-100 shadow-butter">
+      <span className="mr-3 flex select-none items-baseline gap-1.5">
+        <span aria-hidden className="text-lg">🧈</span>
+        <span className="wordmark text-lg text-butter-200">Buttery Stitches</span>
+        <span className="ml-1 hidden text-[11px] italic text-butter-100/50 sm:inline">
+          stitch something sweet
+        </span>
       </span>
 
       <BarButton onClick={() => newProject()}>New</BarButton>

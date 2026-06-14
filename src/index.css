@@ -10,16 +10,51 @@ body,
 }
 
 body {
-  @apply bg-cream text-navy;
+  @apply text-navy;
+  /* A soft, warm butter wash so the whole app feels creamy rather than flat. */
+  background:
+    radial-gradient(120% 90% at 50% -10%, #fffdf4 0%, #fdf6dd 55%, #fbefc6 100%)
+      fixed;
   font-family:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica,
     Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
+@layer base {
+  /* Everything that reacts to the pointer eases gently — small touch, big feel. */
+  button,
+  a,
+  input,
+  select,
+  [role="button"] {
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease,
+      border-color 0.15s ease,
+      box-shadow 0.15s ease,
+      transform 0.08s ease;
+  }
+
+  /* A buttery focus ring instead of the default browser outline. */
+  :focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px #fffdf3,
+      0 0 0 4px #ebcb4e;
+    border-radius: 6px;
+  }
+}
+
 @layer components {
   .input {
-    @apply w-full rounded border border-navy/20 bg-white px-2 py-1 text-sm text-navy outline-none focus:border-navy/60;
+    @apply w-full rounded-md border border-navy/20 bg-white px-2 py-1 text-sm text-navy outline-none focus:border-navy/60;
+  }
+
+  /* The serif wordmark — a touch of letter-spacing and an optical lift. */
+  .wordmark {
+    @apply font-butter font-semibold tracking-wide;
+    font-feature-settings: "liga" 1, "kern" 1;
   }
 }
 
