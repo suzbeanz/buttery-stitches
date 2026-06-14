@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useProjectStore } from "../store/projectStore";
+import { useEditorStore } from "../store/editorStore";
+import { mmToInch, inchToMm } from "../lib/units";
 import { HOOP_PRESETS } from "../lib/hoops";
 import {
   designSize,
@@ -22,6 +24,16 @@ export default function DesignPanel() {
   const { objects, hoop } = project;
   const size = designSize(objects);
   const [lock, setLock] = useState(true);
+
+  // All geometry is stored in mm; the panel just displays the active unit.
+  const rulerUnit = useEditorStore((s) => s.rulerUnit);
+  const isInch = rulerUnit === "inch";
+  const unit = isInch ? "in" : "mm";
+  const toDisp = (mm: number) => (isInch ? mmToInch(mm) : mm);
+  const fromDisp = (v: number) => (isInch ? inchToMm(v) : v);
+  const decimals = isInch ? 2 : 1;
+  const step = isInch ? 0.1 : 1;
+  const minDim = isInch ? 0.1 : 1;
 
   const warnings = useMemo(
     () => validateDesign(generateDesign(project), project),
@@ -87,14 +99,20 @@ export default function DesignPanel() {
       {presetIndex === -1 && (
         <div className="flex gap-2">
           <LabeledNumber
-            label="Hoop W"
-            value={hoop.wMm}
-            onCommit={(v) => onHoopDim({ wMm: v })}
+            label={`Hoop W (${unit})`}
+            value={toDisp(hoop.wMm)}
+            decimals={decimals}
+            step={step}
+            min={minDim}
+            onCommit={(v) => onHoopDim({ wMm: fromDisp(v) })}
           />
           <LabeledNumber
-            label="Hoop H"
-            value={hoop.hMm}
-            onCommit={(v) => onHoopDim({ hMm: v })}
+            label={`Hoop H (${unit})`}
+            value={toDisp(hoop.hMm)}
+            decimals={decimals}
+            step={step}
+            min={minDim}
+            onCommit={(v) => onHoopDim({ hMm: fromDisp(v) })}
           />
         </div>
       )}
@@ -103,8 +121,22 @@ export default function DesignPanel() {
       {hasDesign ? (
         <>
           <div className="flex items-end gap-2">
-            <LabeledNumber label="Width (mm)" value={size.w} onCommit={onWidth} />
-            <LabeledNumber label="Height (mm)" value={size.h} onCommit={onHeight} />
+            <LabeledNumber
+              label={`Width (${unit})`}
+              value={toDisp(size.w)}
+              decimals={decimals}
+              step={step}
+              min={minDim}
+              onCommit={(v) => onWidth(fromDisp(v))}
+            />
+            <LabeledNumber
+              label={`Height (${unit})`}
+              value={toDisp(size.h)}
+              decimals={decimals}
+              step={step}
+              min={minDim}
+              onCommit={(v) => onHeight(fromDisp(v))}
+            />
           </div>
           <label className="flex items-center gap-2 text-xs text-navy/70">
             <input
@@ -148,23 +180,29 @@ function LabeledNumber({
   label,
   value,
   onCommit,
+  decimals = 1,
+  step = 1,
+  min = 1,
 }: {
   label: string;
   value: number;
   onCommit: (v: number) => void;
+  decimals?: number;
+  step?: number;
+  min?: number;
 }) {
-  const [text, setText] = useState(value.toFixed(1));
+  const [text, setText] = useState(value.toFixed(decimals));
   const [editing, setEditing] = useState(false);
   // Reflect external changes (undo, fit, etc.) when not actively editing.
   useEffect(() => {
-    if (!editing) setText(value.toFixed(1));
-  }, [value, editing]);
+    if (!editing) setText(value.toFixed(decimals));
+  }, [value, editing, decimals]);
 
   function commit() {
     setEditing(false);
     const v = parseFloat(text);
     if (!Number.isNaN(v) && v > 0) onCommit(v);
-    else setText(value.toFixed(1));
+    else setText(value.toFixed(decimals));
   }
 
   return (
@@ -180,8 +218,8 @@ function LabeledNumber({
           if (e.key === "Enter") (e.target as HTMLInputElement).blur();
         }}
         className="input"
-        step={1}
-        min={1}
+        step={step}
+        min={min}
       />
     </label>
   );

@@ -45,16 +45,14 @@ describe("buildOutline", () => {
     expect(satinWidthOf(obj.paths)).toBeCloseTo(2.4, 1);
   });
 
-  it("closes the ring: each rail returns to its start", () => {
-    // The centerline is closed (first point appended), so the rails trace the
-    // whole border and end back near where they began. The seam vertex is not
-    // mitered like an interior corner, so allow up to the column width.
-    const width = 1.5;
-    const [obj] = buildOutline([square], width, "c1");
+  it("closes the ring seam exactly: each rail returns to its start", () => {
+    // The centerline loops, and the closed offset reuses the seam vertex's
+    // wrap-around neighbors, so each rail ends exactly where it began.
+    const [obj] = buildOutline([square], 1.5, "c1");
     for (const rail of obj.paths) {
       const first = rail[0];
       const last = rail[rail.length - 1];
-      expect(distance(first, last)).toBeLessThanOrEqual(width + 1e-6);
+      expect(distance(first, last)).toBeLessThanOrEqual(1e-9);
     }
   });
 

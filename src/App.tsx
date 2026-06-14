@@ -8,7 +8,11 @@ import PropertiesPanel from "./components/PropertiesPanel";
 import HelpOverlay from "./components/HelpOverlay";
 import { useProjectStore } from "./store/projectStore";
 import { useEditorStore, type Tool } from "./store/editorStore";
+import { cloneObject } from "./lib/objects";
 import { downloadProject } from "./lib/embproj";
+
+/** How far (mm) a pasted or duplicated object is offset so it doesn't hide the original. */
+const PASTE_OFFSET_MM = 3;
 
 /**
  * Three-region editor shell (Section 8):
@@ -83,6 +87,45 @@ function useGlobalShortcuts(setShowHelp: (fn: (v: boolean) => boolean) => void) 
       if (mod && e.key.toLowerCase() === "y") {
         e.preventDefault();
         useProjectStore.temporal.getState().redo();
+        return;
+      }
+      // Copy selected objects to the clipboard (deep copies).
+      if (mod && e.key.toLowerCase() === "c") {
+        const ps = useProjectStore.getState();
+        const sel = ps.project.objects.filter((o) =>
+          ps.selectedIds.includes(o.id),
+        );
+        if (sel.length) {
+          e.preventDefault();
+          useEditorStore.getState().setClipboard(sel.map((o) => cloneObject(o)));
+        }
+        return;
+      }
+      // Paste the clipboard, offset slightly so the copies are visible.
+      if (mod && e.key.toLowerCase() === "v") {
+        const clip = useEditorStore.getState().clipboard;
+        if (clip.length) {
+          e.preventDefault();
+          useProjectStore
+            .getState()
+            .addObjects(
+              clip.map((o) => cloneObject(o, PASTE_OFFSET_MM, PASTE_OFFSET_MM)),
+            );
+        }
+        return;
+      }
+      // Duplicate selection in place (one undo step).
+      if (mod && e.key.toLowerCase() === "d") {
+        const ps = useProjectStore.getState();
+        const sel = ps.project.objects.filter((o) =>
+          ps.selectedIds.includes(o.id),
+        );
+        if (sel.length) {
+          e.preventDefault();
+          ps.addObjects(
+            sel.map((o) => cloneObject(o, PASTE_OFFSET_MM, PASTE_OFFSET_MM)),
+          );
+        }
         return;
       }
       if (mod) return; // leave other Ctrl/Cmd combos to the browser

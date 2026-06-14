@@ -106,23 +106,50 @@ function leftNormal(a: Point, b: Point): Point {
   return { x: -dy / len, y: dx / len };
 }
 
+/** Average two unit normals into a single unit normal. */
+function averageNormal(a: Point, b: Point): Point {
+  const nx = a.x + b.x;
+  const ny = a.y + b.y;
+  const len = Math.hypot(nx, ny) || 1;
+  return { x: nx / len, y: ny / len };
+}
+
 /**
- * Offset an open polyline by `dist` mm along its left normal. Vertices use the
- * average of the adjacent segment normals so corners stay continuous. Used to
- * derive a satin rail pair from a drawn centerline.
+ * Offset a polyline by `dist` mm along its left normal. Vertices use the average
+ * of the adjacent segment normals so corners stay continuous. Used to derive a
+ * satin rail pair from a centerline.
+ *
+ * When `closed` is set and the path's first and last points coincide, the path
+ * is treated as a loop: the shared seam vertex is offset using its wrap-around
+ * neighbors (the segment before the last point and the segment after the first),
+ * so the offset ring closes on itself with no gap at the seam.
  */
-export function offsetPolyline(path: Path, dist: number): Path {
+export function offsetPolyline(path: Path, dist: number, closed = false): Path {
   if (path.length < 2) return path.map((p) => ({ ...p }));
+
+  const isLoop =
+    closed && distance(path[0], path[path.length - 1]) < 1e-9 && path.length > 2;
+
+  if (isLoop) {
+    // Work on the unique vertices (drop the duplicated closing point), offset
+    // each with wrap-around neighbors, then re-close the seam exactly.
+    const ring = path.slice(0, -1);
+    const m = ring.length;
+    const out = ring.map((p, i) => {
+      const prev = leftNormal(ring[(i - 1 + m) % m], ring[i]);
+      const next = leftNormal(ring[i], ring[(i + 1) % m]);
+      const n = averageNormal(prev, next);
+      return { x: p.x + n.x * dist, y: p.y + n.y * dist };
+    });
+    out.push({ ...out[0] });
+    return out;
+  }
+
   const normals: Point[] = [];
   for (let i = 0; i < path.length; i++) {
     const prev = i > 0 ? leftNormal(path[i - 1], path[i]) : null;
     const next = i < path.length - 1 ? leftNormal(path[i], path[i + 1]) : null;
-    let nx = (prev?.x ?? next!.x) + (next?.x ?? prev!.x);
-    let ny = (prev?.y ?? next!.y) + (next?.y ?? prev!.y);
-    const len = Math.hypot(nx, ny) || 1;
-    nx /= len;
-    ny /= len;
-    normals.push({ x: nx, y: ny });
+    normals.push(averageNormal(prev ?? next!, next ?? prev!));
   }
   return path.map((p, i) => ({
     x: p.x + normals[i].x * dist,
@@ -132,9 +159,17 @@ export function offsetPolyline(path: Path, dist: number): Path {
 
 /**
  * Build a satin rail pair from a centerline and total column width.
- * Returns [leftRail, rightRail].
+ * Returns [leftRail, rightRail]. Pass `closed` for a centerline that loops back
+ * on itself (e.g. an outline border) so the rails close cleanly at the seam.
  */
-export function railsFromCenterline(center: Path, widthMm: number): [Path, Path] {
+export function railsFromCenterline(
+  center: Path,
+  widthMm: number,
+  closed = false,
+): [Path, Path] {
   const half = widthMm / 2;
-  return [offsetPolyline(center, half), offsetPolyline(center, -half)];
+  return [
+    offsetPolyline(center, half, closed),
+    offsetPolyline(center, -half, closed),
+  ];
 }

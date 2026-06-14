@@ -17,6 +17,7 @@ import { makeObject, minPointsFor } from "../lib/objects";
 import { translatePaths, dedupePath, applyMatrix, type Matrix } from "../lib/geometry";
 import { smoothPath } from "../lib/smooth";
 import { computeTicks } from "../lib/ruler";
+import { mmToInch } from "../lib/units";
 import { generateDesign } from "../lib/engine";
 import { designToSegments, needleAt } from "../lib/engine/render";
 
@@ -294,7 +295,9 @@ export default function CanvasStage() {
       )}
 
       <div className="pointer-events-none absolute bottom-2 right-3 rounded bg-navy/80 px-2 py-0.5 text-[11px] text-butter-100">
-        {project.widthMm.toFixed(0)} × {project.heightMm.toFixed(0)} mm
+        {rulerUnit === "inch"
+          ? `${mmToInch(project.widthMm).toFixed(2)} × ${mmToInch(project.heightMm).toFixed(2)} in`
+          : `${project.widthMm.toFixed(0)} × ${project.heightMm.toFixed(0)} mm`}
       </div>
     </main>
   );

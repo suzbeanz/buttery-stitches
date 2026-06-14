@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Point, StitchType } from "../types/project";
+import type { EmbObject, Point, StitchType } from "../types/project";
 
 /**
  * Transient editor UI state — current tool, in-progress drawing, ruler units,
@@ -38,6 +38,8 @@ interface EditorState {
    * use a densified spline polyline instead of straight segments.
    */
   smooth: boolean;
+  /** deep copies of objects held for paste (transient; not undone). */
+  clipboard: EmbObject[];
 
   // ---- preview / stitch simulator ----
   viewMode: ViewMode;
@@ -57,6 +59,7 @@ interface EditorState {
   setRulerUnit: (unit: RulerUnit) => void;
   setSmooth: (smooth: boolean) => void;
   toggleSmooth: () => void;
+  setClipboard: (objects: EmbObject[]) => void;
 
   setViewMode: (mode: ViewMode) => void;
   setSimTotal: (total: number) => void;
@@ -70,8 +73,9 @@ export const useEditorStore = create<EditorState>((set) => ({
   draft: [],
   cursorMm: null,
   activeColorId: null,
-  rulerUnit: "mm",
+  rulerUnit: "inch",
   smooth: false,
+  clipboard: [],
 
   viewMode: "edit",
   simTotal: 0,
@@ -87,6 +91,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   setRulerUnit: (unit) => set({ rulerUnit: unit }),
   setSmooth: (smooth) => set({ smooth }),
   toggleSmooth: () => set((s) => ({ smooth: !s.smooth })),
+  setClipboard: (clipboard) => set({ clipboard }),
 
   setViewMode: (viewMode) =>
     set((s) => ({

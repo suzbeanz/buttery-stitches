@@ -28,6 +28,7 @@ export interface ProjectState {
   updateProject: (patch: Partial<Project>) => void;
 
   addObject: (object: EmbObject) => void;
+  addObjects: (objects: EmbObject[]) => void;
   removeObjects: (ids: string[]) => void;
   updateObject: (id: string, patch: Partial<EmbObject>) => void;
   updateObjectParams: (id: string, patch: Partial<EmbObjectParams>) => void;
@@ -64,6 +65,15 @@ export const useProjectStore = create<ProjectState>()(
             objects: [...s.project.objects, object],
           },
           selectedIds: [object.id],
+        })),
+
+      addObjects: (objects) =>
+        set((s) => ({
+          project: {
+            ...s.project,
+            objects: [...s.project.objects, ...objects],
+          },
+          selectedIds: objects.map((o) => o.id),
         })),
 
       removeObjects: (ids) =>

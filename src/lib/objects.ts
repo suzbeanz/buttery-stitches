@@ -5,6 +5,7 @@ import {
   railsFromCenterline,
   centerlineOf,
   distance,
+  translatePaths,
 } from "./geometry";
 
 /** Default satin column width (mm) when building rails from a centerline. */
@@ -36,6 +37,24 @@ export function makeObject(
     colorId,
     paths,
     params: {},
+    visible: true,
+  };
+}
+
+/**
+ * Deep-copy an object with a fresh id, optionally shifted by (dx, dy) mm. Used
+ * for copy/paste and duplicate so the clone is fully independent of the original.
+ */
+export function cloneObject(
+  object: EmbObject,
+  dxMm = 0,
+  dyMm = 0,
+): EmbObject {
+  return {
+    ...object,
+    id: newId("obj"),
+    paths: translatePaths(object.paths, dxMm, dyMm),
+    params: { ...object.params },
     visible: true,
   };
 }

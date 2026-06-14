@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   makeObject,
+  cloneObject,
   satinWidthOf,
   setSatinWidth,
   convertObjectType,
@@ -13,6 +14,26 @@ const line: Path = [
   { x: 10, y: 0 },
   { x: 20, y: 0 },
 ];
+
+describe("cloneObject", () => {
+  it("gives the clone a fresh id and offsets its geometry", () => {
+    const original = makeObject("fill", line, "c1");
+    const clone = cloneObject(original, 3, 5);
+    expect(clone.id).not.toBe(original.id);
+    expect(clone.type).toBe("fill");
+    expect(clone.colorId).toBe("c1");
+    expect(clone.paths[0][0]).toEqual({ x: 3, y: 5 });
+    // Original is untouched (deep copy).
+    expect(original.paths[0][0]).toEqual({ x: 0, y: 0 });
+  });
+
+  it("deep-copies paths and params so edits don't leak back", () => {
+    const original = makeObject("running", line, "c1");
+    const clone = cloneObject(original);
+    clone.paths[0][0].x = 999;
+    expect(original.paths[0][0].x).toBe(0);
+  });
+});
 
 describe("makeObject", () => {
   it("keeps running/fill geometry as a single path", () => {

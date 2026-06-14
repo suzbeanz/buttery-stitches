@@ -50,7 +50,8 @@ export function buildOutline(
 
   return chosen.map((ring) => {
     const centerline = closeRing(ring);
-    const [left, right] = railsFromCenterline(centerline, widthMm);
+    // closed: true so the rails close cleanly where the border meets its start.
+    const [left, right] = railsFromCenterline(centerline, widthMm, true);
     return makeObjectFromPaths("satin", [left, right], colorId, "Outline");
   });
 }
