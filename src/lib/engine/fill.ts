@@ -1,5 +1,8 @@
 import type { Path, Point } from "../../types/project";
-import { rotatePoint } from "./resample";
+import { rotatePoint, capSegmentLength } from "./resample";
+
+/** Longest single satin throw (mm) before it is split for safety. */
+const MAX_THROW_MM = 7;
 
 export interface FillOptions {
   /** mm between scan rows */
@@ -299,5 +302,8 @@ export function columnSatinFill(rings: Path[], opts: FillOptions): Path {
       else rotated.push({ x: x1, y }, { x: x0, y });
     }
   }
-  return rotated.map((p) => rotatePoint(p, opts.angle, pivot));
+  // Split throws wider than a safe length (split satin) before rotating back.
+  return capSegmentLength(rotated, MAX_THROW_MM).map((p) =>
+    rotatePoint(p, opts.angle, pivot),
+  );
 }

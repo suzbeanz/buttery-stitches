@@ -1,0 +1,57 @@
+import { describe, it, expect } from "vitest";
+import { fixStitches, fixObjectStitches } from "./fix";
+import { makeObject, makeObjectFromPaths } from "./objects";
+import { createEmptyProject } from "./project";
+import type { Path } from "../types/project";
+
+const strokeFill: Path = [
+  { x: 0, y: 0 },
+  { x: 2, y: 0 },
+  { x: 2, y: 30 },
+  { x: 0, y: 30 },
+];
+const broadFill: Path = [
+  { x: 0, y: 0 },
+  { x: 40, y: 0 },
+  { x: 40, y: 40 },
+  { x: 0, y: 40 },
+];
+
+describe("fixObjectStitches", () => {
+  it("makes a narrow fill satin and a broad fill tatami", () => {
+    expect(fixObjectStitches(makeObjectFromPaths("fill", [strokeFill], "c1")).params.fillStyle).toBe("satin");
+    expect(fixObjectStitches(makeObjectFromPaths("fill", [broadFill], "c1")).params.fillStyle).toBe("tatami");
+  });
+
+  it("keeps text as satin", () => {
+    const o = makeObjectFromPaths("fill", [broadFill], "c1");
+    o.text = { content: "Hi", fontId: "x", heightMm: 15, letterSpacingMm: 0 };
+    expect(fixObjectStitches(o).params.fillStyle).toBe("satin");
+  });
+
+  it("clamps a too-high fill density and turns on underlay", () => {
+    const o = makeObjectFromPaths("fill", [broadFill], "c1");
+    o.params = { density: 0.1 };
+    const fixed = fixObjectStitches(o);
+    expect(fixed.params.density).toBeGreaterThanOrEqual(0.35);
+    expect(fixed.params.underlay).toBe(true);
+  });
+
+  it("clamps running stitch length into a safe range", () => {
+    const o = makeObject("running", [{ x: 0, y: 0 }, { x: 50, y: 0 }], "c1");
+    o.params = { stitchLength: 20 };
+    expect(fixObjectStitches(o).params.stitchLength).toBeLessThanOrEqual(4);
+  });
+});
+
+describe("fixStitches", () => {
+  it("groups objects by color to cut thread changes", () => {
+    const p = createEmptyProject();
+    const a = makeObject("running", [{ x: 0, y: 0 }, { x: 5, y: 0 }], "red");
+    const b = makeObject("running", [{ x: 0, y: 0 }, { x: 5, y: 0 }], "blue");
+    const c = makeObject("running", [{ x: 0, y: 0 }, { x: 5, y: 0 }], "red");
+    p.objects = [a, b, c];
+    const colors = fixStitches(p).objects.map((o) => o.colorId);
+    expect(colors).toEqual(["red", "red", "blue"]);
+  });
+});

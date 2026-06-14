@@ -18,12 +18,14 @@ import {
   Star,
   Heart,
   Minus,
+  Wand2,
   type LucideIcon,
 } from "lucide-react";
 import { useProjectStore, useTemporalStore } from "../store/projectStore";
 import { useEditorStore } from "../store/editorStore";
 import { downloadProject, loadProjectFromFile } from "../lib/embproj";
 import { buildWorksheet, worksheetHtml } from "../lib/worksheet";
+import { fixStitches } from "../lib/fix";
 import { makeShapeObject, type ShapeKind } from "../lib/shapes";
 import type { Project } from "../types/project";
 import ExportMenu from "./ExportMenu";
@@ -213,6 +215,12 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
       </div>
 
       <ExportMenu />
+      <BarButton
+        label="Fix stitches (smart cleanup)"
+        onClick={() => setProject(fixStitches(project))}
+      >
+        <Wand2 size={18} />
+      </BarButton>
       <BarButton label="Thread worksheet" onClick={openWorksheet}>
         <ClipboardList size={18} />
       </BarButton>
