@@ -119,7 +119,14 @@ export function tracedataToObjects(
       rgb: [pal.r, pal.g, pal.b],
       name: `Color ${ci + 1}`,
     };
-    let used = false;
+
+    // Collect every region of this colour first, then emit ONE fill object for
+    // all the filled blobs (the tatami engine clips with even-odd, so disjoint
+    // outers + their holes coexist in a single object). Thin slivers stay as
+    // individual running objects. This keeps a logo to a handful of objects
+    // instead of one per traced blob.
+    const fillRings: Path[] = [];
+    const runningObjects: EmbObject[] = [];
 
     layer.forEach((path) => {
       if (path.isholepath) return; // pulled in via a parent's holechildren
@@ -127,22 +134,23 @@ export function tracedataToObjects(
       const cls = classifyShape(outer, { runningMaxWidth, minAreaMm2 });
       if (!cls) return; // despeckled
 
-      let paths: Path[];
       if (cls.type === "fill") {
         const holes = (path.holechildren ?? [])
           .map((idx) => layer[idx])
           .filter(Boolean)
           .map((h) => simp(pathToPolylinePx(h)));
-        paths = [outer, ...holes];
+        fillRings.push(outer, ...holes);
       } else {
-        paths = [outer];
+        runningObjects.push(makeObjectFromPaths("running", [outer], colorId));
       }
-
-      objects.push(makeObjectFromPaths(cls.type, paths, colorId));
-      used = true;
     });
 
-    if (used) colors.push(color);
+    if (fillRings.length > 0) {
+      objects.push(makeObjectFromPaths("fill", fillRings, colorId));
+    }
+    objects.push(...runningObjects);
+
+    if (fillRings.length > 0 || runningObjects.length > 0) colors.push(color);
   });
 
   return { colors, objects };

@@ -71,7 +71,7 @@ export default function AutoDigitizeDialog({
         });
 
         if (objects.length === 0) {
-          setError("No shapes found. Try more colours or turn off background removal.");
+          setError("No shapes found. Try more colors or turn off background removal.");
           setBusy(false);
           return;
         }
@@ -116,7 +116,7 @@ export default function AutoDigitizeDialog({
         {looksLikePhoto && (
           <p className="mb-3 rounded bg-butter-200 px-2 py-1.5 text-[12px] text-navy">
             ⚠️ This looks like a photo. Buttery Stitches is built for logos and line
-            art — expect a rough result, and try fewer colours.
+            art — expect a rough result, and try fewer colors.
           </p>
         )}
 
@@ -141,7 +141,7 @@ export default function AutoDigitizeDialog({
             checked={removeBackground}
             onChange={(e) => setRemoveBackground(e.target.checked)}
           />
-          Remove background (drops the largest colour area)
+          Remove background (drops the largest color area)
         </label>
 
         {hasExistingWork && (

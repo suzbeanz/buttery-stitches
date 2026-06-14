@@ -86,7 +86,7 @@ export default function ExportMenu() {
               <div className="flex items-center justify-between px-1 pb-2 text-[11px] text-navy/70">
                 <span>{stitches.toLocaleString()} stitches</span>
                 <span>
-                  {changes + 1} colour{changes === 0 ? "" : "s"}
+                  {changes + 1} color{changes === 0 ? "" : "s"}
                 </span>
               </div>
 

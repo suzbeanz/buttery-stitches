@@ -125,10 +125,10 @@ export function worksheetHtml(worksheet: Worksheet, title = "Buttery Stitches"):
 </style></head>
 <body>
   <h1>🧈 ${esc(title)} — Thread Worksheet</h1>
-  <p class="sub">Stitch in this colour order, top to bottom.</p>
+  <p class="sub">Stitch in this color order, top to bottom.</p>
   <div class="totals">
     <div>Stitches<span>${worksheet.totalStitches.toLocaleString()}</span></div>
-    <div>Colour stops<span>${worksheet.colorStops}</span></div>
+    <div>Color stops<span>${worksheet.colorStops}</span></div>
     <div>Est. run time<span>${formatDuration(worksheet.estMinutes)}</span></div>
   </div>
   <table>

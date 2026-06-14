@@ -458,6 +458,8 @@ function ObjectShape({
   onCommitPaths: (paths: Path[]) => void;
 }) {
   const stroke = color ? `rgb(${color.rgb.join(",")})` : "#888";
+  const fillColor = color ? `rgba(${color.rgb.join(",")},0.28)` : "rgba(136,136,136,0.28)";
+  const isFill = object.type === "fill";
   const selectable = tool === "select" || tool === "node";
   const movable = tool === "select" && selected;
   const editingNodes = tool === "node" && selected;
@@ -496,6 +498,20 @@ function ObjectShape({
         onCommitPaths(movedMm);
       }}
     >
+      {/* Fill objects get a translucent body so they read as solid in the
+          editor. The first ring is the outer; the rest are holes, painted with
+          the hoop's white to punch them back out. */}
+      {isFill &&
+        paths.map((path, pi) => (
+          <Line
+            key={`fill-${pi}`}
+            points={path.flatMap((p) => [px(p.x), py(p.y)])}
+            closed
+            fill={pi === 0 ? fillColor : "#ffffff"}
+            listening={false}
+          />
+        ))}
+
       {paths.map((path, pi) => (
         <Line
           key={pi}

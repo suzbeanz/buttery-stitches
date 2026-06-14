@@ -131,6 +131,48 @@ describe("tracedataToObjects", () => {
     expect(objects[0].paths).toHaveLength(2); // outer + hole
   });
 
+  it("groups disjoint fill blobs of one colour into a single object", () => {
+    const td = {
+      width: 100,
+      height: 100,
+      palette: [
+        { r: 255, g: 255, b: 255, a: 255 }, // background
+        { r: 30, g: 120, b: 60, a: 255 },
+      ],
+      layers: [
+        [sq(0, 0, 100, 100)],
+        // two separate solid squares of the same colour
+        [sq(10, 10, 30, 30), sq(60, 60, 90, 90)],
+      ],
+    } as unknown as Tracedata;
+
+    const { colors, objects } = tracedataToObjects(td, { mmPerPx: 1 });
+    expect(colors).toHaveLength(1);
+    expect(objects).toHaveLength(1); // one fill object, not two
+    expect(objects[0].type).toBe("fill");
+    expect(objects[0].paths).toHaveLength(2); // both blobs as even-odd rings
+  });
+
+  it("keeps thin slivers as separate running objects", () => {
+    const td = {
+      width: 100,
+      height: 100,
+      palette: [
+        { r: 255, g: 255, b: 255, a: 255 }, // background
+        { r: 0, g: 0, b: 0, a: 255 },
+      ],
+      layers: [
+        [sq(0, 0, 100, 100)],
+        // a solid blob plus a thin sliver
+        [sq(10, 10, 40, 40), sq(50, 10, 90, 11)],
+      ],
+    } as unknown as Tracedata;
+
+    const { objects } = tracedataToObjects(td, { mmPerPx: 1 });
+    const types = objects.map((o) => o.type).sort();
+    expect(types).toEqual(["fill", "running"]);
+  });
+
   it("scales pixels to millimetres and offsets", () => {
     const td = {
       width: 10,
