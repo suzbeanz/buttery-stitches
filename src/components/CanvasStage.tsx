@@ -256,8 +256,20 @@ export default function CanvasStage() {
                         if (n) nodeRefs.current.set(o.id, n);
                         else nodeRefs.current.delete(o.id);
                       }}
-                      onSelect={() => setSelection([o.id])}
+                      onSelect={(additive) => {
+                        if (!additive) return setSelection([o.id]);
+                        const cur = useProjectStore.getState().selectedIds;
+                        setSelection(
+                          cur.includes(o.id)
+                            ? cur.filter((id) => id !== o.id)
+                            : [...cur, o.id],
+                        );
+                      }}
                       onCommitPaths={(paths) => updateObject(o.id, { paths })}
+                      selectedIds={selectedIds}
+                      onMoveSelected={(dx, dy) =>
+                        useProjectStore.getState().moveObjects(selectedIds, dx, dy)
+                      }
                       hoopMm={{ wMm: hoop.wMm, hMm: hoop.hMm }}
                       targets={objectBounds.filter((x) => x.id !== o.id).map((x) => x.b)}
                       onGuides={setGuides}
@@ -502,6 +514,8 @@ function ObjectShape({
   registerNode,
   onSelect,
   onCommitPaths,
+  selectedIds,
+  onMoveSelected,
   hoopMm,
   targets,
   onGuides,
@@ -514,12 +528,16 @@ function ObjectShape({
   py: (y: number) => number;
   toMm: (sx: number, sy: number) => Point;
   registerNode: (node: Konva.Group | null) => void;
-  onSelect: () => void;
+  onSelect: (additive: boolean) => void;
   onCommitPaths: (paths: Path[]) => void;
+  selectedIds: string[];
+  onMoveSelected: (dxMm: number, dyMm: number) => void;
   hoopMm: { wMm: number; hMm: number };
   targets: Bounds[];
   onGuides: (g: { x: number[]; y: number[] }) => void;
 }) {
+  // Part of a multi-selection: dragging moves every selected object together.
+  const multi = selected && selectedIds.length > 1;
   // px per mm — for converting a snap offset (mm) back to canvas pixels.
   const scalePx = px(1) - px(0);
   const stroke = color ? `rgb(${color.rgb.join(",")})` : "#888";
@@ -548,8 +566,8 @@ function ObjectShape({
     <Group
       ref={registerNode}
       draggable={movable}
-      onMouseDown={selectable ? onSelect : undefined}
-      onTap={selectable ? onSelect : undefined}
+      onMouseDown={selectable ? (e) => onSelect(e.evt.shiftKey) : undefined}
+      onTap={selectable ? () => onSelect(false) : undefined}
       onDblClick={
         object.text ? () => useEditorStore.getState().setEditingTextId(object.id) : undefined
       }
@@ -557,6 +575,7 @@ function ObjectShape({
         object.text ? () => useEditorStore.getState().setEditingTextId(object.id) : undefined
       }
       onDragMove={(e) => {
+        if (multi) return; // moving a group: skip per-object snapping
         // Snap the moving object to hoop/object guide lines and show the guides.
         const g = e.target;
         const a = toMm(0, 0);
@@ -583,7 +602,10 @@ function ObjectShape({
         if (dxPx === 0 && dyPx === 0) return; // pure click, no move
         const a = toMm(0, 0);
         const b = toMm(dxPx, dyPx);
-        onCommitPaths(translatePaths(object.paths, b.x - a.x, b.y - a.y));
+        const dxMm = b.x - a.x;
+        const dyMm = b.y - a.y;
+        if (multi) onMoveSelected(dxMm, dyMm);
+        else onCommitPaths(translatePaths(object.paths, dxMm, dyMm));
       }}
       onTransformEnd={(e) => {
         const node = e.target;
@@ -634,8 +656,8 @@ function ObjectShape({
             ctx.fillStrokeShape(shape);
           }}
           fill={fillColor}
-          onMouseDown={selectable ? onSelect : undefined}
-          onTap={selectable ? onSelect : undefined}
+          onMouseDown={selectable ? (e) => onSelect(e.evt.shiftKey) : undefined}
+          onTap={selectable ? () => onSelect(false) : undefined}
         />
       )}
 

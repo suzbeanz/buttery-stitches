@@ -9,6 +9,7 @@ import type {
   ThreadColor,
 } from "../types/project";
 import { createEmptyProject } from "../lib/project";
+import { translatePaths } from "../lib/geometry";
 
 /**
  * Single project store. The `project` object is the entire editable document;
@@ -32,6 +33,8 @@ export interface ProjectState {
   removeObjects: (ids: string[]) => void;
   updateObject: (id: string, patch: Partial<EmbObject>) => void;
   updateObjectParams: (id: string, patch: Partial<EmbObjectParams>) => void;
+  /** Translate several objects together (one undo step). */
+  moveObjects: (ids: string[], dxMm: number, dyMm: number) => void;
   reorderObjects: (fromIndex: number, toIndex: number) => void;
 
   addColor: (color: ThreadColor) => void;
@@ -107,6 +110,21 @@ export const useProjectStore = create<ProjectState>()(
             ),
           },
         })),
+
+      moveObjects: (ids, dxMm, dyMm) =>
+        set((s) => {
+          const move = new Set(ids);
+          return {
+            project: {
+              ...s.project,
+              objects: s.project.objects.map((o) =>
+                move.has(o.id)
+                  ? { ...o, paths: translatePaths(o.paths, dxMm, dyMm) }
+                  : o,
+              ),
+            },
+          };
+        }),
 
       reorderObjects: (fromIndex, toIndex) =>
         set((s) => {
