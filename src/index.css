@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  @apply bg-cream text-navy;
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  .input {
+    @apply w-full rounded border border-navy/20 bg-white px-2 py-1 text-sm text-navy outline-none focus:border-navy/60;
+  }
+}
+
+/* Thin, buttery scrollbars. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d9b23a transparent;
+}

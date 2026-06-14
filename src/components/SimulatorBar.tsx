@@ -1,0 +1,125 @@
+import { useEffect } from "react";
+import { useEditorStore } from "../store/editorStore";
+
+/**
+ * Stitch simulator: the highest-trust feature. Toggle between editing the
+ * vectors and watching the design redraw stitch-by-stitch, scrub to any point,
+ * and control playback speed. The simulation reads the exact same `generateDesign`
+ * output the exporter uses, so what you watch is what you'll sew.
+ */
+
+const SPEEDS: { label: string; value: number }[] = [
+  { label: "0.5×", value: 120 },
+  { label: "1×", value: 400 },
+  { label: "2×", value: 900 },
+  { label: "4×", value: 2000 },
+];
+
+export default function SimulatorBar() {
+  const viewMode = useEditorStore((s) => s.viewMode);
+  const setViewMode = useEditorStore((s) => s.setViewMode);
+  const simTotal = useEditorStore((s) => s.simTotal);
+  const simIndex = useEditorStore((s) => s.simIndex);
+  const simPlaying = useEditorStore((s) => s.simPlaying);
+  const simSpeed = useEditorStore((s) => s.simSpeed);
+  const setSimIndex = useEditorStore((s) => s.setSimIndex);
+  const setSimPlaying = useEditorStore((s) => s.setSimPlaying);
+  const setSimSpeed = useEditorStore((s) => s.setSimSpeed);
+
+  // Playback loop: advance the cursor by speed × elapsed each animation frame.
+  useEffect(() => {
+    if (viewMode !== "stitch" || !simPlaying) return;
+    let raf = 0;
+    let prev = performance.now();
+    const step = (now: number) => {
+      const s = useEditorStore.getState();
+      const dt = (now - prev) / 1000;
+      prev = now;
+      const next = s.simIndex + s.simSpeed * dt;
+      if (next >= s.simTotal) {
+        s.setSimIndex(s.simTotal);
+        s.setSimPlaying(false);
+        return;
+      }
+      s.setSimIndex(next);
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [viewMode, simPlaying]);
+
+  function togglePlay() {
+    if (simTotal === 0) return;
+    if (simIndex >= simTotal) setSimIndex(0); // replay from the top
+    setSimPlaying(!simPlaying);
+  }
+
+  const shown = Math.min(Math.floor(simIndex), simTotal);
+
+  return (
+    <div className="flex items-center gap-3 border-t border-navy/15 bg-butter-100 px-3 py-1.5">
+      {/* Edit / Stitch view toggle */}
+      <div className="flex overflow-hidden rounded border border-navy/20 text-xs">
+        {(["edit", "stitch"] as const).map((m) => (
+          <button
+            key={m}
+            onClick={() => setViewMode(m)}
+            className={`px-2.5 py-1 capitalize ${
+              viewMode === m
+                ? "bg-navy text-butter-200"
+                : "bg-butter-50 text-navy hover:bg-butter-200"
+            }`}
+          >
+            {m === "stitch" ? "Stitch view" : "Edit"}
+          </button>
+        ))}
+      </div>
+
+      {viewMode === "stitch" ? (
+        <>
+          <button
+            onClick={togglePlay}
+            disabled={simTotal === 0}
+            className="rounded bg-navy px-3 py-1 text-sm text-butter-200 hover:bg-navy-light disabled:opacity-40"
+          >
+            {simPlaying ? "❚❚ Pause" : "▶ Play"}
+          </button>
+
+          <input
+            type="range"
+            min={0}
+            max={simTotal}
+            value={shown}
+            onChange={(e) => {
+              setSimPlaying(false);
+              setSimIndex(Number(e.target.value));
+            }}
+            className="h-1.5 flex-1 cursor-pointer accent-navy"
+            aria-label="Scrub stitches"
+          />
+
+          <span className="w-28 text-right text-xs tabular-nums text-navy/70">
+            {shown.toLocaleString()} / {simTotal.toLocaleString()}
+          </span>
+
+          <select
+            value={simSpeed}
+            onChange={(e) => setSimSpeed(Number(e.target.value))}
+            className="rounded border border-navy/20 bg-butter-50 px-1 py-0.5 text-xs text-navy"
+            aria-label="Playback speed"
+          >
+            {SPEEDS.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </>
+      ) : (
+        <span className="text-xs text-navy/50">
+          Switch to <b>Stitch view</b> to watch the design redraw stitch by stitch.
+        </span>
+      )}
+    </div>
+  );
+}
