@@ -14,8 +14,6 @@ const FILE_BY_ID: Record<string, string> = {
   poppins: "Poppins-SemiBold.ttf",
   montserrat: "Montserrat-SemiBold.ttf",
   playfair: "PlayfairDisplay-Bold.ttf",
-  "roboto-slab": "RobotoSlab-Bold.ttf",
-  oswald: "Oswald-Medium.ttf",
   "bebas-neue": "BebasNeue-Regular.ttf",
   pacifico: "Pacifico-Regular.ttf",
   lobster: "Lobster-Regular.ttf",

@@ -59,9 +59,31 @@ export interface DigitizeResult {
   objects: EmbObject[];
 }
 
-/** Segment start points form the polygon's vertices (px). */
+/** Samples along a quadratic from (x1,y1) via control (x2,y2) to (x3,y3). */
+const Q_SAMPLES = 6;
+
+/**
+ * Vertices of a traced path (px). Each segment contributes its start point;
+ * quadratic ("Q") segments also contribute sampled interior points so imported
+ * curves (a circle, a logo's rounded edges) come out smooth instead of faceted.
+ * Douglas–Peucker later drops any sample that lies on a straight run.
+ */
 function pathToPolylinePx(path: TracePath): Point[] {
-  return path.segments.map((s) => ({ x: s.x1, y: s.y1 }));
+  const pts: Point[] = [];
+  for (const s of path.segments) {
+    pts.push({ x: s.x1, y: s.y1 });
+    if (s.type === "Q" && s.x3 !== undefined && s.y3 !== undefined) {
+      for (let i = 1; i < Q_SAMPLES; i++) {
+        const t = i / Q_SAMPLES;
+        const mt = 1 - t;
+        pts.push({
+          x: mt * mt * s.x1 + 2 * mt * t * s.x2 + t * t * s.x3,
+          y: mt * mt * s.y1 + 2 * mt * t * s.y2 + t * t * s.y3,
+        });
+      }
+    }
+  }
+  return pts;
 }
 
 function toMm(pts: Point[], mmPerPx: number, ox: number, oy: number): Path {

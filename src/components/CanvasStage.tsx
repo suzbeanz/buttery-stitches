@@ -28,7 +28,7 @@ import { snap } from "../lib/snap";
 import { smoothPath } from "../lib/smooth";
 import { computeTicks } from "../lib/ruler";
 import { mmToInch } from "../lib/units";
-import { generateDesign, generateObjectRuns, orientByDepth } from "../lib/engine";
+import { generateDesign, orientByDepth } from "../lib/engine";
 import { designToSegments, needleAt } from "../lib/engine/render";
 
 /**
@@ -551,9 +551,8 @@ function ObjectShape({
   // px per mm — for converting a snap offset (mm) back to canvas pixels.
   const scalePx = px(1) - px(0);
   const stroke = color ? `rgb(${color.rgb.join(",")})` : "#888";
-  // Faint backing so the shape still reads where stitches are sparse; the actual
-  // stitch lines (below) carry the realistic look on top.
-  const fillColor = color ? `rgba(${color.rgb.join(",")},0.12)` : "rgba(136,136,136,0.12)";
+  // Solid, clean thread color so the design view reads like the finished piece.
+  const fillColor = color ? `rgba(${color.rgb.join(",")},0.85)` : "rgba(136,136,136,0.85)";
   const isFill = object.type === "fill";
   // The border outline is a display option. When off (and not selected) the
   // object shows no stroke, but the path stays clickable via its hit width.
@@ -571,16 +570,14 @@ function ObjectShape({
   // (script) contours union — no false holes.
   const fillRings = useMemo(() => (isFill ? orientByDepth(paths) : []), [isFill, paths]);
 
-  // Realistic preview: the object's actual generated stitches, so the builder
-  // shows fill texture / satin throws / the running path rather than a flat
-  // shape. Recomputed only when the object changes.
-  const runs = useMemo(() => generateObjectRuns(object), [object]);
-  // Skip the per-stitch preview for very dense objects — the solid body + outline
-  // still convey them, and this keeps the canvas responsive on large designs.
-  const showStitches = useMemo(
-    () => !editingNodes && runs.reduce((n, r) => n + r.pts.length, 0) <= 4000,
-    [runs, editingNodes],
-  );
+  // Satin renders as a solid column (the area between its two rails), so the
+  // design view reads clean and premium rather than as raw zig-zag lines. The
+  // actual stitches are shown in Stitch view.
+  const isSatin = object.type === "satin";
+  const satinColumnPts = useMemo(() => {
+    if (!isSatin || paths.length < 2) return null;
+    return [...paths[0], ...[...paths[1]].reverse()];
+  }, [isSatin, paths]);
 
   return (
     <Group
@@ -681,22 +678,17 @@ function ObjectShape({
         />
       )}
 
-      {/* Realistic stitch preview: the object's actual penetrations as thin
-          thread-colored lines (underlay dimmer). Hidden mid node-drag, where the
-          live outline leads instead. */}
-      {showStitches &&
-        runs.map((run, ri) => (
-          <Line
-            key={`run-${ri}`}
-            points={run.pts.flatMap((p) => [px(p.x), py(p.y)])}
-            stroke={stroke}
-            strokeWidth={run.underlay ? 0.5 : 0.8}
-            opacity={run.underlay ? 0.3 : 0.9}
-            lineCap="round"
-            lineJoin="round"
-            listening={false}
-          />
-        ))}
+      {/* Satin renders as a solid column between its rails. */}
+      {satinColumnPts && (
+        <Line
+          points={satinColumnPts.flatMap((p) => [px(p.x), py(p.y)])}
+          closed
+          fill={fillColor}
+          listening={selectable}
+          onMouseDown={selectable ? (e) => onSelect(e.evt.shiftKey) : undefined}
+          onTap={selectable ? () => onSelect(false) : undefined}
+        />
+      )}
 
       {paths.map((path, pi) => (
         <Line

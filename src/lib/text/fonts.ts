@@ -15,9 +15,7 @@ import type { Font } from "opentype.js";
 import poppinsUrl from "./fonts/Poppins-SemiBold.ttf?url";
 import playfairUrl from "./fonts/PlayfairDisplay-Bold.ttf?url";
 import pacificoUrl from "./fonts/Pacifico-Regular.ttf?url";
-import robotoSlabUrl from "./fonts/RobotoSlab-Bold.ttf?url";
 import montserratUrl from "./fonts/Montserrat-SemiBold.ttf?url";
-import oswaldUrl from "./fonts/Oswald-Medium.ttf?url";
 import lobsterUrl from "./fonts/Lobster-Regular.ttf?url";
 import dancingScriptUrl from "./fonts/DancingScript-Bold.ttf?url";
 import bebasNeueUrl from "./fonts/BebasNeue-Regular.ttf?url";
@@ -56,18 +54,6 @@ export const FONTS: FontEntry[] = [
     id: "playfair",
     name: "Playfair Display (serif)",
     url: playfairUrl,
-    license: "OFL-1.1",
-  },
-  {
-    id: "roboto-slab",
-    name: "Roboto Slab (slab)",
-    url: robotoSlabUrl,
-    license: "OFL-1.1",
-  },
-  {
-    id: "oswald",
-    name: "Oswald (condensed)",
-    url: oswaldUrl,
     license: "OFL-1.1",
   },
   {
