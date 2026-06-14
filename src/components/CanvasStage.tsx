@@ -19,7 +19,7 @@ import { translatePaths, dedupePath, applyMatrix, type Matrix } from "../lib/geo
 import { smoothPath } from "../lib/smooth";
 import { computeTicks } from "../lib/ruler";
 import { mmToInch } from "../lib/units";
-import { generateDesign } from "../lib/engine";
+import { generateDesign, generateObjectRuns } from "../lib/engine";
 import { designToSegments, needleAt } from "../lib/engine/render";
 
 /**
@@ -469,7 +469,9 @@ function ObjectShape({
   onCommitPaths: (paths: Path[]) => void;
 }) {
   const stroke = color ? `rgb(${color.rgb.join(",")})` : "#888";
-  const fillColor = color ? `rgba(${color.rgb.join(",")},0.28)` : "rgba(136,136,136,0.28)";
+  // Faint backing so the shape still reads where stitches are sparse; the actual
+  // stitch lines (below) carry the realistic look on top.
+  const fillColor = color ? `rgba(${color.rgb.join(",")},0.12)` : "rgba(136,136,136,0.12)";
   const isFill = object.type === "fill";
   // The border outline is a display option. When off (and not selected) the
   // object shows no stroke, but the path stays clickable via its hit width.
@@ -482,6 +484,11 @@ function ObjectShape({
   // a node-drag is a single undo step and the outline follows the handle).
   const [livePaths, setLivePaths] = useState<Path[] | null>(null);
   const paths = livePaths ?? object.paths;
+
+  // Realistic preview: the object's actual generated stitches, so the builder
+  // shows fill texture / satin throws / the running path rather than a flat
+  // shape. Recomputed only when the object changes.
+  const runs = useMemo(() => generateObjectRuns(object), [object]);
 
   return (
     <Group
@@ -552,6 +559,23 @@ function ObjectShape({
           onTap={selectable ? onSelect : undefined}
         />
       )}
+
+      {/* Realistic stitch preview: the object's actual penetrations as thin
+          thread-colored lines (underlay dimmer). Hidden mid node-drag, where the
+          live outline leads instead. */}
+      {!editingNodes &&
+        runs.map((run, ri) => (
+          <Line
+            key={`run-${ri}`}
+            points={run.pts.flatMap((p) => [px(p.x), py(p.y)])}
+            stroke={stroke}
+            strokeWidth={run.underlay ? 0.5 : 0.8}
+            opacity={run.underlay ? 0.3 : 0.9}
+            lineCap="round"
+            lineJoin="round"
+            listening={false}
+          />
+        ))}
 
       {paths.map((path, pi) => (
         <Line

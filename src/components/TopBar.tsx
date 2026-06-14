@@ -11,13 +11,33 @@ import {
   HelpCircle,
   PanelLeft,
   PanelRight,
+  Shapes,
+  Square,
+  Circle,
+  Triangle,
+  Star,
+  Heart,
+  Minus,
+  type LucideIcon,
 } from "lucide-react";
 import { useProjectStore, useTemporalStore } from "../store/projectStore";
 import { useEditorStore } from "../store/editorStore";
 import { downloadProject, loadProjectFromFile } from "../lib/embproj";
 import { buildWorksheet, worksheetHtml } from "../lib/worksheet";
+import { makeShapeObject, type ShapeKind } from "../lib/shapes";
 import type { Project } from "../types/project";
 import ExportMenu from "./ExportMenu";
+
+/** Shapes offered in the insert menu, with their icon and default params. */
+const SHAPES: { kind: ShapeKind; label: string; Icon: LucideIcon }[] = [
+  { kind: "rectangle", label: "Rectangle", Icon: Square },
+  { kind: "roundedRect", label: "Rounded", Icon: Square },
+  { kind: "ellipse", label: "Circle", Icon: Circle },
+  { kind: "triangle", label: "Triangle", Icon: Triangle },
+  { kind: "star", label: "Star", Icon: Star },
+  { kind: "heart", label: "Heart", Icon: Heart },
+  { kind: "line", label: "Line", Icon: Minus },
+];
 
 // Lazy-loaded: pulls in imagetracerjs only when the user imports an image.
 const AutoDigitizeDialog = lazy(() => import("./AutoDigitizeDialog"));
@@ -39,6 +59,8 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
   const imageInput = useRef<HTMLInputElement>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [showText, setShowText] = useState(false);
+  const [showShapes, setShowShapes] = useState(false);
+  const activeColorId = useEditorStore((s) => s.activeColorId);
 
   const layersOpen = useEditorStore((s) => s.layersOpen);
   const propertiesOpen = useEditorStore((s) => s.propertiesOpen);
@@ -82,6 +104,20 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
     // Adds to the existing design (does not replace it).
     if (newColor) addColor(newColor);
     addObject(object);
+  }
+
+  function insertShape(kind: ShapeKind) {
+    const colorId = activeColorId ?? project.colors[0]?.id;
+    if (!colorId) return;
+    const center = { x: project.hoop.wMm / 2, y: project.hoop.hMm / 2 };
+    addObject(
+      makeShapeObject(
+        kind,
+        { center, width: 30, height: 30, radius: 6, points: 5, outerR: 18, innerR: 9, length: 40 },
+        colorId,
+      ),
+    );
+    setShowShapes(false);
   }
 
   function openWorksheet() {
@@ -131,6 +167,34 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
       <BarButton label="Add text" onClick={() => setShowText(true)}>
         <Type size={18} />
       </BarButton>
+
+      <div className="relative">
+        <BarButton
+          label="Add shape"
+          onClick={() => setShowShapes((v) => !v)}
+          active={showShapes}
+        >
+          <Shapes size={18} />
+        </BarButton>
+        {showShapes && (
+          <>
+            <div className="fixed inset-0 z-20" onClick={() => setShowShapes(false)} />
+            <div className="absolute left-0 z-30 mt-1 grid w-44 grid-cols-3 gap-1 rounded-md border border-navy/20 bg-cream p-1.5 text-navy shadow-butter">
+              {SHAPES.map(({ kind, label, Icon }) => (
+                <button
+                  key={kind}
+                  onClick={() => insertShape(kind)}
+                  className="flex flex-col items-center gap-1 rounded-md px-1 py-2 text-[11px] hover:bg-butter-200"
+                >
+                  <Icon size={18} />
+                  {label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
       <ExportMenu />
       <BarButton label="Thread worksheet" onClick={openWorksheet}>
         <ClipboardList size={18} />
