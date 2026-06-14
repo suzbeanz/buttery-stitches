@@ -28,8 +28,11 @@ export function polygonPerimeter(path: Path): number {
 export interface ClassifyOptions {
   /** shapes thinner than this mean width become running stitches (default 1.2) */
   runningMaxWidth?: number;
-  /** shapes smaller than this are noise to be dropped (default 1 mm²) */
+  /** shapes smaller than this are noise to be dropped (default 2 mm²) */
   minAreaMm2?: number;
+  /** a thin shape is only a real stroke if at least this long (default 6 mm);
+   *  shorter thin shapes are anti-aliasing fringe and are dropped. */
+  runningMinLengthMm?: number;
 }
 
 export interface Classification {
@@ -42,19 +45,21 @@ export interface Classification {
  * Classify a traced region (mm polygon) into a stitch type.
  *
  * Mean width ≈ 2·area / perimeter — for a long thin shape this is its actual
- * width, so it's a good "is this a stroke or a blob?" signal. Thin shapes become
- * running stitches; everything else is a fill. (Auto-satin needs medial-axis
- * extraction and is intentionally deferred — users can convert a fill to satin
- * with one click in the editor.)
+ * width, so it's a good "is this a stroke or a blob?" signal. Broad shapes become
+ * fills; genuinely long thin shapes become running stitches. Crucially, SHORT
+ * thin shapes are the anti-aliasing fringe between color regions, not real
+ * strokes, so they are dropped — that's what keeps an auto-digitized logo to a
+ * handful of clean objects instead of dozens of sliver outlines.
  *
- * Returns `null` for shapes below the noise threshold (despeckle).
+ * Returns `null` for shapes that are noise (too small, or short fringe).
  */
 export function classifyShape(
   path: Path,
   opts: ClassifyOptions = {},
 ): Classification | null {
   const runningMaxWidth = opts.runningMaxWidth ?? 1.2;
-  const minArea = opts.minAreaMm2 ?? 1;
+  const minArea = opts.minAreaMm2 ?? 2;
+  const runningMinLength = opts.runningMinLengthMm ?? 6;
 
   const area = polygonArea(path);
   if (area < minArea) return null;
@@ -62,6 +67,12 @@ export function classifyShape(
   const perimeter = polygonPerimeter(path);
   const meanWidth = perimeter > 0 ? (2 * area) / perimeter : 0;
 
-  const type: StitchType = meanWidth < runningMaxWidth ? "running" : "fill";
-  return { type, areaMm2: area, meanWidthMm: meanWidth };
+  if (meanWidth < runningMaxWidth) {
+    // Thin: a real stroke only if it's long enough; otherwise it's fringe noise.
+    const length = perimeter / 2; // ≈ length for a long thin shape
+    if (length < runningMinLength) return null;
+    return { type: "running", areaMm2: area, meanWidthMm: meanWidth };
+  }
+
+  return { type: "fill", areaMm2: area, meanWidthMm: meanWidth };
 }

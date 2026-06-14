@@ -4,7 +4,6 @@ import type { Font } from "opentype.js";
 import { FONTS, DEFAULT_FONT_ID, loadFont } from "../lib/text/fonts";
 import { layoutText } from "../lib/text/layout";
 import { translatePaths, pathsBounds } from "../lib/geometry";
-import { orientByDepth } from "../lib/engine";
 import { mmToInch, inchToMm } from "../lib/units";
 import { newId } from "../lib/id";
 
@@ -328,8 +327,10 @@ function TextPreview({
           className="max-h-full max-w-full"
           preserveAspectRatio="xMidYMid meet"
         >
+          {/* Render with the font's own winding (nonzero), exactly like a
+              browser — so the preview works for every font. */}
           <path
-            d={ringsToSvgPath(orientByDepth(layout.object.paths))}
+            d={ringsToSvgPath(layout.object.paths)}
             fill={colorHex}
             fillRule="nonzero"
           />
