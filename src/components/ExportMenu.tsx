@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Download, AlertTriangle } from "lucide-react";
 import type { LoadStage } from "../lib/pyodide/loader";
 import { useProjectStore } from "../store/projectStore";
 import {
@@ -70,9 +71,12 @@ export default function ExportMenu() {
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="rounded px-2.5 py-1 text-sm text-butter-100 hover:bg-butter-200/15"
+        title="Export"
+        aria-label="Export"
+        aria-expanded={open}
+        className="grid h-9 w-9 place-items-center rounded-lg text-butter-100 hover:bg-butter-200/15"
       >
-        Export ▾
+        <Download size={18} />
       </button>
 
       {open && (
@@ -93,8 +97,8 @@ export default function ExportMenu() {
               {warnings.length > 0 && (
                 <ul className="mb-2 max-h-24 overflow-y-auto rounded bg-butter-200/60 p-1.5 text-[11px] text-navy/80">
                   {warnings.map((w, i) => (
-                    <li key={i} className="flex gap-1">
-                      <span aria-hidden>⚠️</span>
+                    <li key={i} className="flex gap-1.5">
+                      <AlertTriangle size={13} className="mt-0.5 shrink-0 text-butter-600" />
                       <span>{w.message}</span>
                     </li>
                   ))}

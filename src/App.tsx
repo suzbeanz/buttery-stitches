@@ -35,21 +35,70 @@ export default function App() {
   const [showHelp, setShowHelp] = useState(false);
   useGlobalShortcuts(setShowHelp);
 
+  // Collapsible side panels: on narrow screens they slide over the canvas
+  // (so it's never squeezed) and default to closed; on wide screens they sit
+  // inline. The top bar's panel toggles flip the same store state.
+  const layersOpen = useEditorStore((s) => s.layersOpen);
+  const propertiesOpen = useEditorStore((s) => s.propertiesOpen);
+  const setLayersOpen = useEditorStore((s) => s.setLayersOpen);
+  const setPropertiesOpen = useEditorStore((s) => s.setPropertiesOpen);
+  const isNarrow = useIsNarrow();
+  useEffect(() => {
+    setLayersOpen(!isNarrow);
+    setPropertiesOpen(!isNarrow);
+  }, [isNarrow, setLayersOpen, setPropertiesOpen]);
+
+  const overlay = "absolute inset-y-0 z-40 shadow-butter";
+
   return (
     <div className="flex h-full flex-col bg-cream text-navy">
       <TopBar onHelp={() => setShowHelp((v) => !v)} />
-      <div className="flex min-h-0 flex-1">
-        <LayerPanel />
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+        {layersOpen && (
+          <div className={isNarrow ? `${overlay} left-0` : "contents"}>
+            <LayerPanel />
+          </div>
+        )}
+
         <div className="flex min-w-0 flex-1 flex-col">
           <ToolStrip />
           <CanvasStage />
           <SimulatorBar />
         </div>
-        <PropertiesPanel />
+
+        {propertiesOpen && (
+          <div className={isNarrow ? `${overlay} right-0` : "contents"}>
+            <PropertiesPanel />
+          </div>
+        )}
+
+        {isNarrow && (layersOpen || propertiesOpen) && (
+          <div
+            className="absolute inset-0 z-30 bg-navy/20"
+            onClick={() => {
+              setLayersOpen(false);
+              setPropertiesOpen(false);
+            }}
+          />
+        )}
       </div>
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
     </div>
   );
+}
+
+/** True when the viewport is narrow enough that side panels should overlay. */
+function useIsNarrow(): boolean {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(max-width: 1023px)");
+    const update = () => setNarrow(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  return narrow;
 }
 
 const TOOL_KEYS: Record<string, Tool> = {

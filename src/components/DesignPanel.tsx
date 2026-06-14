@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle } from "lucide-react";
 import { useProjectStore } from "../store/projectStore";
 import { useEditorStore } from "../store/editorStore";
 import { mmToInch, inchToMm } from "../lib/units";
@@ -161,8 +162,8 @@ export default function DesignPanel() {
       {warnings.length > 0 && (
         <ul className="rounded bg-butter-200/60 p-1.5 text-[11px] text-navy/80">
           {warnings.map((w, i) => (
-            <li key={i} className="flex gap-1">
-              <span aria-hidden>⚠️</span>
+            <li key={i} className="flex gap-1.5">
+              <AlertTriangle size={13} className="mt-0.5 shrink-0 text-butter-600" />
               <span>{w.message}</span>
             </li>
           ))}

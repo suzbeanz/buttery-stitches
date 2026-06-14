@@ -476,6 +476,9 @@ function ObjectShape({
   const stroke = color ? `rgb(${color.rgb.join(",")})` : "#888";
   const fillColor = color ? `rgba(${color.rgb.join(",")},0.28)` : "rgba(136,136,136,0.28)";
   const isFill = object.type === "fill";
+  // The border outline is a display option. When off (and not selected) the
+  // object shows no stroke, but the path stays clickable via its hit width.
+  const outlineOn = object.params.outline !== false;
   const selectable = tool === "select" || tool === "node";
   const movable = tool === "select" && selected;
   const editingNodes = tool === "node" && selected;
@@ -533,7 +536,7 @@ function ObjectShape({
           key={pi}
           points={path.flatMap((p) => [px(p.x), py(p.y)])}
           stroke={stroke}
-          strokeWidth={selected ? 2.5 : 1.5}
+          strokeWidth={selected ? 2.5 : outlineOn ? 1.5 : 0}
           closed={object.type === "fill"}
           listening={selectable}
           hitStrokeWidth={10}

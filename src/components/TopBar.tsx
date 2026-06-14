@@ -1,5 +1,19 @@
 import { lazy, Suspense, useRef, useState } from "react";
+import {
+  FilePlus2,
+  FolderOpen,
+  Save,
+  Image as ImageIcon,
+  Type,
+  ClipboardList,
+  Undo2,
+  Redo2,
+  HelpCircle,
+  PanelLeft,
+  PanelRight,
+} from "lucide-react";
 import { useProjectStore, useTemporalStore } from "../store/projectStore";
+import { useEditorStore } from "../store/editorStore";
 import { downloadProject, loadProjectFromFile } from "../lib/embproj";
 import { buildWorksheet, worksheetHtml } from "../lib/worksheet";
 import type { Project } from "../types/project";
@@ -25,6 +39,11 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
   const imageInput = useRef<HTMLInputElement>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [showText, setShowText] = useState(false);
+
+  const layersOpen = useEditorStore((s) => s.layersOpen);
+  const propertiesOpen = useEditorStore((s) => s.propertiesOpen);
+  const toggleLayers = useEditorStore((s) => s.toggleLayers);
+  const toggleProperties = useEditorStore((s) => s.toggleProperties);
 
   const { undo, redo, pastStates, futureStates } = useTemporalStore((t) => ({
     undo: t.undo,
@@ -78,51 +97,71 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
   }
 
   return (
-    <header className="flex items-center gap-1 border-b border-navy-dark bg-navy px-3 py-2 text-butter-100 shadow-butter">
-      <span className="mr-3 flex select-none items-baseline gap-1.5">
+    <header className="flex items-center gap-0.5 border-b border-navy-dark bg-navy px-2 py-2 text-butter-100 shadow-butter">
+      <BarButton
+        label={layersOpen ? "Hide layers" : "Show layers"}
+        onClick={toggleLayers}
+        active={layersOpen}
+      >
+        <PanelLeft size={18} />
+      </BarButton>
+
+      <span className="mx-2 flex select-none items-baseline gap-1.5">
         <span aria-hidden className="text-lg">🧈</span>
-        <span className="wordmark text-lg text-butter-200">Buttery Stitches</span>
-        <span className="ml-1 hidden text-[11px] italic text-butter-100/50 sm:inline">
-          stitch something sweet
+        <span className="wordmark hidden text-lg text-butter-200 sm:inline">
+          Buttery Stitches
         </span>
       </span>
 
-      <BarButton onClick={() => newProject()}>New</BarButton>
-      <BarButton onClick={() => fileInput.current?.click()}>Open</BarButton>
-      <BarButton onClick={() => downloadProject(project)}>Save</BarButton>
-
-      <div className="mx-2 h-5 w-px bg-butter-200/20" />
-
-      <BarButton onClick={() => imageInput.current?.click()}>
-        Import image
+      <BarButton label="New" onClick={() => newProject()}>
+        <FilePlus2 size={18} />
       </BarButton>
-      <BarButton onClick={() => setShowText(true)}>Add text</BarButton>
+      <BarButton label="Open" onClick={() => fileInput.current?.click()}>
+        <FolderOpen size={18} />
+      </BarButton>
+      <BarButton label="Save" onClick={() => downloadProject(project)}>
+        <Save size={18} />
+      </BarButton>
+
+      <div className="mx-1.5 h-5 w-px bg-butter-200/20" />
+
+      <BarButton label="Import image" onClick={() => imageInput.current?.click()}>
+        <ImageIcon size={18} />
+      </BarButton>
+      <BarButton label="Add text" onClick={() => setShowText(true)}>
+        <Type size={18} />
+      </BarButton>
       <ExportMenu />
-      <BarButton onClick={openWorksheet}>Worksheet</BarButton>
-
-      <div className="mx-2 h-5 w-px bg-butter-200/20" />
-
-      <BarButton onClick={() => undo()} disabled={pastStates.length === 0}>
-        Undo
+      <BarButton label="Thread worksheet" onClick={openWorksheet}>
+        <ClipboardList size={18} />
       </BarButton>
-      <BarButton onClick={() => redo()} disabled={futureStates.length === 0}>
-        Redo
+
+      <div className="mx-1.5 h-5 w-px bg-butter-200/20" />
+
+      <BarButton label="Undo" onClick={() => undo()} disabled={pastStates.length === 0}>
+        <Undo2 size={18} />
+      </BarButton>
+      <BarButton label="Redo" onClick={() => redo()} disabled={futureStates.length === 0}>
+        <Redo2 size={18} />
       </BarButton>
 
       <div className="flex-1" />
 
-      <span className="text-xs text-butter-200/70">
+      <span className="px-1 text-xs text-butter-200/70">
         {project.objects.length} object
         {project.objects.length === 1 ? "" : "s"}
       </span>
 
-      <button
-        onClick={onHelp}
-        title="Keyboard shortcuts (?)"
-        className="ml-2 h-6 w-6 rounded-full border border-butter-200/30 text-sm text-butter-100 hover:bg-butter-200/15"
+      <BarButton label="Keyboard shortcuts" onClick={onHelp}>
+        <HelpCircle size={18} />
+      </BarButton>
+      <BarButton
+        label={propertiesOpen ? "Hide properties" : "Show properties"}
+        onClick={toggleProperties}
+        active={propertiesOpen}
       >
-        ?
-      </button>
+        <PanelRight size={18} />
+      </BarButton>
 
       <input
         ref={fileInput}
@@ -167,18 +206,28 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
 
 function BarButton({
   children,
+  label,
   onClick,
   disabled,
+  active,
 }: {
   children: React.ReactNode;
+  /** accessible name + tooltip for the icon button. */
+  label: string;
   onClick: () => void;
   disabled?: boolean;
+  active?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className="rounded px-2.5 py-1 text-sm text-butter-100 hover:bg-butter-200/15 disabled:cursor-not-allowed disabled:text-butter-200/40 disabled:hover:bg-transparent"
+      title={label}
+      aria-label={label}
+      aria-pressed={active}
+      className={`grid h-9 w-9 place-items-center rounded-lg text-butter-100 hover:bg-butter-200/15 disabled:cursor-not-allowed disabled:text-butter-200/40 disabled:hover:bg-transparent ${
+        active ? "bg-butter-200/15 text-butter-200" : ""
+      }`}
     >
       {children}
     </button>
