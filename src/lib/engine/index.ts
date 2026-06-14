@@ -4,6 +4,7 @@ import { distance } from "../geometry";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
 import { tatamiFill, columnSatinFill, splitFillRegions } from "./fill";
+import { medialSatin } from "./medial";
 import {
   fillEdgeUnderlay,
   fillParallelUnderlay,
@@ -115,23 +116,33 @@ export function generateObjectRuns(object: EmbObject): StitchRun[] {
   // fill — edge + parallel underlay, then top, per connected region. Keeping
   // each pass a separate run lets the assembler jump between them rather than
   // dragging a long stitch from the edge run to the fill start. Lettering uses
-  // satin columns (smooth + shiny); broad areas use tatami. The top pass is also
-  // split wherever it would travel across a counter/gap, so those become jumps
-  // instead of long stitches.
+  // satin that follows each stroke's medial axis (smooth + shiny, falling back to
+  // a column fill for shapes too small to skeletonize); broad areas use tatami.
+  // Every top run is split where it would cross a counter/gap, so those jump.
   const satin = p.fillStyle === "satin";
-  const topFill = satin ? columnSatinFill : tatamiFill;
   const travelMax = satin ? 8 : 6;
   for (const region of splitFillRegions(object.paths)) {
     if (p.underlay) {
       addRun(runs, dropShortStitches(fillEdgeUnderlay(region)), true);
-      // The parallel pass crosses counters too, so split its travels as well.
       for (const sub of splitLongTravels(fillParallelUnderlay(region, p.angle), travelMax)) {
         addRun(runs, dropShortStitches(sub), true);
       }
     }
-    const top = topFill(region, { density: p.density, angle: p.angle });
-    for (const sub of splitLongTravels(top, travelMax)) {
-      addRun(runs, dropShortStitches(sub), false);
+
+    let topRuns: Point[][];
+    if (satin) {
+      topRuns = medialSatin(region, { density: p.density });
+      if (topRuns.length === 0) {
+        topRuns = [columnSatinFill(region, { density: p.density, angle: p.angle })];
+      }
+    } else {
+      topRuns = [tatamiFill(region, { density: p.density, angle: p.angle })];
+    }
+
+    for (const run of topRuns) {
+      for (const sub of splitLongTravels(run, travelMax)) {
+        addRun(runs, dropShortStitches(sub), false);
+      }
     }
   }
   return runs;

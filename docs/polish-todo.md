@@ -20,7 +20,14 @@ the living audit/polish list: check items off as they land.
 ## Text
 - [x] Preview must render with every font — use the font's own winding (nonzero),
       like a browser, instead of recomputing it.
-- [ ] Per-stroke satin (medial axis) for truly crisp cursive lettering.
+- [x] Per-stroke satin (medial axis): rasterize → distance transform → Zhang–Suen
+      thinning → satin column down each skeleton branch (variable width from the
+      distance transform). Falls back to a column fill for tiny shapes.
+- [ ] Tune skeleton branch joins / corners on complex glyphs (B, R) — small gaps
+      at junctions are acceptable for now.
+
+## UX / UI
+- [ ] Mobile styling cleanup (few users, but for professionalism).
 
 ## Stitch quality / engine
 - [x] Nonzero-winding fills (counters cut, overlapping script letters union).
