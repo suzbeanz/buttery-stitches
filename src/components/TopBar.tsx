@@ -7,6 +7,9 @@ import ExportMenu from "./ExportMenu";
 
 // Lazy-loaded: pulls in imagetracerjs only when the user imports an image.
 const AutoDigitizeDialog = lazy(() => import("./AutoDigitizeDialog"));
+// Lazy-loaded: pulls in opentype.js + bundled fonts only when adding text.
+const TextDialog = lazy(() => import("./TextDialog"));
+import type { AddTextResult } from "./TextDialog";
 
 /**
  * Top bar: new / open / save / import image / export plus undo / redo. Kept
@@ -16,9 +19,12 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
   const project = useProjectStore((s) => s.project);
   const newProject = useProjectStore((s) => s.newProject);
   const setProject = useProjectStore((s) => s.setProject);
+  const addObject = useProjectStore((s) => s.addObject);
+  const addColor = useProjectStore((s) => s.addColor);
   const fileInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [showText, setShowText] = useState(false);
 
   const { undo, redo, pastStates, futureStates } = useTemporalStore((t) => ({
     undo: t.undo,
@@ -53,6 +59,12 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
     setImageFile(null);
   }
 
+  function applyText({ object, newColor }: AddTextResult) {
+    // Adds to the existing design (does not replace it).
+    if (newColor) addColor(newColor);
+    addObject(object);
+  }
+
   function openWorksheet() {
     const ws = buildWorksheet(project);
     if (ws.totalStitches === 0) {
@@ -84,6 +96,7 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
       <BarButton onClick={() => imageInput.current?.click()}>
         Import image
       </BarButton>
+      <BarButton onClick={() => setShowText(true)}>Add text</BarButton>
       <ExportMenu />
       <BarButton onClick={openWorksheet}>Worksheet</BarButton>
 
@@ -134,6 +147,17 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
             hasExistingWork={project.objects.length > 0}
             onApply={applyDigitized}
             onClose={() => setImageFile(null)}
+          />
+        </Suspense>
+      )}
+
+      {showText && (
+        <Suspense fallback={null}>
+          <TextDialog
+            hoop={project.hoop}
+            colors={project.colors}
+            onAdd={applyText}
+            onClose={() => setShowText(false)}
           />
         </Suspense>
       )}
