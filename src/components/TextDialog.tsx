@@ -27,6 +27,12 @@ export interface AddTextResult {
 /** Default text height in mm (≈ 0.6"), a comfortable readable size. */
 const DEFAULT_HEIGHT_MM = 15;
 
+/** Quick height presets, in each unit. Inches mirror common lettering sizes. */
+const SIZE_PRESETS: Record<"in" | "mm", number[]> = {
+  in: [0.5, 1, 1.5, 2, 3],
+  mm: [12, 25, 38, 50, 75],
+};
+
 export default function TextDialog({
   hoop,
   colors,
@@ -89,6 +95,11 @@ export default function TextDialog({
     if (!Number.isFinite(v) || v <= 0) return;
     setHeightMm(unit === "in" ? inchToMm(v) : v);
   }
+
+  // Presets for the active unit; highlight the one matching the current height.
+  const presets = SIZE_PRESETS[unit];
+  const presetMm = (p: number) => (unit === "in" ? inchToMm(p) : p);
+  const isPresetActive = (p: number) => Math.abs(presetMm(p) - heightMm) < 0.05;
 
   function add() {
     if (!font || !layout || layout.object.paths.length === 0) {
@@ -203,6 +214,28 @@ export default function TextDialog({
               className="w-full rounded border border-navy/20 bg-white px-2 py-1.5 text-navy"
             />
           </label>
+        </div>
+
+        <div className="mb-3 text-sm text-navy">
+          <div className="mb-1">Quick sizes ({unit})</div>
+          <div className="flex flex-wrap gap-1.5">
+            {presets.map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setSize(p)}
+                aria-label={`Set height to ${p} ${unit}`}
+                className={
+                  "rounded border px-2.5 py-1 text-[12px] " +
+                  (isPresetActive(p)
+                    ? "border-navy bg-navy text-butter-200"
+                    : "border-navy/20 bg-white text-navy hover:bg-butter-200")
+                }
+              >
+                {p}
+              </button>
+            ))}
+          </div>
         </div>
 
         <label className="mb-3 block text-sm text-navy">

@@ -16,6 +16,12 @@ import poppinsUrl from "./fonts/Poppins-SemiBold.ttf?url";
 import playfairUrl from "./fonts/PlayfairDisplay-Bold.ttf?url";
 import pacificoUrl from "./fonts/Pacifico-Regular.ttf?url";
 import robotoSlabUrl from "./fonts/RobotoSlab-Bold.ttf?url";
+import montserratUrl from "./fonts/Montserrat-SemiBold.ttf?url";
+import oswaldUrl from "./fonts/Oswald-Medium.ttf?url";
+import lobsterUrl from "./fonts/Lobster-Regular.ttf?url";
+import dancingScriptUrl from "./fonts/DancingScript-Bold.ttf?url";
+import bebasNeueUrl from "./fonts/BebasNeue-Regular.ttf?url";
+import caveatUrl from "./fonts/Caveat-Bold.ttf?url";
 
 export interface FontEntry {
   /** stable id stored nowhere persistent — used only by the dialog UI. */
@@ -29,8 +35,9 @@ export interface FontEntry {
 }
 
 /**
- * The bundled font set: a clean sans, a serif that echoes the wordmark, a
- * friendly script, and a sturdy slab. All OFL 1.1.
+ * The bundled font set: clean sans faces, serifs that echo the wordmark,
+ * friendly scripts, a sturdy slab, and a tall condensed display face. Every
+ * face ships under the SIL Open Font License 1.1 (OFL-1.1).
  */
 export const FONTS: FontEntry[] = [
   {
@@ -40,9 +47,33 @@ export const FONTS: FontEntry[] = [
     license: "OFL-1.1",
   },
   {
+    id: "montserrat",
+    name: "Montserrat (sans)",
+    url: montserratUrl,
+    license: "OFL-1.1",
+  },
+  {
     id: "playfair",
     name: "Playfair Display (serif)",
     url: playfairUrl,
+    license: "OFL-1.1",
+  },
+  {
+    id: "roboto-slab",
+    name: "Roboto Slab (slab)",
+    url: robotoSlabUrl,
+    license: "OFL-1.1",
+  },
+  {
+    id: "oswald",
+    name: "Oswald (condensed)",
+    url: oswaldUrl,
+    license: "OFL-1.1",
+  },
+  {
+    id: "bebas-neue",
+    name: "Bebas Neue (display)",
+    url: bebasNeueUrl,
     license: "OFL-1.1",
   },
   {
@@ -52,9 +83,21 @@ export const FONTS: FontEntry[] = [
     license: "OFL-1.1",
   },
   {
-    id: "roboto-slab",
-    name: "Roboto Slab (slab)",
-    url: robotoSlabUrl,
+    id: "lobster",
+    name: "Lobster (script)",
+    url: lobsterUrl,
+    license: "OFL-1.1",
+  },
+  {
+    id: "dancing-script",
+    name: "Dancing Script (script)",
+    url: dancingScriptUrl,
+    license: "OFL-1.1",
+  },
+  {
+    id: "caveat",
+    name: "Caveat (handwriting)",
+    url: caveatUrl,
     license: "OFL-1.1",
   },
 ];
