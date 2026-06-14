@@ -3,7 +3,7 @@ import type { EmbObject, Path, Point, ThreadColor } from "../../types/project";
 import { newId } from "../id";
 import { makeObjectFromPaths } from "../objects";
 import { douglasPeucker } from "./simplify";
-import { classifyShape, polygonArea } from "./classify";
+import { polygonArea } from "./classify";
 
 export * from "./simplify";
 export * from "./classify";
@@ -81,8 +81,7 @@ export function tracedataToObjects(
     offsetX = 0,
     offsetY = 0,
     simplifyTolMm = 0.3,
-    minAreaMm2 = 1,
-    runningMaxWidth = 1.2,
+    minAreaMm2 = 2,
     removeBackground = true,
   } = opts;
 
@@ -120,49 +119,50 @@ export function tracedataToObjects(
       name: `Color ${ci + 1}`,
     };
 
-    // Collect every region of this color first, then emit ONE fill object for
-    // all the filled blobs (the tatami engine clips with even-odd, so disjoint
-    // outers + their holes coexist in a single object). Thin slivers stay as
-    // individual running objects. This keeps a logo to a handful of objects
-    // instead of one per traced blob.
+    // Build ONE solid fill object per color from all its regions (the nonzero
+    // fill engine handles disjoint blobs + their holes in a single object). We
+    // deliberately produce SOLID fills rather than per-region running outlines:
+    // that's what makes an auto-digitized logo look like real embroidery and
+    // keeps it to a clean object-per-color instead of dozens of slivers. Tiny
+    // specks are despeckled by area. The user can convert any region to satin in
+    // the editor for crisp strokes.
     const fillRings: Path[] = [];
-    const runningObjects: EmbObject[] = [];
 
     layer.forEach((path) => {
       if (path.isholepath) return; // pulled in via a parent's holechildren
       const outer = simp(pathToPolylinePx(path));
-      const cls = classifyShape(outer, { runningMaxWidth, minAreaMm2 });
-      if (!cls) return; // despeckled
-
-      if (cls.type === "fill") {
-        const holes = (path.holechildren ?? [])
-          .map((idx) => layer[idx])
-          .filter(Boolean)
-          .map((h) => simp(pathToPolylinePx(h)));
-        fillRings.push(outer, ...holes);
-      } else {
-        runningObjects.push(makeObjectFromPaths("running", [outer], colorId));
-      }
+      if (polygonArea(outer) < minAreaMm2) return; // despeckle
+      const holes = (path.holechildren ?? [])
+        .map((idx) => layer[idx])
+        .filter(Boolean)
+        .map((h) => simp(pathToPolylinePx(h)))
+        .filter((h) => polygonArea(h) >= minAreaMm2);
+      fillRings.push(outer, ...holes);
     });
 
     if (fillRings.length > 0) {
       objects.push(makeObjectFromPaths("fill", fillRings, colorId));
+      colors.push(color);
     }
-    objects.push(...runningObjects);
-
-    if (fillRings.length > 0 || runningObjects.length > 0) colors.push(color);
   });
 
   return { colors, objects };
 }
 
-/** imagetracerjs trace options tuned for clean logos / line art. */
+/**
+ * imagetracerjs trace options tuned for clean, solid embroidery (not line art).
+ * A light blur merges the anti-aliasing fringe between color regions before
+ * tracing, and a higher pathomit drops the tiny stray paths — together these cut
+ * an auto-digitized logo from dozens of sliver objects down to a clean handful.
+ */
 const TRACE_OPTIONS = {
-  pathomit: 8,
+  pathomit: 16,
   ltres: 1,
   qtres: 1,
   rightangleenhance: true,
   colorquantcycles: 3,
+  blurradius: 2,
+  blurdelta: 20,
 };
 
 /**

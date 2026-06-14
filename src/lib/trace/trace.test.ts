@@ -153,7 +153,7 @@ describe("tracedataToObjects", () => {
     expect(objects[0].paths).toHaveLength(2); // both blobs as even-odd rings
   });
 
-  it("keeps thin slivers as separate running objects", () => {
+  it("builds one solid fill per color, merging all its regions", () => {
     const td = {
       width: 100,
       height: 100,
@@ -163,14 +163,15 @@ describe("tracedataToObjects", () => {
       ],
       layers: [
         [sq(0, 0, 100, 100)],
-        // a solid blob plus a thin sliver
-        [sq(10, 10, 40, 40), sq(50, 10, 90, 11)],
+        // a solid blob plus a thin sliver — both belong to the one fill object.
+        [sq(10, 10, 40, 40), sq(50, 10, 90, 12)],
       ],
     } as unknown as Tracedata;
 
     const { objects } = tracedataToObjects(td, { mmPerPx: 1 });
-    const types = objects.map((o) => o.type).sort();
-    expect(types).toEqual(["fill", "running"]);
+    expect(objects).toHaveLength(1);
+    expect(objects[0].type).toBe("fill");
+    expect(objects[0].paths).toHaveLength(2);
   });
 
   it("scales pixels to millimeters and offsets", () => {
