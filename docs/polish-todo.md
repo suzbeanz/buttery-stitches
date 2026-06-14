@@ -11,7 +11,9 @@ the living audit/polish list: check items off as they land.
       outlines — the deeper Hatch-level rebuild.
 - [ ] Smart per-region stitch type: broad → tatami, thin/text → satin.
 - [ ] Optional RgbQuant pre-quantization for cleaner color separation.
-- [ ] De-dupe: avoid a fill AND a running outline of the same shape.
+- [x] De-dupe: avoid a fill AND a running outline of the same shape (now
+      all-fills, one object per color).
+- [x] Stitch order: largest fills first so small details land on top.
 
 ## Text
 - [x] Preview must render with every font — use the font's own winding (nonzero),

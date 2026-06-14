@@ -174,6 +174,29 @@ describe("tracedataToObjects", () => {
     expect(objects[0].paths).toHaveLength(2);
   });
 
+  it("orders objects largest-area first (details on top)", () => {
+    const td = {
+      width: 100,
+      height: 100,
+      palette: [
+        { r: 255, g: 255, b: 255, a: 255 }, // background
+        { r: 10, g: 10, b: 10, a: 255 }, // small detail
+        { r: 200, g: 50, b: 50, a: 255 }, // big area
+      ],
+      layers: [
+        [sq(0, 0, 100, 100)],
+        [sq(10, 10, 20, 20)], // 10×10 = 100
+        [sq(30, 30, 90, 90)], // 60×60 = 3600
+      ],
+    } as unknown as Tracedata;
+
+    const { objects } = tracedataToObjects(td, { mmPerPx: 1 });
+    expect(objects).toHaveLength(2);
+    expect(polygonArea(objects[0].paths[0])).toBeGreaterThan(
+      polygonArea(objects[1].paths[0]),
+    );
+  });
+
   it("scales pixels to millimeters and offsets", () => {
     const td = {
       width: 10,
