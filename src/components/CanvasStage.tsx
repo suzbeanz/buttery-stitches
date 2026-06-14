@@ -575,6 +575,12 @@ function ObjectShape({
   // shows fill texture / satin throws / the running path rather than a flat
   // shape. Recomputed only when the object changes.
   const runs = useMemo(() => generateObjectRuns(object), [object]);
+  // Skip the per-stitch preview for very dense objects — the solid body + outline
+  // still convey them, and this keeps the canvas responsive on large designs.
+  const showStitches = useMemo(
+    () => !editingNodes && runs.reduce((n, r) => n + r.pts.length, 0) <= 4000,
+    [runs, editingNodes],
+  );
 
   return (
     <Group
@@ -678,7 +684,7 @@ function ObjectShape({
       {/* Realistic stitch preview: the object's actual penetrations as thin
           thread-colored lines (underlay dimmer). Hidden mid node-drag, where the
           live outline leads instead. */}
-      {!editingNodes &&
+      {showStitches &&
         runs.map((run, ri) => (
           <Line
             key={`run-${ri}`}

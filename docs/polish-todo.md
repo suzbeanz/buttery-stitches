@@ -27,7 +27,8 @@ the living audit/polish list: check items off as they land.
       at junctions are acceptable for now.
 
 ## UX / UI
-- [ ] Mobile styling cleanup (few users, but for professionalism).
+- [x] Toolbars scroll horizontally instead of clipping on narrow screens.
+- [ ] Mobile styling cleanup pass (few users, but for professionalism).
 
 ## Stitch quality / engine
 - [x] Nonzero-winding fills (counters cut, overlapping script letters union).
@@ -49,4 +50,5 @@ the living audit/polish list: check items off as they land.
       at the stitch length, verified ~4 mm on a donut).
 - [ ] Proper fill travel: route around counters along the edge rather than
       jumping (fewer trims) — the "complex fill" upgrade.
-- [ ] Realistic edit-render performance on very large designs.
+- [x] Realistic edit-render performance: skip per-stitch preview for very dense
+      objects (>4000 stitches), keeping the solid body + outline.
