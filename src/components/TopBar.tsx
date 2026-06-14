@@ -157,6 +157,7 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
         label={layersOpen ? "Hide layers" : "Show layers"}
         onClick={toggleLayers}
         active={layersOpen}
+        align="start"
       >
         <PanelLeft size={18} />
       </BarButton>
@@ -241,13 +242,14 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
         {project.objects.length === 1 ? "" : "s"}
       </span>
 
-      <BarButton label="Keyboard shortcuts" onClick={onHelp}>
+      <BarButton label="Keyboard shortcuts" onClick={onHelp} align="end">
         <HelpCircle size={18} />
       </BarButton>
       <BarButton
         label={propertiesOpen ? "Hide properties" : "Show properties"}
         onClick={toggleProperties}
         active={propertiesOpen}
+        align="end"
       >
         <PanelRight size={18} />
       </BarButton>
@@ -311,6 +313,7 @@ function BarButton({
   onClick,
   disabled,
   active,
+  align,
 }: {
   children: React.ReactNode;
   /** accessible name + tooltip for the icon button. */
@@ -318,12 +321,15 @@ function BarButton({
   onClick: () => void;
   disabled?: boolean;
   active?: boolean;
+  /** anchor the tooltip to a side so corner buttons don't run off-screen. */
+  align?: "start" | "end";
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       data-tip={label}
+      data-tip-align={align}
       aria-label={label}
       aria-pressed={active}
       className={`grid h-9 w-9 place-items-center rounded-lg text-butter-100 hover:bg-butter-200/15 disabled:cursor-not-allowed disabled:text-butter-200/40 disabled:hover:bg-transparent ${
