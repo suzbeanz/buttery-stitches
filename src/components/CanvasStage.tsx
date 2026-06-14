@@ -496,6 +496,12 @@ function ObjectShape({
       draggable={movable}
       onMouseDown={selectable ? onSelect : undefined}
       onTap={selectable ? onSelect : undefined}
+      onDblClick={
+        object.text ? () => useEditorStore.getState().setEditingTextId(object.id) : undefined
+      }
+      onDblTap={
+        object.text ? () => useEditorStore.getState().setEditingTextId(object.id) : undefined
+      }
       onDragEnd={(e) => {
         const g = e.target;
         const dxPx = g.x();
