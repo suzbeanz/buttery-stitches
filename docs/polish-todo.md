@@ -28,7 +28,8 @@ the living audit/polish list: check items off as they land.
 
 ## UX / UI
 - [x] Toolbars scroll horizontally instead of clipping on narrow screens.
-- [ ] Mobile styling cleanup pass (few users, but for professionalism).
+- [x] Tall dialogs scroll on short/mobile screens (max-height + overflow).
+- [ ] Deeper mobile pass: tune tap targets / type scale on phones.
 
 ## Stitch quality / engine
 - [x] Nonzero-winding fills (counters cut, overlapping script letters union).
@@ -48,7 +49,8 @@ the living audit/polish list: check items off as they land.
 - [x] Within-row gap-crossing stitches in fills (over counters) — split fill +
       underlay runs at long travels so they jump instead (longest stitch now caps
       at the stitch length, verified ~4 mm on a donut).
-- [ ] Proper fill travel: route around counters along the edge rather than
-      jumping (fewer trims) — the "complex fill" upgrade.
+- [ ] OPTIMIZATION (not correctness): route fill travel around counters and/or
+      reorder fill sub-runs to cut jumps. Current output is correct (jumps are
+      short, no long stitches); this just reduces jump count.
 - [x] Realistic edit-render performance: skip per-stitch preview for very dense
       objects (>4000 stitches), keeping the solid body + outline.

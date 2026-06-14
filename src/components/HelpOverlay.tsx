@@ -44,7 +44,7 @@ export default function HelpOverlay({ onClose }: { onClose: () => void }) {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-lg border border-navy/20 bg-cream p-5 shadow-2xl"
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border border-navy/20 bg-cream p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="mb-4 font-butter text-lg font-semibold text-navy">
