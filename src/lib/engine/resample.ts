@@ -124,6 +124,27 @@ export function capSegmentLength(path: Path, maxLen: number): Path {
   return out;
 }
 
+/**
+ * Split a stitch path into separate runs wherever it makes a travel longer than
+ * `maxMm` — those long moves are a fill crossing a counter or gap, which should
+ * be a jump (handled by the assembler), not one long snag-prone stitch.
+ */
+export function splitLongTravels(path: Path, maxMm: number): Path[] {
+  if (path.length === 0) return [];
+  const runs: Path[] = [];
+  let cur: Point[] = [{ ...path[0] }];
+  for (let i = 1; i < path.length; i++) {
+    if (distance(path[i - 1], path[i]) > maxMm) {
+      runs.push(cur);
+      cur = [{ ...path[i] }];
+    } else {
+      cur.push({ ...path[i] });
+    }
+  }
+  runs.push(cur);
+  return runs.filter((r) => r.length > 0);
+}
+
 /** Rotate a point by `deg` degrees about `pivot`. */
 export function rotatePoint(p: Point, deg: number, pivot: Point): Point {
   const r = (deg * Math.PI) / 180;

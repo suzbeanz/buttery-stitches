@@ -9,7 +9,7 @@ import {
   fillParallelUnderlay,
   satinUnderlay,
 } from "./underlay";
-import { dropShortStitches } from "./resample";
+import { dropShortStitches, splitLongTravels } from "./resample";
 
 export * from "./running";
 export * from "./satin";
@@ -115,14 +115,24 @@ export function generateObjectRuns(object: EmbObject): StitchRun[] {
   // fill — edge + parallel underlay, then top, per connected region. Keeping
   // each pass a separate run lets the assembler jump between them rather than
   // dragging a long stitch from the edge run to the fill start. Lettering uses
-  // satin columns (smooth + shiny); broad areas use tatami.
-  const topFill = p.fillStyle === "satin" ? columnSatinFill : tatamiFill;
+  // satin columns (smooth + shiny); broad areas use tatami. The top pass is also
+  // split wherever it would travel across a counter/gap, so those become jumps
+  // instead of long stitches.
+  const satin = p.fillStyle === "satin";
+  const topFill = satin ? columnSatinFill : tatamiFill;
+  const travelMax = satin ? 8 : 6;
   for (const region of splitFillRegions(object.paths)) {
     if (p.underlay) {
       addRun(runs, dropShortStitches(fillEdgeUnderlay(region)), true);
-      addRun(runs, dropShortStitches(fillParallelUnderlay(region, p.angle)), true);
+      // The parallel pass crosses counters too, so split its travels as well.
+      for (const sub of splitLongTravels(fillParallelUnderlay(region, p.angle), travelMax)) {
+        addRun(runs, dropShortStitches(sub), true);
+      }
     }
-    addRun(runs, dropShortStitches(topFill(region, { density: p.density, angle: p.angle })), false);
+    const top = topFill(region, { density: p.density, angle: p.angle });
+    for (const sub of splitLongTravels(top, travelMax)) {
+      addRun(runs, dropShortStitches(sub), false);
+    }
   }
   return runs;
 }
