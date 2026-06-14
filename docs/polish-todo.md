@@ -10,8 +10,9 @@ the living audit/polish list: check items off as they land.
 - [x] Raster segmentation pre-pass: median-cut quantization flattens the image to
       N solid colors BEFORE tracing, so each color is a clean solid region (no
       anti-aliasing fringe). Own quantizer — no RgbQuant dependency needed.
-- [ ] Smart per-region stitch type: broad → tatami, thin/text → satin (the
-      "Fix stitches" button does this on demand; make it automatic on import).
+- [x] Smart per-region stitch type on import: auto-digitize now runs the
+      "Fix stitches" cleanup automatically (satin for thin strokes, tatami for
+      broad, safe densities, color-grouped order).
 - [x] De-dupe: avoid a fill AND a running outline of the same shape (now
       all-fills, one object per color).
 - [x] Stitch order: largest fills first so small details land on top.

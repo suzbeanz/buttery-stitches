@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Hoop, Project } from "../types/project";
 import { loadImageData } from "../lib/image";
 import { imageDataToObjects, estimateColorComplexity } from "../lib/trace";
+import { fixStitches } from "../lib/fix";
 
 /**
  * Auto-digitize dialog: preview the image, choose the color count and a couple
@@ -76,14 +77,19 @@ export default function AutoDigitizeDialog({
           return;
         }
 
-        onApply({
-          version: 1,
-          widthMm: hoop.wMm,
-          heightMm: hoop.hMm,
-          hoop: { ...hoop },
-          colors,
-          objects,
-        });
+        // Run the smart cleanup so the import lands with sensible stitch types
+        // (satin for thin strokes, tatami for broad areas), safe densities, and
+        // color-grouped order — no manual tuning needed to get a good result.
+        onApply(
+          fixStitches({
+            version: 1,
+            widthMm: hoop.wMm,
+            heightMm: hoop.hMm,
+            hoop: { ...hoop },
+            colors,
+            objects,
+          }),
+        );
       } catch (e) {
         setError((e as Error).message);
         setBusy(false);
