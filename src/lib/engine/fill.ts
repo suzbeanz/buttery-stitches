@@ -13,6 +13,78 @@ export interface FillOptions {
 /** Default tatami stitch length (mm) — the spacing of holes along a row. */
 export const FILL_STITCH_LENGTH = 4;
 
+/** Even-odd ray cast: is point `p` inside the closed ring? */
+function pointInRing(p: Point, ring: Path): boolean {
+  let inside = false;
+  const n = ring.length;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const a = ring[i];
+    const b = ring[j];
+    const straddles = a.y > p.y !== b.y > p.y;
+    if (straddles && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/** Absolute polygon area (shoelace). */
+function ringArea(ring: Path): number {
+  let s = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i];
+    const b = ring[(i + 1) % ring.length];
+    s += a.x * b.y - b.x * a.y;
+  }
+  return Math.abs(s / 2);
+}
+
+/**
+ * Split a fill's rings into connected regions, each `[outer, ...holes]`. A ring
+ * counts as a hole when it sits inside a larger ring (its smallest container);
+ * disjoint outers — e.g. separate letters of a word, or a logo's separate blobs —
+ * become separate regions. The fill engine then stitches each region on its own,
+ * so the assembler can jump between them instead of dragging one long stitch
+ * across the gap.
+ */
+export function splitFillRegions(rings: Path[]): Path[][] {
+  const usable = rings.filter((r) => r.length >= 3);
+  if (usable.length <= 1) return usable.length ? [usable.map((r) => r)] : [];
+
+  const areas = usable.map(ringArea);
+  // For each ring, the index of the smallest ring strictly containing it (-1 = none).
+  const containerOf = usable.map((ring, i) => {
+    let best = -1;
+    let bestArea = Infinity;
+    usable.forEach((other, j) => {
+      if (j === i || areas[j] <= areas[i]) return;
+      if (pointInRing(ring[0], other) && areas[j] < bestArea) {
+        best = j;
+        bestArea = areas[j];
+      }
+    });
+    return best;
+  });
+
+  const regions: Path[][] = [];
+  const outerRegion = new Map<number, number>();
+  usable.forEach((ring, i) => {
+    if (containerOf[i] === -1) {
+      outerRegion.set(i, regions.length);
+      regions.push([ring]);
+    }
+  });
+  // Attach each contained ring to its top-level outer as a hole.
+  usable.forEach((ring, i) => {
+    if (containerOf[i] === -1) return;
+    let top = containerOf[i];
+    while (containerOf[top] !== -1) top = containerOf[top];
+    const r = outerRegion.get(top);
+    if (r !== undefined) regions[r].push(ring);
+  });
+  return regions;
+}
+
 function centroid(ring: Path): Point {
   let x = 0,
     y = 0;

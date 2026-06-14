@@ -45,21 +45,26 @@ function meanColumnWidth(left: Path, right: Path): number {
  * top layer. `topAngle` is the angle the top fill will be stitched at.
  */
 export function fillUnderlay(rings: Path[], topAngle = 0): Path {
+  return [...fillEdgeUnderlay(rings), ...fillParallelUnderlay(rings, topAngle)];
+}
+
+/** Edge run around the region outline (pass 1 of the fill underlay). */
+export function fillEdgeUnderlay(rings: Path[]): Path {
   const outer = rings[0];
   if (!outer || outer.length < 3) return [];
-
   // Close the outline so the edge run returns to its start.
   const closed = [...outer, outer[0]];
-  const edge = runningStitch(closed, UNDERLAY_STITCH);
+  return runningStitch(closed, UNDERLAY_STITCH);
+}
 
-  // Parallel pass laid perpendicular to the eventual top angle.
-  const parallel = tatamiFill(rings, {
+/** Low-density parallel pass perpendicular to the top angle (pass 2). */
+export function fillParallelUnderlay(rings: Path[], topAngle = 0): Path {
+  if (!rings[0] || rings[0].length < 3) return [];
+  return tatamiFill(rings, {
     density: FILL_UNDERLAY_ROW,
     angle: topAngle + 90,
     stitchLength: UNDERLAY_STITCH,
   });
-
-  return [...edge, ...parallel];
 }
 
 /**

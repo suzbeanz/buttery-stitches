@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useProjectStore } from "../store/projectStore";
 import { useEditorStore } from "../store/editorStore";
 import { DEFAULT_PARAMS } from "../types/project";
@@ -25,7 +25,10 @@ export default function PropertiesPanel() {
   const updateObject = useProjectStore((s) => s.updateObject);
   const updateObjectParams = useProjectStore((s) => s.updateObjectParams);
 
-  const selected = objects.filter((o) => selectedIds.includes(o.id));
+  const selected = useMemo(
+    () => objects.filter((o) => selectedIds.includes(o.id)),
+    [objects, selectedIds],
+  );
 
   return (
     <aside className="flex h-full w-64 shrink-0 flex-col border-l border-navy/15 bg-butter-100">
@@ -94,15 +97,15 @@ function ObjectProperties({
   const colors = useProjectStore((s) => s.project.colors);
   const p = object.params;
 
-  // Live stitch count for the selected object.
-  const stitchCount = (() => {
+  // Live stitch count for the selected object (recomputed only when it changes).
+  const stitchCount = useMemo(() => {
     try {
       const { underlay, main } = generateObjectStitches(object);
       return underlay.length + main.length;
     } catch {
       return 0;
     }
-  })();
+  }, [object]);
 
   return (
     <div className="flex flex-col gap-3 border-b border-navy/15 p-3 text-sm">

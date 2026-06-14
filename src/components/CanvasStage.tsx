@@ -7,6 +7,7 @@ import {
   Text,
   Circle,
   Group,
+  Shape,
   Transformer,
 } from "react-konva";
 import type Konva from "konva";
@@ -18,7 +19,7 @@ import { translatePaths, dedupePath, applyMatrix, type Matrix } from "../lib/geo
 import { smoothPath } from "../lib/smooth";
 import { computeTicks } from "../lib/ruler";
 import { mmToInch } from "../lib/units";
-import { generateDesign } from "../lib/engine";
+import { generateDesign, generateObjectRuns } from "../lib/engine";
 import { designToSegments, needleAt } from "../lib/engine/render";
 
 /**
@@ -64,8 +65,10 @@ export default function CanvasStage() {
   const smooth = useEditorStore((s) => s.smooth);
 
   const viewMode = useEditorStore((s) => s.viewMode);
-  const simIndex = useEditorStore((s) => s.simIndex);
   const setSimTotal = useEditorStore((s) => s.setSimTotal);
+  // Note: `simIndex` is intentionally NOT subscribed here. It changes every
+  // animation frame during playback; reading it inside StitchView keeps the
+  // (hidden) edit layer from re-rendering on every frame.
 
   // The assembled design drives both this preview and the exporter.
   const design = useMemo(() => generateDesign(project), [project]);
@@ -184,7 +187,6 @@ export default function CanvasStage() {
   }
 
   const drawing = viewMode === "edit" && isDrawTool(tool);
-  const needle = viewMode === "stitch" ? needleAt(design, simIndex) : null;
   const ticksX = useMemo(() => computeTicks(hoop.wMm, rulerUnit), [hoop.wMm, rulerUnit]);
   const ticksY = useMemo(() => computeTicks(hoop.hMm, rulerUnit), [hoop.hMm, rulerUnit]);
 
@@ -264,14 +266,7 @@ export default function CanvasStage() {
             )}
 
             {viewMode === "stitch" && (
-              <StitchView
-                design={design}
-                upTo={simIndex}
-                needle={needle}
-                colorById={colorById}
-                px={px}
-                py={py}
-              />
+              <StitchView design={design} colorById={colorById} px={px} py={py} />
             )}
           </Layer>
 
@@ -400,23 +395,23 @@ function DraftPreview({
 
 // ---------------------------------------------------------------------------
 
-/** Read-only render of the assembled stitches, up to the simulator cursor. */
+/** Read-only render of the assembled stitches, up to the simulator cursor.
+ * Subscribes to `simIndex` itself so playback re-renders only this view, not the
+ * whole (hidden) edit layer. */
 function StitchView({
   design,
-  upTo,
-  needle,
   colorById,
   px,
   py,
 }: {
   design: Parameters<typeof designToSegments>[0];
-  upTo: number;
-  needle: Point | null;
   colorById: Map<string, ThreadColor>;
   px: (x: number) => number;
   py: (y: number) => number;
 }) {
+  const upTo = useEditorStore((s) => s.simIndex);
   const segs = useMemo(() => designToSegments(design, upTo), [design, upTo]);
+  const needle = useMemo(() => needleAt(design, upTo), [design, upTo]);
   return (
     <Group listening={false}>
       {segs.map((seg, i) => {
@@ -474,7 +469,9 @@ function ObjectShape({
   onCommitPaths: (paths: Path[]) => void;
 }) {
   const stroke = color ? `rgb(${color.rgb.join(",")})` : "#888";
-  const fillColor = color ? `rgba(${color.rgb.join(",")},0.28)` : "rgba(136,136,136,0.28)";
+  // Faint backing so the shape still reads where stitches are sparse; the actual
+  // stitch lines (below) carry the realistic look on top.
+  const fillColor = color ? `rgba(${color.rgb.join(",")},0.12)` : "rgba(136,136,136,0.12)";
   const isFill = object.type === "fill";
   // The border outline is a display option. When off (and not selected) the
   // object shows no stroke, but the path stays clickable via its hit width.
@@ -487,6 +484,11 @@ function ObjectShape({
   // a node-drag is a single undo step and the outline follows the handle).
   const [livePaths, setLivePaths] = useState<Path[] | null>(null);
   const paths = livePaths ?? object.paths;
+
+  // Realistic preview: the object's actual generated stitches, so the builder
+  // shows fill texture / satin throws / the running path rather than a flat
+  // shape. Recomputed only when the object changes.
+  const runs = useMemo(() => generateObjectRuns(object), [object]);
 
   return (
     <Group
@@ -517,16 +519,60 @@ function ObjectShape({
         onCommitPaths(movedMm);
       }}
     >
-      {/* Fill objects get a translucent body so they read as solid in the
-          editor. The first ring is the outer; the rest are holes, painted with
-          the hoop's white to punch them back out. */}
-      {isFill &&
-        paths.map((path, pi) => (
+      {/* Fill objects get a translucent body drawn with the even-odd rule, so
+          every disjoint region (e.g. each letter of a word) fills and the
+          counters of a/e/o cut out correctly. The body is listening, so clicking
+          a filled interior selects the object. */}
+      {isFill && (
+        <Shape
+          listening={selectable}
+          perfectDrawEnabled={false}
+          sceneFunc={(ctx) => {
+            const native = (ctx as unknown as { _context: CanvasRenderingContext2D })
+              ._context;
+            native.beginPath();
+            for (const ring of paths) {
+              if (ring.length < 3) continue;
+              native.moveTo(px(ring[0].x), py(ring[0].y));
+              for (let i = 1; i < ring.length; i++) {
+                native.lineTo(px(ring[i].x), py(ring[i].y));
+              }
+              native.closePath();
+            }
+            native.fillStyle = fillColor;
+            native.fill("evenodd");
+          }}
+          hitFunc={(ctx, shape) => {
+            ctx.beginPath();
+            for (const ring of paths) {
+              if (ring.length < 3) continue;
+              ctx.moveTo(px(ring[0].x), py(ring[0].y));
+              for (let i = 1; i < ring.length; i++) {
+                ctx.lineTo(px(ring[i].x), py(ring[i].y));
+              }
+              ctx.closePath();
+            }
+            ctx.fillStrokeShape(shape);
+          }}
+          fill={fillColor}
+          onMouseDown={selectable ? onSelect : undefined}
+          onTap={selectable ? onSelect : undefined}
+        />
+      )}
+
+      {/* Realistic stitch preview: the object's actual penetrations as thin
+          thread-colored lines (underlay dimmer). Hidden mid node-drag, where the
+          live outline leads instead. */}
+      {!editingNodes &&
+        runs.map((run, ri) => (
           <Line
-            key={`fill-${pi}`}
-            points={path.flatMap((p) => [px(p.x), py(p.y)])}
-            closed
-            fill={pi === 0 ? fillColor : "#ffffff"}
+            key={`run-${ri}`}
+            points={run.pts.flatMap((p) => [px(p.x), py(p.y)])}
+            stroke={stroke}
+            strokeWidth={run.underlay ? 0.5 : 0.8}
+            opacity={run.underlay ? 0.3 : 0.9}
+            lineCap="round"
+            lineJoin="round"
             listening={false}
           />
         ))}

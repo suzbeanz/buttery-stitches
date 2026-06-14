@@ -71,7 +71,7 @@ export default function ExportMenu() {
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        title="Export"
+        data-tip="Export"
         aria-label="Export"
         aria-expanded={open}
         className="grid h-9 w-9 place-items-center rounded-lg text-butter-100 hover:bg-butter-200/15"

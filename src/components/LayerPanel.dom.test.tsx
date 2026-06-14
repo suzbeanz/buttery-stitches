@@ -39,8 +39,8 @@ describe("LayerPanel", () => {
   it("deletes an object", () => {
     render(<LayerPanel />);
     const before = useProjectStore.getState().project.objects.length;
-    // Each row has a delete (✕) button.
-    fireEvent.click(screen.getAllByTitle("Delete")[0]);
+    // Each row has a delete button.
+    fireEvent.click(screen.getAllByLabelText("Delete")[0]);
     expect(useProjectStore.getState().project.objects.length).toBe(before - 1);
   });
 
@@ -48,7 +48,7 @@ describe("LayerPanel", () => {
     render(<LayerPanel />);
     const obj = useProjectStore.getState().project.objects[0];
     expect(obj.visible).toBe(true);
-    fireEvent.click(screen.getAllByTitle("Hide")[0]);
+    fireEvent.click(screen.getAllByLabelText("Hide")[0]);
     expect(useProjectStore.getState().project.objects[0].visible).toBe(false);
   });
 });

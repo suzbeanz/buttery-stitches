@@ -3,8 +3,12 @@ import { resolveParams } from "../../types/project";
 import { distance } from "../geometry";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
-import { tatamiFill } from "./fill";
-import { fillUnderlay, satinUnderlay } from "./underlay";
+import { tatamiFill, splitFillRegions } from "./fill";
+import {
+  fillEdgeUnderlay,
+  fillParallelUnderlay,
+  satinUnderlay,
+} from "./underlay";
 import { dropShortStitches } from "./resample";
 
 export * from "./running";
@@ -67,34 +71,68 @@ function tieStitches(anchor: Point, toward: Point): Point[] {
   return out;
 }
 
-/** The underlay + top-layer penetrations for a single object. */
-export function generateObjectStitches(
-  object: EmbObject,
-): { underlay: Point[]; main: Point[] } {
+/**
+ * One continuous run of penetrations the needle sews without lifting. Underlay
+ * and top layer are separate runs, and a fill yields a run per disjoint region,
+ * so the assembler can jump between them instead of dragging one long stitch
+ * (from an edge-run to the fill start, or across the gap between two letters).
+ */
+export interface StitchRun {
+  pts: Point[];
+  underlay: boolean;
+}
+
+/** Push a run if it has any penetrations. */
+function addRun(runs: StitchRun[], pts: Point[], underlay: boolean): void {
+  if (pts.length > 0) runs.push({ pts, underlay });
+}
+
+/**
+ * The runs for a single object. Splitting a fill into its regions (and underlay
+ * from top) here is what lets `generateDesign` jump between them.
+ */
+export function generateObjectRuns(object: EmbObject): StitchRun[] {
   const p = resolveParams(object.type, object.params);
+  const runs: StitchRun[] = [];
 
   if (object.type === "running") {
-    return {
-      underlay: [],
-      main: dropShortStitches(runningStitch(object.paths[0] ?? [], p.stitchLength)),
-    };
+    addRun(runs, dropShortStitches(runningStitch(object.paths[0] ?? [], p.stitchLength)), false);
+    return runs;
   }
 
   if (object.type === "satin") {
     const [left, right] = object.paths;
-    if (!left || !right) return { underlay: [], main: [] };
-    return {
-      underlay: p.underlay ? dropShortStitches(satinUnderlay(left, right)) : [],
-      main: dropShortStitches(
-        satinColumn(left, right, { density: p.density, pullComp: p.pullComp }),
-      ),
-    };
+    if (!left || !right) return runs;
+    if (p.underlay) addRun(runs, dropShortStitches(satinUnderlay(left, right)), true);
+    addRun(
+      runs,
+      dropShortStitches(satinColumn(left, right, { density: p.density, pullComp: p.pullComp })),
+      false,
+    );
+    return runs;
   }
 
-  // fill
+  // fill — edge + parallel underlay, then top, per connected region. Keeping
+  // each pass a separate run lets the assembler jump between them rather than
+  // dragging a long stitch from the edge run to the fill start.
+  for (const region of splitFillRegions(object.paths)) {
+    if (p.underlay) {
+      addRun(runs, dropShortStitches(fillEdgeUnderlay(region)), true);
+      addRun(runs, dropShortStitches(fillParallelUnderlay(region, p.angle)), true);
+    }
+    addRun(runs, dropShortStitches(tatamiFill(region, { density: p.density, angle: p.angle })), false);
+  }
+  return runs;
+}
+
+/** The combined underlay + top-layer penetrations for an object (all regions). */
+export function generateObjectStitches(
+  object: EmbObject,
+): { underlay: Point[]; main: Point[] } {
+  const runs = generateObjectRuns(object);
   return {
-    underlay: p.underlay ? dropShortStitches(fillUnderlay(object.paths, p.angle)) : [],
-    main: dropShortStitches(tatamiFill(object.paths, { density: p.density, angle: p.angle })),
+    underlay: runs.filter((r) => r.underlay).flatMap((r) => r.pts),
+    main: runs.filter((r) => !r.underlay).flatMap((r) => r.pts),
   };
 }
 
@@ -110,12 +148,19 @@ export function generateDesign(
   project: Project,
   { jumpThreshold = 3, trimThreshold = 8, lockStitches = true }: DesignOptions = {},
 ): EngineStitch[] {
-  // First pass: keep only objects that actually produce penetrations, so trim /
-  // run-boundary decisions line up with what gets stitched.
+  // First pass: expand each visible object into its runs (a fill contributes one
+  // run per region), keeping only runs that actually produce penetrations. The
+  // travel logic below then jumps/trims between consecutive runs — including
+  // between the disjoint regions of a single fill.
   const drawn = project.objects
     .filter((o) => o.visible)
-    .map((object) => ({ object, ...generateObjectStitches(object) }))
-    .map((d) => ({ ...d, pts: [...d.underlay, ...d.main], underlayCount: d.underlay.length }))
+    .flatMap((object) =>
+      generateObjectRuns(object).map((run) => ({
+        object,
+        pts: run.pts,
+        underlay: run.underlay,
+      })),
+    )
     .filter((d) => d.pts.length > 0);
 
   const out: EngineStitch[] = [];
@@ -123,7 +168,7 @@ export function generateDesign(
   let prevColor: string | null = null;
 
   drawn.forEach((d, di) => {
-    const { object, pts, underlayCount } = d;
+    const { object, pts } = d;
     const colorChanged = object.colorId !== prevColor;
     const start = pts[0];
 
@@ -152,13 +197,13 @@ export function generateDesign(
       pushTie(out, start, pts[1] ?? start, { id: object.id, colorId: object.colorId });
     }
 
-    pts.forEach((pt, i) => {
+    pts.forEach((pt) => {
       out.push({
         x: pt.x,
         y: pt.y,
         colorId: object.colorId,
         objectId: object.id,
-        underlay: i < underlayCount,
+        underlay: d.underlay,
       });
     });
 

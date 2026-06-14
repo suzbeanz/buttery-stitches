@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   GripVertical,
   Eye,
@@ -33,7 +33,10 @@ export default function LayerPanel() {
   const reorderObjects = useProjectStore((s) => s.reorderObjects);
 
   const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const colorById = new Map<string, ThreadColor>(colors.map((c) => [c.id, c]));
+  const colorById = useMemo(
+    () => new Map<string, ThreadColor>(colors.map((c) => [c.id, c])),
+    [colors],
+  );
 
   return (
     <aside className="flex h-full w-60 shrink-0 flex-col border-r border-navy/15 bg-butter-100">
@@ -91,14 +94,16 @@ export default function LayerPanel() {
                   <span className="flex-1 truncate text-navy">{o.name}</span>
                 </button>
                 <button
-                  title={o.visible ? "Hide" : "Show"}
+                  data-tip={o.visible ? "Hide" : "Show"}
+                  aria-label={o.visible ? "Hide" : "Show"}
                   onClick={() => updateObject(o.id, { visible: !o.visible })}
                   className="grid h-6 w-6 place-items-center rounded text-navy/60 hover:bg-butter-300/60 hover:text-navy"
                 >
                   {o.visible ? <Eye size={15} /> : <EyeOff size={15} />}
                 </button>
                 <button
-                  title="Delete"
+                  data-tip="Delete"
+                  aria-label="Delete"
                   onClick={() => removeObjects([o.id])}
                   className="grid h-6 w-6 place-items-center rounded text-navy/40 opacity-0 hover:bg-red-50 hover:text-red-600 group-hover:opacity-100"
                 >

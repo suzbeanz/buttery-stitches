@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Project } from "../../types/project";
 import { createEmptyProject } from "../project";
-import { makeObject } from "../objects";
+import { makeObject, makeObjectFromPaths } from "../objects";
 import { generateDesign, countStitches, countColorChanges } from "./index";
 import { validateDesign, LIMITS } from "./validate";
 
@@ -25,6 +25,24 @@ describe("generateDesign", () => {
     const o = makeObject("running", [{ x: 0, y: 0 }, { x: 10, y: 0 }], "c1");
     o.visible = false;
     expect(generateDesign(projectWith(o))).toEqual([]);
+  });
+
+  it("jumps between the disjoint regions of one multi-region fill", () => {
+    // Two separate squares in a single fill object, far apart, same color.
+    const fill = makeObjectFromPaths(
+      "fill",
+      [
+        [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }],
+        [{ x: 60, y: 60 }, { x: 70, y: 60 }, { x: 70, y: 70 }, { x: 60, y: 70 }],
+      ],
+      "c1",
+    );
+    const design = generateDesign(projectWith(fill), { lockStitches: false });
+    // A jump separates the two regions even though it's one object/color.
+    const jumps = design.filter((s) => s.jump);
+    expect(jumps.length).toBeGreaterThanOrEqual(1);
+    expect(jumps.every((s) => s.objectId === fill.id)).toBe(true);
+    expect(countColorChanges(design)).toBe(0);
   });
 
   it("inserts a trimming jump on a color change", () => {
