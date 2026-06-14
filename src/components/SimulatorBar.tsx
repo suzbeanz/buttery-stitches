@@ -58,7 +58,7 @@ export default function SimulatorBar() {
   const shown = Math.min(Math.floor(simIndex), simTotal);
 
   return (
-    <div className="flex items-center gap-3 border-t border-navy/15 bg-butter-100 px-3 py-1.5">
+    <div className="flex items-center gap-3 overflow-x-auto border-t border-navy/15 bg-butter-100 px-3 py-1.5">
       {/* Edit / Stitch view toggle */}
       <div className="flex overflow-hidden rounded-lg border border-navy/20 text-xs">
         {([
