@@ -6,6 +6,7 @@ import {
   resampleByCount,
   capSegmentLength,
   dropShortStitches,
+  splitLongTravels,
 } from "./resample";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
@@ -18,6 +19,29 @@ const square = (x: number, y: number, s: number): Path => [
   { x: x + s, y: y + s },
   { x, y: y + s },
 ];
+
+describe("splitLongTravels", () => {
+  it("splits a run at a long travel into separate runs", () => {
+    const runs = splitLongTravels(
+      [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 2, y: 0 },
+        { x: 20, y: 0 }, // 18mm jump
+        { x: 21, y: 0 },
+      ],
+      5,
+    );
+    expect(runs).toHaveLength(2);
+    expect(runs[0]).toHaveLength(3);
+    expect(runs[1]).toHaveLength(2);
+  });
+
+  it("keeps a continuous run intact", () => {
+    const runs = splitLongTravels([{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 4, y: 0 }], 5);
+    expect(runs).toHaveLength(1);
+  });
+});
 
 describe("columnSatinFill", () => {
   // A narrow vertical stroke — like a letter stem.

@@ -33,5 +33,9 @@ the living audit/polish list: check items off as they land.
 - [ ] Empty/loading/error states polish pass.
 
 ## Known correctness caveats
-- [ ] Within-row gap-crossing stitches in fills (over counters) — split per span.
+- [x] Within-row gap-crossing stitches in fills (over counters) — split fill +
+      underlay runs at long travels so they jump instead (longest stitch now caps
+      at the stitch length, verified ~4 mm on a donut).
+- [ ] Proper fill travel: route around counters along the edge rather than
+      jumping (fewer trims) — the "complex fill" upgrade.
 - [ ] Realistic edit-render performance on very large designs.
