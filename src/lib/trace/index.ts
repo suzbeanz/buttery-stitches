@@ -105,7 +105,7 @@ export function tracedataToObjects(
   }
 
   const colors: ThreadColor[] = [];
-  const objects: EmbObject[] = [];
+  const built: { object: EmbObject; area: number }[] = [];
 
   td.layers.forEach((layer, ci) => {
     if (ci === bgIndex) return;
@@ -127,11 +127,14 @@ export function tracedataToObjects(
     // specks are despeckled by area. The user can convert any region to satin in
     // the editor for crisp strokes.
     const fillRings: Path[] = [];
+    let outerArea = 0;
 
     layer.forEach((path) => {
       if (path.isholepath) return; // pulled in via a parent's holechildren
       const outer = simp(pathToPolylinePx(path));
-      if (polygonArea(outer) < minAreaMm2) return; // despeckle
+      const area = polygonArea(outer);
+      if (area < minAreaMm2) return; // despeckle
+      outerArea += area;
       const holes = (path.holechildren ?? [])
         .map((idx) => layer[idx])
         .filter(Boolean)
@@ -141,12 +144,14 @@ export function tracedataToObjects(
     });
 
     if (fillRings.length > 0) {
-      objects.push(makeObjectFromPaths("fill", fillRings, colorId));
+      built.push({ object: makeObjectFromPaths("fill", fillRings, colorId), area: outerArea });
       colors.push(color);
     }
   });
 
-  return { colors, objects };
+  // Stitch the largest fills first so smaller details land on top, not buried.
+  built.sort((a, b) => b.area - a.area);
+  return { colors, objects: built.map((b) => b.object) };
 }
 
 /**
