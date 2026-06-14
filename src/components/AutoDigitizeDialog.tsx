@@ -127,6 +127,7 @@ export default function AutoDigitizeDialog({
           </div>
           <input
             type="range"
+            aria-label="Number of colors"
             min={2}
             max={12}
             value={numColors}

@@ -184,6 +184,7 @@ export default function TextDialog({
             </div>
             <input
               type="number"
+              aria-label="Text height"
               min={0}
               step={sizeStep}
               value={Number(sizeValue.toFixed(unit === "in" ? 2 : 1))}
