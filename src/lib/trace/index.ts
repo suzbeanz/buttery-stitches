@@ -4,9 +4,11 @@ import { newId } from "../id";
 import { makeObjectFromPaths } from "../objects";
 import { douglasPeucker } from "./simplify";
 import { polygonArea } from "./classify";
+import { quantizeImage } from "./quantize";
 
 export * from "./simplify";
 export * from "./classify";
+export * from "./quantize";
 
 /** The slice of imagetracerjs's tracedata we consume. */
 interface TraceSegment {
@@ -155,34 +157,38 @@ export function tracedataToObjects(
 }
 
 /**
- * imagetracerjs trace options tuned for clean, solid embroidery (not line art).
- * A light blur merges the anti-aliasing fringe between color regions before
- * tracing, and a higher pathomit drops the tiny stray paths — together these cut
- * an auto-digitized logo from dozens of sliver objects down to a clean handful.
+ * imagetracerjs trace options. Because we hand it a pre-quantized FLAT image
+ * (see imageDataToObjects), there is no anti-aliasing to fight: a higher pathomit
+ * drops tiny stray paths and a touch of blur softens the pixel staircase before
+ * tracing, so each color comes out as a clean solid region.
  */
 const TRACE_OPTIONS = {
   pathomit: 16,
   ltres: 1,
   qtres: 1,
   rightangleenhance: true,
-  colorquantcycles: 3,
-  blurradius: 2,
+  colorquantcycles: 1,
+  blurradius: 1,
   blurdelta: 20,
 };
 
 /**
- * Full auto-digitize: quantize + trace the image (imagetracerjs) and convert to
- * stitch objects. `numberOfColors` is user-adjustable (2–12).
+ * Full auto-digitize: a raster segmentation pre-pass (median-cut quantization
+ * flattens the photo/logo to N solid colors) followed by tracing each color into
+ * a solid fill. Flattening first is what makes the result look like real
+ * embroidery instead of a fringe of sliver outlines. `numberOfColors` is
+ * user-adjustable (2–12).
  */
 export function imageDataToObjects(
   imageData: ImageData,
   numberOfColors: number,
   opts: DigitizeOptions,
 ): DigitizeResult {
-  const td = ImageTracer.imagedataToTracedata(imageData, {
-    ...TRACE_OPTIONS,
-    numberofcolors: numberOfColors,
-  }) as Tracedata;
+  const flat = quantizeImage(imageData, numberOfColors);
+  const td = ImageTracer.imagedataToTracedata(
+    { width: flat.width, height: flat.height, data: flat.data } as ImageData,
+    { ...TRACE_OPTIONS, numberofcolors: numberOfColors },
+  ) as Tracedata;
   return tracedataToObjects(td, opts);
 }
 
