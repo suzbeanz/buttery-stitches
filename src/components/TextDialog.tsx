@@ -148,7 +148,7 @@ export default function TextDialog({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-lg border border-navy/20 bg-cream p-4 shadow-2xl"
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border border-navy/20 bg-cream p-4 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="mb-3 font-butter text-lg font-semibold text-navy">
