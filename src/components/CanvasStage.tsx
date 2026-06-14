@@ -15,7 +15,15 @@ import { useProjectStore } from "../store/projectStore";
 import { useEditorStore, isDrawTool } from "../store/editorStore";
 import type { EmbObject, Path, Point, ThreadColor } from "../types/project";
 import { makeObject, minPointsFor } from "../lib/objects";
-import { translatePaths, dedupePath, applyMatrix, type Matrix } from "../lib/geometry";
+import {
+  translatePaths,
+  dedupePath,
+  applyMatrix,
+  pathsBounds,
+  type Matrix,
+  type Bounds,
+} from "../lib/geometry";
+import { snap } from "../lib/snap";
 import { smoothPath } from "../lib/smooth";
 import { computeTicks } from "../lib/ruler";
 import { mmToInch } from "../lib/units";
@@ -38,6 +46,7 @@ import { designToSegments, needleAt } from "../lib/engine/render";
 
 const RULER = 22; // px thickness of the top/left rulers
 const PADDING = 28; // px breathing room around the hoop
+const SNAP_MM = 2; // snap distance (mm) for alignment to hoop/object edges
 
 const C = {
   cream: "#FFFDF3",
@@ -73,6 +82,17 @@ export default function CanvasStage() {
   // The assembled design drives both this preview and the exporter.
   const design = useMemo(() => generateDesign(project), [project]);
   useEffect(() => setSimTotal(design.length), [design, setSimTotal]);
+
+  // Bounding box of every object (mm) — snap targets while dragging.
+  const objectBounds = useMemo(
+    () =>
+      project.objects
+        .map((o) => ({ id: o.id, b: pathsBounds(o.paths) }))
+        .filter((x): x is { id: string; b: Bounds } => x.b !== null),
+    [project.objects],
+  );
+  // Active alignment guide lines (mm) shown while dragging.
+  const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] });
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -238,8 +258,34 @@ export default function CanvasStage() {
                       }}
                       onSelect={() => setSelection([o.id])}
                       onCommitPaths={(paths) => updateObject(o.id, { paths })}
+                      hoopMm={{ wMm: hoop.wMm, hMm: hoop.hMm }}
+                      targets={objectBounds.filter((x) => x.id !== o.id).map((x) => x.b)}
+                      onGuides={setGuides}
                     />
                   ))}
+
+                {(guides.x.length > 0 || guides.y.length > 0) && (
+                  <Group listening={false}>
+                    {guides.x.map((gx, i) => (
+                      <Line
+                        key={`gx-${i}`}
+                        points={[px(gx), originY, px(gx), originY + hoopH]}
+                        stroke={C.butterDeep}
+                        strokeWidth={1}
+                        dash={[4, 3]}
+                      />
+                    ))}
+                    {guides.y.map((gy, i) => (
+                      <Line
+                        key={`gy-${i}`}
+                        points={[originX, py(gy), originX + hoopW, py(gy)]}
+                        stroke={C.butterDeep}
+                        strokeWidth={1}
+                        dash={[4, 3]}
+                      />
+                    ))}
+                  </Group>
+                )}
 
                 {drawing && draft.length > 0 && (
                   <DraftPreview
@@ -456,6 +502,9 @@ function ObjectShape({
   registerNode,
   onSelect,
   onCommitPaths,
+  hoopMm,
+  targets,
+  onGuides,
 }: {
   object: EmbObject;
   tool: string;
@@ -467,7 +516,12 @@ function ObjectShape({
   registerNode: (node: Konva.Group | null) => void;
   onSelect: () => void;
   onCommitPaths: (paths: Path[]) => void;
+  hoopMm: { wMm: number; hMm: number };
+  targets: Bounds[];
+  onGuides: (g: { x: number[]; y: number[] }) => void;
 }) {
+  // px per mm — for converting a snap offset (mm) back to canvas pixels.
+  const scalePx = px(1) - px(0);
   const stroke = color ? `rgb(${color.rgb.join(",")})` : "#888";
   // Faint backing so the shape still reads where stitches are sparse; the actual
   // stitch lines (below) carry the realistic look on top.
@@ -502,7 +556,26 @@ function ObjectShape({
       onDblTap={
         object.text ? () => useEditorStore.getState().setEditingTextId(object.id) : undefined
       }
+      onDragMove={(e) => {
+        // Snap the moving object to hoop/object guide lines and show the guides.
+        const g = e.target;
+        const a = toMm(0, 0);
+        const b = toMm(g.x(), g.y());
+        const base = pathsBounds(object.paths);
+        if (!base) return;
+        const moving: Bounds = {
+          minX: base.minX + (b.x - a.x),
+          maxX: base.maxX + (b.x - a.x),
+          minY: base.minY + (b.y - a.y),
+          maxY: base.maxY + (b.y - a.y),
+        };
+        const res = snap(moving, targets, hoopMm, SNAP_MM);
+        if (res.dx !== 0) g.x(g.x() + res.dx * scalePx);
+        if (res.dy !== 0) g.y(g.y() + res.dy * scalePx);
+        onGuides({ x: res.guidesX, y: res.guidesY });
+      }}
       onDragEnd={(e) => {
+        onGuides({ x: [], y: [] });
         const g = e.target;
         const dxPx = g.x();
         const dyPx = g.y();
