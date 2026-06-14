@@ -16,7 +16,8 @@ test-results/
 playwright-report/
 playwright/.cache/
 
-# Editor / OS
+# Editor / OS / tooling
+.claude/
 .DS_Store
 .idea/
 .vscode/
