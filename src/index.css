@@ -91,6 +91,16 @@ body {
     top: auto;
     bottom: calc(100% + 6px);
   }
+  /* Edge buttons anchor the tooltip to a side so it doesn't run off-screen. */
+  [data-tip-align="start"]::after {
+    left: 0;
+    transform: none;
+  }
+  [data-tip-align="end"]::after {
+    left: auto;
+    right: 0;
+    transform: none;
+  }
 }
 
 /* Thin, buttery scrollbars. */
