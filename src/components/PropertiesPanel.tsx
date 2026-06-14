@@ -217,7 +217,6 @@ const NEW_COLOR = "__new__";
  * chosen color and inserts it immediately after the fill in stitch order.
  */
 function OutlineControl({ fill }: { fill: EmbObject }) {
-  const objects = useProjectStore((s) => s.project.objects);
   const colors = useProjectStore((s) => s.project.colors);
   const addObject = useProjectStore((s) => s.addObject);
   const addColor = useProjectStore((s) => s.addColor);

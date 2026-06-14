@@ -27,7 +27,6 @@ const SATIN_EDGE_RUN_WIDTH = 3;
  * column is wide enough to need an edge run on top of the centerline run.
  */
 function meanColumnWidth(left: Path, right: Path): number {
-  const center = centerlineOf(left, right);
   const n = Math.min(left.length, right.length);
   if (n === 0) return 0;
   let sum = 0;
