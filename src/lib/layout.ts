@@ -4,7 +4,7 @@ import { pathsBounds, translatePaths, type Bounds } from "./geometry";
 /**
  * Document layout: design sizing and hoop fitting.
  *
- * Resizing scales the millimetre *geometry*, never the stitches. Because the
+ * Resizing scales the millimeter *geometry*, never the stitches. Because the
  * engine regenerates stitches from geometry at a fixed density, a larger design
  * automatically gets proportionally more stitches (re-densification) — scaling
  * raw stitch points, which destroys density, is exactly what we avoid.
@@ -50,7 +50,7 @@ export function designSize(objects: EmbObject[]): { w: number; h: number } {
 }
 
 /**
- * Uniformly scale the design so it fills `margin` of the hoop, then centre it.
+ * Uniformly scale the design so it fills `margin` of the hoop, then center it.
  * Uniform scaling keeps stitch quality (a non-uniform squash would distort
  * satin widths and fill angles).
  */
@@ -76,7 +76,7 @@ export function fitToHoop(
 }
 
 /**
- * Resize the design to a target width (mm), uniformly, about its centre.
+ * Resize the design to a target width (mm), uniformly, about its center.
  * Returns the objects unchanged if there's nothing to scale.
  */
 export function resizeToWidth(

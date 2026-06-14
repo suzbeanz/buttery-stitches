@@ -28,11 +28,11 @@ describe("makeObject", () => {
 });
 
 describe("satin width", () => {
-  it("measures and resets column width about the centreline", () => {
+  it("measures and resets column width about the centerline", () => {
     const o = makeObject("satin", line, "c");
     const widened = setSatinWidth(o.paths, 8);
     expect(satinWidthOf(widened)).toBeCloseTo(8);
-    // centreline (y=0) is preserved
+    // centerline (y=0) is preserved
     const midY = (widened[0][0].y + widened[1][0].y) / 2;
     expect(midY).toBeCloseTo(0);
   });
@@ -70,12 +70,12 @@ describe("convertObjectType", () => {
     expect(satinWidthOf(patch.paths!)).toBeCloseTo(DEFAULT_SATIN_WIDTH);
   });
 
-  it("satin -> running collapses rails back to a centreline", () => {
+  it("satin -> running collapses rails back to a centerline", () => {
     const satin = makeObject("satin", line, "c");
     const patch = convertObjectType(satin, "running");
     expect(patch.type).toBe("running");
     expect(patch.paths).toHaveLength(1);
-    // centreline matches the original line
+    // centerline matches the original line
     patch.paths![0].forEach((p, i) => {
       expect(p.x).toBeCloseTo(line[i].x);
       expect(p.y).toBeCloseTo(line[i].y);

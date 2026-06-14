@@ -2,7 +2,7 @@ import type { Path, Point } from "../types/project";
 import { distance } from "./geometry";
 
 /**
- * Pure curve smoothing in millimetres.
+ * Pure curve smoothing in millimeters.
  *
  * Curves are stored as ordinary densified polylines so the stitch engine and
  * exporter never need to know a curve was involved — the smoothed path is just

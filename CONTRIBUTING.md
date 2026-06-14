@@ -9,7 +9,7 @@ OSS project, so clarity beats cleverness here.
   stitch engine take geometry + params and return ordered stitch points. No
   reaching into the store, no DOM, no side effects. They are the part that's
   expensive to get wrong — every algorithm change needs a unit test.
-- **Work in millimetres.** The entire app model is in mm; only the exporter
+- **Work in millimeters.** The entire app model is in mm; only the exporter
   converts to pyembroidery's 1/10 mm units.
 - **The `.embproj` JSON is the source of truth.** PES and friends are lossy
   exports. Don't add features that depend on round-tripping through PES.

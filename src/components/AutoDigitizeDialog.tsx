@@ -4,12 +4,12 @@ import { loadImageData } from "../lib/image";
 import { imageDataToObjects, estimateColorComplexity } from "../lib/trace";
 
 /**
- * Auto-digitize dialog: preview the image, choose the colour count and a couple
+ * Auto-digitize dialog: preview the image, choose the color count and a couple
  * of options, and convert it to a stitch design. Best for clean logos and line
  * art — photos are warned about and digitize roughly (an explicit v1 non-goal).
  */
 
-/** Above this estimated colour count, the image is probably a photo. */
+/** Above this estimated color count, the image is probably a photo. */
 const PHOTO_COMPLEXITY = 160;
 
 export default function AutoDigitizeDialog({

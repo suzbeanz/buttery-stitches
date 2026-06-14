@@ -367,7 +367,7 @@ function ThreadColors() {
                 {activeColorId === c.id ? "Active" : "Use"}
               </button>
             </div>
-            {/* Brand / catalogue code for the thread worksheet. */}
+            {/* Brand / catalog code for the thread worksheet. */}
             <div className="flex gap-1 pl-7">
               <input
                 value={c.brand ?? ""}

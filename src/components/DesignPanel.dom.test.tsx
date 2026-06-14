@@ -38,7 +38,7 @@ describe("DesignPanel", () => {
     expect(designSize(useProjectStore.getState().project.objects).w).toBeCloseTo(40);
   });
 
-  it("fits the design to the hoop and centres it", () => {
+  it("fits the design to the hoop and centers it", () => {
     render(<DesignPanel />);
     fireEvent.click(screen.getByText("Fit to hoop"));
     const { project } = useProjectStore.getState();

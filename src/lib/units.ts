@@ -1,5 +1,5 @@
 /**
- * Unit conversions. The app works in millimetres; only the exporter touches
+ * Unit conversions. The app works in millimeters; only the exporter touches
  * pyembroidery's native 1/10 mm units.
  */
 

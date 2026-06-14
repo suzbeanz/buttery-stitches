@@ -9,7 +9,7 @@ the fix (with the test that now guards it).
 
 - **Pure logic is unit-tested.** The risky geometry/interaction math was
   extracted into pure functions (`geometry.ts`, `objects.ts`) so it's verifiable
-  without a browser: dedupe, centreline recovery, affine baking, satin width,
+  without a browser: dedupe, centerline recovery, affine baking, satin width,
   and type conversion all have tests.
 - **Panels are tested under jsdom** with Testing Library (`*.dom.test.tsx`):
   ToolStrip, LayerPanel, PropertiesPanel — render + real interactions.
@@ -53,15 +53,15 @@ single polyline. Naively swapping the type left mismatched geometry — a satin
 turned to running rendered two stray lines, and running→satin fed the width math
 a non-rail shape (NaN width).
 **Fix:** `convertObjectType()` rebuilds geometry to satisfy each type's
-invariant (→satin builds rails from a centreline; satin→other collapses rails to
-their centreline; running↔fill keep points). Guarded by `objects.test.ts ›
+invariant (→satin builds rails from a centerline; satin→other collapses rails to
+their centerline; running↔fill keep points). Guarded by `objects.test.ts ›
 convertObjectType`.
 
 ### 5. Satin column width wasn't editable  ⛔→✅
 **Flow:** draw a satin column, try to make it wider.
 **Problem:** width was implicit in the rail geometry with no control.
 **Fix:** a "Column width (mm)" field re-derives the rails about the fixed
-centreline (`setSatinWidth`). This also models the **re-densify, don't scale**
+centerline (`setSatinWidth`). This also models the **re-densify, don't scale**
 principle locally. Guarded by `objects.test.ts › satin width` and a panel test.
 
 ### 6. "Move" and "node edit" fought over the same handles  ⛔→✅
@@ -73,12 +73,12 @@ separation. Objects are selectable in both modes so Node-mode users can pick a
 target.
 
 ### 7. Delete key firing while typing in a field  ✅ (verified safe)
-**Flow:** edit a thread-colour name, press Backspace to erase a character.
+**Flow:** edit a thread-color name, press Backspace to erase a character.
 **Check:** the global key handler ignores `Delete`/`Backspace` when focus is in
 an `INPUT`/`TEXTAREA`/`SELECT`, so editing text never deletes the selected
 object.
 
-### 8. Transforms must stay in millimetres  ✅ (by design)
+### 8. Transforms must stay in millimeters  ✅ (by design)
 Scale/rotate **bake the affine transform back into mm path coordinates**
 (`applyMatrix`) and reset the node, rather than leaving a Konva scale on the
 node. This keeps the data model in mm so Phase 5 resizing can re-densify

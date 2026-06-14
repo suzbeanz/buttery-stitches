@@ -5,14 +5,14 @@ The stitch engine and simulator, with a synthetic-user pass.
 ## Design principles that keep it correct
 
 - **One source of truth for stitches.** `generateDesign(project)` produces a
-  single ordered event stream (stitch / jump / trim, with colour + underlay
+  single ordered event stream (stitch / jump / trim, with color + underlay
   flags). The simulator and the exporter both consume it, so the preview can
   never disagree with the exported file.
 - **All stitch math is pure and unit-tested.** running, satin, fill, resample,
   sequencing, validation, and the render-segmenter each have tests
   (`src/lib/engine/*.test.ts`). The Konva/React layer only draws.
 - **End-to-end format check.** The exact `embroidery.py` that ships to Pyodide
-  was run against a multi-colour command-stream plan in CPython: PES/DST/JEF/
+  was run against a multi-color command-stream plan in CPython: PES/DST/JEF/
   EXP/VP3 all write, and the PES round-trips with 2 threads and a real
   COLOR_CHANGE.
 
@@ -34,9 +34,9 @@ The stitch engine and simulator, with a synthetic-user pass.
 - The simulator rebuilds render segments each frame (`O(n)`); fine for logos,
   but very large designs (>~15k stitches) may want incremental drawing.
 - Satin "throw splitting" caps stitch length but doesn't yet insert a true
-  centre split-stitch; good enough to keep stitches bounded for v1.
+  center split-stitch; good enough to keep stitches bounded for v1.
 - Fill travel between disjoint row spans is a plain connecting stitch; the
   sequencer will jump/trim it when long, but a smarter travel path is a
   follow-up.
-- Auto thread-order optimisation is deferred to the auto-digitize pipeline
+- Auto thread-order optimization is deferred to the auto-digitize pipeline
   (Phase 4); Phase 3 respects the user's layer order as the stitch sequence.

@@ -3,7 +3,7 @@ import type { Point, StitchType } from "../types/project";
 
 /**
  * Transient editor UI state — current tool, in-progress drawing, ruler units,
- * and the colour new objects are drawn with. Deliberately separate from the
+ * and the color new objects are drawn with. Deliberately separate from the
  * project store so that picking a tool or moving the cursor never lands in the
  * undo history.
  */
@@ -29,7 +29,7 @@ interface EditorState {
   draft: Point[];
   /** live cursor position in mm while drawing (for the rubber-band preview). */
   cursorMm: Point | null;
-  /** colour id assigned to newly drawn objects. */
+  /** color id assigned to newly drawn objects. */
   activeColorId: string | null;
   rulerUnit: RulerUnit;
   /**

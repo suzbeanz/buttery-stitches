@@ -1,6 +1,6 @@
 import type { Path, Point } from "../types/project";
 
-/** Plain 2D geometry helpers operating in millimetres. Pure functions only. */
+/** Plain 2D geometry helpers operating in millimeters. Pure functions only. */
 
 export function sub(a: Point, b: Point): Point {
   return { x: a.x - b.x, y: a.y - b.y };
@@ -70,7 +70,7 @@ export function dedupePath(path: Path, eps = 0.1): Path {
   return out;
 }
 
-/** Midpoint centreline of a rail pair, over the shorter of the two rails. */
+/** Midpoint centerline of a rail pair, over the shorter of the two rails. */
 export function centerlineOf(left: Path, right: Path): Path {
   const n = Math.min(left.length, right.length);
   const center: Path = [];
@@ -109,7 +109,7 @@ function leftNormal(a: Point, b: Point): Point {
 /**
  * Offset an open polyline by `dist` mm along its left normal. Vertices use the
  * average of the adjacent segment normals so corners stay continuous. Used to
- * derive a satin rail pair from a drawn centreline.
+ * derive a satin rail pair from a drawn centerline.
  */
 export function offsetPolyline(path: Path, dist: number): Path {
   if (path.length < 2) return path.map((p) => ({ ...p }));
@@ -131,7 +131,7 @@ export function offsetPolyline(path: Path, dist: number): Path {
 }
 
 /**
- * Build a satin rail pair from a centreline and total column width.
+ * Build a satin rail pair from a centerline and total column width.
  * Returns [leftRail, rightRail].
  */
 export function railsFromCenterline(center: Path, widthMm: number): [Path, Path] {

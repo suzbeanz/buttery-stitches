@@ -50,7 +50,7 @@ describe("geometry", () => {
     expect(out[1].y).toBeCloseTo(1);
   });
 
-  it("builds a rail pair straddling the centreline at half-width", () => {
+  it("builds a rail pair straddling the centerline at half-width", () => {
     const [left, right] = railsFromCenterline(
       [
         { x: 0, y: 0 },
@@ -58,7 +58,7 @@ describe("geometry", () => {
       ],
       4,
     );
-    // rails sit ±2 mm off the centreline
+    // rails sit ±2 mm off the centerline
     expect(Math.abs(left[0].y)).toBeCloseTo(2);
     expect(Math.abs(right[0].y)).toBeCloseTo(2);
     expect(left[0].y).toBeCloseTo(-right[0].y);
@@ -77,7 +77,7 @@ describe("geometry", () => {
     ]);
   });
 
-  it("recovers the centreline from a rail pair", () => {
+  it("recovers the centerline from a rail pair", () => {
     const center = centerlineOf(
       [
         { x: 0, y: 2 },

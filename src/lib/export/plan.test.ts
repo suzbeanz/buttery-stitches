@@ -14,7 +14,7 @@ describe("export plan", () => {
     expect(packRgb({ id: "c", rgb: [255, 255, 255] })).toBe(0xffffff);
   });
 
-  it("blocks a single-colour design and converts mm to 1/10 mm", () => {
+  it("blocks a single-color design and converts mm to 1/10 mm", () => {
     const design: EngineStitch[] = [
       { x: 0, y: 0, colorId: "a", objectId: "o" },
       { x: 2.5, y: 0, colorId: "a", objectId: "o" },
@@ -28,7 +28,7 @@ describe("export plan", () => {
     ]);
   });
 
-  it("starts a new block on a colour change", () => {
+  it("starts a new block on a color change", () => {
     const design: EngineStitch[] = [
       { x: 0, y: 0, colorId: "a", objectId: "o1" },
       { x: 5, y: 5, colorId: "b", objectId: "o2", jump: true, trim: true },
@@ -37,13 +37,13 @@ describe("export plan", () => {
     const plan = planFromDesign(design, colors);
     expect(plan.blocks).toHaveLength(2);
     expect(plan.blocks[1].rgb).toBe(0xff0000);
-    // The colour-change trim is implied by the block boundary, so the new
+    // The color-change trim is implied by the block boundary, so the new
     // block starts with the jump (not a redundant trim cmd).
     expect(plan.blocks[1].cmds[0][0]).toBe("j");
     expect(planStitchCount(plan)).toBe(2); // two penetrations, one jump
   });
 
-  it("emits within-colour trims as explicit trim commands", () => {
+  it("emits within-color trims as explicit trim commands", () => {
     const design: EngineStitch[] = [
       { x: 0, y: 0, colorId: "a", objectId: "o1" },
       { x: 30, y: 0, colorId: "a", objectId: "o2", jump: true, trim: true },

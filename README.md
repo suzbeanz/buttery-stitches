@@ -11,15 +11,15 @@
 
 ![Buttery Stitches editor](docs/hero.svg)
 
-Buttery Stitches is built for **clean logos, line art, text, and limited-colour
-designs** (≤ ~8 colours). Photo-realistic auto-digitizing is an explicit
+Buttery Stitches is built for **clean logos, line art, text, and limited-color
+designs** (≤ ~8 colors). Photo-realistic auto-digitizing is an explicit
 non-goal — drop in a photo and you'll get a rough, aggressively quantized
 result with a warning, not a miracle.
 
 ## Using it
 
 1. **Start a design** — draw with the Running / Satin / Fill tools, or click
-   **Import image** to auto-digitize a logo (adjust colours, remove background).
+   **Import image** to auto-digitize a logo (adjust colors, remove background).
 2. **Refine** — Select to move / scale / rotate, Node to drag vertices, edit
    stitch params on the right, drag layers to reorder the stitch sequence.
 3. **Size it** — pick a hoop and **Fit to hoop**; resizing re-densifies.
@@ -36,7 +36,7 @@ result with a warning, not a miracle.
   by [`pyembroidery`](https://github.com/EmbroideryHub/pyembroidery) — a mature,
   pure-Python library — run in the browser via [Pyodide](https://pyodide.org/)
   (WebAssembly). Its internal unit is 1/10 mm.
-- **Millimetres everywhere in the app.** We only convert to pyembroidery's
+- **Millimeters everywhere in the app.** We only convert to pyembroidery's
   1/10 mm units at export. This keeps the stitch-math readable and testable.
 
 ## Project status
@@ -54,20 +54,20 @@ Built in phases (see the spec). Current progress:
 - [x] **Phase 2 — Manual editor.** Draw running/satin/fill objects; **Select**
       tool to move + scale/rotate (transforms baked back to mm); **Node** tool to
       drag vertices; reorder the stitch sequence; visibility/delete; editable
-      satin column width; thread-colour management; butter rulers (mm/inch).
+      satin column width; thread-color management; butter rulers (mm/inch).
       QA via synthetic user testing — see [`docs/QA-phase2.md`](docs/QA-phase2.md).
 - [x] **Phase 3 — Stitch engine.** Pure, unit-tested stitch generation —
       running (exact endpoint landing), satin (zig-zag, pull comp, throw
       splitting), tatami fill (angled scan-line clipping with holes + brick
       stagger), and underlay. A sequencer assembles objects into one event stream
-      with jumps/trims/colour-changes that drives **both** the live stitch
+      with jumps/trims/color-changes that drives **both** the live stitch
       simulator (play / scrub / speed) **and** the exporter — so preview and file
       always agree. Real designs now export (the Phase 1 sample square is gone),
       with live stitch counts and validation warnings.
 - [x] **Phase 4 — Auto-digitize.** Import an image → quantize + trace
       (imagetracerjs) → simplify (Douglas–Peucker) → classify (blob ⇒ fill,
-      sliver ⇒ running, holes via even-odd) → stitch objects, grouped by colour,
-      sized & centred in the hoop. Adjustable colour count (2–12), background
+      sliver ⇒ running, holes via even-odd) → stitch objects, grouped by color,
+      sized & centered in the hoop. Adjustable color count (2–12), background
       removal, despeckle, and a photo-complexity warning. The dialog lazy-loads
       the tracer so it doesn't weigh down first paint. Everything stays on your
       machine.
@@ -75,7 +75,7 @@ Built in phases (see the spec). Current progress:
       sizes; design resize with aspect-lock and fit-to-hoop that **re-densifies**
       (scales geometry, not stitch points — verified by test). Live design-wide
       validation warnings in the Design panel. Thread brand/code editing and a
-      printable **thread worksheet** (colour order, swatches, brand/code, stitch
+      printable **thread worksheet** (color order, swatches, brand/code, stitch
       counts, estimated run time) opened as a self-contained print/PDF page.
 - [x] **Phase 6 — Polish & deploy.** Keyboard shortcuts + in-app help (`?`),
       empty-state guidance, a CI workflow, and a GitHub Pages deploy workflow
@@ -89,13 +89,13 @@ Built in phases (see the spec). Current progress:
 | Styling              | Tailwind CSS |
 | State / undo-redo    | Zustand + zundo |
 | Canvas / geometry    | Konva (react-konva); path math in plain TS |
-| Raster → vector + quantize | imagetracerjs (per-colour layers) |
+| Raster → vector + quantize | imagetracerjs (per-color layers) |
 | Embroidery file I/O  | pyembroidery via Pyodide (WASM) _(Phase 1)_ |
 | Tests                | Vitest (stitch math) + Playwright (e2e smoke) |
 
 ## The project file (`.embproj`)
 
-A `.embproj` is plain JSON describing the whole design in millimetres — colours,
+A `.embproj` is plain JSON describing the whole design in millimeters — colors,
 objects, and the object **order, which is the stitch sequence**. It is lossless
 and re-editable, and it is the **source of truth**. An exported `.pes` is lossy;
 never edit the PES and expect to round-trip it back.
@@ -139,7 +139,7 @@ first export; self-host those files for a fully offline deployment).
 
 StitchForge is MIT-licensed (see [LICENSE](LICENSE)). Key dependencies are
 MIT/compatible: `pyembroidery` (MIT), `imagetracerjs` (Public Domain/Unlicense),
-RgbQuant.js (MIT), Konva (MIT), Zustand (MIT). Licences are re-verified as each
+RgbQuant.js (MIT), Konva (MIT), Zustand (MIT). Licenses are re-verified as each
 dependency is actually added.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) to get involved.

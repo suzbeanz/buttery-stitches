@@ -1,7 +1,7 @@
 /**
  * Core data model for a Buttery Stitches project.
  *
- * IMPORTANT: every coordinate and dimension in this model is in **millimetres**.
+ * IMPORTANT: every coordinate and dimension in this model is in **millimeters**.
  * We only convert to pyembroidery's 1/10 mm units at the moment of export
  * (see lib/export). Keeping the in-app model in mm keeps the geometry and
  * stitch-math code readable and unit-test friendly.
@@ -10,7 +10,7 @@
 /** The three stitch primitives the engine knows how to generate. */
 export type StitchType = "running" | "satin" | "fill";
 
-/** A polyline / polygon in millimetre coordinates. */
+/** A polyline / polygon in millimeter coordinates. */
 export type Point = { x: number; y: number };
 export type Path = Point[];
 

@@ -14,14 +14,14 @@ import { generateDesign, type EngineStitch } from "../engine";
 export const EMB_FORMATS = ["pes", "dst", "jef", "exp", "vp3"] as const;
 export type EmbFormat = (typeof EMB_FORMATS)[number];
 
-/** Most compatible PES first; #PES0060 carries richer colour data. */
+/** Most compatible PES first; #PES0060 carries richer color data. */
 export const PES_VERSIONS = [1, 6] as const;
 export type PesVersion = (typeof PES_VERSIONS)[number];
 
 /** One command in 1/10 mm units: stitch, jump, or trim. */
 export type PlanCmd = ["s", number, number] | ["j", number, number] | ["t"];
 
-/** One thread colour and its command stream. */
+/** One thread color and its command stream. */
 export interface PlanBlock {
   rgb: number;
   cmds: PlanCmd[];
@@ -38,9 +38,9 @@ export function packRgb(color: ThreadColor): number {
 }
 
 /**
- * Convert an engine design into a colour-blocked plan in 1/10 mm units.
- * Consecutive same-colour stitches share a block; a colour change starts a new
- * block (the exporter trims + colour-changes between blocks).
+ * Convert an engine design into a color-blocked plan in 1/10 mm units.
+ * Consecutive same-color stitches share a block; a color change starts a new
+ * block (the exporter trims + color-changes between blocks).
  */
 export function planFromDesign(
   design: EngineStitch[],
@@ -58,7 +58,7 @@ export function planFromDesign(
       blocks.push(current);
       currentColor = s.colorId;
     }
-    // A within-colour trim (the colour-change trim is implied by the block
+    // A within-color trim (the color-change trim is implied by the block
     // boundary, so skip it on the first event of a block).
     if (s.trim && !startsBlock) current!.cmds.push(["t"]);
     const x = mmToTenths(s.x);

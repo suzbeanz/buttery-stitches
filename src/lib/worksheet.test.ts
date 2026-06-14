@@ -17,7 +17,7 @@ function twoColorProject() {
 }
 
 describe("buildWorksheet", () => {
-  it("lists colour stops in order with per-stop stitch counts", () => {
+  it("lists color stops in order with per-stop stitch counts", () => {
     const ws = buildWorksheet(twoColorProject());
     expect(ws.rows).toHaveLength(2);
     expect(ws.colorStops).toBe(2);

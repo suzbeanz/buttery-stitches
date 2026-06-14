@@ -18,7 +18,7 @@ import { downloadProject } from "./lib/embproj";
  * Top bar spans the full width. Global keyboard shortcuts live here.
  */
 export default function App() {
-  // Keep the "active draw colour" pointed at a real colour in the project.
+  // Keep the "active draw color" pointed at a real color in the project.
   const colors = useProjectStore((s) => s.project.colors);
   const activeColorId = useEditorStore((s) => s.activeColorId);
   const setActiveColorId = useEditorStore((s) => s.setActiveColorId);

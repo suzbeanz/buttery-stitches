@@ -2,7 +2,7 @@ import type { RulerUnit } from "../store/editorStore";
 import { MM_PER_INCH } from "./units";
 
 export interface Tick {
-  /** position along the axis in millimetres */
+  /** position along the axis in millimeters */
   mm: number;
   major: boolean;
   /** label shown at major ticks, already unit-formatted */
@@ -12,10 +12,10 @@ export interface Tick {
 /**
  * Compute tick marks for a ruler spanning `lengthMm`, styled after the
  * measurement guides printed on a stick of butter — regular minor ticks with
- * labelled majors.
+ * labeled majors.
  *
- *  - mm:   minor every 5 mm, major (labelled) every 10 mm.
- *  - inch: minor every 1/4", major (labelled) every 1".
+ *  - mm:   minor every 5 mm, major (labeled) every 10 mm.
+ *  - inch: minor every 1/4", major (labeled) every 1".
  */
 export function computeTicks(lengthMm: number, unit: RulerUnit): Tick[] {
   const ticks: Tick[] = [];

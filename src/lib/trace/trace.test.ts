@@ -93,7 +93,7 @@ function sq(
 }
 
 describe("tracedataToObjects", () => {
-  it("removes the background colour and keeps foreground objects", () => {
+  it("removes the background color and keeps foreground objects", () => {
     const td = {
       width: 100,
       height: 100,
@@ -131,7 +131,7 @@ describe("tracedataToObjects", () => {
     expect(objects[0].paths).toHaveLength(2); // outer + hole
   });
 
-  it("groups disjoint fill blobs of one colour into a single object", () => {
+  it("groups disjoint fill blobs of one color into a single object", () => {
     const td = {
       width: 100,
       height: 100,
@@ -141,7 +141,7 @@ describe("tracedataToObjects", () => {
       ],
       layers: [
         [sq(0, 0, 100, 100)],
-        // two separate solid squares of the same colour
+        // two separate solid squares of the same color
         [sq(10, 10, 30, 30), sq(60, 60, 90, 90)],
       ],
     } as unknown as Tracedata;
@@ -173,7 +173,7 @@ describe("tracedataToObjects", () => {
     expect(types).toEqual(["fill", "running"]);
   });
 
-  it("scales pixels to millimetres and offsets", () => {
+  it("scales pixels to millimeters and offsets", () => {
     const td = {
       width: 10,
       height: 10,
@@ -212,7 +212,7 @@ describe("imageDataToObjects (real imagetracerjs)", () => {
     return { width: w, height: h, data } as unknown as ImageData;
   }
 
-  it("traces a two-colour image into objects", () => {
+  it("traces a two-color image into objects", () => {
     const img = image(16, 16, (x) => (x < 8 ? [220, 20, 30] : [20, 60, 200]));
     const { colors, objects } = imageDataToObjects(img, 2, {
       mmPerPx: 1,

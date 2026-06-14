@@ -7,14 +7,14 @@ import {
   distance,
 } from "./geometry";
 
-/** Default satin column width (mm) when building rails from a centreline. */
+/** Default satin column width (mm) when building rails from a centerline. */
 export const DEFAULT_SATIN_WIDTH = 4;
 
 /**
  * Build an EmbObject of the given type from a drawn path of points (mm).
  *  - running: the path is used as-is (open polyline).
  *  - fill:    the path is the region outline (closed when stitched/rendered).
- *  - satin:   the path is treated as a centreline; we derive a left/right rail
+ *  - satin:   the path is treated as a centerline; we derive a left/right rail
  *             pair so the geometry matches the data model.
  */
 export function makeObject(
@@ -81,7 +81,7 @@ export function satinWidthOf(paths: Path[]): number {
 }
 
 /**
- * Re-derive a satin rail pair at a new column width, keeping the centreline
+ * Re-derive a satin rail pair at a new column width, keeping the centerline
  * (the midline of the existing rails) fixed.
  */
 export function setSatinWidth(paths: Path[], widthMm: number): Path[] {
@@ -96,8 +96,8 @@ export function setSatinWidth(paths: Path[], widthMm: number): Path[] {
  * satisfy the type's invariant (satin = rail pair, running/fill = one polyline).
  * Returns the patch to apply; if the type is unchanged, returns {}.
  *
- *  - → satin:        treat the first path as a centreline and build rails.
- *  - satin → other:  collapse the rail pair back to its centreline.
+ *  - → satin:        treat the first path as a centerline and build rails.
+ *  - satin → other:  collapse the rail pair back to its centerline.
  *  - running ↔ fill: geometry is identical (open vs closed is a render concern).
  */
 export function convertObjectType(

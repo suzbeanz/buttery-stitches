@@ -27,18 +27,18 @@ describe("layout", () => {
     expect(designBounds(objs)).toEqual({ minX: 10, minY: 10, maxX: 30, maxY: 30 });
   });
 
-  it("resizes uniformly to a target width about the centre", () => {
+  it("resizes uniformly to a target width about the center", () => {
     const resized = resizeToWidth([square(0, 0, 10)], 20);
     expect(designSize(resized).w).toBeCloseTo(20);
     expect(designSize(resized).h).toBeCloseTo(20);
   });
 
-  it("fits the design inside the hoop and centres it", () => {
+  it("fits the design inside the hoop and centers it", () => {
     const hoop = { wMm: 100, hMm: 100 };
     const fitted = fitToHoop([square(0, 0, 500)], hoop, 0.9);
     const b = designBounds(fitted)!;
     expect(b.maxX - b.minX).toBeLessThanOrEqual(90 + 1e-6);
-    // centred
+    // centered
     expect((b.minX + b.maxX) / 2).toBeCloseTo(50);
     expect((b.minY + b.maxY) / 2).toBeCloseTo(50);
   });

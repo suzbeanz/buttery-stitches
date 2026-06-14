@@ -2,7 +2,7 @@
 # plan" handed over from TypeScript and writes the requested format to bytes.
 #
 # The plan is JSON, already in pyembroidery's 1/10 mm units (the mm→tenths
-# conversion happens on the TS side). One block per thread colour:
+# conversion happens on the TS side). One block per thread color:
 #
 #   {
 #     "blocks": [

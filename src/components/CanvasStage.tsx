@@ -25,12 +25,12 @@ import { designToSegments, needleAt } from "../lib/engine/render";
  * and the manual-editing interactions.
  *
  *   Select tool — click to select, drag the body to move, transform handles to
- *                 scale/rotate. Transforms are baked back into millimetre paths.
+ *                 scale/rotate. Transforms are baked back into millimeter paths.
  *   Node tool   — drag individual vertices.
  *   Draw tools  — click to place points; double-click / Enter to finish.
  *
  * Everything lives in one Konva stage so the rulers and the design share a
- * single millimetre→pixel transform. Move/transform/node edits each write to the
+ * single millimeter→pixel transform. Move/transform/node edits each write to the
  * store exactly once (on gesture end) so undo steps map to whole gestures.
  */
 

@@ -37,9 +37,9 @@ export interface Tracedata {
 }
 
 export interface DigitizeOptions {
-  /** millimetres per source pixel (sets the physical size) */
+  /** millimeters per source pixel (sets the physical size) */
   mmPerPx: number;
-  /** translate the whole design (mm), e.g. to centre it in the hoop */
+  /** translate the whole design (mm), e.g. to center it in the hoop */
   offsetX?: number;
   offsetY?: number;
   /** Douglas–Peucker tolerance (default 0.3 mm) */
@@ -48,7 +48,7 @@ export interface DigitizeOptions {
   minAreaMm2?: number;
   /** shapes thinner than this become running stitches (default 1.2 mm) */
   runningMaxWidth?: number;
-  /** skip the largest-area colour (usually the background) */
+  /** skip the largest-area color (usually the background) */
   removeBackground?: boolean;
 }
 
@@ -68,8 +68,8 @@ function toMm(pts: Point[], mmPerPx: number, ox: number, oy: number): Path {
 
 /**
  * Convert imagetracerjs tracedata into stitch objects (Section 5, steps 3–5).
- * Pure — feed it a tracedata object and it returns colours + classified
- * objects, grouped by colour to minimise thread changes. The actual tracing
+ * Pure — feed it a tracedata object and it returns colors + classified
+ * objects, grouped by color to minimize thread changes. The actual tracing
  * (which needs a canvas) lives in `imageDataToObjects`.
  */
 export function tracedataToObjects(
@@ -89,7 +89,7 @@ export function tracedataToObjects(
   const simp = (pts: Point[]): Path =>
     douglasPeucker(toMm(pts, mmPerPx, offsetX, offsetY), simplifyTolMm);
 
-  // Identify the background as the colour covering the most area.
+  // Identify the background as the color covering the most area.
   let bgIndex = -1;
   if (removeBackground) {
     let maxArea = -1;
@@ -120,7 +120,7 @@ export function tracedataToObjects(
       name: `Color ${ci + 1}`,
     };
 
-    // Collect every region of this colour first, then emit ONE fill object for
+    // Collect every region of this color first, then emit ONE fill object for
     // all the filled blobs (the tatami engine clips with even-odd, so disjoint
     // outers + their holes coexist in a single object). Thin slivers stay as
     // individual running objects. This keeps a logo to a handful of objects
@@ -182,7 +182,7 @@ export function imageDataToObjects(
 }
 
 /**
- * Cheap "is this a photo?" estimate: sample pixels and count distinct colours
+ * Cheap "is this a photo?" estimate: sample pixels and count distinct colors
  * quantized to 4 bits per channel. High counts mean a photographic image that
  * will digitize roughly (v1 is for logos / line art).
  */

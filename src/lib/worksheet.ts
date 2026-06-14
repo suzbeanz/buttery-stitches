@@ -2,17 +2,17 @@ import type { Project, ThreadColor } from "../types/project";
 import { generateDesign, type EngineStitch } from "./engine";
 
 /**
- * Printable thread worksheet: the colour-change sequence an operator follows at
+ * Printable thread worksheet: the color-change sequence an operator follows at
  * the machine — swatch, thread name/brand/code, and stitch count per stop, plus
  * totals and an estimated run time.
  */
 
-/** Typical home-machine speed and the overhead of a colour change. */
+/** Typical home-machine speed and the overhead of a color change. */
 const STITCHES_PER_MIN = 600;
 const SECONDS_PER_COLOR_CHANGE = 20;
 
 export interface WorksheetRow {
-  stop: number; // 1-based colour-stop order
+  stop: number; // 1-based color-stop order
   rgb: [number, number, number];
   name?: string;
   brand?: string;
@@ -27,7 +27,7 @@ export interface Worksheet {
   estMinutes: number;
 }
 
-/** Group the design into consecutive colour stops and tally stitches each. */
+/** Group the design into consecutive color stops and tally stitches each. */
 export function buildWorksheet(
   project: Project,
   design: EngineStitch[] = generateDesign(project),
@@ -132,7 +132,7 @@ export function worksheetHtml(worksheet: Worksheet, title = "Buttery Stitches"):
     <div>Est. run time<span>${formatDuration(worksheet.estMinutes)}</span></div>
   </div>
   <table>
-    <thead><tr><th class="num">#</th><th>Colour</th><th>Name</th><th>Brand</th><th>Code</th><th class="num">Stitches</th></tr></thead>
+    <thead><tr><th class="num">#</th><th>Color</th><th>Name</th><th>Brand</th><th>Code</th><th class="num">Stitches</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
   <div class="print"><button onclick="window.print()">Print / Save as PDF</button></div>
