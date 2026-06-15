@@ -36,4 +36,12 @@ describe("needleAt", () => {
     expect(needleAt(design, 3)).toEqual({ x: 1, y: 0 });
     expect(needleAt(design, 0)).toBeNull();
   });
+
+  it("handles a fractional cursor without indexing undefined (playback)", () => {
+    // simIndex is a float mid-playback; needleAt/designToSegments must floor it,
+    // not read design[4.7] (undefined) and crash on `.jump`.
+    expect(needleAt(design, 4.7)).toEqual({ x: 5, y: 5 });
+    expect(() => designToSegments(design, 3.9)).not.toThrow();
+    expect(designToSegments(design, 3.9)).toEqual(designToSegments(design, 3));
+  });
 });
