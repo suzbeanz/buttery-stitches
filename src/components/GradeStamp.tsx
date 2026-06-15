@@ -28,7 +28,7 @@ export default function GradeStamp({
       fill="none"
       role="img"
       aria-label={`${top} ${big} ${bottom}`}
-      className={className}
+      className={`shrink-0 ${className}`}
       style={{ transform: `rotate(${rotate}deg)` }}
     >
       <circle cx="40" cy="40" r="38" stroke={RED} strokeWidth="2.5" />
