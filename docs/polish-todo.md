@@ -3,6 +3,19 @@
 Working toward a Hatch-by-Wilcom-level, open-source embroidery digitizer. This is
 the living audit/polish list: check items off as they land.
 
+## Brand & style guide (2026-06-15)
+Applied the butter-wrapper brand system from the style guide:
+- [x] Inks: Press Navy #20305F (primary ink), Stamp Red #A5402C (sparing accent),
+      Wrapper Cream #F3E8BC (paper), Churned Cream #F8F1CF (panels), Sepia #2C2A20
+      (body). Tailwind tokens + Konva canvas + worksheet + Home updated.
+- [x] Type: Playfair Display headlines/wordmark, Old Standard TT serif body
+      (loaded via Google Fonts; serif fallbacks for offline). Body set serif.
+- [x] Flat paper background (faint paper wash only — no glossy gradients).
+- [x] The tablespoon ruler device rebuilt as navy ticks on cream (no yellow band).
+- [ ] Next brand passes: button system (outlined navy / solid navy / one red CTA),
+      export-format "stamps", drop-caps + newspaper columns on the homepage,
+      tablespoon ruler labels + red progress fill, nameplate/deck treatment.
+
 ## Stitch quality — crisp & intelligent (2026-06-15)
 - [x] Satin vs fill is now chosen by STROKE WIDTH: only genuinely narrow strokes
       (<=2.2mm — thin/script faces) satin; bold/large block letters lay a clean

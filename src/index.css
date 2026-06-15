@@ -11,13 +11,23 @@ body,
 
 body {
   @apply text-navy;
-  /* A soft, warm butter wash so the whole app feels creamy rather than flat. */
-  background:
-    radial-gradient(120% 90% at 50% -10%, #fffdf4 0%, #fdf6dd 55%, #fbefc6 100%)
-      fixed;
-  font-family:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica,
-    Arial, sans-serif;
+  /* Flat butter-wrapper cream stock with only the faintest paper wash — no
+     glossy gradients (per the brand standards). */
+  background-color: #f3e8bc;
+  background-image:
+    radial-gradient(
+      120% 70% at 50% -5%,
+      rgba(255, 251, 230, 0.55),
+      rgba(255, 251, 230, 0) 50%
+    ),
+    radial-gradient(
+      90% 60% at 100% 102%,
+      rgba(150, 120, 60, 0.07),
+      rgba(150, 120, 60, 0) 55%
+    );
+  background-attachment: fixed;
+  /* Warm book serif — the butter-wrapper voice (Playfair handles headlines). */
+  font-family: "Old Standard TT", Georgia, "Times New Roman", serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -40,8 +50,8 @@ body {
   :focus-visible {
     outline: none;
     box-shadow:
-      0 0 0 2px #fffdf3,
-      0 0 0 4px #ebcb4e;
+      0 0 0 2px #f3e8bc,
+      0 0 0 4px #20305f;
     border-radius: 6px;
   }
 }
@@ -70,8 +80,8 @@ body {
     left: 50%;
     transform: translateX(-50%);
     white-space: nowrap;
-    background: #16234a;
-    color: #f9e9a6;
+    background: #20305f;
+    color: #f3e8bc;
     font-size: 11px;
     line-height: 1;
     padding: 5px 8px;
@@ -106,5 +116,5 @@ body {
 /* Thin, buttery scrollbars. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #d9b23a transparent;
+  scrollbar-color: rgba(32, 48, 95, 0.45) transparent;
 }

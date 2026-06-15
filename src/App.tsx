@@ -89,7 +89,7 @@ function Studio({ onHome }: { onHome: () => void }) {
   const overlay = "absolute inset-y-0 z-40 shadow-butter";
 
   return (
-    <div className="flex h-full flex-col bg-butter-100 text-navy">
+    <div className="flex h-full flex-col bg-paper text-navy">
       <TopBar onHelp={() => setShowHelp((v) => !v)} onHome={onHome} />
       <RulerStrip />
       <div className="relative flex min-h-0 flex-1 overflow-hidden">

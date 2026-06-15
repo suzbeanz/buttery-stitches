@@ -1,20 +1,33 @@
 /**
- * The butter-stick ruler motif as a thin horizontal divider: a butter band
- * printed with navy minor + major ticks. Used as label-style trim around the app
- * (under the top bar) and on the homepage, tying the whole surface to the rulers
- * inside the editor.
+ * The tablespoon-ruler device from the brand guide: a navy top rule with navy
+ * major (1/16) and minor (1/64) ticks hanging beneath it, printed straight on
+ * the cream stock. Used as the section divider throughout the app — the signature
+ * sewing-table nod that ties the editor to the homepage.
  */
+const NAVY = "#20305F";
+
 export default function RulerStrip({ className = "" }: { className?: string }) {
   return (
     <div
       aria-hidden
-      className={`h-3 w-full shrink-0 border-b border-navy/40 ${className}`}
-      style={{
-        background: `
-          repeating-linear-gradient(90deg, #16234A 0 1px, transparent 1px 32px) bottom / 100% 7px no-repeat,
-          repeating-linear-gradient(90deg, rgba(22,35,74,0.6) 0 1px, transparent 1px 8px) bottom / 100% 4px no-repeat,
-          #F9E9A6`,
-      }}
-    />
+      className={`relative h-4 w-full shrink-0 border-t-2 border-navy ${className}`}
+    >
+      {/* major ticks */}
+      <div
+        className="absolute inset-x-0 top-0 h-[13px]"
+        style={{
+          backgroundImage: `repeating-linear-gradient(to right, ${NAVY} 0 1.4px, transparent 1.4px 100%)`,
+          backgroundSize: "calc(100% / 16) 13px",
+        }}
+      />
+      {/* minor ticks */}
+      <div
+        className="absolute inset-x-0 top-0 h-[7px] opacity-50"
+        style={{
+          backgroundImage: `repeating-linear-gradient(to right, ${NAVY} 0 1px, transparent 1px 100%)`,
+          backgroundSize: "calc(100% / 64) 7px",
+        }}
+      />
+    </div>
   );
 }

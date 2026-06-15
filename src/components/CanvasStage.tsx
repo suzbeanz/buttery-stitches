@@ -54,12 +54,13 @@ const HOOP_BAND = 14; // px thickness of the hoop frame in the mockup
 const HOOP_MARGIN = 18; // px of fabric/plastic between the stitch field and the frame opening
 
 const C = {
-  cream: "#FFFDF3",
+  cream: "#F3E8BC", // wrapper-cream paper, the canvas surround
   fabric: "#ECE8DE", // soft neutral "fabric" so light thread colors stay visible
-  butter: "#F9E9A6",
-  butterDeep: "#EBCB4E",
-  navy: "#16234A",
-  navySoft: "#27386E",
+  butter: "#F8F1CF", // churned-cream band for the in-canvas rulers
+  butterDeep: "#E7CF7A",
+  navy: "#20305F", // press navy
+  navySoft: "#2E4173",
+  salted: "#A5402C", // stamp red accent
 };
 
 export default function CanvasStage() {
