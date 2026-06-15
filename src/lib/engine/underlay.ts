@@ -1,6 +1,7 @@
 import type { Path } from "../../types/project";
 import { centerlineOf, distance } from "../geometry";
 import { runningStitch } from "./running";
+import { resampleByCount } from "./resample";
 import { tatamiFill } from "./fill";
 
 /**
@@ -75,14 +76,22 @@ export function fillParallelUnderlay(rings: Path[], topAngle = 0): Path {
  */
 export function satinUnderlay(left: Path, right: Path): Path {
   if (left.length < 2 || right.length < 2) return [];
-  const center = centerlineOf(left, right);
+  // Match the rails point-for-point first. `centerlineOf` and the width check
+  // pair rails by index, which is only meaningful when both have the same vertex
+  // count — not guaranteed for edited or imported satin. Resampling both to a
+  // common count keeps the centerline and edge runs aligned to the real column.
+  const n = Math.max(left.length, right.length);
+  const l = resampleByCount(left, n);
+  const r = resampleByCount(right, n);
+
+  const center = centerlineOf(l, r);
   const out = runningStitch(center, UNDERLAY_STITCH);
 
-  if (meanColumnWidth(left, right) >= SATIN_EDGE_RUN_WIDTH) {
+  if (meanColumnWidth(l, r) >= SATIN_EDGE_RUN_WIDTH) {
     // Run up the right rail and back down the left so the pass ends near the
     // centerline start, keeping travel into the top layer short.
-    out.push(...runningStitch(right, UNDERLAY_STITCH));
-    out.push(...runningStitch([...left].reverse(), UNDERLAY_STITCH));
+    out.push(...runningStitch(r, UNDERLAY_STITCH));
+    out.push(...runningStitch([...l].reverse(), UNDERLAY_STITCH));
   }
 
   return out;

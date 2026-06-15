@@ -4,7 +4,7 @@ import type { Font } from "opentype.js";
 import { FONTS, DEFAULT_FONT_ID, loadFont } from "../lib/text/fonts";
 import { layoutText } from "../lib/text/layout";
 import { translatePaths, pathsBounds } from "../lib/geometry";
-import { useEscapeToClose } from "./useEscapeToClose";
+import { useEscapeToClose, useDialogFocus } from "./useEscapeToClose";
 import { mmToInch, inchToMm } from "../lib/units";
 import { newId } from "../lib/id";
 
@@ -64,6 +64,7 @@ export default function TextDialog({
   const [font, setFont] = useState<Font | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEscapeToClose(onClose);
+  const dialogRef = useDialogFocus<HTMLDivElement>();
 
   // Load (and cache) the chosen font.
   useEffect(() => {
@@ -152,10 +153,12 @@ export default function TextDialog({
       }}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
+        tabIndex={-1}
         aria-label={editObject ? "Edit text" : "Add text"}
-        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border border-navy/20 bg-cream p-4 shadow-2xl"
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border border-navy/20 bg-cream p-4 shadow-2xl outline-none"
       >
         <h2 className="mb-3 font-butter text-lg font-semibold text-navy">
           {editObject ? "Edit text" : "Add text"}

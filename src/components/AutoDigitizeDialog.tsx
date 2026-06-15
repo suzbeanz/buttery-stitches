@@ -3,7 +3,7 @@ import type { Hoop, Project } from "../types/project";
 import { loadImageData } from "../lib/image";
 import { imageDataToObjects, estimateColorComplexity } from "../lib/trace";
 import { fixStitches } from "../lib/fix";
-import { useEscapeToClose } from "./useEscapeToClose";
+import { useEscapeToClose, useDialogFocus } from "./useEscapeToClose";
 
 /**
  * Auto-digitize dialog: preview the image, choose the color count and a couple
@@ -33,6 +33,7 @@ export default function AutoDigitizeDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEscapeToClose(onClose);
+  const dialogRef = useDialogFocus<HTMLDivElement>();
 
   const previewUrl = useMemo(() => URL.createObjectURL(file), [file]);
   useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
@@ -107,10 +108,12 @@ export default function AutoDigitizeDialog({
       }}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
+        tabIndex={-1}
         aria-label="Turn a picture into stitches"
-        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border border-navy/20 bg-cream p-4 shadow-2xl"
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border border-navy/20 bg-cream p-4 shadow-2xl outline-none"
       >
         <h2 className="mb-3 font-butter text-lg font-semibold text-navy">
           Turn a picture into stitches

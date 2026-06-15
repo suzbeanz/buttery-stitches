@@ -10,7 +10,7 @@ import {
   scaleAllPaths,
   fitToHoop,
 } from "../lib/layout";
-import { generateDesign } from "../lib/engine";
+import { designFor } from "../lib/engine";
 import { validateDesign } from "../lib/engine/validate";
 
 /**
@@ -37,7 +37,7 @@ export default function DesignPanel() {
   const minDim = isInch ? 0.1 : 1;
 
   const warnings = useMemo(
-    () => validateDesign(generateDesign(project), project),
+    () => validateDesign(designFor(project), project),
     [project],
   );
 

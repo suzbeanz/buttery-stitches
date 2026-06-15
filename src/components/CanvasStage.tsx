@@ -29,7 +29,7 @@ import { rectFromPoints, rectSpanMm, marqueeSelect } from "../lib/marquee";
 import { smoothPath } from "../lib/smooth";
 import { computeTicksRange } from "../lib/ruler";
 import { mmToInch } from "../lib/units";
-import { generateDesign, orientByDepth } from "../lib/engine";
+import { designFor, orientByDepth } from "../lib/engine";
 import { designToSegments, needleAt } from "../lib/engine/render";
 
 /**
@@ -90,7 +90,7 @@ export default function CanvasStage() {
   // (hidden) edit layer from re-rendering on every frame.
 
   // The assembled design drives both this preview and the exporter.
-  const design = useMemo(() => generateDesign(project), [project]);
+  const design = useMemo(() => designFor(project), [project]);
   useEffect(() => setSimTotal(design.length), [design, setSimTotal]);
 
   // Whenever Stitch view is showing and we're not mid-playback, pin the cursor

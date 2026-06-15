@@ -20,6 +20,8 @@ export default {
           light: "#27386E",
           dark: "#0E1733",
         },
+        // The "salted" accent — used sparingly, like the red stamp on a wrapper.
+        salted: "#C0392B",
         cream: "#FFFDF3",
       },
       fontFamily: {

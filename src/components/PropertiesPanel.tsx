@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useProjectStore } from "../store/projectStore";
 import { useEditorStore } from "../store/editorStore";
 import { DEFAULT_PARAMS } from "../types/project";
@@ -33,7 +33,7 @@ export default function PropertiesPanel() {
   return (
     <aside className="flex h-full w-64 shrink-0 flex-col border-l border-navy/25 bg-butter-100">
       <div className="flex items-center gap-1.5 border-b-2 border-navy bg-butter-200 px-3 py-2 text-xs font-bold uppercase tracking-[0.18em] text-navy">
-        <span className="text-[#C0392B]">*</span> Properties
+        <span className="text-salted">*</span> Properties
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -110,11 +110,7 @@ function ObjectProperties({
   return (
     <div className="flex flex-col gap-3 border-b border-navy/25 p-3 text-sm">
       <Field label="Name">
-        <input
-          value={object.name}
-          onChange={(e) => onName(e.target.value)}
-          className="input"
-        />
+        <CommitInput value={object.name} onCommit={onName} />
       </Field>
 
       <Field label="Stitch type">
@@ -378,10 +374,10 @@ function ThreadColors() {
                 className="h-5 w-5 shrink-0 cursor-pointer rounded border border-navy/30 bg-transparent p-0"
                 title="Change color"
               />
-              <input
+              <CommitInput
                 value={c.name ?? ""}
                 placeholder="Unnamed"
-                onChange={(e) => updateColor(c.id, { name: e.target.value })}
+                onCommit={(name) => updateColor(c.id, { name })}
                 className="min-w-0 flex-1 bg-transparent text-sm text-navy outline-none"
               />
               <button
@@ -442,6 +438,41 @@ function Field({
       <span className="text-xs text-navy/60">{label}</span>
       {children}
     </label>
+  );
+}
+
+/**
+ * A text input that commits only on blur or Enter — so typing a name or color
+ * label is a single undo step, not one per keystroke. It mirrors the live value
+ * while focused and re-syncs if the underlying value changes elsewhere.
+ */
+function CommitInput({
+  value,
+  onCommit,
+  placeholder,
+  className = "input",
+}: {
+  value: string;
+  onCommit: (v: string) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const commit = () => {
+    if (draft !== value) onCommit(draft);
+  };
+  return (
+    <input
+      value={draft}
+      placeholder={placeholder}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
+      className={className}
+    />
   );
 }
 

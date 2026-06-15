@@ -318,6 +318,21 @@ function pushTie(
   }
 }
 
+let designCache: { project: Project; design: EngineStitch[] } | null = null;
+
+/**
+ * The assembled design for a project, memoized by project reference. The project
+ * is replaced immutably on every edit, so this computes the design once per
+ * change and shares it across every consumer (the canvas preview, design
+ * validation, the exporter, the worksheet) instead of each regenerating it.
+ */
+export function designFor(project: Project): EngineStitch[] {
+  if (designCache && designCache.project === project) return designCache.design;
+  const design = generateDesign(project);
+  designCache = { project, design };
+  return design;
+}
+
 /** Number of actual penetrations (excludes jumps). */
 export function countStitches(design: EngineStitch[]): number {
   return design.reduce((n, s) => n + (s.jump ? 0 : 1), 0);

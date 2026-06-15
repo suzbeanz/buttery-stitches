@@ -34,6 +34,17 @@ describe("douglasPeucker", () => {
     );
     expect(out).toHaveLength(3);
   });
+
+  it("handles a huge collinear input without recursing or hanging", () => {
+    // 50k collinear points collapse to the two endpoints. The iterative version
+    // finishes fast; the old recursive one risked a deep stack and a fresh
+    // sub-array allocation at every level.
+    const pts = Array.from({ length: 50000 }, (_, i) => ({ x: i, y: 0 }));
+    const out = douglasPeucker(pts, 0.5);
+    expect(out).toHaveLength(2);
+    expect(out[0]).toEqual({ x: 0, y: 0 });
+    expect(out[1]).toEqual({ x: 49999, y: 0 });
+  });
 });
 
 describe("classify metrics", () => {
