@@ -1,171 +1,225 @@
-import { Image as ImageIcon, Type, Eye } from "lucide-react";
+import type { ReactNode } from "react";
+import Tape from "./Tape";
+import PressButton from "./PressButton";
+import PressCard from "./PressCard";
+import Stamp from "./Stamp";
+import GradeStamp from "./GradeStamp";
+import SectionHead from "./SectionHead";
 import Footer from "./Footer";
 
 /**
- * Homepage as a printed butter label (per the reference): the whole surface is
- * butter-yellow, everything is pressed in navy ink with a "salted" red accent,
- * the butter-stick ruler doubles as the nav (with red Tbsp measurements), the
- * body is set in monospace like a wrapper, and a "NET WT." line signs the foot.
+ * The homepage as a printed butter wrapper / editorial spread. Flat Press-Blue
+ * ink on churned-butter stock, the tablespoon tape running full-bleed between
+ * every section as the structural grid, grade stamps, and press-block fixtures.
  */
-const RED = "#A5402C";
-const NAVY = "#20305F";
+const TBSP = ["1 Tbsp", "2 Tbsp", "3 Tbsp", "4 Tbsp", "5 Tbsp", "6 Tbsp", "7 Tbsp", "8 Tbsp"];
 
 export default function Home({ onStart }: { onStart: () => void }) {
   return (
-    <div className="relative h-full overflow-y-auto bg-butter-200 text-navy">
-      {/* faint corner sparkles, like the reference */}
-      <Sparkle className="left-3 top-3" />
-      <Sparkle className="right-3 bottom-3" />
+    <div className="h-full overflow-y-auto">
+      {/* HERO — the label */}
+      <Col className="pt-10 sm:pt-16">
+        <PressCard className="px-6 py-8 sm:px-10 sm:py-10">
+          <div className="flex items-center justify-between border-b-[1.5px] border-foil pb-3 font-label text-[12px] font-semibold uppercase tracking-[0.22em] text-ink">
+            <span>Open Source</span>
+            <span>Net Wt. Free · 100% Free</span>
+          </div>
 
-      <div className="mx-auto max-w-4xl px-5 py-12 sm:py-16">
-        {/* Headline */}
-        <h1 className="wordmark text-center text-5xl font-bold leading-[0.95] text-navy sm:text-7xl">
-          Buttery Stitches
-        </h1>
-        <p className="mt-3 text-center text-sm font-bold uppercase tracking-[0.28em] text-navy/80 sm:text-base">
-          Embroidery Digitizing — Made Simple
-        </p>
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-x-7 gap-y-4">
+            <GradeStamp size={74} className="hidden sm:block" />
+            <div className="text-center leading-none">
+              <div className="font-accent text-2xl italic text-stamp sm:text-3xl">
+                Sweet &amp; Unsalted
+              </div>
+              <div className="font-display text-6xl uppercase leading-[0.82] tracking-wide text-ink sm:text-8xl">
+                Buttery
+                <br />
+                Stitches
+              </div>
+              <div className="mt-4 font-label text-[12px] font-medium uppercase tracking-[0.4em] text-ink-deep sm:text-sm">
+                Embroidery Digitizing — Churned to Order
+              </div>
+            </div>
+            <GradeStamp size={74} rotate={7} top="Made" big="100" bottom="% Open" className="hidden sm:block" />
+          </div>
 
-        {/* Ruler nav with Tbsp measurements */}
-        <RulerNav />
+          <div className="mt-7 text-center font-mono text-[12px] uppercase tracking-[0.14em] text-char/80">
+            Net Wt. Free · Pictures, Words &amp; Shapes → Machine-Ready Stitches
+          </div>
+        </PressCard>
 
-        <div className="mt-8 text-center">
-          <button
-            onClick={onStart}
-            className="inline-flex items-center gap-2 rounded-full bg-navy px-9 py-3.5 text-lg font-semibold text-butter-200 shadow-butter transition-transform hover:scale-[1.03]"
-          >
-            Start stitching 🧈
-          </button>
-          <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.18em] text-navy/50">
+        <div className="mt-7 text-center">
+          <PressButton onClick={onStart} className="text-base">
+            Start Stitching
+          </PressButton>
+          <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.14em] text-char/60">
             Free · No sign-up · Stays on your machine
           </p>
         </div>
+      </Col>
 
-        {/* Two-column wrapper copy */}
-        <div className="mt-12 grid grid-cols-1 gap-8 sm:grid-cols-2">
-          <Column title="Key Features" salted>
-            <p>
-              Turn flat logos and line art into clean, machine-ready stitches
-              automatically. Add words in curated fonts with crisp satin
-              lettering that follows every stroke.
-            </p>
-            <p>
-              Drop in premade shapes, drag points, snap to guides, and reorder
-              layers — a full editor without the steep learning curve. Everything
-              runs in your browser; nothing is uploaded.
-            </p>
-            <div className="grid grid-cols-3 gap-2 pt-1 font-sans">
-              <Pill Icon={ImageIcon} label="Pictures" />
-              <Pill Icon={Type} label="Words" />
-              <Pill Icon={Eye} label="Preview" />
-            </div>
-          </Column>
+      <Tape labels={TBSP} className="mt-12" />
 
-          <Column title="How It Works">
-            <p>
-              Start with a picture, some words, or a shape. Buttery Stitches
-              converts it to stitches using embroidery best practices — underlay,
-              tie-offs, and safe stitch lengths so designs sew reliably.
-            </p>
-            <p>
-              Tweak color, size, and stitch style, preview it inside the hoop,
-              then export to PES, DST, JEF, EXP, or VP3 — the formats home and
-              commercial machines read.
-            </p>
-            <p className="text-navy/60">
-              Pro digitizing software costs hundreds of dollars. This is a free,
-              open-source alternative — named, with love, after a very good girl
-              called Butters.
-            </p>
-          </Column>
+      {/* 01 — THE SPREAD */}
+      <Col>
+        <SectionHead no="Section 01 / Half Cup" title="The Spread" sub="What it does" />
+        <p className="max-w-2xl font-body text-[17px] leading-relaxed text-char">
+          Buttery Stitches turns pictures, words, and shapes into machine-ready
+          embroidery files — churned right in your browser, free and open-source.
+          It borrows the honest confidence of a dairy-case butter label:{" "}
+          <b className="text-ink">one good product, plainly made.</b> No gradients,
+          no startup gloss — just clean stitches, measured and exact.
+        </p>
+      </Col>
+
+      <Tape labels={TBSP} className="mt-12" />
+
+      {/* 02 — WHAT'S INSIDE */}
+      <Col>
+        <SectionHead no="Section 02 / The Kit" title="What's Inside" sub="Picture · Words · Export" />
+        <div className="mt-2 grid grid-cols-1 gap-5 sm:grid-cols-3">
+          <Feature title="Picture → Stitches" motif={<ImageMotif />}>
+            Drop in a logo or line art and get clean, machine-ready stitches.
+          </Feature>
+          <Feature title="Add Words" motif={<StickMotif />}>
+            Stitch a name or message in curated fonts — crisp satin or solid fill.
+          </Feature>
+          <Feature title="Preview &amp; Export" motif={<NeedleMotif />}>
+            Watch it sew inside the hoop, then save to your machine's format.
+          </Feature>
         </div>
+      </Col>
 
-        {/* NET WT. signature */}
-        <div className="mt-14 border-t-2 border-navy pt-6 text-center">
-          <p className="text-sm font-bold uppercase tracking-[0.18em] text-navy">
-            Net wt. free · 100% open source
-          </p>
-          <Footer />
+      <Tape labels={TBSP} className="mt-12" />
+
+      {/* 03 — HOW IT WORKS */}
+      <Col>
+        <SectionHead no="Section 03 / The Method" title="How It Works" sub="Trace → Export" />
+        <p className="max-w-2xl font-body text-[16px] leading-relaxed text-char">
+          Every design is portioned the same careful way — underlay, tie-offs, and
+          safe stitch lengths so it sews reliably. The tape fills as it's digitized:
+        </p>
+        <Tape
+          className="mt-7"
+          fillPct={1}
+          labels={["Trace", "Path", "Fill", "Underlay", "Satin", "Tie-off", "Preview", "Export"]}
+        />
+      </Col>
+
+      <Tape labels={TBSP} className="mt-12" />
+
+      {/* 04 — FORMATS */}
+      <Col>
+        <SectionHead no="Section 04 / The Tickets" title="The Formats" sub="Home &amp; commercial machines" />
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Stamp variant="solid">PES</Stamp>
+          <Stamp>DST</Stamp>
+          <Stamp>JEF</Stamp>
+          <Stamp variant="red">EXP</Stamp>
+          <Stamp variant="red">VP3</Stamp>
+          <span className="mx-2 font-body text-[15px] text-char/70">
+            — the formats your machine reads.
+          </span>
         </div>
-      </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Stamp>Net Wt. Free</Stamp>
+          <Stamp variant="red">Grade AA</Stamp>
+        </div>
+      </Col>
+
+      <Tape labels={TBSP} className="mt-12" />
+
+      {/* 05 — WHY OPEN SOURCE */}
+      <Col>
+        <SectionHead no="Section 05 / The Promise" title="Why It's Free" sub="Open source, for everyone" />
+        <div className="mt-2 grid grid-cols-1 gap-5 sm:grid-cols-3">
+          <Feature title="Free Forever">
+            Pro digitizing software costs hundreds. This costs nothing, always.
+          </Feature>
+          <Feature title="Stays On Your Machine">
+            Everything runs in your browser. Nothing is ever uploaded.
+          </Feature>
+          <Feature title="Open &amp; Yours">
+            Open-source and improving in the open — proof that free can be the best.
+          </Feature>
+        </div>
+        <div className="mt-9 text-center">
+          <PressButton onClick={onStart} className="text-base">
+            Start Stitching
+          </PressButton>
+        </div>
+      </Col>
+
+      <Tape labels={TBSP} className="mt-12" />
+
+      {/* FOOTER BAND */}
+      <Col className="pb-2">
+        <div className="border-y-[3px] border-ink py-5 text-center">
+          <div className="font-display text-2xl uppercase tracking-wide text-ink-deep sm:text-4xl">
+            Net Wt. Free · 100% Open Source
+          </div>
+        </div>
+      </Col>
+      <Footer />
     </div>
   );
 }
 
-/** The butter-stick ruler as a decorative divider, with red Tbsp measurements. */
-function RulerNav() {
-  const tbsp = 8;
-  return (
-    <div className="mx-auto mt-9 max-w-2xl select-none" aria-hidden>
-      <svg viewBox="0 0 800 26" className="w-full">
-        <line x1="3" y1="13" x2="797" y2="13" stroke={NAVY} strokeWidth="2" />
-        {Array.from({ length: tbsp + 1 }).map((_, i) => {
-          const x = 3 + (794 * i) / tbsp;
-          const major = i === 0 || i === tbsp;
-          return (
-            <line
-              key={i}
-              x1={x}
-              y1={major ? 3 : 6}
-              x2={x}
-              y2={major ? 23 : 20}
-              stroke={NAVY}
-              strokeWidth="2"
-            />
-          );
-        })}
-      </svg>
-
-      <div
-        className="grid text-center text-xs font-bold sm:text-sm"
-        style={{ gridTemplateColumns: `repeat(${tbsp}, minmax(0, 1fr))`, color: RED }}
-      >
-        {Array.from({ length: tbsp }).map((_, i) => (
-          <span key={i}>{i + 1} Tbsp</span>
-        ))}
-      </div>
-    </div>
-  );
+/** Centered measured column; the tape rules run full-bleed outside it. */
+function Col({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <div className={`mx-auto max-w-5xl px-6 ${className}`}>{children}</div>;
 }
 
-function Column({
+function Feature({
   title,
-  salted,
+  motif,
   children,
 }: {
   title: string;
-  salted?: boolean;
-  children: React.ReactNode;
+  motif?: ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <section>
-      <h2 className="text-xl font-bold uppercase tracking-wide text-navy sm:text-2xl">
+    <PressCard className="p-5">
+      {motif && <div className="mb-3">{motif}</div>}
+      <h3 className="font-label text-lg font-semibold uppercase tracking-[0.08em] text-ink-deep">
         {title}
-        {salted && <span style={{ color: RED }}> *</span>}
-      </h2>
-      <div className="mt-3 space-y-3 font-mono text-sm leading-relaxed text-navy/85">
+      </h3>
+      <p className="mt-1.5 font-body text-[14px] leading-relaxed text-char/80">
         {children}
-      </div>
-    </section>
+      </p>
+    </PressCard>
   );
 }
 
-function Pill({ Icon, label }: { Icon: typeof ImageIcon; label: string }) {
+// --- single-weight line motifs (Press Blue on cream) -----------------------
+const INK = "#173A7A";
+function ImageMotif() {
   return (
-    <div className="flex items-center gap-1.5 border-2 border-navy px-2 py-1.5 text-xs font-semibold text-navy">
-      <Icon size={14} />
-      {label}
-    </div>
+    <svg width="48" height="48" viewBox="0 0 58 58" fill="none" aria-hidden>
+      <rect x="14" y="10" width="30" height="38" rx="2" stroke={INK} strokeWidth="2.5" />
+      <circle cx="29" cy="20" r="5" stroke={INK} strokeWidth="2" />
+      <path d="M22 40 L26 31 L33 36 L38 28" stroke={INK} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
-
-function Sparkle({ className }: { className: string }) {
+function StickMotif() {
   return (
-    <span
-      aria-hidden
-      className={`pointer-events-none absolute text-3xl text-navy/10 ${className}`}
-    >
-      ✦
-    </span>
+    <svg width="48" height="48" viewBox="0 0 58 58" fill="none" aria-hidden>
+      <rect x="8" y="20" width="42" height="18" rx="2" stroke={INK} strokeWidth="2.5" />
+      <path d="M8 24 L14 20 M8 34 L14 38 M50 24 L44 20 M50 34 L44 38" stroke={INK} strokeWidth="1.5" />
+      <line x1="20" y1="20" x2="20" y2="38" stroke={INK} strokeWidth="1" />
+      <line x1="38" y1="20" x2="38" y2="38" stroke={INK} strokeWidth="1" />
+    </svg>
+  );
+}
+function NeedleMotif() {
+  return (
+    <svg width="48" height="48" viewBox="0 0 58 58" fill="none" aria-hidden>
+      <path d="M29 6 L29 44" stroke={INK} strokeWidth="2.5" />
+      <circle cx="29" cy="48" r="4" stroke={INK} strokeWidth="2.5" />
+      <path d="M29 10 L24 16 M29 10 L34 16" stroke={INK} strokeWidth="2" strokeLinecap="round" />
+      <path d="M20 24 q9 8 18 0" stroke="#B23A2E" strokeWidth="1.5" strokeDasharray="3 3" />
+    </svg>
   );
 }
