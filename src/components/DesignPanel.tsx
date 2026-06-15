@@ -12,6 +12,7 @@ import {
 } from "../lib/layout";
 import { designFor } from "../lib/engine";
 import { validateDesign } from "../lib/engine/validate";
+import { FABRICS, DEFAULT_FABRIC, type FabricType } from "../types/project";
 
 /**
  * Document settings: hoop, design size (with aspect lock + fit-to-hoop), and
@@ -120,6 +121,8 @@ export default function DesignPanel() {
         </div>
       )}
 
+      <FabricTypePicker />
+
       <FabricPicker />
 
       {/* Design size */}
@@ -188,6 +191,32 @@ const FABRIC_SWATCHES = [
   "#D9B89C", // tan
   "#E9C9D0", // blush
 ];
+
+/**
+ * The fabric the design will be stitched onto. The choice bends the engine's
+ * density, pull compensation, and underlay weight (docs/stitch-logic.md §8) so
+ * the same artwork sews cleanly on a stable woven or a stretchy knit.
+ */
+function FabricTypePicker() {
+  const fabric = useProjectStore((s) => s.project.fabric ?? DEFAULT_FABRIC);
+  const updateProject = useProjectStore((s) => s.updateProject);
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/60">Fabric type</span>
+      <select
+        value={fabric}
+        onChange={(e) => updateProject({ fabric: e.target.value as FabricType })}
+        className="input"
+      >
+        {(Object.keys(FABRICS) as FabricType[]).map((id) => (
+          <option key={id} value={id}>
+            {FABRICS[id].name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 function FabricPicker() {
   const fabricColor = useEditorStore((s) => s.fabricColor);

@@ -26,10 +26,12 @@ function widen(l: Point, r: Point, by: number): [Point, Point] {
 }
 
 /**
- * Satin column: given a left/right rail pair, march along both in lock-step and
- * zig-zag across, one throw per `density` step. Pull compensation widens the
- * column; throws wider than a safe stitch length are split so no single stitch
- * is dangerously long (a long satin throw snags and loosens).
+ * Satin column: given a left/right rail pair, lay zig-zag throws across with
+ * DENSITY COMPENSATION on curves — sample both rails finely, then place a throw
+ * only after whichever rail (the outer one through a bend) has advanced a full
+ * `density`, so the convex edge stays evenly covered instead of fanning into
+ * gaps and the concave edge packs tighter. Pull compensation widens the column;
+ * throws wider than a safe length are split so no single stitch snags.
  */
 export function satinColumn(
   left: Path,
@@ -37,22 +39,35 @@ export function satinColumn(
   { density, pullComp, maxWidth = SATIN_MAX_WIDTH }: SatinOptions,
 ): Path {
   if (left.length < 2 || right.length < 2) return [];
+  const step = Math.max(0.05, density);
 
-  const avgLen = (polylineLength(left) + polylineLength(right)) / 2;
-  const steps = Math.max(1, Math.round(avgLen / Math.max(0.05, density)));
-  const n = steps + 1;
+  // Dense, matched samples down both rails.
+  const len = (polylineLength(left) + polylineLength(right)) / 2;
+  const dense = Math.max(2, Math.round(len / (step / 4)) + 1);
+  const lp = resampleByCount(left, dense);
+  const rp = resampleByCount(right, dense);
 
-  const lp = resampleByCount(left, n);
-  const rp = resampleByCount(right, n);
+  // Choose throw positions so neither rail's gap between throws exceeds density.
+  const idx: number[] = [0];
+  let last = 0;
+  for (let i = 1; i < dense; i++) {
+    const dl = distance(lp[i], lp[last]);
+    const dr = distance(rp[i], rp[last]);
+    if (Math.max(dl, dr) >= step) {
+      idx.push(i);
+      last = i;
+    }
+  }
+  if (idx[idx.length - 1] !== dense - 1) idx.push(dense - 1);
 
   const out: Point[] = [];
-  for (let i = 0; i < n; i++) {
+  idx.forEach((i, k) => {
     let [l, r] = [lp[i], rp[i]];
     if (pullComp > 0) [l, r] = widen(l, r, pullComp);
-    // Interleave rails: L0,R0,L1,R1,… → across throws with a short diagonal
-    // advance between them.
-    out.push(l, r);
-  }
+    // Alternate the leading rail each throw so they chain into a zig-zag.
+    if (k % 2 === 0) out.push(l, r);
+    else out.push(r, l);
+  });
 
   // Cap throw length so very wide columns become split (running) satin.
   return capSegmentLength(out, maxWidth);

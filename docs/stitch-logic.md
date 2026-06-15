@@ -118,38 +118,38 @@ run it **first**, **inset ~1 mm** from the edge so it never peeks out, at a
 | rule | status |
 |---|---|
 | Running / satin / tatami primitives | ✅ |
-| Type by width (lettering satin ≤ 2.2 mm, fix.ts ≤ 3.5 mm) | ⚠️ partial — no length/aspect/area logic; no auto-running for very thin/lines |
-| Densities + clamps | ✅ (not fabric-aware) |
-| Satin density compensation on curves | ⚠️ medial only — **user satin objects use uniform spacing** |
+| Type by width — holes-aware `classifyRegion` (running < 1.2 mm, satin ≤ 7 mm, tatami above) | ✅ shared by `fix.ts` and the fill branch; hairline columns auto-run |
+| Densities + clamps | ✅ fabric-aware (scaled by `densityMul`) |
+| Satin density compensation on curves | ✅ medial **and** user `satinColumn` (dense-sample, throw on `max(dl,dr) ≥ density`) |
 | Tatami brick stagger | ✅ |
 | Tatami angle | ❌ fixed 0° default (bands on straight edges); no principal-axis / per-region variation |
-| Fill underlay (edge + parallel) | ⚠️ have, but **on the boundary (not inset)**, fixed density, no zig-zag |
-| Satin underlay (center + edge for wide) | ⚠️ have basic; **no zig-zag for wide**, threshold coarse |
-| Pull compensation (satin) | ✅ param; ❌ not auto by width/fabric |
+| Fill underlay (inset edge + parallel) | ✅ inset ~1 mm; +criss-cross pass for heavy fabric |
+| Satin underlay (tiered by width) | ✅ center / +edge-walk (≥ 2 mm) / +zig-zag (≥ 4 mm), per user satin **and** per medial column |
+| Pull compensation (satin) | ✅ param, scaled by fabric `pullMul`; ⚠️ not yet auto by width |
 | Fill push/pull compensation | ❌ |
 | Satin corners (miter/cap) | ❌ |
 | Max stitch / split satin | ✅ (≤ 7 mm throws, region run-splitting) |
 | Lock stitches, min-stitch, coincident collapse | ✅ |
 | Color grouping; nearest-neighbor branch routing | ✅ / ⚠️ (not global) |
 | Contour / radial / motif / gradient textures | ❌ |
-| Fabric-type presets driving density/underlay/pull | ❌ (fabricColor is visual only) |
+| Fabric-type presets driving density/underlay/pull | ✅ `FABRICS` registry (woven/knit/pile/sheer) wired through the engine + UI |
 | Validation (min/max stitch, density, hoop, count) | ✅ (could warn on satin > 7 mm specifically) |
 
 ---
 
 ## 10. Roadmap to maximum power (prioritized)
-1. **Unified auto-classifier** — one pure `classifyStitch(shape, fabric)` encoding
-   §2 (width + length + aspect + area + role), used at import and as the default
-   for drawn/imported shapes. Replaces the ad-hoc width gates. Add auto-**running**
-   for very thin / open shapes.
-2. **Underlay system** — pick underlay TYPE per §5 (center / edge-walk / zig-zag
-   for satin; edge + parallel/zig-zag for fill), **inset edges**, density scaled
-   to the top. Biggest visible-quality lift after #1.
-3. **Density compensation for user satin** — bring the medial curve-compensation
-   into `satinColumn` so hand-drawn satin curves are crisp too.
+1. ✅ **Unified auto-classifier** — pure holes-aware `classifyRegion` (§2, mean
+   width → running / satin / tatami), shared by `fix.ts` and the fill branch;
+   very-thin medial columns auto-stitch as a single running line.
+2. ✅ **Underlay system** — underlay TYPE per §5 (center / edge-walk / zig-zag for
+   satin; **inset** edge + parallel/criss-cross for fill), tiered by width and
+   fabric weight, per user satin AND per medial column.
+3. ✅ **Density compensation for user satin** — the medial curve-compensation now
+   also drives `satinColumn`, so hand-drawn satin curves are crisp too.
 4. **Smart tatami angle** — principal-axis (or per-region varied) instead of 0°.
-5. **Auto pull/push compensation** — pull-comp by width; fill push-pull; wired to
-   a **fabric-type** setting (knit/woven/pile/sheer) that also scales density/underlay.
+5. **Auto pull/push compensation** — pull-comp by width; fill push-pull. (Fabric
+   scaling of density/pull/underlay is done — see the `FABRICS` registry; remaining
+   is the *width-driven* auto pull-comp and fill push-pull.)
 6. **Satin corner mitering**; **split-satin** for 7–12 mm columns.
 7. **Texture options** — contour/echo fill (organic shapes), then motif/gradient.
 8. **Validation tuning** — flag satin > 7 mm, underlay-off on large fills, etc.

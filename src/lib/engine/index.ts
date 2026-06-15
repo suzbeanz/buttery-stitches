@@ -1,16 +1,17 @@
-import type { EmbObject, Path, Point, Project } from "../../types/project";
-import { resolveParams } from "../../types/project";
+import type {
+  EmbObject,
+  FabricProfile,
+  Path,
+  Point,
+  Project,
+} from "../../types/project";
+import { resolveParams, fabricProfile } from "../../types/project";
 import { distance } from "../geometry";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
 import { tatamiFill, splitFillRegions } from "./fill";
 import { medialColumns, satinCoverage, type SatinColumn } from "./medial";
-import {
-  fillEdgeUnderlay,
-  fillParallelUnderlay,
-  centerlineUnderlay,
-  satinUnderlay,
-} from "./underlay";
+import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
 import { dropShortStitches, splitLongTravels } from "./resample";
 
 export * from "./running";
@@ -167,12 +168,22 @@ function acceptableSatin(region: Path[], density: number): SatinColumn[] {
   return coverage >= MIN_SATIN_COVERAGE ? columns : [];
 }
 
+/** A medial column thinner than this stitches as a single running line, not satin. */
+const RUNNING_COLUMN_MM = 1.2;
+
 /**
  * The runs for a single object. Splitting a fill into its regions (and underlay
- * from top) here is what lets `generateDesign` jump between them.
+ * from top) here is what lets `generateDesign` jump between them. The `fabric`
+ * profile bends density / pull-comp / underlay weight (docs/stitch-logic.md §8).
  */
-export function generateObjectRuns(object: EmbObject): StitchRun[] {
+export function generateObjectRuns(
+  object: EmbObject,
+  fabric: FabricProfile = fabricProfile(undefined),
+): StitchRun[] {
   const p = resolveParams(object.type, object.params);
+  const density = p.density * fabric.densityMul;
+  const pullComp = p.pullComp * fabric.pullMul;
+  const weight = fabric.underlay;
   const runs: StitchRun[] = [];
 
   if (object.type === "running") {
@@ -183,61 +194,54 @@ export function generateObjectRuns(object: EmbObject): StitchRun[] {
   if (object.type === "satin") {
     const [left, right] = object.paths;
     if (!left || !right) return runs;
-    if (p.underlay) addRun(runs, dropShortStitches(satinUnderlay(left, right)), true);
-    addRun(
-      runs,
-      dropShortStitches(satinColumn(left, right, { density: p.density, pullComp: p.pullComp })),
-      false,
-    );
+    if (p.underlay) {
+      for (const run of satinUnderlay(left, right, weight)) {
+        addRun(runs, dropShortStitches(run), true);
+      }
+    }
+    addRun(runs, dropShortStitches(satinColumn(left, right, { density, pullComp })), false);
     return runs;
   }
 
-  // fill — edge + parallel underlay, then top, per connected region. Keeping
-  // each pass a separate run lets the assembler jump between them rather than
-  // dragging a long stitch from the edge run to the fill start. Lettering uses
-  // satin that follows each stroke's medial axis (smooth + shiny, falling back to
-  // a column fill for shapes too small to skeletonize); broad areas use tatami.
-  // Every top run is split where it would cross a counter/gap, so those jump.
+  // fill — underlay then top, per connected region. Keeping each pass a separate
+  // run lets the assembler jump between them. Strokes satin along their medial
+  // axis (very thin ones run as a single line); broad areas use tatami; the
+  // medial pass falls back to tatami where satin won't cover cleanly.
   const satin = p.fillStyle === "satin";
   for (const region of splitFillRegions(object.paths)) {
-    // Satin lettering follows each stroke's medial axis — but only when it
-    // actually covers the glyph. If the skeleton is poor (junction-heavy or
-    // chunky shapes), we fall back to a plain tatami fill so output is never
-    // broken. `satinRuns` is empty when we fall back.
-    const columns = satin ? acceptableSatin(region, p.density) : [];
+    const columns = satin ? acceptableSatin(region, density) : [];
     const usingSatin = columns.length > 0;
     const travelMax = usingSatin ? 8 : 6;
 
     let cursor: Point | null = null;
     if (p.underlay) {
-      if (usingSatin) {
-        // Run a centerline underlay down each satin stroke to anchor the column
-        // (proper satin underlay), rather than tracing the glyph silhouette.
-        for (const col of columns) {
-          const run = dropShortStitches(centerlineUnderlay(col.centerline));
-          addRun(runs, run, true);
-          if (run.length) cursor = run[run.length - 1];
-        }
-      } else {
-        // Fill underlay: an edge run around the outline + a perpendicular tatami
-        // pass that the top rows can bite into.
-        const edge = dropShortStitches(fillEdgeUnderlay(region));
-        addRun(runs, edge, true);
-        if (edge.length) cursor = edge[edge.length - 1];
-        for (const sub of splitLongTravels(fillParallelUnderlay(region, p.angle), travelMax)) {
-          addRun(runs, dropShortStitches(sub), true);
+      // Satin: tiered underlay per column (center / edge-walk / zig-zag by width).
+      // Tatami: inset edge run + perpendicular pass(es).
+      const ulRuns = usingSatin
+        ? columns.flatMap((c) => columnUnderlay(c.centerline, c.widthMm, weight))
+        : fillUnderlayRuns(region, p.angle, weight);
+      for (const run of ulRuns) {
+        for (const sub of splitLongTravels(run, travelMax)) {
+          const u = dropShortStitches(sub);
+          addRun(runs, u, true);
+          if (u.length) cursor = u[u.length - 1];
         }
       }
     }
 
-    // Sew the satin strokes in nearest-neighbor order from where the underlay
-    // left off, so the needle takes the shortest path between them — fewer and
-    // shorter jumps, a neater stitch-out. Pure reordering; geometry is unchanged.
-    const topRuns: Point[][] = usingSatin
-      ? orderByNearest(columns.map((c) => c.throws), cursor)
-      : [tatamiFill(region, { density: p.density, angle: p.angle })];
+    // Top layer. Hairline columns become a single running line; the rest satin.
+    const tops: Point[][] = usingSatin
+      ? columns.map((c) =>
+          c.widthMm < RUNNING_COLUMN_MM
+            ? runningStitch(c.centerline, p.stitchLength)
+            : c.throws,
+        )
+      : [tatamiFill(region, { density, angle: p.angle })];
 
-    for (const run of topRuns) {
+    // Sew the strokes nearest-neighbor from where the underlay left off, for the
+    // shortest travel between them (pure reordering; geometry unchanged).
+    const ordered = usingSatin ? orderByNearest(tops, cursor) : tops;
+    for (const run of ordered) {
       for (const sub of splitLongTravels(run, travelMax)) {
         addRun(runs, dropShortStitches(sub), false);
       }
@@ -273,10 +277,11 @@ export function generateDesign(
   // run per region), keeping only runs that actually produce penetrations. The
   // travel logic below then jumps/trims between consecutive runs — including
   // between the disjoint regions of a single fill.
+  const fabric = fabricProfile(project.fabric);
   const drawn = project.objects
     .filter((o) => o.visible)
     .flatMap((object) =>
-      generateObjectRuns(object).map((run) => ({
+      generateObjectRuns(object, fabric).map((run) => ({
         object,
         pts: run.pts,
         underlay: run.underlay,
