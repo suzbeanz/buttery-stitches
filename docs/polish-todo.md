@@ -88,9 +88,10 @@ the living audit/polish list: check items off as they land.
       empty canvas draws a rubber-band rectangle (butter fill, dashed navy) and
       selects every object it grazes on release; a tiny drag is treated as a
       click and clears. Pure helpers in src/lib/marquee.ts, unit-tested.
-- [ ] HOOP MOCKUP looks nothing like the reference photo the user sent — rebuild
-      the Stitch-view hoop to match it (need the reference image to match wood
-      grain / proportions / hardware).
+- [x] HOOP MOCKUP rebuilt to match the reference: a light greige PLASTIC machine
+      hoop (not wood) — rounded-square double frame with a seam channel, a
+      mounting-bracket arm with a slot on the left, a silver tension screw at the
+      bottom, and centering registration ticks.
 - [ ] STITCH-VIEW PLAY still shows an empty frame — playback never reveals
       stitches. Investigate SimulatorBar rAF + simIndex/simTotal + StitchView
       reveal; it must animate from 0 and actually draw.

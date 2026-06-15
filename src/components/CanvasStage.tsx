@@ -330,36 +330,89 @@ export default function CanvasStage() {
           <Layer>
             {viewMode === "stitch" ? (
               <Group listening={false}>
-                {/* Realistic embroidery hoop: a wooden ring with a tension screw,
-                    fabric stretched inside — the physical preview. */}
+                {/* Plastic machine-embroidery hoop: a rounded-square double frame
+                    with a mounting bracket on the left and a tension screw at the
+                    bottom, fabric stretched inside — the physical preview. */}
+
+                {/* Mounting bracket arm on the left (drawn behind the frame). */}
+                <Rect
+                  x={originX - HOOP_BAND - 24}
+                  y={originY + hoopH * 0.3}
+                  width={34}
+                  height={hoopH * 0.4}
+                  cornerRadius={5}
+                  fillLinearGradientStartPoint={{ x: 0, y: 0 }}
+                  fillLinearGradientEndPoint={{ x: 0, y: hoopH * 0.4 }}
+                  fillLinearGradientColorStops={[0, "#ECE9E2", 1, "#C7C1B7"]}
+                  stroke="#A9A39A"
+                  strokeWidth={1}
+                />
+                {/* Slot cut into the bracket. */}
+                <Rect
+                  x={originX - HOOP_BAND - 18}
+                  y={originY + hoopH * 0.3 + 9}
+                  width={12}
+                  height={hoopH * 0.4 - 18}
+                  cornerRadius={5}
+                  fill={C.cream}
+                  stroke="#B4AEA4"
+                  strokeWidth={1}
+                />
+
+                {/* Bottom tension bracket + silver screw (drawn behind the frame). */}
+                <Rect
+                  x={originX + hoopW / 2 - 6}
+                  y={originY + hoopH + HOOP_BAND - 7}
+                  width={34}
+                  height={13}
+                  cornerRadius={6}
+                  fillLinearGradientStartPoint={{ x: 0, y: 0 }}
+                  fillLinearGradientEndPoint={{ x: 0, y: 13 }}
+                  fillLinearGradientColorStops={[0, "#ECE9E2", 1, "#C7C1B7"]}
+                  stroke="#A9A39A"
+                  strokeWidth={1}
+                />
+                <Rect
+                  x={originX + hoopW / 2 + 26}
+                  y={originY + hoopH + HOOP_BAND - 6}
+                  width={17}
+                  height={11}
+                  cornerRadius={2}
+                  fillLinearGradientStartPoint={{ x: 0, y: 0 }}
+                  fillLinearGradientEndPoint={{ x: 0, y: 11 }}
+                  fillLinearGradientColorStops={[0, "#EDEDED", 0.5, "#B5B5B5", 1, "#8C8C8C"]}
+                  stroke="#7d7d7d"
+                  strokeWidth={0.75}
+                />
+
+                {/* Outer plastic frame. */}
                 <Rect
                   x={originX - HOOP_BAND}
                   y={originY - HOOP_BAND}
                   width={hoopW + HOOP_BAND * 2}
                   height={hoopH + HOOP_BAND * 2}
-                  cornerRadius={HOOP_BAND + 12}
+                  cornerRadius={HOOP_BAND + 20}
                   fillLinearGradientStartPoint={{ x: 0, y: 0 }}
                   fillLinearGradientEndPoint={{ x: 0, y: hoopH + HOOP_BAND * 2 }}
-                  fillLinearGradientColorStops={[0, "#E8CFA4", 0.5, "#D2A86E", 1, "#B5863F"]}
+                  fillLinearGradientColorStops={[0, "#EEEBE4", 0.5, "#D9D4CB", 1, "#BFB9AF"]}
+                  stroke="#A9A39A"
+                  strokeWidth={1}
                   shadowColor="#16234A"
-                  shadowOpacity={0.25}
-                  shadowBlur={20}
+                  shadowOpacity={0.18}
+                  shadowBlur={18}
                   shadowOffsetY={5}
                 />
-                {/* Tension screw bracket at the top. */}
+                {/* Seam between the outer frame and the inner ring (the channel). */}
                 <Rect
-                  x={originX + hoopW / 2 - 17}
-                  y={originY - HOOP_BAND - 11}
-                  width={34}
-                  height={18}
-                  cornerRadius={3}
-                  fillLinearGradientStartPoint={{ x: 0, y: 0 }}
-                  fillLinearGradientEndPoint={{ x: 0, y: 18 }}
-                  fillLinearGradientColorStops={[0, "#E8CFA4", 1, "#B5863F"]}
-                  stroke="#9c7740"
+                  x={originX - HOOP_BAND * 0.5}
+                  y={originY - HOOP_BAND * 0.5}
+                  width={hoopW + HOOP_BAND}
+                  height={hoopH + HOOP_BAND}
+                  cornerRadius={HOOP_BAND + 10}
+                  stroke="#9b958c"
                   strokeWidth={1}
+                  fillEnabled={false}
                 />
-                <Circle x={originX + hoopW / 2} y={originY - HOOP_BAND - 2} radius={3.5} fill="#7d5e2f" />
                 {/* Fabric stretched in the hoop. */}
                 <Rect
                   x={originX}
@@ -367,20 +420,29 @@ export default function CanvasStage() {
                   width={hoopW}
                   height={hoopH}
                   fill={fabricColor}
-                  cornerRadius={6}
+                  cornerRadius={10}
                 />
-                {/* Inner rim shadow where the hoop grips the fabric. */}
+                {/* Inner rim shadow where the ring grips the fabric. */}
                 <Rect
                   x={originX}
                   y={originY}
                   width={hoopW}
                   height={hoopH}
-                  cornerRadius={6}
+                  cornerRadius={10}
                   stroke="#000000"
                   strokeWidth={2}
-                  opacity={0.12}
+                  opacity={0.1}
                   fillEnabled={false}
                 />
+                {/* Centering registration ticks at the inner-edge midpoints. */}
+                {[
+                  [originX + hoopW / 2, originY - HOOP_BAND * 0.5, originX + hoopW / 2, originY],
+                  [originX + hoopW / 2, originY + hoopH, originX + hoopW / 2, originY + hoopH + HOOP_BAND * 0.5],
+                  [originX - HOOP_BAND * 0.5, originY + hoopH / 2, originX, originY + hoopH / 2],
+                  [originX + hoopW, originY + hoopH / 2, originX + hoopW + HOOP_BAND * 0.5, originY + hoopH / 2],
+                ].map((pts, i) => (
+                  <Line key={`tick-${i}`} points={pts} stroke="#8a857c" strokeWidth={1} />
+                ))}
               </Group>
             ) : (
               <Rect
