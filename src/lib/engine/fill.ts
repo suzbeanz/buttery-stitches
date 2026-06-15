@@ -1,5 +1,6 @@
 import type { Path, Point } from "../../types/project";
-import { rotatePoint, capSegmentLength } from "./resample";
+import { rotatePoint } from "./resample";
+import { staggeredSatin } from "./satin";
 
 /** Longest single satin throw (mm) before it is split for safety. */
 const MAX_THROW_MM = 7;
@@ -368,7 +369,7 @@ export function columnSatinFill(rings: Path[], opts: FillOptions): Path {
     }
   }
 
-  const rotated: Point[] = [];
+  const pairs: [Point, Point][] = [];
   let k = 0;
   for (let y = minY + density / 2; y <= maxY; y += density, k++) {
     const spans = rowSpans(rrings, y);
@@ -376,12 +377,9 @@ export function columnSatinFill(rings: Path[], opts: FillOptions): Path {
     // Alternate the leading edge each row so consecutive throws chain into a
     // continuous zig-zag column (the satin).
     for (const [x0, x1] of spans) {
-      if (k % 2 === 0) rotated.push({ x: x0, y }, { x: x1, y });
-      else rotated.push({ x: x1, y }, { x: x0, y });
+      pairs.push(k % 2 === 0 ? [{ x: x0, y }, { x: x1, y }] : [{ x: x1, y }, { x: x0, y }]);
     }
   }
-  // Split throws wider than a safe length (split satin) before rotating back.
-  return capSegmentLength(rotated, MAX_THROW_MM).map((p) =>
-    rotatePoint(p, opts.angle, pivot),
-  );
+  // Split throws wider than a safe length (staggered split satin) before rotating.
+  return staggeredSatin(pairs, MAX_THROW_MM).map((p) => rotatePoint(p, opts.angle, pivot));
 }

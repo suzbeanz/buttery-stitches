@@ -9,7 +9,11 @@ import {
 import { signedArea } from "../trace/classify";
 import { runningStitch } from "./running";
 import { resampleByCount } from "./resample";
+import { staggeredSatin } from "./satin";
 import { tatamiFill } from "./fill";
+
+/** Longest safe underlay zig-zag throw (mm); wider columns split the throw. */
+const UNDERLAY_MAX_THROW = 6;
 
 /**
  * Underlay passes — the low-density first stitching that stabilizes the fabric
@@ -42,18 +46,16 @@ function meanColumnWidth(left: Path, right: Path): number {
   return sum / n;
 }
 
-/** A coarse zig-zag across a rail pair — a stabilizing underlay for wide columns. */
+/** A coarse zig-zag across a rail pair — a stabilizing underlay for wide columns.
+ *  Throws wider than a safe length split (so a wide column's underlay never snags). */
 function zigzag(left: Path, right: Path, spacing: number): Path {
   const len = (polylineLength(left) + polylineLength(right)) / 2;
   const n = Math.max(2, Math.round(len / Math.max(0.5, spacing)) + 1);
   const l = resampleByCount(left, n);
   const r = resampleByCount(right, n);
-  const out: Path = [];
-  for (let i = 0; i < n; i++) {
-    if (i % 2 === 0) out.push(l[i], r[i]);
-    else out.push(r[i], l[i]);
-  }
-  return out;
+  const pairs: [Path[0], Path[0]][] = [];
+  for (let i = 0; i < n; i++) pairs.push(i % 2 === 0 ? [l[i], r[i]] : [r[i], l[i]]);
+  return staggeredSatin(pairs, UNDERLAY_MAX_THROW);
 }
 
 /**

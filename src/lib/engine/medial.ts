@@ -1,10 +1,10 @@
 import type { Path, Point } from "../../types/project";
 import { orientByDepth } from "./fill";
 import { polylineLength } from "../geometry";
-import { resampleByDistance, capSegmentLength } from "./resample";
+import { resampleByDistance } from "./resample";
 import { douglasPeucker } from "../trace/simplify";
 import { smoothPath } from "../smooth";
-import { autoPullCompMm } from "./satin";
+import { autoPullCompMm, staggeredSatin } from "./satin";
 
 /** Longest single satin throw (mm) before it is split for safety. */
 const MAX_THROW_MM = 7;
@@ -449,13 +449,12 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
     }
     if (idx[idx.length - 1] !== dense.length - 1) idx.push(dense.length - 1);
 
-    const pts: Point[] = [];
-    idx.forEach((i, k) => {
-      // Alternate the leading rail each throw so they chain into a zig-zag.
-      if (k % 2 === 0) pts.push(left[i], right[i]);
-      else pts.push(right[i], left[i]);
-    });
-    const capped = capSegmentLength(pts, MAX_THROW_MM);
+    // Alternate the leading rail each throw so they chain into a zig-zag; split
+    // any over-wide throw into staggered sub-stitches (split satin, no seam).
+    const pairs: [Point, Point][] = idx.map((i, k) =>
+      k % 2 === 0 ? [left[i], right[i]] : [right[i], left[i]],
+    );
+    const capped = staggeredSatin(pairs, MAX_THROW_MM);
     if (capped.length >= 2) {
       // Representative stroke width = median rail-to-rail span (drop the edge
       // overshoot we added), used to decide satin-vs-fill upstream.
