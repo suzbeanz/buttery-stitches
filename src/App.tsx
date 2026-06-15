@@ -7,7 +7,6 @@ import SimulatorBar from "./components/SimulatorBar";
 import PropertiesPanel from "./components/PropertiesPanel";
 import HelpOverlay from "./components/HelpOverlay";
 import Home from "./components/Home";
-import Tape from "./components/Tape";
 import { useProjectStore } from "./store/projectStore";
 import { useEditorStore, type Tool } from "./store/editorStore";
 import { cloneObject } from "./lib/objects";
@@ -91,7 +90,6 @@ function Studio({ onHome }: { onHome: () => void }) {
   return (
     <div className="flex h-full flex-col bg-paper text-navy">
       <TopBar onHelp={() => setShowHelp((v) => !v)} onHome={onHome} />
-      <Tape />
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         {layersOpen && (
           <div className={isNarrow ? `${overlay} left-0` : "contents"}>

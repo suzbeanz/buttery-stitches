@@ -84,7 +84,7 @@ export default function DesignPanel() {
 
       {/* Hoop */}
       <label className="flex flex-col gap-1">
-        <span className="text-xs text-navy/60">Hoop</span>
+        <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/60">Hoop</span>
         <select
           value={presetIndex === -1 ? "custom" : presetIndex}
           onChange={(e) => onHoopPreset(e.target.value)}
@@ -153,7 +153,7 @@ export default function DesignPanel() {
           </label>
           <button
             onClick={() => updateProject({ objects: fitToHoop(objects, hoop) })}
-            className="rounded bg-navy px-2 py-1 text-xs text-butter-200 hover:bg-navy-light"
+            className="rounded-sm border-2 border-ink bg-ink px-3 py-1.5 font-label text-xs font-semibold uppercase tracking-[0.12em] text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none"
           >
             Fit to hoop
           </button>
@@ -194,17 +194,17 @@ function FabricPicker() {
   const setFabricColor = useEditorStore((s) => s.setFabricColor);
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs text-navy/60">Fabric (hoop background)</span>
+      <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/60">Fabric (hoop background)</span>
       <div className="flex flex-wrap items-center gap-1.5">
         {FABRIC_SWATCHES.map((c) => (
           <button
             key={c}
             onClick={() => setFabricColor(c)}
             aria-label={`Fabric color ${c}`}
-            className={`h-6 w-6 rounded-md border ${
+            className={`h-6 w-6 rounded-sm border-2 ${
               fabricColor.toUpperCase() === c
-                ? "border-navy ring-2 ring-navy/40"
-                : "border-navy/20"
+                ? "border-ink ring-2 ring-ink/40"
+                : "border-ink/25"
             }`}
             style={{ backgroundColor: c }}
           />
@@ -257,7 +257,7 @@ function LabeledNumber({
 
   return (
     <label className="flex min-w-0 flex-1 flex-col gap-1">
-      <span className="text-xs text-navy/60">{label}</span>
+      <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/60">{label}</span>
       <input
         type="number"
         value={text}

@@ -1,4 +1,4 @@
-import { MousePointer2, Spline, X } from "lucide-react";
+import { MousePointer2, Spline, X, Magnet, Crosshair } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   useEditorStore,
@@ -24,6 +24,10 @@ export default function ToolRail() {
   const setRulerUnit = useEditorStore((s) => s.setRulerUnit);
   const smooth = useEditorStore((s) => s.smooth);
   const toggleSmooth = useEditorStore((s) => s.toggleSmooth);
+  const snapEnabled = useEditorStore((s) => s.snapEnabled);
+  const guidesEnabled = useEditorStore((s) => s.guidesEnabled);
+  const toggleSnap = useEditorStore((s) => s.toggleSnap);
+  const toggleGuides = useEditorStore((s) => s.toggleGuides);
   const viewMode = useEditorStore((s) => s.viewMode);
   const locked = viewMode === "stitch"; // editing tools are inert in stitch view
   const drawing = isDrawTool(tool) && draft.length > 0;
@@ -73,6 +77,26 @@ export default function ToolRail() {
           </Group>
         </>
       )}
+
+      <Rule />
+      <Group label="Helpers">
+        <RailBtn
+          label="Snap"
+          tip={snapEnabled ? "Snapping on — click to turn off" : "Snapping off — click to turn on"}
+          active={snapEnabled}
+          onClick={() => toggleSnap()}
+        >
+          <Magnet size={20} />
+        </RailBtn>
+        <RailBtn
+          label="Guides"
+          tip={guidesEnabled ? "Guides on — click to turn off" : "Guides off — click to turn on"}
+          active={guidesEnabled}
+          onClick={() => toggleGuides()}
+        >
+          <Crosshair size={20} />
+        </RailBtn>
+      </Group>
 
       {/* Units toggle pinned to the bottom. */}
       <div className="mt-auto px-2 pt-2">

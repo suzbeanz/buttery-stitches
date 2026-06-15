@@ -38,6 +38,10 @@ interface EditorState {
    * use a densified spline polyline instead of straight segments.
    */
   smooth: boolean;
+  /** snap moving/resizing objects to the hoop and other objects (default on). */
+  snapEnabled: boolean;
+  /** draw alignment guide lines while dragging (default on). */
+  guidesEnabled: boolean;
   /** deep copies of objects held for paste (transient; not undone). */
   clipboard: EmbObject[];
   /** whether the left (layers) and right (properties) panels are open. */
@@ -72,6 +76,8 @@ interface EditorState {
   setRulerUnit: (unit: RulerUnit) => void;
   setSmooth: (smooth: boolean) => void;
   toggleSmooth: () => void;
+  toggleSnap: () => void;
+  toggleGuides: () => void;
   setClipboard: (objects: EmbObject[]) => void;
   setLayersOpen: (open: boolean) => void;
   setPropertiesOpen: (open: boolean) => void;
@@ -99,6 +105,8 @@ export const useEditorStore = create<EditorState>((set) => ({
   activeColorId: null,
   rulerUnit: "inch",
   smooth: false,
+  snapEnabled: true,
+  guidesEnabled: true,
   clipboard: [],
   layersOpen: true,
   propertiesOpen: true,
@@ -122,6 +130,8 @@ export const useEditorStore = create<EditorState>((set) => ({
   setRulerUnit: (unit) => set({ rulerUnit: unit }),
   setSmooth: (smooth) => set({ smooth }),
   toggleSmooth: () => set((s) => ({ smooth: !s.smooth })),
+  toggleSnap: () => set((s) => ({ snapEnabled: !s.snapEnabled })),
+  toggleGuides: () => set((s) => ({ guidesEnabled: !s.guidesEnabled })),
   setClipboard: (clipboard) => set({ clipboard }),
   setLayersOpen: (layersOpen) => set({ layersOpen }),
   setPropertiesOpen: (propertiesOpen) => set({ propertiesOpen }),
