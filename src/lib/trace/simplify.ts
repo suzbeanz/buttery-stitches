@@ -14,27 +14,40 @@ function perpDistance(p: Point, a: Point, b: Point): number {
  * Douglas–Peucker polyline simplification. Drops vertices that lie within
  * `tolerance` of the line between their neighbours — turning a noisy traced
  * outline into a clean, light path. Pure.
+ *
+ * Implemented iteratively with an explicit work stack and a keep-mask, so a
+ * huge traced outline (tens of thousands of points) can't blow the call stack
+ * or allocate a new sub-array at every level of recursion.
  */
 export function douglasPeucker(points: Path, tolerance: number): Path {
-  if (points.length <= 2 || tolerance <= 0) return points.map((p) => ({ ...p }));
+  const n = points.length;
+  if (n <= 2 || tolerance <= 0) return points.map((p) => ({ ...p }));
 
-  let maxDist = 0;
-  let index = 0;
-  const a = points[0];
-  const b = points[points.length - 1];
-  for (let i = 1; i < points.length - 1; i++) {
-    const d = perpDistance(points[i], a, b);
-    if (d > maxDist) {
-      maxDist = d;
-      index = i;
+  const keep = new Uint8Array(n);
+  keep[0] = 1;
+  keep[n - 1] = 1;
+
+  const stack: [number, number][] = [[0, n - 1]];
+  while (stack.length > 0) {
+    const [first, last] = stack.pop()!;
+    let maxDist = 0;
+    let index = -1;
+    const a = points[first];
+    const b = points[last];
+    for (let i = first + 1; i < last; i++) {
+      const d = perpDistance(points[i], a, b);
+      if (d > maxDist) {
+        maxDist = d;
+        index = i;
+      }
+    }
+    if (maxDist > tolerance && index !== -1) {
+      keep[index] = 1;
+      stack.push([first, index], [index, last]);
     }
   }
 
-  if (maxDist > tolerance) {
-    const left = douglasPeucker(points.slice(0, index + 1), tolerance);
-    const right = douglasPeucker(points.slice(index), tolerance);
-    // Drop the duplicated joint vertex.
-    return [...left.slice(0, -1), ...right];
-  }
-  return [{ ...a }, { ...b }];
+  const out: Path = [];
+  for (let i = 0; i < n; i++) if (keep[i]) out.push({ ...points[i] });
+  return out;
 }
