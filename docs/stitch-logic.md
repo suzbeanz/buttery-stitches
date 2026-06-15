@@ -122,7 +122,7 @@ run it **first**, **inset ~1 mm** from the edge so it never peeks out, at a
 | Densities + clamps | ✅ fabric-aware (scaled by `densityMul`) |
 | Satin density compensation on curves | ✅ medial **and** user `satinColumn` (dense-sample, throw on `max(dl,dr) ≥ density`) |
 | Tatami brick stagger | ✅ |
-| Tatami angle | ❌ fixed 0° default (bands on straight edges); no principal-axis / per-region variation |
+| Tatami angle | ✅ per-region smart angle — flows along the grain (major axis) for elongated shapes, off-axis 45° for roundish ones; user Angle field is an offset |
 | Fill underlay (inset edge + parallel) | ✅ inset ~1 mm; +criss-cross pass for heavy fabric |
 | Satin underlay (tiered by width) | ✅ center / +edge-walk (≥ 2 mm) / +zig-zag (≥ 4 mm), per user satin **and** per medial column |
 | Pull compensation (satin) | ✅ param, scaled by fabric `pullMul`; ⚠️ not yet auto by width |
@@ -146,7 +146,10 @@ run it **first**, **inset ~1 mm** from the edge so it never peeks out, at a
    fabric weight, per user satin AND per medial column.
 3. ✅ **Density compensation for user satin** — the medial curve-compensation now
    also drives `satinColumn`, so hand-drawn satin curves are crisp too.
-4. **Smart tatami angle** — principal-axis (or per-region varied) instead of 0°.
+4. ✅ **Smart tatami angle** — per-region `autoFillAngle`: elongated shapes flow
+   along their major axis (area second moments), roundish/square shapes use an
+   off-axis 45° so rows never band on a straight edge; the user Angle field nudges
+   either as an offset. Underlay follows the same angle.
 5. **Auto pull/push compensation** — pull-comp by width; fill push-pull. (Fabric
    scaling of density/pull/underlay is done — see the `FABRICS` registry; remaining
    is the *width-driven* auto pull-comp and fill push-pull.)

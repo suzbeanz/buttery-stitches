@@ -176,7 +176,7 @@ function ObjectProperties({
 
       {object.type === "fill" && (
         <NumberField
-          label="Angle (°)"
+          label="Angle (° from auto)"
           value={p.angle ?? DEFAULT_PARAMS.angle}
           step={5}
           onChange={(v) => onParam({ angle: v })}

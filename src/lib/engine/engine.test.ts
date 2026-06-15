@@ -10,7 +10,14 @@ import {
 } from "./resample";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
-import { tatamiFill, columnSatinFill, splitFillRegions, orientByDepth } from "./fill";
+import {
+  tatamiFill,
+  columnSatinFill,
+  splitFillRegions,
+  orientByDepth,
+  principalAxis,
+  autoFillAngle,
+} from "./fill";
 import { fillUnderlay, satinUnderlay } from "./underlay";
 
 const square = (x: number, y: number, s: number): Path => [
@@ -382,6 +389,51 @@ describe("tatamiFill", () => {
     // No penetration should land strictly inside the hole.
     const inHole = out.filter((p) => p.x > 8.01 && p.x < 11.99 && p.y > 8.01 && p.y < 11.99);
     expect(inHole).toHaveLength(0);
+  });
+});
+
+describe("principalAxis & autoFillAngle (smart tatami angle)", () => {
+  /** A `w`×`h` rectangle rotated `deg` degrees about the origin. */
+  function rotRect(w: number, h: number, deg: number): Path {
+    const r = (deg * Math.PI) / 180;
+    const c = Math.cos(r);
+    const s = Math.sin(r);
+    return [
+      { x: -w / 2, y: -h / 2 },
+      { x: w / 2, y: -h / 2 },
+      { x: w / 2, y: h / 2 },
+      { x: -w / 2, y: h / 2 },
+    ].map((p) => ({ x: p.x * c - p.y * s, y: p.x * s + p.y * c }));
+  }
+
+  // Normalize an axis angle into [0,180) — axes are direction-agnostic.
+  const axisMod = (a: number) => ((a % 180) + 180) % 180;
+
+  it("reads a wide bar's grain as horizontal (~0°)", () => {
+    const { angleDeg, elongation } = principalAxis(rotRect(40, 8, 0));
+    expect(axisMod(angleDeg)).toBeCloseTo(0, 0);
+    expect(elongation).toBeGreaterThan(1.3);
+  });
+
+  it("finds the major axis of a rotated bar", () => {
+    const { angleDeg } = principalAxis(rotRect(40, 8, 30));
+    expect(axisMod(angleDeg)).toBeCloseTo(30, 0);
+  });
+
+  it("reads a square as round (elongation ≈ 1)", () => {
+    const { elongation } = principalAxis(rotRect(20, 20, 0));
+    expect(elongation).toBeCloseTo(1, 1);
+  });
+
+  it("elongated shapes fill along the grain; round shapes use 45°", () => {
+    // A long bar flows along its length…
+    expect(axisMod(autoFillAngle([rotRect(40, 8, 0)]))).toBeCloseTo(0, 0);
+    // …a square falls back to an off-axis 45° so rows don't band on its edges.
+    expect(autoFillAngle([rotRect(20, 20, 0)])).toBeCloseTo(45, 5);
+  });
+
+  it("adds the user's offset to the automatic angle", () => {
+    expect(autoFillAngle([rotRect(20, 20, 0)], 10)).toBeCloseTo(55, 5);
   });
 });
 
