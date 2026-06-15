@@ -164,6 +164,21 @@ function ObjectProperties({
       )}
 
       {object.type === "fill" && (
+        <Field label="Stitch style">
+          <select
+            value={p.fillStyle ?? DEFAULT_PARAMS.fillStyle}
+            onChange={(e) =>
+              onParam({ fillStyle: e.target.value as "tatami" | "satin" })
+            }
+            className="input"
+          >
+            <option value="tatami">Solid fill (tatami)</option>
+            <option value="satin">Satin columns</option>
+          </select>
+        </Field>
+      )}
+
+      {object.type === "fill" && (
         <NumberField
           label="Angle (°)"
           value={p.angle ?? DEFAULT_PARAMS.angle}
