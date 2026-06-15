@@ -1,9 +1,14 @@
 import type { Path, Point } from "../../types/project";
 import { orientByDepth } from "./fill";
-import { satinColumn } from "./satin";
 import { polylineLength } from "../geometry";
+import { resampleByDistance, capSegmentLength } from "./resample";
 import { douglasPeucker } from "../trace/simplify";
 import { smoothPath } from "../smooth";
+
+/** Longest single satin throw (mm) before it is split for safety. */
+const MAX_THROW_MM = 7;
+/** Shortest stroke (mm) worth satining; below this it is thinning noise. */
+const MIN_BRANCH_MM = 2;
 
 /**
  * Auto-satin via the medial axis. Real embroidery lettering is satin columns that
@@ -370,30 +375,44 @@ export function medialSatin(rings: Path[], opts: MedialOptions): Path[] {
     }));
     if (loop) raw.push({ ...raw[0] }); // close the ring
 
-    // Prune thinning spurs — tiny branches that aren't real strokes.
-    if (polylineLength(raw) < 1.4) continue;
+    // Prune thinning spurs and stray stubs — tiny branches that aren't real
+    // strokes (they otherwise stitch as little floating boxes).
+    if (polylineLength(raw) < MIN_BRANCH_MM) continue;
 
     // Clean the centerline: drop the pixel staircase, then smooth it.
     const center = smoothPath(douglasPeucker(raw, cellMm * 1.2), { maxSegmentMm: 0.8 });
     if (center.length < 2) continue;
 
-    // Width that follows the true stroke (median would overflow tapers), pushed
-    // out a touch so the satin reaches the edge.
+    // Sample the centerline at the throw spacing, then throw a clean
+    // PERPENDICULAR stitch across the stroke at each sample. Driving throws off
+    // evenly-spaced centerline points (instead of marching two independently
+    // resampled rails) is what stops the satin from fanning out at curves and
+    // junctions. Width tracks the real stroke, pushed out a touch to the edge.
+    const samples = resampleByDistance(center, Math.max(0.1, opts.density));
+    if (loop && samples.length > 1) {
+      const a = samples[0];
+      const b = samples[samples.length - 1];
+      if (Math.hypot(a.x - b.x, a.y - b.y) > 1e-6) samples.push({ ...a });
+    }
+    if (samples.length < 2) continue;
+
     const halves = smoothWidths(
-      center.map((p) => halfWidthAtMm(dt, grid, p.x, p.y) + OVERSHOOT_MM),
+      samples.map((p) => halfWidthAtMm(dt, grid, p.x, p.y) + OVERSHOOT_MM),
       loop,
     );
 
-    const left: Point[] = [];
-    const right: Point[] = [];
-    for (let i = 0; i < center.length; i++) {
-      const nrm = normalAt(center, i, loop);
+    const pts: Point[] = [];
+    for (let i = 0; i < samples.length; i++) {
+      const nrm = normalAt(samples, i, loop);
       const half = halves[i];
-      left.push({ x: center[i].x + nrm.x * half, y: center[i].y + nrm.y * half });
-      right.push({ x: center[i].x - nrm.x * half, y: center[i].y - nrm.y * half });
+      const l = { x: samples[i].x + nrm.x * half, y: samples[i].y + nrm.y * half };
+      const r = { x: samples[i].x - nrm.x * half, y: samples[i].y - nrm.y * half };
+      // Alternate the leading rail each throw so they chain into a zig-zag.
+      if (i % 2 === 0) pts.push(l, r);
+      else pts.push(r, l);
     }
-    const pts = satinColumn(left, right, { density: opts.density, pullComp: 0 });
-    if (pts.length >= 2) runs.push(pts);
+    const capped = capSegmentLength(pts, MAX_THROW_MM);
+    if (capped.length >= 2) runs.push(capped);
   }
   return runs;
 }
