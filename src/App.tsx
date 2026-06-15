@@ -6,6 +6,7 @@ import CanvasStage from "./components/CanvasStage";
 import SimulatorBar from "./components/SimulatorBar";
 import PropertiesPanel from "./components/PropertiesPanel";
 import HelpOverlay from "./components/HelpOverlay";
+import Home from "./components/Home";
 import { useProjectStore } from "./store/projectStore";
 import { useEditorStore, type Tool } from "./store/editorStore";
 import { cloneObject } from "./lib/objects";
@@ -21,7 +22,34 @@ const PASTE_OFFSET_MM = 3;
  *   Right  — design settings, selection properties, threads
  * Top bar spans the full width. Global keyboard shortcuts live here.
  */
+/** localStorage key remembering that the user has already entered the studio. */
+const ENTERED_KEY = "bs:entered";
+
 export default function App() {
+  // Show the marketing homepage first; once the user enters the studio we
+  // remember it so returning visitors land straight in the editor.
+  const [entered, setEntered] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(ENTERED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const enterStudio = () => {
+    try {
+      localStorage.setItem(ENTERED_KEY, "1");
+    } catch {
+      /* private mode — fine, just don't persist */
+    }
+    setEntered(true);
+  };
+
+  if (!entered) return <Home onStart={enterStudio} />;
+
+  return <Studio onHome={() => setEntered(false)} />;
+}
+
+function Studio({ onHome }: { onHome: () => void }) {
   // Keep the "active draw color" pointed at a real color in the project.
   const colors = useProjectStore((s) => s.project.colors);
   const activeColorId = useEditorStore((s) => s.activeColorId);
@@ -61,7 +89,7 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col bg-cream text-navy">
-      <TopBar onHelp={() => setShowHelp((v) => !v)} />
+      <TopBar onHelp={() => setShowHelp((v) => !v)} onHome={onHome} />
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         {layersOpen && (
           <div className={isNarrow ? `${overlay} left-0` : "contents"}>
