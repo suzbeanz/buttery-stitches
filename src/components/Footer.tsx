@@ -5,8 +5,8 @@
  */
 export default function Footer() {
   return (
-    <footer className="border-t border-navy/10 bg-cream px-6 py-8 text-center text-navy">
-      <p className="text-sm">
+    <div className="px-6 py-6 text-center text-navy">
+      <p className="text-sm font-semibold">
         Made With <span aria-label="love">❤️</span> by Suz
       </p>
       <div className="mt-3 flex items-center justify-center gap-3">
@@ -15,7 +15,7 @@ export default function Footer() {
           target="_blank"
           rel="noreferrer"
           aria-label="Suz on LinkedIn"
-          className="grid h-10 w-10 place-items-center rounded-full border border-navy/15 text-navy transition-colors hover:bg-butter-100 hover:text-navy-dark"
+          className="grid h-10 w-10 place-items-center rounded-full border-2 border-navy text-navy transition-colors hover:bg-navy hover:text-butter-200"
         >
           <LinkedInMark />
         </a>
@@ -24,15 +24,15 @@ export default function Footer() {
           target="_blank"
           rel="noreferrer"
           aria-label="Suz on GitHub"
-          className="grid h-10 w-10 place-items-center rounded-full border border-navy/15 text-navy transition-colors hover:bg-butter-100 hover:text-navy-dark"
+          className="grid h-10 w-10 place-items-center rounded-full border-2 border-navy text-navy transition-colors hover:bg-navy hover:text-butter-200"
         >
           <GitHubMark />
         </a>
       </div>
-      <p className="mt-4 text-xs text-navy/45">
-        Buttery Stitches — free, open-source embroidery digitizing for everyone.
+      <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-navy/45">
+        Distributed by Buttery Stitches · Open Source
       </p>
-    </footer>
+    </div>
   );
 }
 

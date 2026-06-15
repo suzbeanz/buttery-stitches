@@ -2,219 +2,181 @@ import { Image as ImageIcon, Type, Eye } from "lucide-react";
 import Footer from "./Footer";
 
 /**
- * The whole homepage is one printed butter label: a butter-yellow wrapper around
- * a cream label face, printed in navy press-ink (primary) with a "salted" red
- * accent (occasional) and butter-yellow highlights (tertiary). A creamery oval
- * seal, a ribbon banner, corner ornaments, and the butter-stick ruler tick lines
- * tie it together — and to the rulers inside the app.
+ * Homepage as a printed butter label (per the reference): the whole surface is
+ * butter-yellow, everything is pressed in navy ink with a "salted" red accent,
+ * the butter-stick ruler doubles as the nav (with red Tbsp measurements), the
+ * body is set in monospace like a wrapper, and a "NET WT." line signs the foot.
  */
-const RED = "#C0392B"; // the "salted" accent
+const RED = "#C0392B";
 const NAVY = "#16234A";
+
+const NAV = ["Home", "Pictures", "Words", "Shapes", "Preview", "Export"];
 
 export default function Home({ onStart }: { onStart: () => void }) {
   return (
-    <div className="h-full overflow-y-auto bg-butter-200 p-3 sm:p-6">
-      {/* The label face */}
-      <div className="relative mx-auto max-w-3xl border-[3px] border-navy bg-cream shadow-butter">
-        <div className="pointer-events-none absolute inset-[6px] border border-navy/40" />
-        <Corner pos="left-1 top-1" />
-        <Corner pos="right-1 top-1" />
-        <Corner pos="left-1 bottom-1" />
-        <Corner pos="right-1 bottom-1" />
+    <div className="relative h-full overflow-y-auto bg-butter-200 text-navy">
+      {/* faint corner sparkles, like the reference */}
+      <Sparkle className="left-3 top-3" />
+      <Sparkle className="right-3 bottom-3" />
 
-        <RulerStrip />
+      <div className="mx-auto max-w-4xl px-5 py-12 sm:py-16">
+        {/* Headline */}
+        <h1 className="wordmark text-center text-5xl font-bold leading-[0.95] text-navy sm:text-7xl">
+          Buttery Stitches
+        </h1>
+        <p className="mt-3 text-center text-sm font-bold uppercase tracking-[0.28em] text-navy/80 sm:text-base">
+          Embroidery Digitizing — Made Simple
+        </p>
 
-        {/* Hero seal */}
-        <header className="px-6 pt-10 pb-8 text-center sm:px-10">
-          <Seal />
-          <div className="mx-auto mt-5 inline-block">
-            <Ribbon>Lightly Salted · Est. 2026</Ribbon>
-          </div>
-          <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.34em] text-navy/70">
-            Pure · Open Source · Churned in your browser
-          </p>
-          <p className="mx-auto mt-4 max-w-md text-base text-navy/75 sm:text-lg">
-            Turn your pictures and words into machine-embroidery files —
-            pro-grade digitizing, spread thick and free for everyone.
-          </p>
+        {/* Ruler nav with Tbsp measurements */}
+        <RulerNav />
+
+        <div className="mt-8 text-center">
           <button
             onClick={onStart}
-            className="mt-7 inline-flex items-center gap-2 rounded-full bg-navy px-9 py-3.5 text-lg font-semibold text-butter-200 shadow-butter transition-transform hover:scale-[1.03]"
+            className="inline-flex items-center gap-2 rounded-full bg-navy px-9 py-3.5 text-lg font-semibold text-butter-200 shadow-butter transition-transform hover:scale-[1.03]"
           >
             Start stitching 🧈
           </button>
-          <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-navy/45">
-            Net wt. free · No sign-up · Stays on your machine
+          <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.18em] text-navy/50">
+            Free · No sign-up · Stays on your machine
           </p>
-        </header>
+        </div>
 
-        <RulerStrip />
+        {/* Two-column wrapper copy */}
+        <div className="mt-12 grid grid-cols-1 gap-8 sm:grid-cols-2">
+          <Column title="Key Features" salted>
+            <p>
+              Turn flat logos and line art into clean, machine-ready stitches
+              automatically. Add words in curated fonts with crisp satin
+              lettering that follows every stroke.
+            </p>
+            <p>
+              Drop in premade shapes, drag points, snap to guides, and reorder
+              layers — a full editor without the steep learning curve. Everything
+              runs in your browser; nothing is uploaded.
+            </p>
+            <div className="grid grid-cols-3 gap-2 pt-1 font-sans">
+              <Pill Icon={ImageIcon} label="Pictures" />
+              <Pill Icon={Type} label="Words" />
+              <Pill Icon={Eye} label="Preview" />
+            </div>
+          </Column>
 
-        {/* What's inside */}
-        <section className="px-6 py-10 sm:px-10">
-          <Eyebrow>What&apos;s inside</Eyebrow>
-          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <Card
-              Icon={ImageIcon}
-              title="Picture → stitches"
-              body="Drop in a logo or line art and get clean, machine-ready stitches."
-            />
-            <Card
-              Icon={Type}
-              title="Add words"
-              body="Stitch a name or message with curated fonts and crisp satin lettering."
-            />
-            <Card
-              Icon={Eye}
-              title="Preview & export"
-              body="See it in the hoop, then save to PES, DST, JEF, EXP, or VP3."
-            />
-          </div>
-        </section>
+          <Column title="How It Works">
+            <p>
+              Start with a picture, some words, or a shape. Buttery Stitches
+              converts it to stitches using embroidery best practices — underlay,
+              tie-offs, and safe stitch lengths so designs sew reliably.
+            </p>
+            <p>
+              Tweak color, size, and stitch style, preview it inside the hoop,
+              then export to PES, DST, JEF, EXP, or VP3 — the formats home and
+              commercial machines read.
+            </p>
+            <p className="text-navy/60">
+              Pro digitizing software costs hundreds of dollars. This is a free,
+              open-source alternative — named, with love, after a very good girl
+              called Butters.
+            </p>
+          </Column>
+        </div>
 
-        <RulerStrip />
-
-        {/* How to use it */}
-        <section className="px-6 py-10 sm:px-10">
-          <Eyebrow>How to use it</Eyebrow>
-          <ol className="mx-auto mt-6 grid max-w-xl grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
-            <Step n={1} title="Start" body="Upload a picture, type words, or draw." />
-            <Step n={2} title="Stitch" body="It auto-converts using embroidery best practices." />
-            <Step n={3} title="Refine" body="Tweak color, size, and stitch style." />
-            <Step n={4} title="Export" body="Send the file to your embroidery machine." />
-          </ol>
-          <p className="mx-auto mt-8 max-w-xl text-center text-sm text-navy/60">
-            Pro digitizing software can cost hundreds of dollars. Buttery Stitches
-            is a free, open-source alternative that runs entirely in your browser —
-            named, with love, after a very good girl called Butters.
+        {/* NET WT. signature */}
+        <div className="mt-14 border-t-2 border-navy pt-6 text-center">
+          <p className="text-sm font-bold uppercase tracking-[0.18em] text-navy">
+            Net wt. free · 100% open source
           </p>
-          <div className="mt-7 text-center">
-            <button
-              onClick={onStart}
-              className="inline-flex items-center gap-2 rounded-full border-2 border-navy px-7 py-3 text-base font-semibold text-navy transition-colors hover:bg-butter-200"
-            >
-              Start stitching 🧈
-            </button>
-          </div>
-        </section>
-
-        <RulerStrip />
-        <Footer />
+          <Footer />
+        </div>
       </div>
     </div>
   );
 }
 
-/** Creamery oval seal: a navy ring with curved top text and the wordmark. */
-function Seal() {
+/** The butter-stick ruler, used as the page nav: labels above, red Tbsp below. */
+function RulerNav() {
+  const tbsp = 8;
   return (
-    <div className="relative mx-auto w-full max-w-md">
-      <svg viewBox="0 0 320 196" className="w-full" role="img" aria-label="Buttery Stitches creamery seal">
-        <ellipse cx="160" cy="98" rx="152" ry="92" fill="none" stroke={NAVY} strokeWidth="3" />
-        <ellipse cx="160" cy="98" rx="142" ry="82" fill="none" stroke={NAVY} strokeWidth="1" />
-        <path id="seal-top" d="M 40 98 A 120 62 0 0 1 280 98" fill="none" />
-        <path id="seal-bottom" d="M 280 98 A 120 62 0 0 1 40 98" fill="none" />
-        <text fill={NAVY} fontSize="13" fontWeight="700" letterSpacing="3.5">
-          <textPath href="#seal-top" startOffset="50%" textAnchor="middle">
-            ★ PURE CREAMERY ★ EMBROIDERY STUDIO ★
-          </textPath>
-        </text>
-        <text fill={NAVY} fontSize="11" fontWeight="700" letterSpacing="3">
-          <textPath href="#seal-bottom" startOffset="50%" textAnchor="middle">
-            FREE · OPEN SOURCE · IN YOUR BROWSER
-          </textPath>
-        </text>
+    <nav className="mx-auto mt-9 max-w-2xl select-none" aria-label="Sections">
+      <div
+        className="grid text-center text-xs font-bold uppercase tracking-wide text-navy sm:text-sm"
+        style={{ gridTemplateColumns: `repeat(${NAV.length}, minmax(0, 1fr))` }}
+      >
+        {NAV.map((n) => (
+          <span key={n}>{n}</span>
+        ))}
+      </div>
+
+      <svg viewBox="0 0 800 26" className="mt-1.5 w-full" aria-hidden>
+        <line x1="3" y1="13" x2="797" y2="13" stroke={NAVY} strokeWidth="2" />
+        {Array.from({ length: tbsp + 1 }).map((_, i) => {
+          const x = 3 + (794 * i) / tbsp;
+          const major = i === 0 || i === tbsp;
+          return (
+            <line
+              key={i}
+              x1={x}
+              y1={major ? 3 : 6}
+              x2={x}
+              y2={major ? 23 : 20}
+              stroke={NAVY}
+              strokeWidth="2"
+            />
+          );
+        })}
       </svg>
-      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-4xl sm:text-5xl" aria-hidden>
-          🧈
-        </span>
-        <span className="wordmark mt-0.5 text-2xl font-semibold leading-none text-navy sm:text-4xl">
-          Buttery Stitches
-        </span>
+
+      <div
+        className="grid text-center text-xs font-bold sm:text-sm"
+        style={{ gridTemplateColumns: `repeat(${tbsp}, minmax(0, 1fr))`, color: RED }}
+      >
+        {Array.from({ length: tbsp }).map((_, i) => (
+          <span key={i}>{i + 1} Tbsp</span>
+        ))}
       </div>
-    </div>
+    </nav>
   );
 }
 
-/** A small red banner ribbon — the "salted" accent. */
-function Ribbon({ children }: { children: React.ReactNode }) {
-  return (
-    <span
-      className="inline-block px-4 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-cream"
-      style={{ backgroundColor: RED }}
-    >
-      {children}
-    </span>
-  );
-}
-
-/** Butter-stick ruler motif: a butter band printed with navy minor + major ticks. */
-function RulerStrip() {
-  return (
-    <div
-      aria-hidden
-      className="h-5 w-full border-y border-navy/40"
-      style={{
-        background: `
-          repeating-linear-gradient(90deg, ${NAVY} 0 1px, transparent 1px 36px) bottom / 100% 11px no-repeat,
-          repeating-linear-gradient(90deg, rgba(22,35,74,0.7) 0 1px, transparent 1px 9px) bottom / 100% 6px no-repeat,
-          #F9E9A6`,
-      }}
-    />
-  );
-}
-
-/** A rotated navy diamond tucked into a label corner. */
-function Corner({ pos }: { pos: string }) {
-  return (
-    <span
-      aria-hidden
-      className={`pointer-events-none absolute ${pos} z-10 h-2.5 w-2.5 rotate-45 bg-navy`}
-    />
-  );
-}
-
-function Eyebrow({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-center gap-3 text-center">
-      <span className="h-px w-8" style={{ backgroundColor: RED }} />
-      <h2 className="font-butter text-2xl font-semibold text-navy sm:text-3xl">{children}</h2>
-      <span className="h-px w-8" style={{ backgroundColor: RED }} />
-    </div>
-  );
-}
-
-function Card({
-  Icon,
+function Column({
   title,
-  body,
+  salted,
+  children,
 }: {
-  Icon: typeof ImageIcon;
   title: string;
-  body: string;
+  salted?: boolean;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="border-2 border-navy bg-cream p-5">
-      <div className="grid h-11 w-11 place-items-center rounded-xl bg-butter-200 text-navy">
-        <Icon size={22} />
+    <section>
+      <h2 className="text-xl font-bold uppercase tracking-wide text-navy sm:text-2xl">
+        {title}
+        {salted && <span style={{ color: RED }}> *</span>}
+      </h2>
+      <div className="mt-3 space-y-3 font-mono text-sm leading-relaxed text-navy/85">
+        {children}
       </div>
-      <h3 className="mt-3 text-lg font-semibold text-navy">{title}</h3>
-      <p className="mt-1 text-sm text-navy/65">{body}</p>
+    </section>
+  );
+}
+
+function Pill({ Icon, label }: { Icon: typeof ImageIcon; label: string }) {
+  return (
+    <div className="flex items-center gap-1.5 border-2 border-navy px-2 py-1.5 text-xs font-semibold text-navy">
+      <Icon size={14} />
+      {label}
     </div>
   );
 }
 
-function Step({ n, title, body }: { n: number; title: string; body: string }) {
+function Sparkle({ className }: { className: string }) {
   return (
-    <li className="flex items-start gap-3">
-      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border-2 border-navy bg-butter-200 text-base font-bold text-navy">
-        {n}
-      </span>
-      <div>
-        <div className="font-semibold text-navy">{title}</div>
-        <div className="text-sm text-navy/65">{body}</div>
-      </div>
-    </li>
+    <span
+      aria-hidden
+      className={`pointer-events-none absolute text-3xl text-navy/10 ${className}`}
+    >
+      ✦
+    </span>
   );
 }
