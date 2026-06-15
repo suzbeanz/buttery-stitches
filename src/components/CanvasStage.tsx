@@ -259,32 +259,73 @@ export default function CanvasStage() {
           style={{ cursor: drawing ? "crosshair" : "default" }}
         >
           <Layer>
-            {/* Hoop mockup: a rounded "embroidery hoop" ring around the fabric so
-                the design previews like it's stitched in a real Brother hoop. */}
-            <Rect
-              x={originX - HOOP_BAND}
-              y={originY - HOOP_BAND}
-              width={hoopW + HOOP_BAND * 2}
-              height={hoopH + HOOP_BAND * 2}
-              cornerRadius={HOOP_BAND + 10}
-              stroke="#cdc6b6"
-              strokeWidth={HOOP_BAND}
-              shadowColor="#16234A"
-              shadowOpacity={0.18}
-              shadowBlur={14}
-              fillEnabled={false}
-              listening={false}
-            />
-            {/* The fabric inside the hoop (user-selectable color). */}
-            <Rect
-              x={originX}
-              y={originY}
-              width={hoopW}
-              height={hoopH}
-              fill={fabricColor}
-              cornerRadius={4}
-              listening={false}
-            />
+            {viewMode === "stitch" ? (
+              <Group listening={false}>
+                {/* Realistic embroidery hoop: a wooden ring with a tension screw,
+                    fabric stretched inside — the physical preview. */}
+                <Rect
+                  x={originX - HOOP_BAND}
+                  y={originY - HOOP_BAND}
+                  width={hoopW + HOOP_BAND * 2}
+                  height={hoopH + HOOP_BAND * 2}
+                  cornerRadius={HOOP_BAND + 12}
+                  fillLinearGradientStartPoint={{ x: 0, y: 0 }}
+                  fillLinearGradientEndPoint={{ x: 0, y: hoopH + HOOP_BAND * 2 }}
+                  fillLinearGradientColorStops={[0, "#E8CFA4", 0.5, "#D2A86E", 1, "#B5863F"]}
+                  shadowColor="#16234A"
+                  shadowOpacity={0.25}
+                  shadowBlur={20}
+                  shadowOffsetY={5}
+                />
+                {/* Tension screw bracket at the top. */}
+                <Rect
+                  x={originX + hoopW / 2 - 17}
+                  y={originY - HOOP_BAND - 11}
+                  width={34}
+                  height={18}
+                  cornerRadius={3}
+                  fillLinearGradientStartPoint={{ x: 0, y: 0 }}
+                  fillLinearGradientEndPoint={{ x: 0, y: 18 }}
+                  fillLinearGradientColorStops={[0, "#E8CFA4", 1, "#B5863F"]}
+                  stroke="#9c7740"
+                  strokeWidth={1}
+                />
+                <Circle x={originX + hoopW / 2} y={originY - HOOP_BAND - 2} radius={3.5} fill="#7d5e2f" />
+                {/* Fabric stretched in the hoop. */}
+                <Rect
+                  x={originX}
+                  y={originY}
+                  width={hoopW}
+                  height={hoopH}
+                  fill={fabricColor}
+                  cornerRadius={6}
+                />
+                {/* Inner rim shadow where the hoop grips the fabric. */}
+                <Rect
+                  x={originX}
+                  y={originY}
+                  width={hoopW}
+                  height={hoopH}
+                  cornerRadius={6}
+                  stroke="#000000"
+                  strokeWidth={2}
+                  opacity={0.12}
+                  fillEnabled={false}
+                />
+              </Group>
+            ) : (
+              <Rect
+                x={originX}
+                y={originY}
+                width={hoopW}
+                height={hoopH}
+                fill="#ffffff"
+                stroke={C.navySoft}
+                strokeWidth={1.5}
+                dash={[6, 4]}
+                listening={false}
+              />
+            )}
 
             {viewMode === "edit" && (
               <>
@@ -424,7 +465,10 @@ export default function CanvasStage() {
                 emoji="✏️"
                 label="Draw it"
                 hint="Draw your own shape"
-                onClick={() => useEditorStore.getState().setTool("fill")}
+                onClick={() => {
+                  useEditorStore.getState().setTool("fill");
+                  setStartDismissed(true);
+                }}
               />
             </div>
             <p className="mt-3 text-xs text-navy/45">
