@@ -140,51 +140,148 @@ function thin(g: Grid): Uint8Array {
   return s;
 }
 
-/** Trace a skeleton into polylines of cell coords, split at junctions. */
+/**
+ * Trace a skeleton into stroke polylines. Unlike a naive split-at-every-junction
+ * tracer (which shatters an s or a serif stem into stubby fragments that don't
+ * satin cleanly), this builds the skeleton's graph and then CHAINS the little
+ * segments straight through each junction — at a junction it continues onto the
+ * segment whose direction best lines up with where it was heading. The result is
+ * a handful of long, smooth strokes per glyph instead of a pile of fragments.
+ */
 function traceSkeleton(skel: Uint8Array, w: number, h: number): [number, number][][] {
-  const at = (x: number, y: number) => (x < 0 || y < 0 || x >= w || y >= h ? 0 : skel[y * w + x]);
-  const deg = (x: number, y: number) => {
-    let d = 0;
+  const at = (i: number) => skel[i];
+  const X = (i: number) => i % w;
+  const Y = (i: number) => Math.floor(i / w);
+  const neighbors = (i: number): number[] => {
+    const x = X(i), y = Y(i);
+    const out: number[] = [];
     for (let dy = -1; dy <= 1; dy++)
-      for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && at(x + dx, y + dy)) d++;
-    return d;
+      for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        const ax = x + dx, ay = y + dy;
+        if (ax >= 0 && ay >= 0 && ax < w && ay < h && at(ay * w + ax)) out.push(ay * w + ax);
+      }
+    return out;
   };
-  const visited = new Uint8Array(w * h);
-  const lines: [number, number][][] = [];
+  const degI = (i: number) => neighbors(i).length;
+  const isNode = (i: number) => skel[i] && degI(i) !== 2; // endpoint or junction
 
-  const walk = (sx: number, sy: number) => {
-    let x = sx, y = sy;
-    const line: [number, number][] = [[x, y]];
-    visited[y * w + x] = 1;
+  // --- 1. Extract segments: deg-2 chains between two nodes. -------------------
+  const segs: number[][] = [];
+  const seen = new Set<string>(); // `${node}->${firstStep}` so each is walked once
+  for (let i = 0; i < w * h; i++) {
+    if (!isNode(i)) continue;
+    for (const start of neighbors(i)) {
+      const key = `${i}->${start}`;
+      if (seen.has(key)) continue;
+      const cells = [i];
+      let prev = i, cur = start;
+      for (;;) {
+        cells.push(cur);
+        if (isNode(cur)) break;
+        const next = neighbors(cur).find((n) => n !== prev);
+        if (next === undefined) break;
+        prev = cur;
+        cur = next;
+        if (cells.length > w * h) break; // safety
+      }
+      seen.add(key);
+      seen.add(`${cells[cells.length - 1]}->${cells[cells.length - 2]}`);
+      if (cells.length >= 2) segs.push(cells);
+    }
+  }
+
+  // Direction (unit) leaving `cells[0]`, sampled a few cells in for stability.
+  const headDir = (cells: number[]): [number, number] => {
+    const k = Math.min(cells.length - 1, 4);
+    const dx = X(cells[k]) - X(cells[0]);
+    const dy = Y(cells[k]) - Y(cells[0]);
+    const l = Math.hypot(dx, dy) || 1;
+    return [dx / l, dy / l];
+  };
+
+  // --- 2. Adjacency of segments at each node. --------------------------------
+  const incident = new Map<number, { si: number; atStart: boolean }[]>();
+  const add = (node: number, si: number, atStart: boolean) => {
+    const list = incident.get(node) ?? [];
+    list.push({ si, atStart });
+    incident.set(node, list);
+  };
+  segs.forEach((c, si) => {
+    add(c[0], si, true);
+    add(c[c.length - 1], si, false);
+  });
+
+  // --- 3. Chain segments straight through junctions. -------------------------
+  const used = new Array(segs.length).fill(false);
+  const oriented = (si: number, atStart: boolean) =>
+    atStart ? segs[si] : [...segs[si]].reverse();
+
+  const buildChain = (si: number, atStart: boolean): [number, number][] => {
+    used[si] = true;
+    const cells = oriented(si, atStart);
     for (;;) {
-      let nx = -1, ny = -1;
-      for (let dy = -1; dy <= 1 && nx < 0; dy++)
-        for (let dx = -1; dx <= 1; dx++) {
-          if (!dx && !dy) continue;
-          const cx = x + dx, cy = y + dy;
-          if (at(cx, cy) && !visited[cy * w + cx]) { nx = cx; ny = cy; break; }
+      const end = cells[cells.length - 1];
+      if (degI(end) === 1) break; // real stroke terminal
+      // Direction arriving at the junction (pointing in).
+      const k = Math.min(cells.length - 1, 4);
+      let ix = X(end) - X(cells[cells.length - 1 - k]);
+      let iy = Y(end) - Y(cells[cells.length - 1 - k]);
+      const il = Math.hypot(ix, iy) || 1;
+      ix /= il;
+      iy /= il;
+      // Pick the unused continuation that bends the least.
+      let best = -1, bestStart = true, bestDot = -2;
+      for (const inc of incident.get(end) ?? []) {
+        if (used[inc.si]) continue;
+        const [lx, ly] = headDir(oriented(inc.si, inc.atStart));
+        const dot = ix * lx + iy * ly; // ~1 == dead straight
+        if (dot > bestDot) {
+          bestDot = dot;
+          best = inc.si;
+          bestStart = inc.atStart;
         }
-      if (nx < 0) break;
-      visited[ny * w + nx] = 1;
-      line.push([nx, ny]);
-      x = nx; y = ny;
-      if (deg(x, y) > 2) break; // stop at a junction
+      }
+      if (best < 0 || bestDot < -0.2) break; // nothing straight enough to continue
+      used[best] = true;
+      const more = oriented(best, bestStart);
+      for (let i = 1; i < more.length; i++) cells.push(more[i]);
+    }
+    return cells.map((c) => [X(c), Y(c)] as [number, number]);
+  };
+
+  const lines: [number, number][][] = [];
+  // Prefer strokes that begin at a real terminal so columns run end to end.
+  segs.forEach((c, si) => {
+    if (used[si]) return;
+    if (degI(c[0]) === 1) lines.push(buildChain(si, true));
+    else if (degI(c[c.length - 1]) === 1) lines.push(buildChain(si, false));
+  });
+  // Any leftover segments (junction-only cycles).
+  segs.forEach((_, si) => {
+    if (!used[si]) lines.push(buildChain(si, true));
+  });
+
+  // --- 4. Pure loops (all deg-2, no node) — e.g. the ring of an o. -----------
+  const inSeg = new Uint8Array(w * h);
+  for (const c of segs) for (const i of c) inSeg[i] = 1;
+  const visited = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    if (!skel[i] || inSeg[i] || visited[i]) continue;
+    const line: [number, number][] = [];
+    let cur = i, prev = -1;
+    for (;;) {
+      line.push([X(cur), Y(cur)]);
+      visited[cur] = 1;
+      const next = neighbors(cur).find((n) => n !== prev && !visited[n]);
+      if (next === undefined) break;
+      prev = cur;
+      cur = next;
     }
     if (line.length >= 2) lines.push(line);
-  };
+  }
 
-  // Start from endpoints/junctions first, then any leftover loops.
-  for (let y = 0; y < h; y++)
-    for (let x = 0; x < w; x++) {
-      if (skel[y * w + x] && !visited[y * w + x]) {
-        const d = deg(x, y);
-        if (d === 1 || d > 2) walk(x, y);
-      }
-    }
-  for (let y = 0; y < h; y++)
-    for (let x = 0; x < w; x++) if (skel[y * w + x] && !visited[y * w + x]) walk(x, y);
-
-  return lines;
+  return lines.filter((l) => l.length >= 2);
 }
 
 /** Unit normal at point i of a centerline (average of adjacent segment normals). */

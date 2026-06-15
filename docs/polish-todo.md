@@ -52,6 +52,15 @@ the living audit/polish list: check items off as they land.
 - [ ] Fabric *photo* backgrounds (not just color) for the mockup.
 
 ## Jot-down (2026-06-15) — to do next
+- [ ] HOMEPAGE THEMING: really lean into the butter brand. Everything styled like
+      it's PRINTED on a butter wrapper — dark navy/blue print ink as the primary,
+      RED used occasionally as the "salted" accent, butter-yellow as a tertiary.
+      Use the butter measurement-ruler lines/style liberally as a motif.
+- [x] Skeleton quality: chained skeleton segments straight through junctions, so
+      an s / serif stems stay one smooth stroke instead of fragmenting. Lettering
+      satin coverage jumped to 65/65 regions across all 8 fonts (poppins "s"
+      0.63 -> 1.00; playfair serifs 0.79 -> 1.00). Verified export: playfair
+      "Goose" fully satin, longest stitch ~7mm, all 5 formats valid.
 - [x] Clicking an add/edit action (Use a picture, Add words, Add shape, edit
       text) now switches the user from Stitch view back to Edit view.
 - [x] LETTERING (was: horrible flat tatami): lettering now defaults to SATIN
@@ -61,8 +70,9 @@ the living audit/polish list: check items off as they land.
       ships satin when it actually fills the glyph (>=82%), otherwise falls back
       to a solid tatami fill, so text is never broken. Verified: all 8 fonts
       sewable; "Goose" exports to all 5 formats with longest stitch 6.75mm.
-      Follow-ups: improve the medial skeleton on S-curves and serifs so fewer
-      regions fall back to tatami (the "s" and serif stems currently do).
+- [x] Skeleton on S-curves and serifs (was a follow-up): fixed by chaining
+      segments through junctions — the "s" and serif stems now satin cleanly
+      (65/65 regions across all 8 fonts; verified export ~7mm longest).
 - [x] Extend the butter-stick rulers in BOTH directions (positive and negative):
       rulers now run the full canvas with 0 on the hoop origin, and the bright
       butter band + edge markers show exactly where the usable hoop area (the
