@@ -48,7 +48,7 @@ import { designToSegments, needleAt } from "../lib/engine/render";
 
 const RULER = 22; // px thickness of the top/left rulers
 const PADDING = 48; // px breathing room around the hoop (room for frame + bracket)
-const SNAP_MM = 2; // snap distance (mm) for alignment to hoop/object edges
+const SNAP_MM = 3; // snap distance (mm) for alignment to hoop/object edges
 const JOIN_SNAP_MM = 3; // snap the closing end of a fill polygon to its start
 const HOOP_BAND = 14; // px thickness of the hoop frame in the mockup
 const HOOP_MARGIN = 18; // px of fabric/plastic between the stitch field and the frame opening
@@ -1013,6 +1013,9 @@ function ObjectShape({
         } else {
           onGuides({ x: [], y: [] });
         }
+        // Force the layer to repaint mid-drag so the guide lines actually show
+        // (a React state change alone doesn't reliably redraw during a Konva drag).
+        g.getLayer()?.batchDraw();
       }}
       onDragEnd={(e) => {
         onGuides({ x: [], y: [] });
