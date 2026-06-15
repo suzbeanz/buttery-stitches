@@ -118,6 +118,8 @@ export default function DesignPanel() {
         </div>
       )}
 
+      <FabricPicker />
+
       {/* Design size */}
       {hasDesign ? (
         <>
@@ -169,6 +171,51 @@ export default function DesignPanel() {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/** Choose the hoop's fabric background for the stitch-view mockup. */
+const FABRIC_SWATCHES = [
+  "#ECE8DE", // natural
+  "#FFFFFF", // white
+  "#C9C6BD", // gray
+  "#3A4A63", // denim
+  "#16234A", // navy
+  "#2A2A2A", // black
+  "#D9B89C", // tan
+  "#E9C9D0", // blush
+];
+
+function FabricPicker() {
+  const fabricColor = useEditorStore((s) => s.fabricColor);
+  const setFabricColor = useEditorStore((s) => s.setFabricColor);
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs text-navy/60">Fabric (hoop background)</span>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {FABRIC_SWATCHES.map((c) => (
+          <button
+            key={c}
+            onClick={() => setFabricColor(c)}
+            aria-label={`Fabric color ${c}`}
+            className={`h-6 w-6 rounded-md border ${
+              fabricColor.toUpperCase() === c
+                ? "border-navy ring-2 ring-navy/40"
+                : "border-navy/20"
+            }`}
+            style={{ backgroundColor: c }}
+          />
+        ))}
+        <input
+          type="color"
+          value={/^#[0-9a-fA-F]{6}$/.test(fabricColor) ? fabricColor : "#ECE8DE"}
+          onChange={(e) => setFabricColor(e.target.value)}
+          aria-label="Custom fabric color"
+          title="Custom fabric color"
+          className="h-6 w-6 cursor-pointer rounded-md border border-navy/20 bg-transparent p-0"
+        />
+      </div>
     </div>
   );
 }

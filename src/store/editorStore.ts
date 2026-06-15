@@ -47,6 +47,12 @@ interface EditorState {
   editingTextId: string | null;
   /** a quick-start action requested from the empty-state guide. */
   pendingStart: "image" | "text" | null;
+  /** the user dismissed the quick-start guide (clicked outside it). */
+  startDismissed: boolean;
+  /** fabric background color for the hoop mockup. */
+  fabricColor: string;
+  /** currently focused node for deletion: object id + ring + point index. */
+  selectedNode: { objectId: string; ring: number; point: number } | null;
 
   // ---- preview / stitch simulator ----
   viewMode: ViewMode;
@@ -73,6 +79,11 @@ interface EditorState {
   toggleProperties: () => void;
   setEditingTextId: (id: string | null) => void;
   setPendingStart: (v: "image" | "text" | null) => void;
+  setStartDismissed: (v: boolean) => void;
+  setFabricColor: (v: string) => void;
+  setSelectedNode: (
+    v: { objectId: string; ring: number; point: number } | null,
+  ) => void;
 
   setViewMode: (mode: ViewMode) => void;
   setSimTotal: (total: number) => void;
@@ -93,6 +104,9 @@ export const useEditorStore = create<EditorState>((set) => ({
   propertiesOpen: true,
   editingTextId: null,
   pendingStart: null,
+  startDismissed: false,
+  fabricColor: "#ECE8DE",
+  selectedNode: null,
 
   viewMode: "edit",
   simTotal: 0,
@@ -115,6 +129,9 @@ export const useEditorStore = create<EditorState>((set) => ({
   toggleProperties: () => set((s) => ({ propertiesOpen: !s.propertiesOpen })),
   setEditingTextId: (editingTextId) => set({ editingTextId }),
   setPendingStart: (pendingStart) => set({ pendingStart }),
+  setStartDismissed: (startDismissed) => set({ startDismissed }),
+  setFabricColor: (fabricColor) => set({ fabricColor }),
+  setSelectedNode: (selectedNode) => set({ selectedNode }),
 
   setViewMode: (viewMode) =>
     set((s) => ({

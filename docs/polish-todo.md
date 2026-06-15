@@ -26,6 +26,20 @@ the living audit/polish list: check items off as they land.
 - [ ] Tune skeleton branch joins / corners on complex glyphs (B, R) — small gaps
       at junctions are acceptable for now.
 
+## From user testing (2026-06-15)
+- [x] Quick-start popup dismisses on outside-click / ✕ and doesn't return.
+- [x] Hoop mockup: design previews inside a rounded embroidery-hoop frame with a
+      user-chosen fabric background color (presets + custom).
+- [x] Node tool: click a vertex to focus it, Delete removes it.
+- [ ] STITCH QUALITY (top priority): auto-digitize still makes too many messy /
+      irrelevant stitches; the dog logo's ring becomes a thick band. Needs lower
+      density, thin-ring → satin/outline (not solid fill), and deliberate routing.
+- [ ] "Clean up the stitching" button only changes params, not geometry — make it
+      actually improve quality + give visible feedback (currently feels like a no-op).
+- [ ] Colors don't reliably populate from a digitized image — audit palette path.
+- [ ] Eraser tool; simpler/clearer toolbar + sidebars.
+- [ ] Fabric *photo* backgrounds (not just color) for the mockup.
+
 ## Accessibility & foolproof (mission: pro power, free, for everyone)
 - [x] Guided quick-start empty state: big "Use a picture / Add words / Draw it"
       buttons so a first-timer knows exactly what to do.

@@ -49,6 +49,7 @@ const RULER = 22; // px thickness of the top/left rulers
 const PADDING = 28; // px breathing room around the hoop
 const SNAP_MM = 2; // snap distance (mm) for alignment to hoop/object edges
 const JOIN_SNAP_MM = 3; // snap the closing end of a fill polygon to its start
+const HOOP_BAND = 12; // px thickness of the hoop frame in the mockup
 
 const C = {
   cream: "#FFFDF3",
@@ -70,6 +71,9 @@ export default function CanvasStage() {
   const draft = useEditorStore((s) => s.draft);
   const cursorMm = useEditorStore((s) => s.cursorMm);
   const rulerUnit = useEditorStore((s) => s.rulerUnit);
+  const fabricColor = useEditorStore((s) => s.fabricColor);
+  const startDismissed = useEditorStore((s) => s.startDismissed);
+  const setStartDismissed = useEditorStore((s) => s.setStartDismissed);
   const activeColorId = useEditorStore((s) => s.activeColorId);
   const addDraftPoint = useEditorStore((s) => s.addDraftPoint);
   const setCursor = useEditorStore((s) => s.setCursor);
@@ -178,14 +182,32 @@ export default function CanvasStage() {
       const el = document.activeElement;
       if (el && ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)) return;
       if (e.key === "Enter") finishDraft();
-      else if (e.key === "Escape") clearDraft();
-      else if (
-        (e.key === "Delete" || e.key === "Backspace") &&
-        tool === "select" &&
-        selectedIds.length
-      ) {
-        e.preventDefault();
-        useProjectStore.getState().removeObjects(selectedIds);
+      else if (e.key === "Escape") {
+        clearDraft();
+        useEditorStore.getState().setSelectedNode(null);
+      } else if (e.key === "Delete" || e.key === "Backspace") {
+        const node = useEditorStore.getState().selectedNode;
+        if (tool === "node" && node) {
+          // Delete the focused vertex (never below the type's minimum).
+          e.preventDefault();
+          const obj = useProjectStore
+            .getState()
+            .project.objects.find((o) => o.id === node.objectId);
+          if (obj) {
+            const ring = obj.paths[node.ring];
+            const min = obj.type === "fill" ? 3 : 2;
+            if (ring && ring.length > min) {
+              const paths = obj.paths.map((p, i) =>
+                i === node.ring ? p.filter((_, j) => j !== node.point) : p,
+              );
+              useProjectStore.getState().updateObject(obj.id, { paths });
+            }
+          }
+          useEditorStore.getState().setSelectedNode(null);
+        } else if (tool === "select" && selectedIds.length) {
+          e.preventDefault();
+          useProjectStore.getState().removeObjects(selectedIds);
+        }
       }
     }
     window.addEventListener("keydown", onKey);
@@ -237,15 +259,30 @@ export default function CanvasStage() {
           style={{ cursor: drawing ? "crosshair" : "default" }}
         >
           <Layer>
+            {/* Hoop mockup: a rounded "embroidery hoop" ring around the fabric so
+                the design previews like it's stitched in a real Brother hoop. */}
+            <Rect
+              x={originX - HOOP_BAND}
+              y={originY - HOOP_BAND}
+              width={hoopW + HOOP_BAND * 2}
+              height={hoopH + HOOP_BAND * 2}
+              cornerRadius={HOOP_BAND + 10}
+              stroke="#cdc6b6"
+              strokeWidth={HOOP_BAND}
+              shadowColor="#16234A"
+              shadowOpacity={0.18}
+              shadowBlur={14}
+              fillEnabled={false}
+              listening={false}
+            />
+            {/* The fabric inside the hoop (user-selectable color). */}
             <Rect
               x={originX}
               y={originY}
               width={hoopW}
               height={hoopH}
-              fill={C.fabric}
-              stroke={C.navySoft}
-              strokeWidth={1.5}
-              dash={[6, 4]}
+              fill={fabricColor}
+              cornerRadius={4}
               listening={false}
             />
 
@@ -348,9 +385,24 @@ export default function CanvasStage() {
         </Stage>
       )}
 
-      {viewMode === "edit" && project.objects.length === 0 && draft.length === 0 && (
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center p-4 text-center text-navy">
-          <div className="pointer-events-auto w-full max-w-md rounded-2xl border border-navy/10 bg-cream/90 p-6 shadow-butter">
+      {viewMode === "edit" &&
+        project.objects.length === 0 &&
+        draft.length === 0 &&
+        !startDismissed && (
+        <div
+          className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center text-navy"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setStartDismissed(true);
+          }}
+        >
+          <div className="relative w-full max-w-md rounded-2xl border border-navy/10 bg-cream/95 p-6 shadow-butter">
+            <button
+              onClick={() => setStartDismissed(true)}
+              aria-label="Close"
+              className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full text-navy/40 hover:bg-butter-200 hover:text-navy"
+            >
+              ✕
+            </button>
             <div className="font-butter text-2xl font-semibold">
               Let&apos;s make something 🧈
             </div>
@@ -611,6 +663,7 @@ function ObjectShape({
   const selectable = tool === "select" || tool === "node";
   const movable = tool === "select" && selected;
   const editingNodes = tool === "node" && selected;
+  const nodeSel = useEditorStore((s) => s.selectedNode);
 
   // Live geometry while dragging a vertex (committed to the store on release so
   // a node-drag is a single undo step and the outline follows the handle).
@@ -755,16 +808,35 @@ function ObjectShape({
 
       {editingNodes &&
         paths.map((path, pi) =>
-          path.map((p, ti) => (
+          path.map((p, ti) => {
+            const focused =
+              nodeSel?.objectId === object.id &&
+              nodeSel.ring === pi &&
+              nodeSel.point === ti;
+            return (
             <Circle
               key={`${pi}-${ti}`}
               x={px(p.x)}
               y={py(p.y)}
-              radius={4.5}
-              fill={C.cream}
+              radius={focused ? 6 : 4.5}
+              fill={focused ? C.butterDeep : C.cream}
               stroke={C.navy}
               strokeWidth={1.5}
               draggable
+              onClick={() =>
+                useEditorStore.getState().setSelectedNode({
+                  objectId: object.id,
+                  ring: pi,
+                  point: ti,
+                })
+              }
+              onTap={() =>
+                useEditorStore.getState().setSelectedNode({
+                  objectId: object.id,
+                  ring: pi,
+                  point: ti,
+                })
+              }
               onDragStart={() =>
                 setLivePaths(object.paths.map((pp) => pp.map((q) => ({ ...q }))))
               }
@@ -783,7 +855,8 @@ function ObjectShape({
                 setLivePaths(null);
               }}
             />
-          )),
+            );
+          }),
         )}
     </Group>
   );
