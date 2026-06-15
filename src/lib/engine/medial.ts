@@ -1,6 +1,9 @@
 import type { Path, Point } from "../../types/project";
 import { orientByDepth } from "./fill";
 import { satinColumn } from "./satin";
+import { polylineLength } from "../geometry";
+import { douglasPeucker } from "../trace/simplify";
+import { smoothPath } from "../smooth";
 
 /**
  * Auto-satin via the medial axis. Real embroidery lettering is satin columns that
@@ -218,19 +221,31 @@ export function medialSatin(rings: Path[], opts: MedialOptions): Path[] {
   const runs: Path[] = [];
   for (const branch of branches) {
     if (branch.length < 2) continue;
-    // Centerline in mm + half-width (mm) from the distance transform.
-    const center: Point[] = branch.map(([gx, gy]) => ({
+    // Raw centerline in mm from the skeleton cells.
+    const raw: Point[] = branch.map(([gx, gy]) => ({
       x: grid.ox + gx * cellMm,
       y: grid.oy + gy * cellMm,
     }));
-    const half = branch.map(([gx, gy]) => Math.max(cellMm, dt[gy * grid.w + gx] * cellMm));
+    // Prune thinning spurs — tiny branches that aren't real strokes.
+    if (polylineLength(raw) < 1.5) continue;
+
+    // Consistent column width: the median half-width along the branch, so the
+    // satin reads as an even, deliberate column instead of wobbling per pixel.
+    const halves = branch
+      .map(([gx, gy]) => Math.max(cellMm, dt[gy * grid.w + gx] * cellMm))
+      .sort((a, b) => a - b);
+    const half = halves[halves.length >> 1];
+
+    // Clean the centerline: drop the pixel staircase, then smooth it.
+    const center = smoothPath(douglasPeucker(raw, cellMm * 1.2), { maxSegmentMm: 0.8 });
+    if (center.length < 2) continue;
 
     const left: Point[] = [];
     const right: Point[] = [];
     for (let i = 0; i < center.length; i++) {
       const n = normalAt(center, i);
-      left.push({ x: center[i].x + n.x * half[i], y: center[i].y + n.y * half[i] });
-      right.push({ x: center[i].x - n.x * half[i], y: center[i].y - n.y * half[i] });
+      left.push({ x: center[i].x + n.x * half, y: center[i].y + n.y * half });
+      right.push({ x: center[i].x - n.x * half, y: center[i].y - n.y * half });
     }
     const pts = satinColumn(left, right, { density: opts.density, pullComp: 0 });
     if (pts.length >= 2) runs.push(pts);
