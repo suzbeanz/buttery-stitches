@@ -1,4 +1,4 @@
-import { MousePointer2, Spline, X, Magnet, Crosshair } from "lucide-react";
+import { MousePointer2, Spline, X, Magnet, Crosshair, Type, Image as ImageIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   useEditorStore,
@@ -28,6 +28,7 @@ export default function ToolRail() {
   const guidesEnabled = useEditorStore((s) => s.guidesEnabled);
   const toggleSnap = useEditorStore((s) => s.toggleSnap);
   const toggleGuides = useEditorStore((s) => s.toggleGuides);
+  const setPendingStart = useEditorStore((s) => s.setPendingStart);
   const viewMode = useEditorStore((s) => s.viewMode);
   const locked = viewMode === "stitch"; // editing tools are inert in stitch view
   const drawing = isDrawTool(tool) && draft.length > 0;
@@ -77,6 +78,16 @@ export default function ToolRail() {
           </Group>
         </>
       )}
+
+      <Rule />
+      <Group label="Make">
+        <RailBtn label="Words" tip="Add lettering" disabled={locked} onClick={() => setPendingStart("text")}>
+          <Type size={20} />
+        </RailBtn>
+        <RailBtn label="Picture" tip="Turn a picture into stitches" disabled={locked} onClick={() => setPendingStart("image")}>
+          <ImageIcon size={20} />
+        </RailBtn>
+      </Group>
 
       <Rule />
       <Group label="Helpers">

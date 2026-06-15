@@ -3,8 +3,6 @@ import {
   FilePlus2,
   FolderOpen,
   Save,
-  Image as ImageIcon,
-  Type,
   ClipboardList,
   Undo2,
   Redo2,
@@ -219,25 +217,6 @@ export default function TopBar({
       </BarButton>
 
       <div className="mx-1.5 h-5 w-px bg-butter-200/20" />
-
-      <BarButton
-        label="Use a picture"
-        onClick={() => {
-          goEdit();
-          imageInput.current?.click();
-        }}
-      >
-        <ImageIcon size={18} />
-      </BarButton>
-      <BarButton
-        label="Add words"
-        onClick={() => {
-          goEdit();
-          setShowText(true);
-        }}
-      >
-        <Type size={18} />
-      </BarButton>
 
       <div className="relative">
         <BarButton
