@@ -51,7 +51,13 @@ import type { AddTextResult } from "./TextDialog";
  * Top bar: new / open / save / import image / export plus undo / redo. Kept
  * deliberately flat and obvious.
  */
-export default function TopBar({ onHelp }: { onHelp: () => void }) {
+export default function TopBar({
+  onHelp,
+  onHome,
+}: {
+  onHelp: () => void;
+  onHome?: () => void;
+}) {
   const project = useProjectStore((s) => s.project);
   const newProject = useProjectStore((s) => s.newProject);
   const setProject = useProjectStore((s) => s.setProject);
@@ -73,6 +79,10 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
   const setEditingTextId = useEditorStore((s) => s.setEditingTextId);
   const pendingStart = useEditorStore((s) => s.pendingStart);
   const setPendingStart = useEditorStore((s) => s.setPendingStart);
+  const setViewMode = useEditorStore((s) => s.setViewMode);
+  // Adding or editing a design only makes sense on the working surface, so any
+  // such action drops the user back into Edit view if they were in Stitch view.
+  const goEdit = () => setViewMode("edit");
   const editingTextObject = editingTextId
     ? project.objects.find((o) => o.id === editingTextId && o.text)
     : undefined;
@@ -108,6 +118,7 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
     // Tracked (not cleared) so an accidental replace can be undone.
     setProject(p);
     setImageFile(null);
+    goEdit();
   }
 
   // The empty-state quick-start buttons set this; open the matching flow.
@@ -121,6 +132,7 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
     // Adds to the existing design (does not replace it).
     if (newColor) addColor(newColor);
     addObject(object);
+    goEdit();
   }
 
   function applyTextEdit({ object, newColor }: AddTextResult) {
@@ -132,9 +144,11 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
       colorId: object.colorId,
     });
     setEditingTextId(null);
+    goEdit();
   }
 
   function insertShape(kind: ShapeKind) {
+    goEdit();
     const colorId = activeColorId ?? project.colors[0]?.id;
     if (!colorId) return;
     const center = { x: project.hoop.wMm / 2, y: project.hoop.hMm / 2 };
@@ -171,12 +185,18 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
         <PanelLeft size={18} />
       </BarButton>
 
-      <span className="mx-2 flex select-none items-baseline gap-1.5">
+      <button
+        onClick={onHome}
+        data-tip="Home"
+        data-tip-side="bottom"
+        aria-label="Home"
+        className="mx-2 flex select-none items-baseline gap-1.5 rounded px-1 hover:opacity-80"
+      >
         <span aria-hidden className="text-lg">🧈</span>
         <span className="wordmark hidden text-lg text-butter-200 sm:inline">
           Buttery Stitches
         </span>
-      </span>
+      </button>
 
       <BarButton label="New" onClick={() => newProject()}>
         <FilePlus2 size={18} />
@@ -190,10 +210,22 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
 
       <div className="mx-1.5 h-5 w-px bg-butter-200/20" />
 
-      <BarButton label="Use a picture" onClick={() => imageInput.current?.click()}>
+      <BarButton
+        label="Use a picture"
+        onClick={() => {
+          goEdit();
+          imageInput.current?.click();
+        }}
+      >
         <ImageIcon size={18} />
       </BarButton>
-      <BarButton label="Add words" onClick={() => setShowText(true)}>
+      <BarButton
+        label="Add words"
+        onClick={() => {
+          goEdit();
+          setShowText(true);
+        }}
+      >
         <Type size={18} />
       </BarButton>
 
