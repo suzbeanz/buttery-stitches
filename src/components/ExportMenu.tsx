@@ -10,7 +10,7 @@ import {
   type EmbFormat,
   type PesVersion,
 } from "../lib/export";
-import { generateDesign, countStitches, countColorChanges } from "../lib/engine";
+import { designFor, countStitches, countColorChanges } from "../lib/engine";
 import { validateDesign } from "../lib/engine/validate";
 
 /**
@@ -38,7 +38,7 @@ export default function ExportMenu() {
   // Recompute the design only while the menu is open.
   const { design, stitches, changes, warnings } = useMemo(() => {
     if (!open) return { design: [], stitches: 0, changes: 0, warnings: [] };
-    const d = generateDesign(project);
+    const d = designFor(project);
     return {
       design: d,
       stitches: countStitches(d),

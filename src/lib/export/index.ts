@@ -2,7 +2,7 @@ import { getPyodide, type LoadStage, type PyodideInterface } from "../pyodide/lo
 import embroideryPy from "./embroidery.py?raw";
 import type { Project, ThreadColor } from "../../types/project";
 import { mmToTenths } from "../units";
-import { generateDesign, type EngineStitch } from "../engine";
+import { designFor, type EngineStitch } from "../engine";
 
 /**
  * Export pipeline: turn the engine's design into embroidery file bytes via
@@ -72,7 +72,7 @@ export function planFromDesign(
 
 /** Build a plan directly from a project (runs the stitch engine). */
 export function planFromProject(project: Project): StitchPlan {
-  return planFromDesign(generateDesign(project), project.colors);
+  return planFromDesign(designFor(project), project.colors);
 }
 
 /** Total penetrations (excludes jumps) in a plan — handy for UI/feedback. */

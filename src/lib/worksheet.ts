@@ -1,5 +1,5 @@
 import type { Project, ThreadColor } from "../types/project";
-import { generateDesign, type EngineStitch } from "./engine";
+import { designFor, type EngineStitch } from "./engine";
 
 /**
  * Printable thread worksheet: the color-change sequence an operator follows at
@@ -30,7 +30,7 @@ export interface Worksheet {
 /** Group the design into consecutive color stops and tally stitches each. */
 export function buildWorksheet(
   project: Project,
-  design: EngineStitch[] = generateDesign(project),
+  design: EngineStitch[] = designFor(project),
 ): Worksheet {
   const byId = new Map<string, ThreadColor>(project.colors.map((c) => [c.id, c]));
   const rows: WorksheetRow[] = [];
