@@ -170,6 +170,20 @@ export const useProjectStore = create<ProjectState>()(
   ),
 );
 
+// Keep selection consistent with the document. `selectedIds` is transient (not
+// part of the undo snapshot), so an undo/redo that restores a different set of
+// objects can leave selected ids pointing at objects that no longer exist —
+// which would make the Transformer and Properties panel target a ghost. Whenever
+// the object set changes, drop any selected id that isn't present anymore.
+useProjectStore.subscribe((state, prev) => {
+  if (state.project.objects === prev.project.objects) return;
+  const present = new Set(state.project.objects.map((o) => o.id));
+  const kept = state.selectedIds.filter((id) => present.has(id));
+  if (kept.length !== state.selectedIds.length) {
+    useProjectStore.setState({ selectedIds: kept });
+  }
+});
+
 /** Hook into zundo's temporal store for undo/redo controls. */
 export function useTemporalStore<T>(
   selector: (state: TemporalState<Partial<TrackedState>>) => T,

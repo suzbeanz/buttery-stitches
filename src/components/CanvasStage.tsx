@@ -183,7 +183,12 @@ export default function CanvasStage() {
       clearDraft();
       return;
     }
-    const colorId = activeColorId ?? project.colors[0]?.id;
+    // Read the color list fresh (not via the render closure): a draft can be
+    // finished after colors changed, and a stale empty list would silently
+    // drop the shape.
+    const colorId =
+      useEditorStore.getState().activeColorId ??
+      useProjectStore.getState().project.colors[0]?.id;
     if (!colorId) return;
     // In curve mode the placed points are control points: feed makeObject a
     // densified spline polyline (for satin this is the smoothed centerline,

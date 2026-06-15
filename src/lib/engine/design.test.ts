@@ -66,11 +66,12 @@ describe("lock / tie stitches", () => {
   const single = () =>
     projectWith(makeObject("running", [{ x: 0, y: 0 }, { x: 10, y: 0 }], "c1"));
 
-  it("adds a tie-in and tie-off to a single thread run (8 extra penetrations)", () => {
+  it("adds a tie-in and tie-off to a single thread run (7 extra penetrations)", () => {
     const plain = generateDesign(single(), { lockStitches: false });
     const locked = generateDesign(single(), { lockStitches: true });
-    // One cluster = 4 penetrations; one at the start, one at the end.
-    expect(countStitches(locked) - countStitches(plain)).toBe(8);
+    // One cluster = 4 penetrations at each end (8), but the tie-in ends exactly
+    // on the run's first point, so that one same-hole punch is collapsed → 7.
+    expect(countStitches(locked) - countStitches(plain)).toBe(7);
   });
 
   it("is on by default", () => {
@@ -109,7 +110,7 @@ describe("lock / tie stitches", () => {
     const locked = generateDesign(single(), { lockStitches: true });
     const plainCount = generateDesign(single(), { lockStitches: false }).length;
     const extra = locked.filter((s) => !s.jump).length - plainCount;
-    expect(extra).toBe(8);
+    expect(extra).toBe(7); // 8 tie penetrations minus the collapsed same-hole punch
     expect(locked.filter((s) => s.jump)).toHaveLength(0); // single run, no travel
   });
 });
@@ -146,5 +147,29 @@ describe("validateDesign", () => {
     const o = makeObject("running", [{ x: 10, y: 10 }, { x: 30, y: 10 }], p.colors[0].id);
     p.objects = [o];
     expect(validateDesign(generateDesign(p), p)).toEqual([]);
+  });
+
+  it("never emits two coincident penetrations in a row (no same-hole punches)", () => {
+    // A filled square with lock stitches: the tie clusters and fill spans must
+    // not leave a 0 mm stitch where the needle would punch the same hole.
+    const fill = makeObjectFromPaths(
+      "fill",
+      [[
+        { x: 0, y: 0 },
+        { x: 24, y: 0 },
+        { x: 24, y: 24 },
+        { x: 0, y: 24 },
+      ]],
+      "c1",
+    );
+    const design = generateDesign(projectWith(fill));
+    let coincident = 0;
+    for (let i = 1; i < design.length; i++) {
+      const a = design[i - 1];
+      const b = design[i];
+      if (a.jump || b.jump || a.colorId !== b.colorId) continue;
+      if (Math.hypot(b.x - a.x, b.y - a.y) < 1e-4) coincident++;
+    }
+    expect(coincident).toBe(0);
   });
 });

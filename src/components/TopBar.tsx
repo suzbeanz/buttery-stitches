@@ -21,6 +21,7 @@ import {
   Wand2,
   type LucideIcon,
 } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 import { useProjectStore, useTemporalStore } from "../store/projectStore";
 import { useEditorStore } from "../store/editorStore";
 import { downloadProject, loadProjectFromFile } from "../lib/embproj";
@@ -87,12 +88,16 @@ export default function TopBar({
     ? project.objects.find((o) => o.id === editingTextId && o.text)
     : undefined;
 
-  const { undo, redo, pastStates, futureStates } = useTemporalStore((t) => ({
-    undo: t.undo,
-    redo: t.redo,
-    pastStates: t.pastStates,
-    futureStates: t.futureStates,
-  }));
+  // useShallow so the top bar re-renders only when these four fields actually
+  // change, not on every entry pushed to the undo history.
+  const { undo, redo, pastStates, futureStates } = useTemporalStore(
+    useShallow((t) => ({
+      undo: t.undo,
+      redo: t.redo,
+      pastStates: t.pastStates,
+      futureStates: t.futureStates,
+    })),
+  );
 
   async function onOpenFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];

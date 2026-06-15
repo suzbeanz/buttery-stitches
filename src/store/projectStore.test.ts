@@ -39,4 +39,17 @@ describe("projectStore.addObjects", () => {
     expect(project.objects[1].id).not.toBe(original.id);
     expect(project.objects[1].paths[0][0]).toEqual({ x: 3, y: 3 });
   });
+
+  it("drops selection that no longer exists after an undo", () => {
+    const colorId = useProjectStore.getState().project.colors[0].id;
+    const a = makeObject("running", line, colorId);
+    useProjectStore.getState().addObject(a);
+    expect(useProjectStore.getState().selectedIds).toEqual([a.id]);
+
+    // Undo the add: the object is gone, so the stale selection must clear
+    // (otherwise the Transformer/Properties would target a ghost object).
+    useProjectStore.temporal.getState().undo();
+    expect(useProjectStore.getState().project.objects).toHaveLength(0);
+    expect(useProjectStore.getState().selectedIds).toEqual([]);
+  });
 });
