@@ -3,6 +3,20 @@
 Working toward a Hatch-by-Wilcom-level, open-source embroidery digitizer. This is
 the living audit/polish list: check items off as they land.
 
+## Stitch quality — crisp & intelligent (2026-06-15)
+- [x] Satin DENSITY COMPENSATION on curves: throws are placed by advancing until
+      whichever rail (the outer one on a curve) has moved one stitch spacing, so
+      the convex edge stays evenly covered instead of fanning into gaps and the
+      concave edge packs tighter — crisp, professional satin. Locked with a
+      rail-gap test; coverage stays 0.97–1.00 across the fonts.
+- [x] Intelligent routing: a region's satin strokes are sewn in nearest-neighbor
+      order (reversing a stroke when its far end is closer) so the needle takes
+      the shortest path — fewer, shorter jumps. Pure reordering, geometry intact.
+      Verified: "Butters" exports to all 5 formats, longest stitch 5.5mm.
+- [ ] Next quality passes to consider: inset fill edge-underlay so it hides under
+      the top layer; smart tatami angle (principal axis) for broad fills;
+      corner mitering on very sharp satin turns.
+
 ## Full codebase audit (2026-06-15)
 Three-way audit (engine/correctness, React/UI/state, cross-cutting hygiene).
 Baseline: typecheck clean, lint 0 errors / 12 a11y warnings, 240 tests green.

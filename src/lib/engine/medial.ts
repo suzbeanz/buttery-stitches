@@ -383,34 +383,53 @@ export function medialSatin(rings: Path[], opts: MedialOptions): Path[] {
     const center = smoothPath(douglasPeucker(raw, cellMm * 1.2), { maxSegmentMm: 0.8 });
     if (center.length < 2) continue;
 
-    // Sample the centerline at the throw spacing, then throw a clean
-    // PERPENDICULAR stitch across the stroke at each sample. Driving throws off
-    // evenly-spaced centerline points (instead of marching two independently
-    // resampled rails) is what stops the satin from fanning out at curves and
-    // junctions. Width tracks the real stroke, pushed out a touch to the edge.
-    const samples = resampleByDistance(center, Math.max(0.1, opts.density));
-    if (loop && samples.length > 1) {
-      const a = samples[0];
-      const b = samples[samples.length - 1];
-      if (Math.hypot(a.x - b.x, a.y - b.y) > 1e-6) samples.push({ ...a });
+    // Densely sample the centerline, build both rails, then place throws with
+    // DENSITY COMPENSATION: advance until whichever rail (the outer one on a
+    // curve) has moved one stitch spacing, so the convex edge stays evenly
+    // covered instead of fanning into gaps and the concave edge naturally packs
+    // tighter — the hallmark of crisp, professional satin. Throws are cast
+    // perpendicular off the centerline so they never fan at curves/junctions.
+    const density = Math.max(0.1, opts.density);
+    const dense = resampleByDistance(center, Math.max(0.05, density / 4));
+    if (loop && dense.length > 1) {
+      const a = dense[0];
+      const b = dense[dense.length - 1];
+      if (Math.hypot(a.x - b.x, a.y - b.y) > 1e-6) dense.push({ ...a });
     }
-    if (samples.length < 2) continue;
+    if (dense.length < 2) continue;
 
     const halves = smoothWidths(
-      samples.map((p) => halfWidthAtMm(dt, grid, p.x, p.y) + OVERSHOOT_MM),
+      dense.map((p) => halfWidthAtMm(dt, grid, p.x, p.y) + OVERSHOOT_MM),
       loop,
     );
+    const left: Point[] = [];
+    const right: Point[] = [];
+    for (let i = 0; i < dense.length; i++) {
+      const nrm = normalAt(dense, i, loop);
+      const half = halves[i];
+      left.push({ x: dense[i].x + nrm.x * half, y: dense[i].y + nrm.y * half });
+      right.push({ x: dense[i].x - nrm.x * half, y: dense[i].y - nrm.y * half });
+    }
+
+    // Choose throw positions so neither rail's gap exceeds the stitch spacing.
+    const idx: number[] = [0];
+    let last = 0;
+    for (let i = 1; i < dense.length; i++) {
+      const dl = Math.hypot(left[i].x - left[last].x, left[i].y - left[last].y);
+      const dr = Math.hypot(right[i].x - right[last].x, right[i].y - right[last].y);
+      if (Math.max(dl, dr) >= density) {
+        idx.push(i);
+        last = i;
+      }
+    }
+    if (idx[idx.length - 1] !== dense.length - 1) idx.push(dense.length - 1);
 
     const pts: Point[] = [];
-    for (let i = 0; i < samples.length; i++) {
-      const nrm = normalAt(samples, i, loop);
-      const half = halves[i];
-      const l = { x: samples[i].x + nrm.x * half, y: samples[i].y + nrm.y * half };
-      const r = { x: samples[i].x - nrm.x * half, y: samples[i].y - nrm.y * half };
+    idx.forEach((i, k) => {
       // Alternate the leading rail each throw so they chain into a zig-zag.
-      if (i % 2 === 0) pts.push(l, r);
-      else pts.push(r, l);
-    }
+      if (k % 2 === 0) pts.push(left[i], right[i]);
+      else pts.push(right[i], left[i]);
+    });
     const capped = capSegmentLength(pts, MAX_THROW_MM);
     if (capped.length >= 2) runs.push(capped);
   }
