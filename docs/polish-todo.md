@@ -52,6 +52,15 @@ the living audit/polish list: check items off as they land.
 - [ ] Fabric *photo* backgrounds (not just color) for the mockup.
 
 ## Jot-down (2026-06-15) — to do next
+- [x] Clicking an add/edit action (Use a picture, Add words, Add shape, edit
+      text) now switches the user from Stitch view back to Edit view.
+- [ ] LETTERING IS HORRIBLE (top priority, user-reported with "Goose" example):
+      the default tatami fill stitches letters as plain HORIZONTAL scanlines —
+      amateur, ribbed, and ugly on round/curved glyphs, with stray serpentine
+      connectors showing. Lettering must be proper SATIN that follows each
+      stroke's centerline (the disabled medial-axis path), or at minimum the
+      fill angle should follow the stroke — not a flat 0° hatch across the whole
+      word. This is the #1 quality gap.
 - [x] Extend the butter-stick rulers in BOTH directions (positive and negative):
       rulers now run the full canvas with 0 on the hoop origin, and the bright
       butter band + edge markers show exactly where the usable hoop area (the
@@ -65,6 +74,17 @@ the living audit/polish list: check items off as they land.
       (up to ~19 mm). Fixed in engine/resample.ts.
 - [ ] Drag-to-select (marquee/box select): drag on empty canvas to rubber-band
       a selection rectangle and select every object it touches. (No such tool yet.)
+- [ ] HOOP MOCKUP looks nothing like the reference photo the user sent — rebuild
+      the Stitch-view hoop to match it (need the reference image to match wood
+      grain / proportions / hardware).
+- [ ] STITCH-VIEW PLAY still shows an empty frame — playback never reveals
+      stitches. Investigate SimulatorBar rAF + simIndex/simTotal + StitchView
+      reveal; it must animate from 0 and actually draw.
+- [ ] Footer: "Made With ❤️ by Suz" linking LinkedIn
+      (https://www.linkedin.com/in/suzie-schmitt/) and GitHub
+      (https://github.com/suzbeanz/).
+- [ ] Homepage / landing with sections: About, What Buttery Stitches Does, How
+      to use it (marketing page in front of the editor).
 - [ ] Foolproof for 60+: every action obvious and forgiving; plain words; no
       dead-ends; nothing that needs explaining twice.
 - [ ] Keep growing the journey suite: cover the image-import path (quantize →

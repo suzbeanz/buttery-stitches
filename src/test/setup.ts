@@ -16,5 +16,10 @@ export function resetStores(project?: Project) {
     cursorMm: null,
     activeColorId: null,
     rulerUnit: "mm",
+    viewMode: "edit",
+    simTotal: 0,
+    simIndex: 0,
+    simPlaying: false,
+    simSpeed: 400,
   });
 }
