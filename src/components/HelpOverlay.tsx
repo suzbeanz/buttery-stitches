@@ -41,11 +41,15 @@ export default function HelpOverlay({ onClose }: { onClose: () => void }) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 p-4"
-      onClick={onClose}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Keyboard shortcuts"
         className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border border-navy/20 bg-cream p-5 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
       >
         <h2 className="mb-4 font-butter text-lg font-semibold text-navy">
           🧈 Keyboard shortcuts

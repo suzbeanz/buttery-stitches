@@ -26,8 +26,19 @@ the living audit/polish list: check items off as they land.
 - [ ] Tune skeleton branch joins / corners on complex glyphs (B, R) — small gaps
       at junctions are acceptable for now.
 
+## Accessibility & foolproof (mission: pro power, free, for everyone)
+- [x] Guided quick-start empty state: big "Use a picture / Add words / Draw it"
+      buttons so a first-timer knows exactly what to do.
+- [x] Dialogs are keyboard-accessible: Escape closes; role="dialog" + aria-modal +
+      aria-label for screen readers; backdrop-click closes only on the backdrop.
+- [x] Plainer language on key actions (Use a picture, Add words, Clean up the
+      stitching, Print thread list).
+- [x] Only ship fonts that actually work (foolproof picker).
+- [ ] First-run tour / inline tips for advanced params (what & why, plainly).
+- [ ] Bigger touch targets + calmer "advanced" grouping; full contrast pass.
+
 ## UX / UI
-- [x] Toolbars scroll horizontally instead of clipping on narrow screens.
+- [x] Toolbars wrap on narrow screens instead of clipping tooltips/menus.
 - [x] Tall dialogs scroll on short/mobile screens (max-height + overflow).
 - [ ] Deeper mobile pass: tune tap targets / type scale on phones.
 

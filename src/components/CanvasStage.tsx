@@ -348,12 +348,36 @@ export default function CanvasStage() {
       )}
 
       {viewMode === "edit" && project.objects.length === 0 && draft.length === 0 && (
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center text-navy/45">
-          <div className="font-butter text-xl">Spread some stitches 🧈</div>
-          <div className="mt-1 text-sm">
-            Pick a tool and draw, or <b>Import image</b> to auto-digitize a logo.
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center p-4 text-center text-navy">
+          <div className="pointer-events-auto w-full max-w-md rounded-2xl border border-navy/10 bg-cream/90 p-6 shadow-butter">
+            <div className="font-butter text-2xl font-semibold">
+              Let&apos;s make something 🧈
+            </div>
+            <p className="mt-1 text-sm text-navy/60">Pick how you&apos;d like to start.</p>
+            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <StartButton
+                emoji="🖼️"
+                label="Use a picture"
+                hint="Turn a photo or logo into stitches"
+                onClick={() => useEditorStore.getState().setPendingStart("image")}
+              />
+              <StartButton
+                emoji="🔤"
+                label="Add words"
+                hint="Stitch a name or message"
+                onClick={() => useEditorStore.getState().setPendingStart("text")}
+              />
+              <StartButton
+                emoji="✏️"
+                label="Draw it"
+                hint="Draw your own shape"
+                onClick={() => useEditorStore.getState().setTool("fill")}
+              />
+            </div>
+            <p className="mt-3 text-xs text-navy/45">
+              New here? Press <b>?</b> any time for help.
+            </p>
           </div>
-          <div className="mt-1 text-xs">Press <b>?</b> for keyboard shortcuts.</div>
         </div>
       )}
 
@@ -367,6 +391,32 @@ export default function CanvasStage() {
 }
 
 // ---------------------------------------------------------------------------
+
+/** Big friendly action in the empty-state quick-start guide. */
+function StartButton({
+  emoji,
+  label,
+  hint,
+  onClick,
+}: {
+  emoji: string;
+  label: string;
+  hint: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex flex-col items-center gap-1 rounded-xl border border-navy/15 bg-white px-3 py-3 text-navy transition-colors hover:border-navy/40 hover:bg-butter-100"
+    >
+      <span className="text-2xl" aria-hidden>
+        {emoji}
+      </span>
+      <span className="text-sm font-semibold">{label}</span>
+      <span className="text-[11px] text-navy/55">{hint}</span>
+    </button>
+  );
+}
 
 function Ruler({
   axis,

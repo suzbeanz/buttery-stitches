@@ -1,4 +1,4 @@
-import { lazy, Suspense, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
   FilePlus2,
   FolderOpen,
@@ -71,6 +71,8 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
   const toggleProperties = useEditorStore((s) => s.toggleProperties);
   const editingTextId = useEditorStore((s) => s.editingTextId);
   const setEditingTextId = useEditorStore((s) => s.setEditingTextId);
+  const pendingStart = useEditorStore((s) => s.pendingStart);
+  const setPendingStart = useEditorStore((s) => s.setPendingStart);
   const editingTextObject = editingTextId
     ? project.objects.find((o) => o.id === editingTextId && o.text)
     : undefined;
@@ -107,6 +109,13 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
     setProject(p);
     setImageFile(null);
   }
+
+  // The empty-state quick-start buttons set this; open the matching flow.
+  useEffect(() => {
+    if (pendingStart === "text") setShowText(true);
+    else if (pendingStart === "image") imageInput.current?.click();
+    if (pendingStart) setPendingStart(null);
+  }, [pendingStart, setPendingStart]);
 
   function applyText({ object, newColor }: AddTextResult) {
     // Adds to the existing design (does not replace it).
@@ -181,10 +190,10 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
 
       <div className="mx-1.5 h-5 w-px bg-butter-200/20" />
 
-      <BarButton label="Import image" onClick={() => imageInput.current?.click()}>
+      <BarButton label="Use a picture" onClick={() => imageInput.current?.click()}>
         <ImageIcon size={18} />
       </BarButton>
-      <BarButton label="Add text" onClick={() => setShowText(true)}>
+      <BarButton label="Add words" onClick={() => setShowText(true)}>
         <Type size={18} />
       </BarButton>
 
@@ -217,12 +226,12 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
 
       <ExportMenu />
       <BarButton
-        label="Fix stitches (smart cleanup)"
+        label="Clean up the stitching"
         onClick={() => setProject(fixStitches(project))}
       >
         <Wand2 size={18} />
       </BarButton>
-      <BarButton label="Thread worksheet" onClick={openWorksheet}>
+      <BarButton label="Print thread list" onClick={openWorksheet}>
         <ClipboardList size={18} />
       </BarButton>
 
