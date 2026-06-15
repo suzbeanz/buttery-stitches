@@ -105,7 +105,7 @@ export function worksheetHtml(worksheet: Worksheet, title = "Buttery Stitches"):
 <html lang="en"><head><meta charset="utf-8" />
 <title>${esc(title)} — Thread Worksheet</title>
 <style>
-  :root { --navy:#16234A; --butter:#F9E9A6; --cream:#FFFDF3; }
+  :root { --navy:#20305F; --butter:#F3E8BC; --cream:#FFFDF3; --salted:#A5402C; }
   body { font-family: Georgia, "Times New Roman", serif; color: var(--navy);
          background: var(--cream); margin: 2rem; }
   h1 { font-size: 1.5rem; margin: 0 0 .25rem; }

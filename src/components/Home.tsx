@@ -7,8 +7,8 @@ import Footer from "./Footer";
  * the butter-stick ruler doubles as the nav (with red Tbsp measurements), the
  * body is set in monospace like a wrapper, and a "NET WT." line signs the foot.
  */
-const RED = "#C0392B";
-const NAVY = "#16234A";
+const RED = "#A5402C";
+const NAVY = "#20305F";
 
 export default function Home({ onStart }: { onStart: () => void }) {
   return (

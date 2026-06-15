@@ -7,32 +7,37 @@ export default {
         // 🧈 Butter palette — warm, creamy yellows.
         butter: {
           50: "#FFFDF4",
-          100: "#FCF4D0",
-          200: "#F9E9A6", // "butter yellow"
-          300: "#F4DC79",
-          400: "#EBCB4E",
+          100: "#F8F1CF", // "churned cream" — panels & inset stock
+          200: "#F3E8BC", // "wrapper cream" — the paper
+          300: "#EFDFA6",
+          400: "#E7CF7A",
           500: "#D9B23A",
           600: "#B8902A",
         },
-        // Classic navy to pair with butter (think dairy-carton lettering).
+        // Press navy — the primary ink (wordmark, rules, type).
         navy: {
-          DEFAULT: "#16234A",
-          light: "#27386E",
-          dark: "#0E1733",
+          DEFAULT: "#20305F",
+          light: "#2E4173",
+          dark: "#16223F",
         },
-        // The "salted" accent — used sparingly, like the red stamp on a wrapper.
-        salted: "#C0392B",
+        // The "salted"/stamp red accent — used sparingly.
+        salted: "#A5402C",
+        // Cream surfaces and warm near-black body copy.
         cream: "#FFFDF3",
+        paper: "#F3E8BC", // wrapper cream — primary background
+        panel: "#F8F1CF", // churned cream — panels & inset stock
+        sepia: "#2C2A20", // warm near-black body copy
       },
       fontFamily: {
-        // The "classic butter" wordmark — an elegant retro serif, degrading
-        // gracefully to widely-installed serifs so the app needs no network.
+        // The "classic butter" wordmark + headlines — Playfair Display.
         butter: ['"Playfair Display"', "Georgia", '"Times New Roman"', "serif"],
+        // Body / UI copy — a warm book serif (the butter-wrapper voice).
+        body: ['"Old Standard TT"', "Georgia", '"Times New Roman"', "serif"],
       },
       boxShadow: {
-        // Warm, soft shadows so panels and dialogs feel pillowy, not harsh.
-        butter: "0 8px 24px -12px rgba(22, 35, 74, 0.25)",
-        card: "0 1px 2px rgba(22, 35, 74, 0.06), 0 6px 20px -10px rgba(22, 35, 74, 0.18)",
+        // Soft, flat shadows — no glassy sheen.
+        butter: "0 8px 24px -12px rgba(32, 48, 95, 0.25)",
+        card: "0 1px 2px rgba(32, 48, 95, 0.06), 0 6px 20px -10px rgba(32, 48, 95, 0.18)",
       },
     },
   },
