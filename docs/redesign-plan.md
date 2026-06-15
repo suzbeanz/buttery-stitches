@@ -12,6 +12,14 @@ NOTE: this supersedes the earlier serif (Playfair/Old Standard) pass.
 - Homepage: **full editorial spread** (many numbered sections, magazine-style).
 - Build order: **Foundations → Homepage → App shell → Toolbar → Fixtures → Voice/QA.**
 
+## Progress
+- [x] P0 Foundations (tokens, fonts, press primitives).
+- [x] P1 Homepage (editorial wrapper).
+- [x] P2 App shell (nameplate, canvas inks, panels, mono numbers).
+- [x] P3 Left tool rail with custom stitch glyphs (+ snap/guides toggles).
+- [x] P4 Fixtures: export menu, dialogs, quick-start, simulator bar in press style.
+- [ ] P5 Voice & accessibility: wholesome microcopy pass; contrast/keyboard QA.
+
 ---
 
 ## 0. Foundations (design system)
