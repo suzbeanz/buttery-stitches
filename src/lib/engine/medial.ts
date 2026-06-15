@@ -344,12 +344,14 @@ export interface MedialOptions {
  * mm a rail is pushed past the sampled stroke edge so the satin fully covers the
  * boundary instead of leaving a thin gap where the distance transform rounds in.
  */
-const OVERSHOOT_MM = 0.2;
+const OVERSHOOT_MM = 0.1;
 
-/** One satin stroke: the smoothed centerline (for underlay) and its throws. */
+/** One satin stroke: the smoothed centerline (for underlay), throws, and the
+ *  stroke's representative (median) full width in mm. */
 export interface SatinColumn {
   centerline: Path;
   throws: Path;
+  widthMm: number;
 }
 
 /**
@@ -444,7 +446,14 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
       else pts.push(right[i], left[i]);
     });
     const capped = capSegmentLength(pts, MAX_THROW_MM);
-    if (capped.length >= 2) columns.push({ centerline: center, throws: capped });
+    if (capped.length >= 2) {
+      // Representative stroke width = median rail-to-rail span (drop the edge
+      // overshoot we added), used to decide satin-vs-fill upstream.
+      const sorted = [...halves].sort((p, q) => p - q);
+      const medianHalf = sorted[sorted.length >> 1] ?? 0;
+      const widthMm = Math.max(0, 2 * (medianHalf - OVERSHOOT_MM));
+      columns.push({ centerline: center, throws: capped, widthMm });
+    }
   }
   return columns;
 }

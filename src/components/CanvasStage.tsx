@@ -47,10 +47,11 @@ import { designToSegments, needleAt } from "../lib/engine/render";
  */
 
 const RULER = 22; // px thickness of the top/left rulers
-const PADDING = 28; // px breathing room around the hoop
+const PADDING = 48; // px breathing room around the hoop (room for frame + bracket)
 const SNAP_MM = 2; // snap distance (mm) for alignment to hoop/object edges
 const JOIN_SNAP_MM = 3; // snap the closing end of a fill polygon to its start
-const HOOP_BAND = 12; // px thickness of the hoop frame in the mockup
+const HOOP_BAND = 14; // px thickness of the hoop frame in the mockup
+const HOOP_MARGIN = 18; // px of fabric/plastic between the stitch field and the frame opening
 
 const C = {
   cream: "#FFFDF3",
@@ -140,6 +141,13 @@ export default function CanvasStage() {
   const hoopH = hoop.hMm * scale;
   const originX = RULER + PADDING + (availW - hoopW) / 2;
   const originY = RULER + PADDING + (availH - hoopH) / 2;
+
+  // Hoop-mockup geometry: the frame opening is larger than the stitchable field,
+  // so there's visible fabric margin beyond the workable area (as on a real hoop).
+  const openL = originX - HOOP_MARGIN;
+  const openT = originY - HOOP_MARGIN;
+  const openW = hoopW + HOOP_MARGIN * 2;
+  const openH = hoopH + HOOP_MARGIN * 2;
 
   const px = (xMm: number) => originX + xMm * scale;
   const py = (yMm: number) => originY + yMm * scale;
@@ -335,39 +343,45 @@ export default function CanvasStage() {
           <Layer>
             {viewMode === "stitch" ? (
               <Group listening={false}>
-                {/* Plastic machine-embroidery hoop: a rounded-square double frame
-                    with a mounting bracket on the left and a tension screw at the
-                    bottom, fabric stretched inside — the physical preview. */}
+                {/* Plastic machine-embroidery hoop: a rounded-square frame whose
+                    opening is larger than the stitchable field, a left mounting
+                    bracket with two bolts, a bottom tension screw, fabric inside,
+                    and a registration grid marking the embroiderable area. */}
 
                 {/* Mounting bracket arm on the left (drawn behind the frame). */}
                 <Rect
-                  x={originX - HOOP_BAND - 24}
-                  y={originY + hoopH * 0.3}
-                  width={34}
-                  height={hoopH * 0.4}
-                  cornerRadius={5}
+                  x={openL - HOOP_BAND - 30}
+                  y={originY + hoopH * 0.2}
+                  width={42}
+                  height={hoopH * 0.6}
+                  cornerRadius={4}
                   fillLinearGradientStartPoint={{ x: 0, y: 0 }}
-                  fillLinearGradientEndPoint={{ x: 0, y: hoopH * 0.4 }}
+                  fillLinearGradientEndPoint={{ x: 0, y: hoopH * 0.6 }}
                   fillLinearGradientColorStops={[0, "#ECE9E2", 1, "#C7C1B7"]}
                   stroke="#A9A39A"
                   strokeWidth={1}
                 />
-                {/* Slot cut into the bracket. */}
-                <Rect
-                  x={originX - HOOP_BAND - 18}
-                  y={originY + hoopH * 0.3 + 9}
-                  width={12}
-                  height={hoopH * 0.4 - 18}
-                  cornerRadius={5}
-                  fill={C.cream}
-                  stroke="#B4AEA4"
-                  strokeWidth={1}
-                />
+                {/* Two mounting bolts on the bracket. */}
+                {[0.3, 0.7].map((t) => (
+                  <Circle
+                    key={`bolt-${t}`}
+                    x={openL - HOOP_BAND - 18}
+                    y={originY + hoopH * (0.2 + 0.6 * t)}
+                    radius={4}
+                    fillRadialGradientStartPoint={{ x: 0, y: 0 }}
+                    fillRadialGradientEndPoint={{ x: 0, y: 0 }}
+                    fillRadialGradientStartRadius={0}
+                    fillRadialGradientEndRadius={4}
+                    fillRadialGradientColorStops={[0, "#EDEDED", 1, "#9A9A9A"]}
+                    stroke="#7d7d7d"
+                    strokeWidth={0.75}
+                  />
+                ))}
 
                 {/* Bottom tension bracket + silver screw (drawn behind the frame). */}
                 <Rect
                   x={originX + hoopW / 2 - 6}
-                  y={originY + hoopH + HOOP_BAND - 7}
+                  y={openT + openH + HOOP_BAND - 7}
                   width={34}
                   height={13}
                   cornerRadius={6}
@@ -379,8 +393,8 @@ export default function CanvasStage() {
                 />
                 <Rect
                   x={originX + hoopW / 2 + 26}
-                  y={originY + hoopH + HOOP_BAND - 6}
-                  width={17}
+                  y={openT + openH + HOOP_BAND - 6}
+                  width={18}
                   height={11}
                   cornerRadius={2}
                   fillLinearGradientStartPoint={{ x: 0, y: 0 }}
@@ -390,15 +404,15 @@ export default function CanvasStage() {
                   strokeWidth={0.75}
                 />
 
-                {/* Outer plastic frame. */}
+                {/* Outer plastic frame around the (larger) opening. */}
                 <Rect
-                  x={originX - HOOP_BAND}
-                  y={originY - HOOP_BAND}
-                  width={hoopW + HOOP_BAND * 2}
-                  height={hoopH + HOOP_BAND * 2}
-                  cornerRadius={HOOP_BAND + 20}
+                  x={openL - HOOP_BAND}
+                  y={openT - HOOP_BAND}
+                  width={openW + HOOP_BAND * 2}
+                  height={openH + HOOP_BAND * 2}
+                  cornerRadius={HOOP_BAND + 22}
                   fillLinearGradientStartPoint={{ x: 0, y: 0 }}
-                  fillLinearGradientEndPoint={{ x: 0, y: hoopH + HOOP_BAND * 2 }}
+                  fillLinearGradientEndPoint={{ x: 0, y: openH + HOOP_BAND * 2 }}
                   fillLinearGradientColorStops={[0, "#EEEBE4", 0.5, "#D9D4CB", 1, "#BFB9AF"]}
                   stroke="#A9A39A"
                   strokeWidth={1}
@@ -407,47 +421,67 @@ export default function CanvasStage() {
                   shadowBlur={18}
                   shadowOffsetY={5}
                 />
-                {/* Seam between the outer frame and the inner ring (the channel). */}
+                {/* Seam between the outer frame and the inner ring. */}
                 <Rect
-                  x={originX - HOOP_BAND * 0.5}
-                  y={originY - HOOP_BAND * 0.5}
-                  width={hoopW + HOOP_BAND}
-                  height={hoopH + HOOP_BAND}
-                  cornerRadius={HOOP_BAND + 10}
+                  x={openL - HOOP_BAND * 0.5}
+                  y={openT - HOOP_BAND * 0.5}
+                  width={openW + HOOP_BAND}
+                  height={openH + HOOP_BAND}
+                  cornerRadius={HOOP_BAND + 12}
                   stroke="#9b958c"
                   strokeWidth={1}
                   fillEnabled={false}
                 />
-                {/* Fabric stretched in the hoop. */}
+                {/* Fabric stretched across the whole opening. */}
                 <Rect
-                  x={originX}
-                  y={originY}
-                  width={hoopW}
-                  height={hoopH}
+                  x={openL}
+                  y={openT}
+                  width={openW}
+                  height={openH}
                   fill={fabricColor}
-                  cornerRadius={10}
+                  cornerRadius={8}
                 />
                 {/* Inner rim shadow where the ring grips the fabric. */}
                 <Rect
-                  x={originX}
-                  y={originY}
-                  width={hoopW}
-                  height={hoopH}
-                  cornerRadius={10}
+                  x={openL}
+                  y={openT}
+                  width={openW}
+                  height={openH}
+                  cornerRadius={8}
                   stroke="#000000"
                   strokeWidth={2}
                   opacity={0.1}
                   fillEnabled={false}
                 />
-                {/* Centering registration ticks at the inner-edge midpoints. */}
-                {[
-                  [originX + hoopW / 2, originY - HOOP_BAND * 0.5, originX + hoopW / 2, originY],
-                  [originX + hoopW / 2, originY + hoopH, originX + hoopW / 2, originY + hoopH + HOOP_BAND * 0.5],
-                  [originX - HOOP_BAND * 0.5, originY + hoopH / 2, originX, originY + hoopH / 2],
-                  [originX + hoopW, originY + hoopH / 2, originX + hoopW + HOOP_BAND * 0.5, originY + hoopH / 2],
-                ].map((pts, i) => (
-                  <Line key={`tick-${i}`} points={pts} stroke="#8a857c" strokeWidth={1} />
-                ))}
+
+                {/* Registration template: the embroiderable field (dashed box)
+                    sits inside the fabric with margin all around, plus centering
+                    crosshairs — so it's clear where stitches can land. */}
+                <Rect
+                  x={originX}
+                  y={originY}
+                  width={hoopW}
+                  height={hoopH}
+                  stroke={C.navy}
+                  strokeWidth={1}
+                  opacity={0.35}
+                  dash={[5, 4]}
+                  fillEnabled={false}
+                />
+                <Line
+                  points={[originX + hoopW / 2, openT + 4, originX + hoopW / 2, openT + openH - 4]}
+                  stroke={C.navy}
+                  strokeWidth={1}
+                  opacity={0.28}
+                  dash={[5, 4]}
+                />
+                <Line
+                  points={[openL + 4, originY + hoopH / 2, openL + openW - 4, originY + hoopH / 2]}
+                  stroke={C.navy}
+                  strokeWidth={1}
+                  opacity={0.28}
+                  dash={[5, 4]}
+                />
               </Group>
             ) : (
               <Rect
