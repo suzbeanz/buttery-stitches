@@ -178,7 +178,7 @@ export default function TopBar({
   }
 
   return (
-    <header className="flex flex-wrap items-center gap-0.5 border-b border-navy-dark bg-navy px-2 py-2 text-butter-100 shadow-butter">
+    <header className="relative z-30 flex flex-wrap items-center gap-0.5 border-b border-navy-dark bg-navy px-2 py-2 text-butter-100 shadow-butter">
       <BarButton
         label={layersOpen ? "Hide layers" : "Show layers"}
         onClick={toggleLayers}

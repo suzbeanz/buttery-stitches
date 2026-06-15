@@ -41,7 +41,7 @@ export default function PropertiesPanel() {
 
         {selected.length === 0 ? (
           <div className="px-3 py-5 text-sm text-navy/60">
-            Select an object to edit its stitch parameters.
+            Select an object to fine-tune its stitches.
           </div>
         ) : selected.length > 1 ? (
           <div className="px-3 py-5 text-sm text-navy/60">

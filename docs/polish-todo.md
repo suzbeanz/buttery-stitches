@@ -133,8 +133,8 @@ Still open (need a decision or are larger):
 - [ ] Fabric *photo* backgrounds (not just color) for the mockup.
 
 ## Jot-down (2026-06-15) — to do next
-- [ ] The "Home" tooltip on the top-bar wordmark is clipped/blocked (appears
-      under the header bar / behind the panel). Fix its placement or stacking.
+- [x] The "Home" tooltip on the top-bar wordmark was clipped behind the panel
+      row — fixed by stacking the header (relative z-30) above it.
 - [x] HOMEPAGE THEMING: rebuilt as a printed butter wrapper — navy press-ink on
       cream paper (primary), a "salted" red stamp + eyebrow accents (occasional),
       butter-yellow as a tertiary highlight (icon chips, step circles), and the

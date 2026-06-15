@@ -46,7 +46,7 @@ export default function LayerPanel() {
 
       {objects.length === 0 ? (
         <div className="px-3 py-6 text-sm text-navy/60">
-          No objects yet. Pick a tool and draw, or import an image.
+          Nothing stitched yet. Pick a tool and draw, or bring in a picture.
         </div>
       ) : (
         <ul className="flex-1 overflow-y-auto py-1">
