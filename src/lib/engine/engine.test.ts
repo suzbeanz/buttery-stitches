@@ -151,6 +151,34 @@ describe("resample", () => {
     expect(out[out.length - 1]).toEqual({ x: 7, y: 0 });
   });
 
+  it("keeps spacing across vertices on a multi-segment path (no long carry)", () => {
+    // An L of two 20 mm legs with a single vertex between them: every stitch
+    // must stay near `spacing`, including the ones straddling the corner.
+    const out = resampleByDistance(
+      [
+        { x: 0, y: 0 },
+        { x: 20, y: 0 },
+        { x: 20, y: 20 },
+      ],
+      2.5,
+    );
+    expect(maxSeg(out)).toBeLessThanOrEqual(2.5 + 1e-6);
+  });
+
+  it("spans a long straight side without leaving a monster stitch", () => {
+    // Regression: a long segment after a short one used to emit a single huge
+    // stitch because the carry was added instead of subtracted.
+    const out = resampleByDistance(
+      [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 21, y: 0 },
+      ],
+      2.5,
+    );
+    expect(maxSeg(out)).toBeLessThanOrEqual(2.5 + 1e-6);
+  });
+
   it("resamples to an exact count spaced equally", () => {
     const out = resampleByCount(
       [

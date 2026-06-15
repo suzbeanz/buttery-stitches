@@ -51,6 +51,25 @@ the living audit/polish list: check items off as they land.
 - [ ] Eraser tool; simpler/clearer toolbar + sidebars.
 - [ ] Fabric *photo* backgrounds (not just color) for the mockup.
 
+## Jot-down (2026-06-15) — to do next
+- [x] Extend the butter-stick rulers in BOTH directions (positive and negative):
+      rulers now run the full canvas with 0 on the hoop origin, and the bright
+      butter band + edge markers show exactly where the usable hoop area (the
+      size limit) stops.
+- [x] Much more comprehensive synthetic user testing: src/test/journeys.test.ts
+      walks complete journeys (add words, all 8 fonts, shapes + satin outline,
+      clean-up, delete/undo/redo, multi-move, save/reopen) and asserts sewable
+      output. It immediately caught a real app-wide bug: resampleByDistance added
+      the carry instead of subtracting it, so every long straight edge (underlay
+      runs, running stitches, satin centerlines) emitted one monster stitch
+      (up to ~19 mm). Fixed in engine/resample.ts.
+- [ ] Drag-to-select (marquee/box select): drag on empty canvas to rubber-band
+      a selection rectangle and select every object it touches. (No such tool yet.)
+- [ ] Foolproof for 60+: every action obvious and forgiving; plain words; no
+      dead-ends; nothing that needs explaining twice.
+- [ ] Keep growing the journey suite: cover the image-import path (quantize →
+      trace → fix) and color-population once those settle.
+
 ## Accessibility & foolproof (mission: pro power, free, for everyone)
 - [x] Guided quick-start empty state: big "Use a picture / Add words / Draw it"
       buttons so a first-timer knows exactly what to do.

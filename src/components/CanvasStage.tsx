@@ -26,7 +26,7 @@ import {
 } from "../lib/geometry";
 import { snap } from "../lib/snap";
 import { smoothPath } from "../lib/smooth";
-import { computeTicks } from "../lib/ruler";
+import { computeTicksRange } from "../lib/ruler";
 import { mmToInch } from "../lib/units";
 import { generateDesign, orientByDepth } from "../lib/engine";
 import { designToSegments, needleAt } from "../lib/engine/render";
@@ -240,8 +240,28 @@ export default function CanvasStage() {
   }
 
   const drawing = viewMode === "edit" && isDrawTool(tool);
-  const ticksX = useMemo(() => computeTicks(hoop.wMm, rulerUnit), [hoop.wMm, rulerUnit]);
-  const ticksY = useMemo(() => computeTicks(hoop.hMm, rulerUnit), [hoop.hMm, rulerUnit]);
+  // Rulers run the full length of the canvas, not just the hoop, so the user
+  // can measure designs that spill past the hoop edge (0 stays on the origin,
+  // values go negative to the left/above it). The shaded band on each ruler
+  // marks the usable hoop area — the canvas-size limit — at a glance.
+  const ticksX = useMemo(
+    () =>
+      computeTicksRange(
+        (RULER - originX) / scale,
+        (size.width - originX) / scale,
+        rulerUnit,
+      ),
+    [originX, scale, size.width, rulerUnit],
+  );
+  const ticksY = useMemo(
+    () =>
+      computeTicksRange(
+        (RULER - originY) / scale,
+        (size.height - originY) / scale,
+        rulerUnit,
+      ),
+    [originY, scale, size.height, rulerUnit],
+  );
 
   return (
     <main
@@ -417,10 +437,27 @@ export default function CanvasStage() {
             )}
           </Layer>
 
-          {/* Rulers above the scene edges */}
+          {/* Butter-stick rulers run the whole canvas; the shaded span marks the
+              usable hoop area (the size limit). */}
           <Layer listening={false}>
-            <Ruler axis="x" ticks={ticksX} originPx={originX} scale={scale} length={hoopW} />
-            <Ruler axis="y" ticks={ticksY} originPx={originY} scale={scale} length={hoopH} />
+            <Ruler
+              axis="x"
+              ticks={ticksX}
+              originPx={originX}
+              scale={scale}
+              spanPx={size.width}
+              hoopStartPx={originX}
+              hoopEndPx={originX + hoopW}
+            />
+            <Ruler
+              axis="y"
+              ticks={ticksY}
+              originPx={originY}
+              scale={scale}
+              spanPx={size.height}
+              hoopStartPx={originY}
+              hoopEndPx={originY + hoopH}
+            />
             <Rect x={0} y={0} width={RULER} height={RULER} fill={C.butterDeep} />
           </Layer>
         </Stage>
@@ -520,24 +557,48 @@ function Ruler({
   ticks,
   originPx,
   scale,
-  length,
+  spanPx,
+  hoopStartPx,
+  hoopEndPx,
 }: {
   axis: "x" | "y";
   ticks: { mm: number; major: boolean; label?: string }[];
   originPx: number;
   scale: number;
-  length: number;
+  /** total length of the ruler in px (the whole canvas edge). */
+  spanPx: number;
+  /** px position where the usable hoop area begins along this axis. */
+  hoopStartPx: number;
+  /** px position where the usable hoop area ends along this axis. */
+  hoopEndPx: number;
 }) {
   const horizontal = axis === "x";
+  // The ruler covers the whole canvas; only the hoop span is "usable". Anything
+  // outside it is dimmed so the user can see exactly where the sewable area —
+  // the canvas-size limit — stops.
+  const usableStart = Math.max(hoopStartPx, RULER);
+  const usableLen = Math.max(0, hoopEndPx - usableStart);
   return (
     <Group>
+      {/* Full-length ruler bed (dimmed = beyond the hoop). */}
       <Rect
-        x={horizontal ? originPx : 0}
-        y={horizontal ? 0 : originPx}
-        width={horizontal ? length : RULER}
-        height={horizontal ? RULER : length}
-        fill={C.butter}
+        x={horizontal ? RULER : 0}
+        y={horizontal ? 0 : RULER}
+        width={horizontal ? spanPx - RULER : RULER}
+        height={horizontal ? RULER : spanPx - RULER}
+        fill={C.butterDeep}
+        opacity={0.4}
       />
+      {/* Bright butter band over the usable hoop area. */}
+      {usableLen > 0 && (
+        <Rect
+          x={horizontal ? usableStart : 0}
+          y={horizontal ? 0 : usableStart}
+          width={horizontal ? usableLen : RULER}
+          height={horizontal ? RULER : usableLen}
+          fill={C.butter}
+        />
+      )}
       {ticks.map((t, i) => {
         const pos = originPx + t.mm * scale;
         const tickLen = t.major ? RULER * 0.55 : RULER * 0.3;
@@ -559,6 +620,15 @@ function Ruler({
           </Group>
         );
       })}
+      {/* Limit markers at the hoop edges so the boundary is unmistakable. */}
+      {[hoopStartPx, hoopEndPx].map((edge, i) => (
+        <Line
+          key={`edge-${i}`}
+          points={horizontal ? [edge, 0, edge, RULER] : [0, edge, RULER, edge]}
+          stroke={C.navy}
+          strokeWidth={1.5}
+        />
+      ))}
     </Group>
   );
 }
