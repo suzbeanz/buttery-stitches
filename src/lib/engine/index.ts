@@ -140,14 +140,29 @@ function orderByNearest(runs: Point[][], from: Point | null): Point[][] {
 }
 
 /**
- * Medial-axis satin columns for a region, but only if they actually fill the
- * glyph. Returns the per-stroke columns (centerline + throws) when coverage is
- * good, or `[]` to signal the caller to use a plain fill instead — so lettering
- * is shiny when it can be and always solid when it can't.
+ * Widest stroke (mm) that still reads as clean satin. Wider strokes — bold or
+ * large block lettering — look sloppy as satin (long, splaying throws) and
+ * belong in a solid tatami fill, exactly like the printed letterform. Satin is
+ * reserved for genuinely narrow strokes (thin and script faces).
+ */
+const MAX_SATIN_STROKE_MM = 2.2;
+
+/**
+ * Medial-axis satin columns for a region, but only if they'd actually look good:
+ * the strokes must be narrow enough to satin cleanly AND the satin must cover
+ * the glyph. Otherwise returns `[]` so the caller lays a solid tatami fill —
+ * shiny where it helps, crisp and solid where it doesn't, never sloppy.
  */
 function acceptableSatin(region: Path[], density: number): SatinColumn[] {
   const columns = medialColumns(region, { density });
   if (columns.length === 0) return [];
+
+  // Median stroke width across the glyph's strokes; bold/large faces fail this
+  // and fall through to a solid fill.
+  const widths = columns.map((c) => c.widthMm).sort((a, b) => a - b);
+  const medianWidth = widths[widths.length >> 1];
+  if (medianWidth > MAX_SATIN_STROKE_MM) return [];
+
   const coverage = satinCoverage(region, columns.map((c) => c.throws));
   return coverage >= MIN_SATIN_COVERAGE ? columns : [];
 }

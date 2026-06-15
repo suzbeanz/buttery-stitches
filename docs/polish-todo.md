@@ -4,6 +4,15 @@ Working toward a Hatch-by-Wilcom-level, open-source embroidery digitizer. This i
 the living audit/polish list: check items off as they land.
 
 ## Stitch quality — crisp & intelligent (2026-06-15)
+- [x] Satin vs fill is now chosen by STROKE WIDTH: only genuinely narrow strokes
+      (<=2.2mm — thin/script faces) satin; bold/large block letters lay a clean
+      solid tatami fill, exactly like the printed letterform, instead of sloppy
+      splaying satin. Edge overshoot trimmed so the remaining satin stays inside
+      the glyph.
+- [x] HOOP: frame opening is now larger than the stitch field (visible fabric
+      margin all around, as on the real Brother hoop), with a dashed
+      embroiderable-area box + centering crosshairs, a left mounting bracket with
+      two bolts, and the bottom tension screw.
 - [x] Satin DENSITY COMPENSATION on curves: throws are placed by advancing until
       whichever rail (the outer one on a curve) has moved one stitch spacing, so
       the convex edge stays evenly covered instead of fanning into gaps and the
