@@ -318,6 +318,38 @@ describe("journey: build a two-color design, delete, undo/redo", () => {
   });
 });
 
+describe("journey: choosing a fabric retunes the sew without breaking it", () => {
+  beforeEach(freshStore);
+
+  // The same artwork must stitch cleanly on a stable woven or a stretchy knit;
+  // the fabric only bends density / pull / underlay (docs/stitch-logic.md §8).
+  const fabrics: Array<Project["fabric"]> = ["woven", "knit", "pile", "sheer"];
+  for (const fabric of fabrics) {
+    it(`a broad fill sews cleanly on ${fabric}`, () => {
+      const store = useProjectStore.getState();
+      store.addObject(makeShapeObject("ellipse", { width: 50, height: 40 }, colorId()));
+      store.updateProject({ fabric });
+      expect(useProjectStore.getState().project.fabric).toBe(fabric);
+      expectSewable(useProjectStore.getState().project);
+    });
+  }
+
+  it("knit lowers density and adds heavier underlay, changing the stitch count", () => {
+    const store = useProjectStore.getState();
+    store.addObject(makeShapeObject("ellipse", { width: 50, height: 40 }, colorId()));
+
+    store.updateProject({ fabric: "woven" });
+    const woven = generateDesign(useProjectStore.getState().project).filter((s) => !s.jump).length;
+
+    store.updateProject({ fabric: "knit" });
+    const knit = generateDesign(useProjectStore.getState().project).filter((s) => !s.jump).length;
+
+    expect(woven).toBeGreaterThan(0);
+    expect(knit).toBeGreaterThan(0);
+    expect(knit).not.toBe(woven);
+  });
+});
+
 describe("journey: save and reopen the .embproj source of truth", () => {
   beforeEach(freshStore);
 

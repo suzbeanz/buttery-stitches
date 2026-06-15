@@ -74,11 +74,41 @@ export interface Hoop {
   name: string;
 }
 
+/** What the design is stitched onto — modifies density, pull-comp, and underlay. */
+export type FabricType = "woven" | "knit" | "pile" | "sheer";
+
+/** How a fabric bends the stitch parameters (see docs/stitch-logic.md §8). */
+export interface FabricProfile {
+  name: string;
+  /** multiplies row density gap — <1 packs rows tighter (stretchy fabric). */
+  densityMul: number;
+  /** multiplies pull compensation — stretchy fabric pulls in more. */
+  pullMul: number;
+  /** how heavy the underlay should be. */
+  underlay: "light" | "standard" | "heavy";
+}
+
+export const FABRICS: Record<FabricType, FabricProfile> = {
+  woven: { name: "Woven (stable)", densityMul: 1.0, pullMul: 1.0, underlay: "standard" },
+  knit: { name: "Knit / stretch", densityMul: 0.9, pullMul: 1.5, underlay: "heavy" },
+  pile: { name: "Pile / fleece", densityMul: 0.85, pullMul: 1.2, underlay: "heavy" },
+  sheer: { name: "Sheer / delicate", densityMul: 1.1, pullMul: 0.7, underlay: "light" },
+};
+
+export const DEFAULT_FABRIC: FabricType = "woven";
+
+/** The profile for a project's fabric (defaults to woven when unset). */
+export function fabricProfile(fabric: FabricType | undefined): FabricProfile {
+  return FABRICS[fabric ?? DEFAULT_FABRIC];
+}
+
 export interface Project {
   version: 1;
   widthMm: number;
   heightMm: number;
   hoop: Hoop;
+  /** what it's stitched onto (default "woven"); bends density/underlay/pull. */
+  fabric?: FabricType;
   colors: ThreadColor[];
   /** ORDER = stitch sequence. The first object is stitched first. */
   objects: EmbObject[];

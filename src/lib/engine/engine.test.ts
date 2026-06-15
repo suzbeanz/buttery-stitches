@@ -418,20 +418,23 @@ describe("fillUnderlay", () => {
 describe("satinUnderlay", () => {
   it("runs just the centerline for a narrow column", () => {
     const left: Path = [{ x: 0, y: 0 }, { x: 20, y: 0 }];
-    const right: Path = [{ x: 0, y: 2 }, { x: 20, y: 2 }]; // 2 mm wide
-    const out = satinUnderlay(left, right);
-    // Every point sits on the centerline (y ≈ 1).
-    for (const p of out) expect(p.y).toBeCloseTo(1, 5);
+    const right: Path = [{ x: 0, y: 1.5 }, { x: 20, y: 1.5 }]; // 1.5 mm wide
+    const runs = satinUnderlay(left, right);
+    // A column this thin gets a single run, all on the centerline (y ≈ 0.75).
+    expect(runs).toHaveLength(1);
+    for (const p of runs[0]) expect(p.y).toBeCloseTo(0.75, 5);
   });
 
   it("adds an edge run on each rail for a wide column", () => {
     const left: Path = [{ x: 0, y: 0 }, { x: 20, y: 0 }];
     const right: Path = [{ x: 0, y: 6 }, { x: 20, y: 6 }]; // 6 mm wide
-    const out = satinUnderlay(left, right);
-    const ys = out.map((p) => p.y);
-    // Edge runs reach the rails at y≈0 and y≈6, not just the centerline.
-    expect(Math.min(...ys)).toBeCloseTo(0, 5);
-    expect(Math.max(...ys)).toBeCloseTo(6, 5);
+    const runs = satinUnderlay(left, right);
+    // Several tiered runs (centerline + edge-walk + zig-zag).
+    expect(runs.length).toBeGreaterThan(1);
+    const ys = runs.flat().map((p) => p.y);
+    // The edge-walk runs reach near the rails, well past the centerline (y=3).
+    expect(Math.min(...ys)).toBeLessThan(1.5);
+    expect(Math.max(...ys)).toBeGreaterThan(4.5);
   });
 
   it("is empty for a degenerate column", () => {

@@ -1,20 +1,27 @@
 import { describe, it, expect } from "vitest";
 import type { Path } from "../../types/project";
-import { satinUnderlay } from "./underlay";
+import {
+  satinUnderlay,
+  columnUnderlay,
+  fillUnderlayRuns,
+  fillEdgeUnderlay,
+} from "./underlay";
 
 describe("satinUnderlay", () => {
   it("spans the whole column even when the rails have different vertex counts", () => {
     // Left rail described with many points, right rail with only its endpoints —
-    // a realistic edited/imported satin. The underlay must still run the full
-    // length of the column, not stop short where the shorter rail ends.
+    // a realistic edited/imported satin. The centerline underlay run must still
+    // run the full length of the column, not stop short where the shorter rail ends.
     const left: Path = Array.from({ length: 21 }, (_, i) => ({ x: 0, y: i }));
     const right: Path = [
       { x: 4, y: 0 },
       { x: 4, y: 20 },
     ];
-    const out = satinUnderlay(left, right);
-    expect(out.length).toBeGreaterThan(2);
-    const ys = out.map((p) => p.y);
+    const runs = satinUnderlay(left, right);
+    // Returns separate runs (centerline + tiers); the first is the centerline run.
+    expect(runs.length).toBeGreaterThanOrEqual(1);
+    const center = runs[0];
+    const ys = center.map((p) => p.y);
     // Centerline runs from y≈0 to y≈20 (full height), centered near x=2.
     expect(Math.min(...ys)).toBeLessThanOrEqual(1);
     expect(Math.max(...ys)).toBeGreaterThanOrEqual(19);
@@ -22,5 +29,57 @@ describe("satinUnderlay", () => {
 
   it("returns nothing for degenerate rails", () => {
     expect(satinUnderlay([{ x: 0, y: 0 }], [{ x: 1, y: 0 }])).toEqual([]);
+  });
+});
+
+describe("columnUnderlay tiers by width", () => {
+  const centerline: Path = Array.from({ length: 11 }, (_, i) => ({ x: 0, y: i * 2 }));
+
+  it("thin columns (light) get only the centerline run", () => {
+    expect(columnUnderlay(centerline, 1.5, "light")).toHaveLength(1);
+  });
+
+  it("a ~3 mm column adds an edge-walk (centerline + two rail runs)", () => {
+    // standard weight, width ≥ 2 mm but < 4 mm: center + edge-walk, no zig-zag.
+    expect(columnUnderlay(centerline, 3, "standard")).toHaveLength(3);
+  });
+
+  it("a wide column adds a zig-zag pass on top of the edge-walk", () => {
+    // width ≥ 4 mm: center + edge-walk (×2) + zig-zag = 4 runs.
+    expect(columnUnderlay(centerline, 4, "standard")).toHaveLength(4);
+  });
+
+  it("heavy weight forces extra tiers a standard column wouldn't get", () => {
+    // At 1.8 mm a standard column is centerline-only; heavy adds edge-walk + zig-zag.
+    expect(columnUnderlay(centerline, 1.8, "standard")).toHaveLength(1);
+    expect(columnUnderlay(centerline, 1.8, "heavy")).toHaveLength(4);
+  });
+});
+
+describe("fill underlay stays inside the region", () => {
+  // A 20×20 mm square (closed ring).
+  const square: Path = [
+    { x: 0, y: 0 },
+    { x: 20, y: 0 },
+    { x: 20, y: 20 },
+    { x: 0, y: 20 },
+    { x: 0, y: 0 },
+  ];
+
+  it("the inset edge run sits strictly inside the outer ring", () => {
+    // Inset ~1 mm, so every penetration must be comfortably inside the 0–20 box.
+    const edge = fillEdgeUnderlay([square]);
+    expect(edge.length).toBeGreaterThan(2);
+    const xs = edge.map((p) => p.x);
+    const ys = edge.map((p) => p.y);
+    expect(Math.min(...xs, ...ys)).toBeGreaterThan(0.2);
+    expect(Math.max(...xs, ...ys)).toBeLessThan(19.8);
+  });
+
+  it("standard fill underlay is edge + one parallel pass; heavy adds another", () => {
+    const std = fillUnderlayRuns([square], 0, "standard");
+    const heavy = fillUnderlayRuns([square], 0, "heavy");
+    expect(std.length).toBe(2);
+    expect(heavy.length).toBe(3);
   });
 });

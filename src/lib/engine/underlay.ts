@@ -1,32 +1,39 @@
 import type { Path } from "../../types/project";
-import { centerlineOf, distance } from "../geometry";
+import {
+  centerlineOf,
+  distance,
+  offsetPolyline,
+  railsFromCenterline,
+  polylineLength,
+} from "../geometry";
+import { signedArea } from "../trace/classify";
 import { runningStitch } from "./running";
 import { resampleByCount } from "./resample";
 import { tatamiFill } from "./fill";
 
 /**
- * Underlay passes. Underlay is the low-density first pass that stabilizes the
- * fabric before the top stitches go down — it's what separates clean output from
- * amateur, puckered output.
+ * Underlay passes — the low-density first stitching that stabilizes the fabric
+ * and gives the top layer loft. Choosing the right underlay for the stitch type
+ * and width (docs/stitch-logic.md §5) is what separates clean output from
+ * amateur, puckered output. Underlay runs FIRST, sits INSET from the edge so it
+ * never peeks past the top, and stays low-density.
  */
 
 /** Stitch length (mm) for underlay running passes. */
 const UNDERLAY_STITCH = 2.5;
-
-/**
- * Row spacing (mm) for the parallel (tatami) underlay pass under a fill. Much
- * wider than a top fill so it only stabilizes the interior — it must never show
- * through the top layer.
- */
+/** Row spacing (mm) for a parallel (tatami) underlay pass under a fill. */
 const FILL_UNDERLAY_ROW = 2.5;
+/** mm the underlay is held inside the shape edge so it hides under the top. */
+const EDGE_INSET = 1.0;
+/** Column width (mm) that earns an edge-walk underlay (two inset rail runs). */
+const SATIN_EDGE_WIDTH = 2;
+/** Column width (mm) that earns a zig-zag underlay. */
+const SATIN_ZIGZAG_WIDTH = 4;
 
-/** Wider satin columns get an extra edge run down each rail for stability. */
-const SATIN_EDGE_RUN_WIDTH = 3;
+/** How heavy the underlay should be (set by fabric, see §8). */
+export type UnderlayWeight = "light" | "standard" | "heavy";
 
-/**
- * Mean width of a satin column (average rail-to-rail gap). Used to decide when a
- * column is wide enough to need an edge run on top of the centerline run.
- */
+/** Mean rail-to-rail width of a satin column. */
 function meanColumnWidth(left: Path, right: Path): number {
   const n = Math.min(left.length, right.length);
   if (n === 0) return 0;
@@ -35,40 +42,117 @@ function meanColumnWidth(left: Path, right: Path): number {
   return sum / n;
 }
 
-/**
- * Fill underlay: two passes that lock the region down before the top tatami.
- *  1. An edge run around the outline so the perimeter cannot creep inward.
- *  2. A low-density parallel (tatami) pass run roughly perpendicular to the top
- *     fill angle, which stops the top rows from sliding along their own
- *     direction and gives them something to bite into.
- *
- * The perpendicular pass uses a wide row spacing so it stays buried under the
- * top layer. `topAngle` is the angle the top fill will be stitched at.
- */
-export function fillUnderlay(rings: Path[], topAngle = 0): Path {
-  return [...fillEdgeUnderlay(rings), ...fillParallelUnderlay(rings, topAngle)];
+/** A coarse zig-zag across a rail pair — a stabilizing underlay for wide columns. */
+function zigzag(left: Path, right: Path, spacing: number): Path {
+  const len = (polylineLength(left) + polylineLength(right)) / 2;
+  const n = Math.max(2, Math.round(len / Math.max(0.5, spacing)) + 1);
+  const l = resampleByCount(left, n);
+  const r = resampleByCount(right, n);
+  const out: Path = [];
+  for (let i = 0; i < n; i++) {
+    if (i % 2 === 0) out.push(l[i], r[i]);
+    else out.push(r[i], l[i]);
+  }
+  return out;
 }
 
 /**
- * Centerline running underlay for a satin stroke. A run straight down the
- * column's center anchors it to the fabric so the top throws sit flat with loft
- * — the standard underlay for satin lettering (better than tracing the glyph's
- * silhouette, which leaves the column interior unsupported).
+ * Underlay for one satin stroke given its centerline and width, returned as
+ * separate runs (the caller jumps between them). Tiered by width and weight:
+ *   light             → centerline run only
+ *   standard, ≥2 mm   → + edge-walk (a run ~1 mm inside each rail)
+ *   ≥4 mm or heavy    → + a zig-zag across the column
+ */
+export function columnUnderlay(
+  centerline: Path,
+  widthMm: number,
+  weight: UnderlayWeight = "standard",
+): Path[] {
+  if (centerline.length < 2) return [];
+  const runs: Path[] = [runningStitch(centerline, UNDERLAY_STITCH)];
+  if (weight === "light") return runs;
+
+  const railWidth = widthMm - 2 * (EDGE_INSET * 0.6); // rails just inside the edges
+  if (railWidth > 0.5 && (widthMm >= SATIN_EDGE_WIDTH || weight === "heavy")) {
+    const [l, r] = railsFromCenterline(centerline, railWidth);
+    runs.push(runningStitch(r, UNDERLAY_STITCH));
+    runs.push(runningStitch([...l].reverse(), UNDERLAY_STITCH));
+  }
+  if (railWidth > 0.5 && (widthMm >= SATIN_ZIGZAG_WIDTH || weight === "heavy")) {
+    const [l, r] = railsFromCenterline(centerline, railWidth);
+    runs.push(zigzag(l, r, UNDERLAY_STITCH));
+  }
+  return runs;
+}
+
+/**
+ * Centerline running underlay for a satin stroke (the lightest tier). Kept for
+ * callers that want a single anchoring run.
  */
 export function centerlineUnderlay(centerline: Path): Path {
   return centerline.length >= 2 ? runningStitch(centerline, UNDERLAY_STITCH) : [];
 }
 
-/** Edge run around the region outline (pass 1 of the fill underlay). */
+/** Inset a closed ring inward by `inset` mm; falls back to the ring if degenerate. */
+function insetRing(outer: Path, inset: number): Path {
+  const closed =
+    outer.length >= 2 &&
+    outer[0].x === outer[outer.length - 1].x &&
+    outer[0].y === outer[outer.length - 1].y
+      ? outer
+      : [...outer, outer[0]];
+  const areaO = Math.abs(signedArea(outer));
+  if (areaO < 1) return closed;
+  // Inward is whichever offset direction shrinks the area.
+  const candidates = [inset, -inset]
+    .map((d) => offsetPolyline(closed, d, true))
+    .filter((c) => c.length >= 3);
+  const shrunk = candidates
+    .filter((c) => {
+      const a = Math.abs(signedArea(c));
+      return a > 1 && a < areaO;
+    })
+    .sort((a, b) => Math.abs(signedArea(b)) - Math.abs(signedArea(a)));
+  return shrunk[0] ?? closed;
+}
+
+/**
+ * Fill underlay: an inset edge run + one (or two, for heavy) low-density parallel
+ * passes the top rows can bite into. Returned as separate runs.
+ */
+export function fillUnderlayRuns(
+  rings: Path[],
+  topAngle = 0,
+  weight: UnderlayWeight = "standard",
+): Path[] {
+  const outer = rings[0];
+  if (!outer || outer.length < 3) return [];
+  const runs: Path[] = [fillEdgeUnderlay(rings)];
+  if (weight !== "light") {
+    runs.push(fillParallelUnderlay(rings, topAngle));
+    if (weight === "heavy") runs.push(fillParallelUnderlay(rings, topAngle + 45));
+  }
+  return runs.filter((r) => r.length >= 2);
+}
+
+/** Legacy combined fill underlay (edge + one parallel) as a single path. */
+export function fillUnderlay(rings: Path[], topAngle = 0): Path {
+  return [...fillEdgeUnderlay(rings), ...fillParallelUnderlay(rings, topAngle)];
+}
+
+/** Edge run around the region, inset ~1 mm so it stays hidden under the top. */
 export function fillEdgeUnderlay(rings: Path[]): Path {
   const outer = rings[0];
   if (!outer || outer.length < 3) return [];
-  // Close the outline so the edge run returns to its start.
-  const closed = [...outer, outer[0]];
+  const inset = insetRing(outer, EDGE_INSET);
+  const closed =
+    inset[0].x === inset[inset.length - 1].x && inset[0].y === inset[inset.length - 1].y
+      ? inset
+      : [...inset, inset[0]];
   return runningStitch(closed, UNDERLAY_STITCH);
 }
 
-/** Low-density parallel pass perpendicular to the top angle (pass 2). */
+/** Low-density parallel pass perpendicular to the top angle. */
 export function fillParallelUnderlay(rings: Path[], topAngle = 0): Path {
   if (!rings[0] || rings[0].length < 3) return [];
   return tatamiFill(rings, {
@@ -79,30 +163,17 @@ export function fillParallelUnderlay(rings: Path[], topAngle = 0): Path {
 }
 
 /**
- * Satin underlay: a centerline running stitch down the column to anchor it so
- * the satin throws sit flat. Wide columns also get an edge run down each rail,
- * because a single centerline cannot hold a broad column's edges from pulling
- * in under the top throws.
+ * Satin underlay for a rail pair, tiered by the column width and fabric weight.
+ * Returns separate runs (centerline, edge-walk, zig-zag as warranted).
  */
-export function satinUnderlay(left: Path, right: Path): Path {
+export function satinUnderlay(
+  left: Path,
+  right: Path,
+  weight: UnderlayWeight = "standard",
+): Path[] {
   if (left.length < 2 || right.length < 2) return [];
-  // Match the rails point-for-point first. `centerlineOf` and the width check
-  // pair rails by index, which is only meaningful when both have the same vertex
-  // count — not guaranteed for edited or imported satin. Resampling both to a
-  // common count keeps the centerline and edge runs aligned to the real column.
   const n = Math.max(left.length, right.length);
   const l = resampleByCount(left, n);
   const r = resampleByCount(right, n);
-
-  const center = centerlineOf(l, r);
-  const out = runningStitch(center, UNDERLAY_STITCH);
-
-  if (meanColumnWidth(l, r) >= SATIN_EDGE_RUN_WIDTH) {
-    // Run up the right rail and back down the left so the pass ends near the
-    // centerline start, keeping travel into the top layer short.
-    out.push(...runningStitch(r, UNDERLAY_STITCH));
-    out.push(...runningStitch([...l].reverse(), UNDERLAY_STITCH));
-  }
-
-  return out;
+  return columnUnderlay(centerlineOf(l, r), meanColumnWidth(l, r), weight);
 }

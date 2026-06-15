@@ -1,5 +1,5 @@
 import type { EmbObject, Project } from "../types/project";
-import { polygonArea, polygonPerimeter } from "./trace/classify";
+import { classifyRegion } from "./engine/classify";
 
 /**
  * "Fix stitches": a smart auto-cleanup pass over a design. It walks an explicit
@@ -18,14 +18,6 @@ import { polygonArea, polygonPerimeter } from "./trace/classify";
  */
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
-/** Mean width of a shape (2·area / perimeter) — small means a thin stroke. */
-function meanWidthMm(object: EmbObject): number {
-  const outer = object.paths[0] ?? [];
-  if (outer.length < 3) return 0;
-  const per = polygonPerimeter(outer);
-  return per > 0 ? (2 * polygonArea(outer)) / per : 0;
-}
-
 /** Width (mm) below which a fill reads as a stroke and should be satin. */
 export const SATIN_WIDTH_THRESHOLD = 3.5;
 
@@ -42,10 +34,11 @@ export function fixObjectStitches(object: EmbObject): EmbObject {
     // fill
     params.density = clamp(params.density ?? 0.4, 0.35, 0.5);
     params.underlay = params.underlay ?? true;
-    // Smart type: lettering and thin strokes → satin; broad areas → tatami.
-    const width = meanWidthMm(object);
-    params.fillStyle =
-      object.text || (width > 0 && width < SATIN_WIDTH_THRESHOLD) ? "satin" : "tatami";
+    // Smart type (holes-aware): text and strokes — including rings like "o" —
+    // become satin (the engine renders very-thin columns as running and falls
+    // back to tatami where satin won't cover); broad areas stay tatami.
+    const kind = classifyRegion(object.paths, { satinMaxWidthMm: SATIN_WIDTH_THRESHOLD });
+    params.fillStyle = object.text || kind !== "tatami" ? "satin" : "tatami";
   }
 
   return { ...object, params };
