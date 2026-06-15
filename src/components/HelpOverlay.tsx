@@ -53,7 +53,7 @@ export default function HelpOverlay({ onClose }: { onClose: () => void }) {
         aria-modal="true"
         tabIndex={-1}
         aria-label="Keyboard shortcuts"
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border border-navy/20 bg-cream p-5 shadow-2xl outline-none"
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-5 shadow-press outline-none"
       >
         <h2 className="mb-4 font-label uppercase tracking-[0.08em] text-lg font-semibold text-navy">
           🧈 Keyboard shortcuts

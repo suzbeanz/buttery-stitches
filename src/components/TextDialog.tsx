@@ -158,7 +158,7 @@ export default function TextDialog({
         aria-modal="true"
         tabIndex={-1}
         aria-label={editObject ? "Edit text" : "Add text"}
-        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border border-navy/20 bg-cream p-4 shadow-2xl outline-none"
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-4 shadow-press outline-none"
       >
         <h2 className="mb-3 font-label uppercase tracking-[0.08em] text-lg font-semibold text-navy">
           {editObject ? "Edit text" : "Add text"}
@@ -290,14 +290,14 @@ export default function TextDialog({
         <div className="mt-4 flex justify-end gap-2">
           <button
             onClick={onClose}
-            className="rounded px-3 py-1.5 text-sm text-navy hover:bg-butter-200"
+            className="rounded-sm border-2 border-ink px-4 py-2 font-label text-xs font-semibold uppercase tracking-wide text-ink hover:bg-butter-200"
           >
             Cancel
           </button>
           <button
             onClick={add}
             disabled={!font || !layout || layout.object.paths.length === 0}
-            className="rounded bg-navy px-3 py-1.5 text-sm text-butter-200 hover:bg-navy-light disabled:opacity-50"
+            className="rounded-sm border-2 border-ink bg-ink px-4 py-2 font-label text-xs font-semibold uppercase tracking-wide text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none disabled:opacity-50"
           >
             {editObject ? "Update text" : "Add text"}
           </button>

@@ -58,9 +58,9 @@ export default function SimulatorBar() {
   const shown = Math.min(Math.floor(simIndex), simTotal);
 
   return (
-    <div className="flex flex-wrap items-center gap-3 border-t border-navy/25 bg-butter-100 px-3 py-1.5">
+    <div className="flex flex-wrap items-center gap-3 border-t-2 border-ink/20 bg-cream px-3 py-1.5">
       {/* Edit / Stitch view toggle */}
-      <div className="flex overflow-hidden rounded-lg border border-navy/20 text-xs">
+      <div className="flex overflow-hidden rounded-sm border-2 border-ink text-xs">
         {([
           { m: "edit" as const, label: "Edit", Icon: Pencil },
           { m: "stitch" as const, label: "Stitch view", Icon: Eye },
@@ -72,10 +72,10 @@ export default function SimulatorBar() {
             data-tip-side="top"
             aria-label={label}
             aria-pressed={viewMode === m}
-            className={`flex items-center gap-1 px-2.5 py-1 ${
+            className={`flex items-center gap-1 px-2.5 py-1 font-label font-semibold uppercase tracking-wide ${
               viewMode === m
-                ? "bg-navy text-butter-200"
-                : "bg-butter-50 text-navy hover:bg-butter-200"
+                ? "bg-ink text-cream"
+                : "bg-cream text-ink hover:bg-butter-200"
             }`}
           >
             <Icon size={14} />
@@ -92,7 +92,7 @@ export default function SimulatorBar() {
             data-tip={simPlaying ? "Pause" : "Play"}
             data-tip-side="top"
             aria-label={simPlaying ? "Pause" : "Play"}
-            className="grid h-8 w-8 place-items-center rounded-lg bg-navy text-butter-200 hover:bg-navy-light disabled:opacity-40"
+            className="grid h-8 w-8 place-items-center rounded-sm border-2 border-ink bg-ink text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none disabled:opacity-40"
           >
             {simPlaying ? <Pause size={16} /> : <Play size={16} />}
           </button>
