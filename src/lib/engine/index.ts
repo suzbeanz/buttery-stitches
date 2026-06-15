@@ -123,9 +123,13 @@ export function generateObjectRuns(object: EmbObject): StitchRun[] {
   const travelMax = satin ? 8 : 6;
   for (const region of splitFillRegions(object.paths)) {
     if (p.underlay) {
+      // Edge run for both; a perpendicular tatami pass only under tatami fills
+      // (it would show as wrong hatching beneath satin lettering).
       addRun(runs, dropShortStitches(fillEdgeUnderlay(region)), true);
-      for (const sub of splitLongTravels(fillParallelUnderlay(region, p.angle), travelMax)) {
-        addRun(runs, dropShortStitches(sub), true);
+      if (!satin) {
+        for (const sub of splitLongTravels(fillParallelUnderlay(region, p.angle), travelMax)) {
+          addRun(runs, dropShortStitches(sub), true);
+        }
       }
     }
 
