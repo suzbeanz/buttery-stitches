@@ -863,28 +863,36 @@ function StitchView({
   const upTo = useEditorStore((s) => s.simIndex);
   const segs = useMemo(() => designToSegments(design, upTo), [design, upTo]);
   const needle = useMemo(() => needleAt(design, upTo), [design, upTo]);
-  // Render each stitch at the real thread thickness (~0.4 mm) so a dense fill or
-  // satin reads as solid coverage — threads touch — instead of separate hairline
-  // "scanlines". Clamped so it stays sensible at any zoom.
+  // Render the whole preview as ONE custom canvas Shape rather than hundreds of
+  // <Line> nodes: during playback simIndex changes every frame, and reconciling
+  // hundreds of Konva nodes per frame is both slow and fragile (it was crashing
+  // the canvas). Drawing straight to the context is fast and rock-solid. Each
+  // stitch is stroked at the real thread thickness (~0.4 mm) so a dense fill or
+  // satin reads as solid coverage instead of separate hairline "scanlines".
   const mmPx = px(1) - px(0);
   const threadPx = Math.min(4, Math.max(1.4, mmPx * 0.42));
   return (
     <Group listening={false}>
-      {segs.map((seg, i) => {
-        const c = colorById.get(seg.colorId);
-        const stroke = c ? `rgb(${c.rgb.join(",")})` : "#888";
-        return (
-          <Line
-            key={i}
-            points={seg.points.flatMap((p) => [px(p.x), py(p.y)])}
-            stroke={stroke}
-            strokeWidth={seg.underlay ? 0.6 : threadPx}
-            opacity={seg.underlay ? 0.4 : 0.95}
-            lineCap="round"
-            lineJoin="round"
-          />
-        );
-      })}
+      <Shape
+        sceneFunc={(ctx) => {
+          for (const seg of segs) {
+            if (seg.points.length === 0) continue;
+            const c = colorById.get(seg.colorId);
+            ctx.beginPath();
+            ctx.moveTo(px(seg.points[0].x), py(seg.points[0].y));
+            for (let i = 1; i < seg.points.length; i++) {
+              ctx.lineTo(px(seg.points[i].x), py(seg.points[i].y));
+            }
+            ctx.setAttr("strokeStyle", c ? `rgb(${c.rgb.join(",")})` : "#888");
+            ctx.setAttr("lineWidth", seg.underlay ? 0.6 : threadPx);
+            ctx.setAttr("lineCap", "round");
+            ctx.setAttr("lineJoin", "round");
+            ctx.setAttr("globalAlpha", seg.underlay ? 0.4 : 0.95);
+            ctx.stroke();
+          }
+          ctx.setAttr("globalAlpha", 1);
+        }}
+      />
       {needle && (
         <Circle
           x={px(needle.x)}
