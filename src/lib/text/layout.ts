@@ -225,8 +225,10 @@ export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
   );
 
   const object = makeObjectFromPaths("fill", rings, colorId, name ?? "Text");
-  // Lettering stitches as a clean tatami fill by default — reliable and solid for
-  // every font. (Auto-satin that follows each stroke is still being perfected;
-  // forcing it produced broken stitches on real letters.)
+  // Lettering asks for satin: the engine lays a satin column down each stroke's
+  // medial axis (shiny, follows curves) wherever it covers the glyph cleanly,
+  // and automatically falls back to a solid tatami fill on shapes whose skeleton
+  // is poor — so text is never broken, just as crisp as the letter allows.
+  object.params = { ...object.params, fillStyle: "satin" };
   return { object, widthMm: penX * scale };
 }

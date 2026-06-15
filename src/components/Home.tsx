@@ -1,139 +1,91 @@
-import { Image as ImageIcon, Type, Pencil, Eye, Download, Wand2 } from "lucide-react";
+import { Image as ImageIcon, Type, Eye } from "lucide-react";
 import Footer from "./Footer";
 
 /**
- * Marketing homepage shown in front of the editor. Plain language, big targets,
- * and a clear path to "Start stitching" so a first-timer — including someone who
- * has never touched digitizing software — knows exactly what this is and how to
- * begin. Lean butter-and-navy branding, no jargon.
+ * Marketing homepage — modern, compact, and confident. One punchy hero, a tight
+ * three-up of what it does, a one-line how-it-works, then the footer. Lean
+ * butter-and-navy branding; plain language so a first-timer gets it instantly.
  */
 export default function Home({ onStart }: { onStart: () => void }) {
   return (
-    <div className="h-full overflow-y-auto bg-cream text-navy">
+    <div className="flex h-full flex-col overflow-y-auto bg-navy text-cream">
       {/* Hero */}
-      <header className="mx-auto max-w-3xl px-6 pt-16 pb-12 text-center sm:pt-24">
-        <div className="mb-4 text-5xl" aria-hidden>
-          🧈
-        </div>
-        <h1 className="wordmark text-4xl font-semibold text-navy sm:text-6xl">
-          Buttery Stitches
-        </h1>
-        <p className="mx-auto mt-4 max-w-xl text-lg text-navy/70 sm:text-xl">
-          Turn your pictures and words into machine-embroidery stitch files —
-          free, in your browser. The power of pricey digitizing software, made
-          for everyone.
-        </p>
-        <button
-          onClick={onStart}
-          className="mt-8 inline-flex items-center gap-2 rounded-full bg-navy px-8 py-4 text-lg font-semibold text-butter-200 shadow-butter transition-colors hover:bg-navy-light"
-        >
-          Start stitching 🧈
-        </button>
-        <p className="mt-3 text-sm text-navy/45">
-          No sign-up, no download. Your work stays on your computer.
-        </p>
-      </header>
+      <header className="relative isolate overflow-hidden">
+        {/* warm glow */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 -z-10"
+          style={{
+            background:
+              "radial-gradient(900px 480px at 50% -10%, rgba(249,233,166,0.28), transparent 60%)",
+          }}
+        />
+        <div className="mx-auto flex max-w-4xl flex-col items-center px-6 pt-20 pb-14 text-center sm:pt-28">
+          <span className="mb-6 inline-flex items-center gap-2 rounded-full border border-butter-200/25 bg-butter-200/10 px-4 py-1.5 text-xs font-medium text-butter-200">
+            🧈 Free · open source · runs in your browser
+          </span>
+          <h1 className="wordmark text-5xl font-semibold leading-[1.05] text-butter-200 sm:text-7xl">
+            Buttery Stitches
+          </h1>
+          <p className="mt-5 max-w-xl text-lg text-cream/75 sm:text-2xl">
+            Turn your pictures and words into machine-embroidery files —
+            pro-grade digitizing, made for everyone.
+          </p>
+          <button
+            onClick={onStart}
+            className="mt-9 inline-flex items-center gap-2 rounded-full bg-butter-200 px-9 py-4 text-lg font-semibold text-navy shadow-butter transition-transform hover:scale-[1.03]"
+          >
+            Start stitching 🧈
+          </button>
+          <p className="mt-3 text-sm text-cream/45">
+            No sign-up. Your work never leaves your computer.
+          </p>
 
-      {/* What it does */}
-      <section className="mx-auto max-w-5xl px-6 py-12">
-        <h2 className="text-center font-butter text-2xl font-semibold sm:text-3xl">
-          What Buttery Stitches does
-        </h2>
-        <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Feature
-            Icon={ImageIcon}
-            title="Turn a picture into stitches"
-            body="Drop in a logo or piece of line art and it becomes clean, machine-ready stitches automatically."
-          />
-          <Feature
-            Icon={Type}
-            title="Add words"
-            body="Stitch a name or message with curated fonts and crisp lettering — satin or solid fill."
-          />
-          <Feature
-            Icon={Pencil}
-            title="Edit like a pro"
-            body="Premade shapes, draggable points, layers, snapping, and undo — without the steep learning curve."
-          />
-          <Feature
-            Icon={Wand2}
-            title="Clean, deliberate stitching"
-            body="Underlay, tie-offs, and safe stitch lengths follow embroidery best practices, so designs sew reliably."
-          />
-          <Feature
-            Icon={Eye}
-            title="Preview in the hoop"
-            body="See your design inside a real hoop on your fabric color, and watch it redraw stitch by stitch."
-          />
-          <Feature
-            Icon={Download}
-            title="Export to your machine"
-            body="Save to PES, DST, JEF, EXP, or VP3 — the formats home and commercial machines use."
-          />
-        </div>
-      </section>
-
-      {/* How to use it */}
-      <section className="bg-butter-50 py-14">
-        <div className="mx-auto max-w-3xl px-6">
-          <h2 className="text-center font-butter text-2xl font-semibold sm:text-3xl">
-            How to use it
-          </h2>
-          <ol className="mt-8 space-y-5">
-            <Step
-              n={1}
-              title="Start with a picture, words, or a shape"
-              body="Pick how you want to begin from the welcome screen — upload an image, type some text, or draw."
+          {/* three-up: what it does */}
+          <div className="mt-16 grid w-full grid-cols-1 gap-3 text-left sm:grid-cols-3">
+            <Card
+              Icon={ImageIcon}
+              title="Picture → stitches"
+              body="Drop in a logo or line art and get clean, machine-ready stitches."
             />
-            <Step
-              n={2}
-              title="Let it become stitches"
-              body="Buttery Stitches converts your art into clean stitches and tidies them up using embroidery best practices."
+            <Card
+              Icon={Type}
+              title="Add words"
+              body="Stitch a name or message with curated fonts and crisp lettering."
             />
-            <Step
-              n={3}
-              title="Make it yours"
-              body="Adjust colors, size, and stitch style. Add a satin outline, nudge points, and reorder layers."
+            <Card
+              Icon={Eye}
+              title="Preview & export"
+              body="See it in the hoop, then save to PES, DST, JEF, EXP, or VP3."
             />
-            <Step
-              n={4}
-              title="Preview, then export"
-              body="Check it inside the hoop, watch it stitch, then export the file your embroidery machine reads."
-            />
-          </ol>
-          <div className="mt-10 text-center">
-            <button
-              onClick={onStart}
-              className="inline-flex items-center gap-2 rounded-full bg-navy px-8 py-4 text-lg font-semibold text-butter-200 shadow-butter transition-colors hover:bg-navy-light"
-            >
-              Start stitching 🧈
-            </button>
           </div>
         </div>
+      </header>
+
+      {/* how it works — one compact line */}
+      <section className="border-t border-cream/10 bg-navy-dark/40 py-10">
+        <div className="mx-auto flex max-w-4xl flex-col gap-6 px-6 sm:flex-row sm:items-start sm:justify-between">
+          <Step n={1} title="Start" body="Upload a picture, type words, or draw." />
+          <Step n={2} title="Stitch" body="It auto-converts using best practices." />
+          <Step n={3} title="Refine" body="Tweak color, size, and stitch style." />
+          <Step n={4} title="Export" body="Send the file to your machine." />
+        </div>
       </section>
 
-      {/* About */}
-      <section className="mx-auto max-w-3xl px-6 py-14 text-center">
-        <h2 className="font-butter text-2xl font-semibold sm:text-3xl">About</h2>
-        <p className="mx-auto mt-5 max-w-2xl text-navy/70">
-          Professional digitizing software can cost hundreds of dollars, which
-          puts it out of reach for a lot of makers. Buttery Stitches is a free,
-          open-source alternative that runs entirely in your browser — nothing to
-          install, nothing uploaded to a server. It's built to be genuinely easy:
-          if you can type a word or open a picture, you can make something you're
-          proud to stitch.
-        </p>
-        <p className="mx-auto mt-4 max-w-2xl text-navy/70">
-          It's named, with love, after a very good girl named Butters.
-        </p>
-      </section>
+      <div className="mx-auto max-w-2xl px-6 py-10 text-center text-sm text-cream/55">
+        Pro digitizing software can cost hundreds of dollars. Buttery Stitches is
+        a free, open-source alternative that runs entirely in your browser —
+        named, with love, after a very good girl called Butters.
+      </div>
 
-      <Footer />
+      <div className="mt-auto bg-cream text-navy">
+        <Footer />
+      </div>
     </div>
   );
 }
 
-function Feature({
+function Card({
   Icon,
   title,
   body,
@@ -143,26 +95,26 @@ function Feature({
   body: string;
 }) {
   return (
-    <div className="rounded-2xl border border-navy/10 bg-white p-5 shadow-card">
-      <div className="grid h-11 w-11 place-items-center rounded-xl bg-butter-100 text-navy">
-        <Icon size={22} />
+    <div className="rounded-2xl border border-cream/10 bg-cream/[0.04] p-5 backdrop-blur-sm">
+      <div className="grid h-10 w-10 place-items-center rounded-xl bg-butter-200 text-navy">
+        <Icon size={20} />
       </div>
-      <h3 className="mt-3 text-lg font-semibold">{title}</h3>
-      <p className="mt-1 text-sm text-navy/65">{body}</p>
+      <h3 className="mt-3 font-semibold text-cream">{title}</h3>
+      <p className="mt-1 text-sm text-cream/60">{body}</p>
     </div>
   );
 }
 
 function Step({ n, title, body }: { n: number; title: string; body: string }) {
   return (
-    <li className="flex gap-4">
-      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-navy text-base font-semibold text-butter-200">
+    <div className="flex items-start gap-3">
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-butter-200 text-sm font-bold text-navy">
         {n}
       </span>
       <div>
-        <h3 className="text-lg font-semibold">{title}</h3>
-        <p className="mt-0.5 text-navy/65">{body}</p>
+        <div className="font-semibold text-butter-200">{title}</div>
+        <div className="text-sm text-cream/60">{body}</div>
       </div>
-    </li>
+    </div>
   );
 }

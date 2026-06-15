@@ -29,6 +29,8 @@ import { makeObjectFromPaths } from "../lib/objects";
 import { buildOutline, DEFAULT_OUTLINE_WIDTH } from "../lib/outline";
 import { fixStitches } from "../lib/fix";
 import { generateDesign, type EngineStitch } from "../lib/engine";
+import { splitFillRegions } from "../lib/engine/fill";
+import { medialSatin, satinCoverage } from "../lib/engine/medial";
 import { planFromProject, planStitchCount } from "../lib/export";
 import { translatePaths, pathsBounds } from "../lib/geometry";
 import { createEmptyProject } from "../lib/project";
@@ -197,10 +199,21 @@ describe("journey: every bundled font must stitch cleanly", () => {
       const cId = colorId();
       const obj = placeText(font, "Buttery", 16, cId);
       expect(obj.paths.length).toBeGreaterThan(0);
+      // Lettering must default to satin (follows the stroke).
+      expect(obj.params?.fillStyle).toBe("satin");
       useProjectStore.getState().addObject(obj);
       expectSewable(useProjectStore.getState().project);
     });
   }
+
+  it("rounded glyphs stitch as satin strokes that cover the letter", () => {
+    const font = loadTtf(FONT_FILE.poppins);
+    const { object } = layoutText({ text: "o", font, heightMm: 16, colorId: "c1" });
+    const region = splitFillRegions(object.paths)[0];
+    const runs = medialSatin(region, { density: 0.4 });
+    expect(runs.length).toBeGreaterThanOrEqual(1);
+    expect(satinCoverage(region, runs)).toBeGreaterThan(0.85);
+  });
 });
 
 describe("journey: drop a shape → add a satin outline → export", () => {

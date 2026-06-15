@@ -188,28 +188,72 @@ function traceSkeleton(skel: Uint8Array, w: number, h: number): [number, number]
 }
 
 /** Unit normal at point i of a centerline (average of adjacent segment normals). */
-function normalAt(line: Point[], i: number): Point {
-  const prev = i > 0 ? line[i - 1] : line[i];
-  const next = i < line.length - 1 ? line[i + 1] : line[i];
+function normalAt(line: Point[], i: number, closed: boolean): Point {
+  const n = line.length;
+  const prev = closed ? line[(i - 1 + n) % n] : line[i > 0 ? i - 1 : i];
+  const next = closed ? line[(i + 1) % n] : line[i < n - 1 ? i + 1 : i];
   const dx = next.x - prev.x;
   const dy = next.y - prev.y;
   const len = Math.hypot(dx, dy) || 1;
   return { x: -dy / len, y: dx / len };
 }
 
+/** Half-width (mm) sampled from the distance transform at a millimeter point. */
+function halfWidthAtMm(dt: Float32Array, g: Grid, x: number, y: number): number {
+  const gx = Math.round((x - g.ox) / g.cellMm);
+  const gy = Math.round((y - g.oy) / g.cellMm);
+  if (gx < 0 || gy < 0 || gx >= g.w || gy >= g.h) return g.cellMm;
+  return Math.max(g.cellMm, dt[gy * g.w + gx] * g.cellMm);
+}
+
+/** Light moving-average smoothing of a width profile (keeps the column even). */
+function smoothWidths(halves: number[], closed: boolean): number[] {
+  const n = halves.length;
+  const out = new Array<number>(n);
+  for (let i = 0; i < n; i++) {
+    let sum = 0;
+    let count = 0;
+    for (let k = -2; k <= 2; k++) {
+      const j = closed ? (i + k + n) % n : i + k;
+      if (j < 0 || j >= n) continue;
+      sum += halves[j];
+      count++;
+    }
+    out[i] = sum / count;
+  }
+  return out;
+}
+
+/** A skeleton branch is a closed loop (o, e-counter, …) if its ends meet. */
+function isLoop(branch: [number, number][]): boolean {
+  if (branch.length < 8) return false;
+  const [ax, ay] = branch[0];
+  const [bx, by] = branch[branch.length - 1];
+  return Math.max(Math.abs(ax - bx), Math.abs(ay - by)) <= 1.6;
+}
+
 export interface MedialOptions {
   density: number;
-  /** grid cell size in mm (default 0.5). */
+  /** grid cell size in mm (default 0.4). */
   cellMm?: number;
 }
 
 /**
+ * mm a rail is pushed past the sampled stroke edge so the satin fully covers the
+ * boundary instead of leaving a thin gap where the distance transform rounds in.
+ */
+const OVERSHOOT_MM = 0.2;
+
+/**
  * Build satin columns down the medial axis of a fill region. Returns one run of
- * penetrations per skeleton branch, or `[]` if the region is too small/degenerate
- * to skeletonize (the caller then falls back to a column fill).
+ * penetrations per skeleton branch, following each stroke's centerline with a
+ * width that tracks the real stroke (so serifs and tapers stay covered). Closed
+ * loops (the ring of an o, the bowl of an e) are stitched all the way around.
+ * Returns `[]` if the region is too small/degenerate to skeletonize (the caller
+ * then falls back to a reliable fill).
  */
 export function medialSatin(rings: Path[], opts: MedialOptions): Path[] {
-  const cellMm = opts.cellMm ?? 0.5;
+  const cellMm = opts.cellMm ?? 0.4;
   const oriented = orientByDepth(rings);
   const grid = rasterize(oriented, cellMm);
   if (!grid) return [];
@@ -221,34 +265,83 @@ export function medialSatin(rings: Path[], opts: MedialOptions): Path[] {
   const runs: Path[] = [];
   for (const branch of branches) {
     if (branch.length < 2) continue;
+    const loop = isLoop(branch);
     // Raw centerline in mm from the skeleton cells.
     const raw: Point[] = branch.map(([gx, gy]) => ({
       x: grid.ox + gx * cellMm,
       y: grid.oy + gy * cellMm,
     }));
-    // Prune thinning spurs — tiny branches that aren't real strokes.
-    if (polylineLength(raw) < 1.5) continue;
+    if (loop) raw.push({ ...raw[0] }); // close the ring
 
-    // Consistent column width: the median half-width along the branch, so the
-    // satin reads as an even, deliberate column instead of wobbling per pixel.
-    const halves = branch
-      .map(([gx, gy]) => Math.max(cellMm, dt[gy * grid.w + gx] * cellMm))
-      .sort((a, b) => a - b);
-    const half = halves[halves.length >> 1];
+    // Prune thinning spurs — tiny branches that aren't real strokes.
+    if (polylineLength(raw) < 1.4) continue;
 
     // Clean the centerline: drop the pixel staircase, then smooth it.
     const center = smoothPath(douglasPeucker(raw, cellMm * 1.2), { maxSegmentMm: 0.8 });
     if (center.length < 2) continue;
 
+    // Width that follows the true stroke (median would overflow tapers), pushed
+    // out a touch so the satin reaches the edge.
+    const halves = smoothWidths(
+      center.map((p) => halfWidthAtMm(dt, grid, p.x, p.y) + OVERSHOOT_MM),
+      loop,
+    );
+
     const left: Point[] = [];
     const right: Point[] = [];
     for (let i = 0; i < center.length; i++) {
-      const n = normalAt(center, i);
-      left.push({ x: center[i].x + n.x * half, y: center[i].y + n.y * half });
-      right.push({ x: center[i].x - n.x * half, y: center[i].y - n.y * half });
+      const nrm = normalAt(center, i, loop);
+      const half = halves[i];
+      left.push({ x: center[i].x + nrm.x * half, y: center[i].y + nrm.y * half });
+      right.push({ x: center[i].x - nrm.x * half, y: center[i].y - nrm.y * half });
     }
     const pts = satinColumn(left, right, { density: opts.density, pullComp: 0 });
     if (pts.length >= 2) runs.push(pts);
   }
   return runs;
+}
+
+/**
+ * Fraction of the region actually covered by a set of stitch runs (0..1). We
+ * rasterize the region, then mark every cell a stitch segment passes through (and
+ * its neighbors). A well-formed satin covers nearly all of the glyph; a broken
+ * one — a missing branch, a column that wandered off — leaves big gaps, which is
+ * exactly when the engine should fall back to a plain fill.
+ */
+export function satinCoverage(rings: Path[], runs: Path[], cellMm = 0.5): number {
+  const oriented = orientByDepth(rings);
+  const grid = rasterize(oriented, cellMm);
+  if (!grid) return 0;
+  const { w, h, ox, oy, cells } = grid;
+
+  let total = 0;
+  for (let i = 0; i < cells.length; i++) if (cells[i]) total++;
+  if (total === 0) return 0;
+
+  const covered = new Uint8Array(w * h);
+  const mark = (x: number, y: number) => {
+    const gx = Math.round((x - ox) / cellMm);
+    const gy = Math.round((y - oy) / cellMm);
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -1; dx <= 1; dx++) {
+        const cx = gx + dx;
+        const cy = gy + dy;
+        if (cx >= 0 && cy >= 0 && cx < w && cy < h) covered[cy * w + cx] = 1;
+      }
+  };
+
+  for (const run of runs) {
+    for (let i = 1; i < run.length; i++) {
+      const a = run[i - 1];
+      const b = run[i];
+      const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / (cellMm * 0.75)));
+      for (let s = 0; s <= steps; s++) {
+        mark(a.x + ((b.x - a.x) * s) / steps, a.y + ((b.y - a.y) * s) / steps);
+      }
+    }
+  }
+
+  let hit = 0;
+  for (let i = 0; i < cells.length; i++) if (cells[i] && covered[i]) hit++;
+  return hit / total;
 }

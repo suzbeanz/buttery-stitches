@@ -54,13 +54,15 @@ the living audit/polish list: check items off as they land.
 ## Jot-down (2026-06-15) — to do next
 - [x] Clicking an add/edit action (Use a picture, Add words, Add shape, edit
       text) now switches the user from Stitch view back to Edit view.
-- [ ] LETTERING IS HORRIBLE (top priority, user-reported with "Goose" example):
-      the default tatami fill stitches letters as plain HORIZONTAL scanlines —
-      amateur, ribbed, and ugly on round/curved glyphs, with stray serpentine
-      connectors showing. Lettering must be proper SATIN that follows each
-      stroke's centerline (the disabled medial-axis path), or at minimum the
-      fill angle should follow the stroke — not a flat 0° hatch across the whole
-      word. This is the #1 quality gap.
+- [x] LETTERING (was: horrible flat tatami): lettering now defaults to SATIN
+      that follows each stroke's medial axis — rebuilt medial.ts with
+      variable stroke width, closed-loop handling (o/e/a/d counters stitch all
+      the way around), and edge overshoot. The engine measures coverage and only
+      ships satin when it actually fills the glyph (>=82%), otherwise falls back
+      to a solid tatami fill, so text is never broken. Verified: all 8 fonts
+      sewable; "Goose" exports to all 5 formats with longest stitch 6.75mm.
+      Follow-ups: improve the medial skeleton on S-curves and serifs so fewer
+      regions fall back to tatami (the "s" and serif stems currently do).
 - [x] Extend the butter-stick rulers in BOTH directions (positive and negative):
       rulers now run the full canvas with 0 on the hoop origin, and the bright
       butter band + edge markers show exactly where the usable hoop area (the
