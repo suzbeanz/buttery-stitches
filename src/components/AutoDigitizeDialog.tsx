@@ -3,6 +3,7 @@ import type { Hoop, Project } from "../types/project";
 import { loadImageData } from "../lib/image";
 import { imageDataToObjects, estimateColorComplexity } from "../lib/trace";
 import { fixStitches } from "../lib/fix";
+import { useEscapeToClose } from "./useEscapeToClose";
 
 /**
  * Auto-digitize dialog: preview the image, choose the color count and a couple
@@ -31,6 +32,7 @@ export default function AutoDigitizeDialog({
   const [removeBackground, setRemoveBackground] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useEscapeToClose(onClose);
 
   const previewUrl = useMemo(() => URL.createObjectURL(file), [file]);
   useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
@@ -100,14 +102,18 @@ export default function AutoDigitizeDialog({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 p-4"
-      onClick={onClose}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Turn a picture into stitches"
         className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border border-navy/20 bg-cream p-4 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
       >
         <h2 className="mb-3 font-butter text-lg font-semibold text-navy">
-          Auto-digitize image
+          Turn a picture into stitches
         </h2>
 
         <div className="mb-3 flex justify-center rounded border border-navy/10 bg-[repeating-conic-gradient(#eee_0_25%,#fff_0_50%)] bg-[length:16px_16px] p-2">

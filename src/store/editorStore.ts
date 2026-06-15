@@ -45,6 +45,8 @@ interface EditorState {
   propertiesOpen: boolean;
   /** id of the text object being re-edited (double-click), or null. */
   editingTextId: string | null;
+  /** a quick-start action requested from the empty-state guide. */
+  pendingStart: "image" | "text" | null;
 
   // ---- preview / stitch simulator ----
   viewMode: ViewMode;
@@ -70,6 +72,7 @@ interface EditorState {
   toggleLayers: () => void;
   toggleProperties: () => void;
   setEditingTextId: (id: string | null) => void;
+  setPendingStart: (v: "image" | "text" | null) => void;
 
   setViewMode: (mode: ViewMode) => void;
   setSimTotal: (total: number) => void;
@@ -89,6 +92,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   layersOpen: true,
   propertiesOpen: true,
   editingTextId: null,
+  pendingStart: null,
 
   viewMode: "edit",
   simTotal: 0,
@@ -110,6 +114,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   toggleLayers: () => set((s) => ({ layersOpen: !s.layersOpen })),
   toggleProperties: () => set((s) => ({ propertiesOpen: !s.propertiesOpen })),
   setEditingTextId: (editingTextId) => set({ editingTextId }),
+  setPendingStart: (pendingStart) => set({ pendingStart }),
 
   setViewMode: (viewMode) =>
     set((s) => ({
