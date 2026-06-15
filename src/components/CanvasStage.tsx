@@ -54,13 +54,13 @@ const HOOP_BAND = 14; // px thickness of the hoop frame in the mockup
 const HOOP_MARGIN = 18; // px of fabric/plastic between the stitch field and the frame opening
 
 const C = {
-  cream: "#F3E8BC", // wrapper-cream paper, the canvas surround
+  cream: "#F6EFCB", // wrapper-cream paper, the canvas surround
   fabric: "#ECE8DE", // soft neutral "fabric" so light thread colors stay visible
-  butter: "#F8F1CF", // churned-cream band for the in-canvas rulers
-  butterDeep: "#E7CF7A",
-  navy: "#20305F", // press navy
-  navySoft: "#2E4173",
-  salted: "#A5402C", // stamp red accent
+  butter: "#F1DE8B", // churned-butter band for the in-canvas rulers
+  butterDeep: "#E7CC63",
+  navy: "#173A7A", // press blue ink
+  navySoft: "#2E4F8C",
+  salted: "#B23A2E", // stamp red accent
 };
 
 export default function CanvasStage() {
@@ -682,7 +682,7 @@ export default function CanvasStage() {
         </div>
       )}
 
-      <div className="pointer-events-none absolute bottom-2 right-3 rounded bg-navy/80 px-2 py-0.5 text-[11px] text-butter-100">
+      <div className="pointer-events-none absolute bottom-2 right-3 rounded-sm bg-navy/85 px-2 py-0.5 font-mono text-[11px] tracking-wide text-butter-100">
         {rulerUnit === "inch"
           ? `${mmToInch(project.widthMm).toFixed(2)} × ${mmToInch(project.heightMm).toFixed(2)} in`
           : `${project.widthMm.toFixed(0)} × ${project.heightMm.toFixed(0)} mm`}

@@ -110,7 +110,7 @@ export default function SimulatorBar() {
             aria-label="Scrub stitches"
           />
 
-          <span className="w-28 text-right text-xs tabular-nums text-navy/70">
+          <span className="w-28 text-right font-mono text-xs tabular-nums text-navy/70">
             {shown.toLocaleString()} / {simTotal.toLocaleString()}
           </span>
 

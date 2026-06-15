@@ -30,6 +30,7 @@ import { fixStitches } from "../lib/fix";
 import { makeShapeObject, type ShapeKind } from "../lib/shapes";
 import type { Project } from "../types/project";
 import ExportMenu from "./ExportMenu";
+import GradeStamp from "./GradeStamp";
 
 /** Shapes offered in the insert menu, with their icon and default params. */
 const SHAPES: { kind: ShapeKind; label: string; Icon: LucideIcon }[] = [
@@ -195,11 +196,11 @@ export default function TopBar({
         data-tip="Home"
         data-tip-side="bottom"
         aria-label="Home"
-        className="mx-2 flex select-none items-baseline gap-1.5 rounded px-1 hover:opacity-80"
+        className="mx-1.5 flex select-none items-center gap-2 rounded px-1 hover:opacity-80"
       >
-        <span aria-hidden className="text-lg">🧈</span>
-        <span className="wordmark hidden text-lg text-butter-200 sm:inline">
-          Buttery Stitches
+        <GradeStamp size={26} rotate={-7} className="text-butter-200" />
+        <span className="wordmark hidden text-xl uppercase leading-none text-butter-200 sm:inline">
+          Buttery&nbsp;Stitches
         </span>
       </button>
 
