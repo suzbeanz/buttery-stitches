@@ -4,40 +4,48 @@ export default {
   theme: {
     extend: {
       colors: {
-        // 🧈 Butter palette — warm, creamy yellows.
+        // Butter-wrapper inks (Edition 01). Flat colors, printed on cream stock.
+        ink: { DEFAULT: "#173A7A", deep: "#102A57" }, // Press Blue / Midnight Press
+        stamp: "#B23A2E", // Stamp Red — marks, measures, one CTA
         butter: {
-          50: "#FFFDF4",
-          100: "#F8F1CF", // "churned cream" — panels & inset stock
-          200: "#F3E8BC", // "wrapper cream" — the paper
-          300: "#EFDFA6",
-          400: "#E7CF7A",
-          500: "#D9B23A",
-          600: "#B8902A",
+          DEFAULT: "#F1DE8B", // Churned Butter — primary background fill
+          deep: "#E7CC63", // Deep Churn — panels / shadow edge
+          // Numeric scale kept for back-compat with existing classes, remapped
+          // onto the new wrapper palette (50 lightest → 400 foil).
+          50: "#FBF6DD",
+          100: "#F6EFCB",
+          200: "#F1DE8B",
+          300: "#E7CC63",
+          400: "#C9A227",
+          500: "#B8902A",
+          600: "#9A7A22",
         },
-        // Press navy — the primary ink (wordmark, rules, type).
-        navy: {
-          DEFAULT: "#20305F",
-          light: "#2E4173",
-          dark: "#16223F",
-        },
-        // The "salted"/stamp red accent — used sparingly.
-        salted: "#A5402C",
-        // Cream surfaces and warm near-black body copy.
-        cream: "#FFFDF3",
-        paper: "#F3E8BC", // wrapper cream — primary background
-        panel: "#F8F1CF", // churned cream — panels & inset stock
-        sepia: "#2C2A20", // warm near-black body copy
+        foil: "#C9A227", // Foil Gold — hairlines, fine accents
+        cream: "#F6EFCB", // Cream Wrapper — paper / card stock
+        char: "#25241C", // Char Black — body copy
+        // Back-compat aliases so existing classes keep resolving during the
+        // migration (navy → ink, paper/panel → wrapper/cream, salted → stamp).
+        navy: { DEFAULT: "#173A7A", light: "#27406F", dark: "#102A57" },
+        paper: "#F1DE8B",
+        panel: "#F6EFCB",
+        sepia: "#25241C",
+        salted: "#B23A2E",
       },
       fontFamily: {
-        // The "classic butter" wordmark + headlines — Playfair Display.
-        butter: ['"Playfair Display"', "Georgia", '"Times New Roman"', "serif"],
-        // Body / UI copy — a warm book serif (the butter-wrapper voice).
-        body: ['"Old Standard TT"', "Georgia", '"Times New Roman"', "serif"],
+        display: ['"Anton"', '"Oswald"', "Impact", "sans-serif"], // wordmark / titles
+        label: ['"Oswald"', "system-ui", "sans-serif"], // labels / buttons / eyebrows
+        body: ['"Libre Franklin"', "system-ui", "sans-serif"], // body copy
+        accent: ['"DM Serif Display"', "Georgia", "serif"], // italic taglines
+        mono: ['"Space Mono"', "ui-monospace", "monospace"], // measures / metadata
+        // Back-compat: the old wordmark class used `font-butter`.
+        butter: ['"Anton"', '"Oswald"', "Impact", "sans-serif"],
       },
       boxShadow: {
-        // Soft, flat shadows — no glassy sheen.
-        butter: "0 8px 24px -12px rgba(32, 48, 95, 0.25)",
-        card: "0 1px 2px rgba(32, 48, 95, 0.06), 0 6px 20px -10px rgba(32, 48, 95, 0.18)",
+        // Hard, offset "press" shadow — stamped onto the page, never a soft glow.
+        press: "0 3px 0 #102A57",
+        "press-sm": "0 2px 0 #102A57",
+        "press-stamp": "0 3px 0 #8C2C22",
+        card: "0 2px 0 #173A7A",
       },
     },
   },

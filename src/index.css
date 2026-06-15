@@ -10,25 +10,29 @@ body,
 }
 
 body {
-  @apply text-navy;
-  /* Flat butter-wrapper cream stock with only the faintest paper wash — no
-     glossy gradients (per the brand standards). */
-  background-color: #f3e8bc;
-  background-image:
-    radial-gradient(
-      120% 70% at 50% -5%,
-      rgba(255, 251, 230, 0.55),
-      rgba(255, 251, 230, 0) 50%
-    ),
-    radial-gradient(
-      90% 60% at 100% 102%,
-      rgba(150, 120, 60, 0.07),
-      rgba(150, 120, 60, 0) 55%
-    );
+  @apply text-char;
+  /* Churned-butter stock with a soft top highlight — the printed wrapper. */
+  background-color: #f1de8b;
+  background-image: radial-gradient(
+    120% 80% at 50% -10%,
+    #f8f2d6 0%,
+    rgba(241, 222, 139, 0) 55%
+  );
   background-attachment: fixed;
-  /* Warm book serif — the butter-wrapper voice (Playfair handles headlines). */
-  font-family: "Old Standard TT", Georgia, "Times New Roman", serif;
+  font-family:
+    "Libre Franklin", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Faint printed-paper grain over everything. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 60;
+  opacity: 0.045;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 @layer base {
@@ -46,24 +50,25 @@ body {
       transform 0.08s ease;
   }
 
-  /* A buttery focus ring instead of the default browser outline. */
+  /* A press-blue focus ring instead of the default browser outline. */
   :focus-visible {
     outline: none;
     box-shadow:
-      0 0 0 2px #f3e8bc,
-      0 0 0 4px #20305f;
-    border-radius: 6px;
+      0 0 0 2px #f6efcb,
+      0 0 0 4px #173a7a;
+    border-radius: 3px;
   }
 }
 
 @layer components {
+  /* Printed field: flat white stock, 2px ink border, square corners. */
   .input {
-    @apply w-full rounded-md border border-navy/20 bg-white px-2 py-1 text-sm text-navy outline-none focus:border-navy/60;
+    @apply w-full rounded-sm border-2 border-ink/70 bg-white px-2.5 py-1.5 text-sm text-char outline-none focus:border-ink;
   }
 
-  /* The serif wordmark — a touch of letter-spacing and an optical lift. */
+  /* The display wordmark — condensed press caps with a touch of tracking. */
   .wordmark {
-    @apply font-butter font-semibold tracking-wide;
+    @apply font-display tracking-wide;
     font-feature-settings: "liga" 1, "kern" 1;
   }
 
@@ -80,8 +85,8 @@ body {
     left: 50%;
     transform: translateX(-50%);
     white-space: nowrap;
-    background: #20305f;
-    color: #f3e8bc;
+    background: #173a7a;
+    color: #f6efcb;
     font-size: 11px;
     line-height: 1;
     padding: 5px 8px;
