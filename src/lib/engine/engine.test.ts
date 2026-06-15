@@ -9,7 +9,7 @@ import {
   splitLongTravels,
 } from "./resample";
 import { runningStitch } from "./running";
-import { satinColumn } from "./satin";
+import { satinColumn, autoPullCompMm } from "./satin";
 import {
   tatamiFill,
   columnSatinFill,
@@ -351,6 +351,19 @@ describe("satinColumn", () => {
   });
 });
 
+describe("autoPullCompMm (width-driven pull compensation)", () => {
+  it("grows with column width and clamps to a sane band", () => {
+    expect(autoPullCompMm(0)).toBeCloseTo(0.2, 5); // clamped up to the minimum
+    expect(autoPullCompMm(4)).toBeGreaterThan(autoPullCompMm(2));
+    expect(autoPullCompMm(100)).toBeCloseTo(0.7, 5); // clamped to the maximum
+  });
+
+  it("scales by the fabric multiplier", () => {
+    expect(autoPullCompMm(2, 1.5)).toBeCloseTo(autoPullCompMm(2) * 1.5, 5);
+    expect(autoPullCompMm(2, 0)).toBe(0);
+  });
+});
+
 describe("tatamiFill", () => {
   // A 20×20 mm square.
   const square: Path = [
@@ -389,6 +402,15 @@ describe("tatamiFill", () => {
     // No penetration should land strictly inside the hole.
     const inHole = out.filter((p) => p.x > 8.01 && p.x < 11.99 && p.y > 8.01 && p.y < 11.99);
     expect(inHole).toHaveLength(0);
+  });
+
+  it("pull comp extends rows a touch past the edge", () => {
+    const plain = tatamiFill([square], { density: 2, angle: 0 });
+    const comped = tatamiFill([square], { density: 2, angle: 0, pullCompMm: 0.5 });
+    const maxX = (o: Path) => Math.max(...o.map((p) => p.x));
+    // Rows now reach ~0.5 mm beyond the 0–20 edge (but never blow past it).
+    expect(maxX(comped)).toBeGreaterThan(maxX(plain));
+    expect(maxX(comped)).toBeLessThanOrEqual(20 + 0.5 + 1e-6);
   });
 });
 

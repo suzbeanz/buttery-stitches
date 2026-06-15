@@ -4,6 +4,7 @@ import { polylineLength } from "../geometry";
 import { resampleByDistance, capSegmentLength } from "./resample";
 import { douglasPeucker } from "../trace/simplify";
 import { smoothPath } from "../smooth";
+import { autoPullCompMm } from "./satin";
 
 /** Longest single satin throw (mm) before it is split for safety. */
 const MAX_THROW_MM = 7;
@@ -338,6 +339,8 @@ export interface MedialOptions {
   density: number;
   /** grid cell size in mm (default 0.4). */
   cellMm?: number;
+  /** pull-compensation scale (fabric multiplier); 0 disables it (default 0). */
+  pullScale?: number;
 }
 
 /**
@@ -417,11 +420,18 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
       dense.map((p) => halfWidthAtMm(dt, grid, p.x, p.y) + OVERSHOOT_MM),
       loop,
     );
+    // Width-driven pull compensation (docs/stitch-logic.md §6): widen each rail
+    // by half the auto pull-comp for the local stroke width so the sewn column
+    // matches the drawn stroke. `pullScale` carries the fabric multiplier; 0
+    // leaves the rails on the true stroke edge.
+    const pullScale = opts.pullScale ?? 0;
     const left: Point[] = [];
     const right: Point[] = [];
     for (let i = 0; i < dense.length; i++) {
       const nrm = normalAt(dense, i, loop);
-      const half = halves[i];
+      const trueHalf = halves[i] - OVERSHOOT_MM;
+      const comp = pullScale > 0 ? autoPullCompMm(2 * Math.max(0, trueHalf), pullScale) / 2 : 0;
+      const half = halves[i] + comp;
       left.push({ x: dense[i].x + nrm.x * half, y: dense[i].y + nrm.y * half });
       right.push({ x: dense[i].x - nrm.x * half, y: dense[i].y - nrm.y * half });
     }
