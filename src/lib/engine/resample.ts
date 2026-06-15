@@ -46,7 +46,10 @@ export function resampleByDistance(path: Path, spacing: number): Path {
   if (path.length === 1 || spacing <= 0) return path.map((p) => ({ ...p }));
 
   const out: Point[] = [{ ...path[0] }];
-  let carry = 0; // distance accumulated since the last placed point
+  // Arc length from the last placed point forward to the current vertex `a`.
+  // The next penetration must land `spacing` past the last placed point, i.e.
+  // `spacing - carry` into the upcoming segment.
+  let carry = 0;
 
   for (let i = 1; i < path.length; i++) {
     const a = path[i - 1];
@@ -56,12 +59,13 @@ export function resampleByDistance(path: Path, spacing: number): Path {
     const dx = (b.x - a.x) / segLen;
     const dy = (b.y - a.y) / segLen;
 
-    let dist = carry;
-    while (dist + spacing <= segLen) {
-      dist += spacing;
+    let dist = spacing - carry; // first sample's offset into this segment
+    while (dist <= segLen + 1e-9) {
       out.push({ x: a.x + dx * dist, y: a.y + dy * dist });
+      dist += spacing;
     }
-    carry = segLen - dist; // leftover carried into the next segment
+    // Distance from the last placed point to b carries into the next segment.
+    carry = segLen - (dist - spacing);
   }
 
   // Always finish exactly on the last vertex.
