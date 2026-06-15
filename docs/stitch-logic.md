@@ -128,8 +128,8 @@ run it **first**, **inset ~1 mm** from the edge so it never peeks out, at a
 | Pull compensation (satin) | ✅ width-driven `autoPullCompMm` on medial lettering (scaled by fabric); explicit param on user satin |
 | Fill pull compensation | ✅ rows extended past the edge by a fabric-scaled comp so the sewn boundary lands on the line |
 | Fill push compensation (inset far ends) | ❌ minor; fold into mitering/validation |
-| Satin corners (miter/cap) | ❌ |
-| Max stitch / split satin | ✅ (≤ 7 mm throws, region run-splitting) |
+| Satin corners (miter/cap) | ✅ throws longer than ~1.4× the column's median width split into staggered sub-stitches, so a sharp-corner diagonal is tacked down, not loose |
+| Max stitch / split satin | ✅ wide columns split into brick-staggered sub-stitches (no seam); underlay zig-zag also capped |
 | Lock stitches, min-stitch, coincident collapse | ✅ |
 | Color grouping; nearest-neighbor branch routing | ✅ / ⚠️ (not global) |
 | Contour / radial / motif / gradient textures | ❌ |
@@ -155,7 +155,11 @@ run it **first**, **inset ~1 mm** from the edge so it never peeks out, at a
    lettering columns (and is fabric-scaled); tatami rows extend past the edge for
    fill pull comp. (Push insetting at fill far ends is a minor remnant, folded into
    #6/#8.)
-6. **Satin corner mitering**; **split-satin** for 7–12 mm columns.
+6. ✅ **Satin corner mitering / split-satin** — `splitThrow` + `staggeredSatin`:
+   any throw longer than ~1.4× the column's median width (a wide column, or a
+   skewed diagonal across a sharp corner) breaks into brick-staggered sub-stitches,
+   so wide columns show no center seam and corners aren't loose. Shared by
+   hand-drawn satin, medial lettering, column-scan fill, and underlay zig-zags.
 7. **Texture options** — contour/echo fill (organic shapes), then motif/gradient.
 8. **Validation tuning** — flag satin > 7 mm, underlay-off on large fills, etc.
 

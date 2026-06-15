@@ -1,6 +1,29 @@
 import type { Path, Point } from "../../types/project";
 import { distance, polylineLength } from "../geometry";
-import { resampleByCount, capSegmentLength } from "./resample";
+import { resampleByCount, splitThrow } from "./resample";
+
+/**
+ * Assemble an ordered list of satin throws (each a `[fromRail, toRail]` pair) into
+ * one zig-zag penetration path, splitting any throw longer than `maxLen` and
+ * brick-staggering the splits so a wide ("split satin") column shows no seam and a
+ * sharp-corner diagonal is tacked down rather than left loose. The leading rail
+ * already alternates in `pairs`, so the down-rail travel between throws is implicit
+ * (and short). Shared by hand-drawn, medial, and column-scan satin.
+ */
+export function staggeredSatin(pairs: [Point, Point][], maxLen: number): Path {
+  const out: Point[] = [];
+  pairs.forEach(([a, b], k) => {
+    for (const p of splitThrow(a, b, maxLen, k % 2)) out.push(p);
+  });
+  return out;
+}
+
+/** Median of a numeric list (robust "typical" value); 0 for an empty list. */
+function median(xs: number[]): number {
+  if (xs.length === 0) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  return s[s.length >> 1];
+}
 
 export interface SatinOptions {
   /** mm between zig-zag rows */
@@ -13,6 +36,11 @@ export interface SatinOptions {
 
 /** Largest column width before a satin stitch should really be a fill. */
 export const SATIN_MAX_WIDTH = 7;
+
+/** A throw longer than this multiple of the column's median width is split. */
+const CORNER_SPLIT_RATIO = 1.4;
+/** Never split below this (mm) — keeps narrow columns from over-splitting. */
+const MIN_SPLIT_CAP_MM = 1.5;
 
 /** Pull-compensation tuning (docs/stitch-logic.md §6) — total mm a column is
  *  widened so the sewn column matches the drawn one. Wider columns gather the
@@ -50,7 +78,8 @@ function widen(l: Point, r: Point, by: number): [Point, Point] {
  * only after whichever rail (the outer one through a bend) has advanced a full
  * `density`, so the convex edge stays evenly covered instead of fanning into
  * gaps and the concave edge packs tighter. Pull compensation widens the column;
- * throws wider than a safe length are split so no single stitch snags.
+ * wide ("split satin") columns and long skewed corner throws are split into
+ * staggered sub-stitches (mitering) so no single stitch snags or sits loose.
  */
 export function satinColumn(
   left: Path,
@@ -79,15 +108,18 @@ export function satinColumn(
   }
   if (idx[idx.length - 1] !== dense - 1) idx.push(dense - 1);
 
-  const out: Point[] = [];
-  idx.forEach((i, k) => {
+  const pairs: [Point, Point][] = idx.map((i, k) => {
     let [l, r] = [lp[i], rp[i]];
     if (pullComp > 0) [l, r] = widen(l, r, pullComp);
     // Alternate the leading rail each throw so they chain into a zig-zag.
-    if (k % 2 === 0) out.push(l, r);
-    else out.push(r, l);
+    return k % 2 === 0 ? [l, r] : [r, l];
   });
 
-  // Cap throw length so very wide columns become split (running) satin.
-  return capSegmentLength(out, maxWidth);
+  // Split cap relative to the column's TYPICAL width: a throw much longer than
+  // that is either a genuinely wide column (split satin) or a skewed diagonal
+  // thrown across a sharp corner — both should break into staggered sub-stitches
+  // (miter the corner), while a straight or gently curved throw stays whole.
+  const medianW = median(pairs.map(([a, b]) => distance(a, b)));
+  const cap = Math.min(maxWidth, Math.max(medianW * CORNER_SPLIT_RATIO, MIN_SPLIT_CAP_MM));
+  return staggeredSatin(pairs, cap);
 }

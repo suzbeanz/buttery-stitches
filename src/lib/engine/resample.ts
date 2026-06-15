@@ -129,6 +129,37 @@ export function capSegmentLength(path: Path, maxLen: number): Path {
 }
 
 /**
+ * Split ONE satin throw (the straight cross-stitch a→b) into sub-stitches no
+ * longer than `maxLen`, returning `[a, …interior breaks…, b]` (both rail points
+ * always kept). When the throw must split — a wide "split satin" column, or a long
+ * skewed diagonal thrown across a sharp corner — `phase` brick-staggers the
+ * interior break points: phase 0 breaks on the even grid, phase 1 on the half
+ * grid. Alternating it per throw keeps the breaks from lining up into a visible
+ * seam down the column (and tacks the corner diagonal down instead of leaving it
+ * loose). A throw that already fits returns just its two endpoints unchanged.
+ */
+export function splitThrow(a: Point, b: Point, maxLen: number, phase = 0): Point[] {
+  if (maxLen <= 0) return [{ ...a }, { ...b }];
+  const len = distance(a, b);
+  if (len <= maxLen) return [{ ...a }, { ...b }];
+  const n = Math.ceil(len / maxLen);
+  const lerp = (t: number): Point => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+  const out: Point[] = [{ ...a }];
+  if (phase % 2 === 0) {
+    for (let i = 1; i < n; i++) out.push(lerp(i / n));
+  } else {
+    // Half-step shift: breaks at 0.5/n, 1.5/n, … so they fall between the even
+    // grid's breaks (the brick stagger). Every sub-segment stays ≤ maxLen.
+    for (let i = 0; i < n; i++) {
+      const t = (i + 0.5) / n;
+      if (t < 1 - 1e-9) out.push(lerp(t));
+    }
+  }
+  out.push({ ...b });
+  return out;
+}
+
+/**
  * Split a stitch path into separate runs wherever it makes a travel longer than
  * `maxMm` — those long moves are a fill crossing a counter or gap, which should
  * be a jump (handled by the assembler), not one long snag-prone stitch.

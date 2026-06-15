@@ -7,9 +7,11 @@ import {
   capSegmentLength,
   dropShortStitches,
   splitLongTravels,
+  splitThrow,
 } from "./resample";
 import { runningStitch } from "./running";
-import { satinColumn, autoPullCompMm } from "./satin";
+import { satinColumn, autoPullCompMm, staggeredSatin } from "./satin";
+import { railsFromCenterline } from "../geometry";
 import {
   tatamiFill,
   columnSatinFill,
@@ -361,6 +363,78 @@ describe("autoPullCompMm (width-driven pull compensation)", () => {
   it("scales by the fabric multiplier", () => {
     expect(autoPullCompMm(2, 1.5)).toBeCloseTo(autoPullCompMm(2) * 1.5, 5);
     expect(autoPullCompMm(2, 0)).toBe(0);
+  });
+});
+
+describe("splitThrow (staggered split satin)", () => {
+  const a = { x: 0, y: 0 };
+  const b = { x: 0, y: 12 };
+
+  it("leaves a throw that fits as just its two rail points", () => {
+    expect(splitThrow(a, { x: 0, y: 3 }, 7)).toHaveLength(2);
+  });
+
+  it("splits a long throw into sub-stitches no longer than maxLen", () => {
+    const out = splitThrow(a, b, 5); // 12 mm / 5 → 3 pieces
+    expect(out.length).toBeGreaterThan(2);
+    for (let i = 1; i < out.length; i++) {
+      expect(distance(out[i - 1], out[i])).toBeLessThanOrEqual(5 + 1e-6);
+    }
+    expect(out[0]).toEqual(a);
+    expect(out[out.length - 1]).toEqual(b);
+  });
+
+  it("brick-staggers the interior breaks by phase", () => {
+    const even = splitThrow(a, b, 5, 0).slice(1, -1).map((p) => p.y);
+    const odd = splitThrow(a, b, 5, 1).slice(1, -1).map((p) => p.y);
+    // The two phases must break at different positions (no aligned seam).
+    expect(even).not.toEqual(odd);
+    for (const ye of even) for (const yo of odd) expect(Math.abs(ye - yo)).toBeGreaterThan(0.1);
+  });
+});
+
+describe("staggeredSatin & satin corner/wide handling", () => {
+  it("a wide column splits with no aligned seam (consecutive breaks differ)", () => {
+    // A uniform 12 mm-wide straight column.
+    const left: Path = [{ x: 0, y: 0 }, { x: 0, y: 30 }];
+    const right: Path = [{ x: 12, y: 0 }, { x: 12, y: 30 }];
+    const out = satinColumn(left, right, { density: 1, pullComp: 0 });
+    // No throw segment exceeds the safe max (split satin).
+    expect(maxSeg(out)).toBeLessThanOrEqual(7 + 1e-6);
+    // Interior split points (x not on a rail) appear, and they don't all share
+    // one x — the stagger breaks the seam.
+    const interiorX = new Set(
+      out.filter((p) => p.x > 0.5 && p.x < 11.5).map((p) => Math.round(p.x * 10) / 10),
+    );
+    expect(interiorX.size).toBeGreaterThan(1);
+  });
+
+  it("miters a sharp corner — no loose diagonal across the bend", () => {
+    // An L-shaped 4 mm column: centerline goes right then up.
+    const center: Path = [
+      { x: 0, y: 0 },
+      { x: 20, y: 0 },
+      { x: 20, y: 20 },
+    ];
+    const [left, right] = railsFromCenterline(center, 4);
+    const out = satinColumn(left, right, { density: 0.4, pullComp: 0 });
+    // The skewed corner throw (≈ width·√2 ≈ 5.66) exceeds the median-relative cap
+    // (4·1.4 = 5.6) and is broken up, so nothing sews loose across the bend.
+    expect(maxSeg(out)).toBeLessThanOrEqual(5.7);
+    expect(out.length).toBeGreaterThan(10);
+    // Deterministic.
+    expect(satinColumn(left, right, { density: 0.4, pullComp: 0 })).toEqual(out);
+  });
+
+  it("staggeredSatin chains the pairs into one path", () => {
+    const out = staggeredSatin(
+      [
+        [{ x: 0, y: 0 }, { x: 4, y: 0 }],
+        [{ x: 4, y: 1 }, { x: 0, y: 1 }],
+      ],
+      7,
+    );
+    expect(out).toHaveLength(4); // both throws fit, no splits
   });
 });
 
