@@ -640,7 +640,7 @@ export default function CanvasStage() {
             if (e.target === e.currentTarget) setStartDismissed(true);
           }}
         >
-          <div className="relative w-full max-w-md rounded-2xl border border-navy/10 bg-cream/95 p-6 shadow-butter">
+          <div className="relative w-full max-w-md rounded-sm border-[2.5px] border-ink bg-cream p-6 shadow-press">
             <button
               onClick={() => setStartDismissed(true)}
               aria-label="Close"
@@ -708,13 +708,13 @@ function StartButton({
   return (
     <button
       onClick={onClick}
-      className="flex flex-col items-center gap-1 rounded-xl border border-navy/15 bg-white px-3 py-3 text-navy transition-colors hover:border-navy/40 hover:bg-butter-100"
+      className="flex flex-col items-center gap-1 rounded-sm border-2 border-ink bg-cream px-3 py-3 text-ink shadow-press-sm transition-transform hover:bg-butter-200 active:translate-y-[2px] active:shadow-none"
     >
       <span className="text-2xl" aria-hidden>
         {emoji}
       </span>
-      <span className="text-sm font-semibold">{label}</span>
-      <span className="text-[11px] text-navy/55">{hint}</span>
+      <span className="font-label text-sm font-semibold uppercase tracking-wide">{label}</span>
+      <span className="font-body text-[11px] text-char/60">{hint}</span>
     </button>
   );
 }

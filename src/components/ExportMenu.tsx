@@ -80,14 +80,14 @@ export default function ExportMenu() {
       </button>
 
       {open && (
-        <div className="absolute left-0 z-20 mt-1 w-72 rounded-md border border-navy/30 bg-butter-50 p-2 text-navy shadow-xl">
+        <div className="absolute left-0 z-20 mt-1 w-72 rounded-sm border-[2.5px] border-ink bg-cream p-2.5 text-char shadow-press">
           {empty ? (
-            <p className="px-1 py-2 text-[12px] text-navy/60">
+            <p className="px-1 py-2 font-body text-[12px] text-char/60">
               Nothing to export yet — draw or import a design first.
             </p>
           ) : (
             <>
-              <div className="flex items-center justify-between px-1 pb-2 text-[11px] text-navy/70">
+              <div className="flex items-center justify-between px-1 pb-2 font-mono text-[11px] text-char/70">
                 <span>{stitches.toLocaleString()} stitches</span>
                 <span>
                   {changes + 1} color{changes === 0 ? "" : "s"}
@@ -95,22 +95,22 @@ export default function ExportMenu() {
               </div>
 
               {warnings.length > 0 && (
-                <ul className="mb-2 max-h-24 overflow-y-auto rounded bg-butter-200/60 p-1.5 text-[11px] text-navy/80">
+                <ul className="mb-2 max-h-24 overflow-y-auto rounded-sm border border-stamp/30 bg-stamp/5 p-1.5 text-[11px] text-char/80">
                   {warnings.map((w, i) => (
                     <li key={i} className="flex gap-1.5">
-                      <AlertTriangle size={13} className="mt-0.5 shrink-0 text-butter-600" />
+                      <AlertTriangle size={13} className="mt-0.5 shrink-0 text-stamp" />
                       <span>{w.message}</span>
                     </li>
                   ))}
                 </ul>
               )}
 
-              <label className="mb-2 flex items-center justify-between px-1 text-xs text-navy/70">
+              <label className="mb-2 flex items-center justify-between px-1 font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-deep">
                 PES version
                 <select
                   value={pesVersion}
                   onChange={(e) => setPesVersion(Number(e.target.value) as PesVersion)}
-                  className="ml-2 rounded border border-navy/30 bg-white px-1 py-0.5 text-navy"
+                  className="ml-2 rounded-sm border-2 border-ink/70 bg-white px-1 py-0.5 font-body text-xs text-char"
                 >
                   {PES_VERSIONS.map((v) => (
                     <option key={v} value={v}>
@@ -121,31 +121,31 @@ export default function ExportMenu() {
                 </select>
               </label>
 
-              <div className="grid grid-cols-3 gap-1">
+              <div className="grid grid-cols-3 gap-1.5">
                 {EMB_FORMATS.map((f) => (
                   <button
                     key={f}
                     disabled={busy}
                     onClick={() => doExport(f)}
-                    className="rounded bg-butter-200 px-2 py-1.5 text-xs uppercase text-navy hover:bg-butter-300 disabled:opacity-50"
+                    className="rounded-sm border-2 border-ink bg-cream px-2 py-1.5 font-label text-xs font-semibold uppercase tracking-wide text-ink shadow-press-sm transition-transform hover:bg-ink hover:text-cream active:translate-y-[2px] active:shadow-none disabled:opacity-50"
                   >
                     {f}
                   </button>
                 ))}
               </div>
 
-              <p className="mt-2 px-1 text-[10px] text-navy/50">
+              <p className="mt-2.5 px-1 font-body text-[10px] text-char/50">
                 First export loads the Python runtime (a few seconds, then cached).
               </p>
             </>
           )}
 
           {busy && (
-            <p className="mt-2 px-1 text-[11px] text-navy">
+            <p className="mt-2 px-1 font-mono text-[11px] text-ink">
               {STAGE_LABEL[stage] || "Working…"}
             </p>
           )}
-          {error && <p className="mt-2 px-1 text-[11px] text-red-600">{error}</p>}
+          {error && <p className="mt-2 px-1 font-body text-[11px] text-stamp">{error}</p>}
         </div>
       )}
     </div>
