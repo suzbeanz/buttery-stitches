@@ -74,6 +74,26 @@ describe("medialSatin", () => {
     // "o"s score ~0.97+.
     expect(satinCoverage(o, runs)).toBeGreaterThan(0.82);
   });
+
+  it("keeps the satin column dense around a curve (density compensation)", () => {
+    // A circular annulus (a clean curved stroke). With density compensation the
+    // outer rail's gap between throws stays near the stitch spacing instead of
+    // fanning open — so the convex edge has no gaps. The advances between throws
+    // (the even-indexed segments of the L,R,R,L,… chain) are the rail gaps.
+    const density = 0.4;
+    const runs = medialSatin(ring(24, 3), { density });
+    let maxRailGap = 0;
+    for (const run of runs) {
+      for (let i = 2; i < run.length; i += 2) {
+        maxRailGap = Math.max(
+          maxRailGap,
+          Math.hypot(run[i].x - run[i - 1].x, run[i].y - run[i - 1].y),
+        );
+      }
+    }
+    // Comfortably bounded (a fixed-spacing satin would fan to several × density).
+    expect(maxRailGap).toBeLessThanOrEqual(density * 2.5);
+  });
 });
 
 describe("satinCoverage", () => {

@@ -95,6 +95,50 @@ function addRun(runs: StitchRun[], pts: Point[], underlay: boolean): void {
 const MIN_SATIN_COVERAGE = 0.82;
 
 /**
+ * Greedily order a set of independent runs so each starts near where the last
+ * ended, reversing a run when its far end is the closer one. Shortens the travel
+ * (and so the jumps) between a region's satin strokes without changing any
+ * stitch geometry.
+ */
+function orderByNearest(runs: Point[][], from: Point | null): Point[][] {
+  const remaining = runs.filter((r) => r.length > 0);
+  const out: Point[][] = [];
+  let cursor = from;
+  while (remaining.length > 0) {
+    let best = 0;
+    let bestReversed = false;
+    let bestDist = Infinity;
+    for (let i = 0; i < remaining.length; i++) {
+      const r = remaining[i];
+      if (!cursor) {
+        best = i;
+        bestReversed = false;
+        break;
+      }
+      const head = r[0];
+      const tail = r[r.length - 1];
+      const dHead = Math.hypot(head.x - cursor.x, head.y - cursor.y);
+      const dTail = Math.hypot(tail.x - cursor.x, tail.y - cursor.y);
+      if (dHead < bestDist) {
+        bestDist = dHead;
+        best = i;
+        bestReversed = false;
+      }
+      if (dTail < bestDist) {
+        bestDist = dTail;
+        best = i;
+        bestReversed = true;
+      }
+    }
+    const [chosen] = remaining.splice(best, 1);
+    const run = bestReversed ? [...chosen].reverse() : chosen;
+    out.push(run);
+    cursor = run[run.length - 1];
+  }
+  return out;
+}
+
+/**
  * Medial-axis satin for a region, but only if it actually fills the glyph.
  * Returns the per-stroke runs when coverage is good, or `[]` to signal the
  * caller to use a plain fill instead — so lettering is shiny when it can be and
@@ -147,10 +191,13 @@ export function generateObjectRuns(object: EmbObject): StitchRun[] {
     const usingSatin = satinRuns.length > 0;
     const travelMax = usingSatin ? 8 : 6;
 
+    let cursor: Point | null = null;
     if (p.underlay) {
       // Edge run for both; a perpendicular tatami pass only under tatami fills
       // (it would show as wrong hatching beneath satin lettering).
-      addRun(runs, dropShortStitches(fillEdgeUnderlay(region)), true);
+      const edge = dropShortStitches(fillEdgeUnderlay(region));
+      addRun(runs, edge, true);
+      if (edge.length) cursor = edge[edge.length - 1];
       if (!usingSatin) {
         for (const sub of splitLongTravels(fillParallelUnderlay(region, p.angle), travelMax)) {
           addRun(runs, dropShortStitches(sub), true);
@@ -158,8 +205,11 @@ export function generateObjectRuns(object: EmbObject): StitchRun[] {
       }
     }
 
+    // Sew the satin strokes in nearest-neighbor order from where the underlay
+    // left off, so the needle takes the shortest path between them — fewer and
+    // shorter jumps, a neater stitch-out. Pure reordering; geometry is unchanged.
     const topRuns: Point[][] = usingSatin
-      ? satinRuns
+      ? orderByNearest(satinRuns, cursor)
       : [tatamiFill(region, { density: p.density, angle: p.angle })];
 
     for (const run of topRuns) {
