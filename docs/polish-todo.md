@@ -20,12 +20,12 @@ the living audit/polish list: check items off as they land.
 ## Text (PRIORITY — lettering must be top-notch; flat files only, never photos)
 - [x] Preview must render with every font — use the font's own winding (nonzero),
       like a browser, instead of recomputing it.
-- [x] Per-stroke satin (medial axis): rasterize → distance transform → Zhang–Suen
-      thinning → satin column down each skeleton branch. Now PRUNES thinning spurs,
-      SMOOTHS the staircased centerline, uses an EVEN column width, and edge-run
-      underlay only (no wrong tatami hatching under letters). Column-fill fallback
-      for shapes too small to skeletonize.
-- [ ] Junction joins on complex glyphs; per-stroke width variation at terminals.
+- [x] Lettering defaults to a clean, solid TATAMI fill — reliable and correct for
+      every font (matches the solid design-view render).
+- [ ] Auto-satin that follows each stroke: medial-axis prototype exists
+      (engine/medial.ts) but produces broken stitches on real letters, so it is
+      DISABLED by default. Needs: skeleton quality on wide/serif glyphs, junction
+      handling, and column ordering before it can be the default or an option.
 - [ ] Tune skeleton branch joins / corners on complex glyphs (B, R) — small gaps
       at junctions are acceptable for now.
 

@@ -4,7 +4,6 @@ import { distance } from "../geometry";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
 import { tatamiFill, columnSatinFill, splitFillRegions } from "./fill";
-import { medialSatin } from "./medial";
 import {
   fillEdgeUnderlay,
   fillParallelUnderlay,
@@ -133,15 +132,10 @@ export function generateObjectRuns(object: EmbObject): StitchRun[] {
       }
     }
 
-    let topRuns: Point[][];
-    if (satin) {
-      topRuns = medialSatin(region, { density: p.density });
-      if (topRuns.length === 0) {
-        topRuns = [columnSatinFill(region, { density: p.density, angle: p.angle })];
-      }
-    } else {
-      topRuns = [tatamiFill(region, { density: p.density, angle: p.angle })];
-    }
+    const top = satin
+      ? columnSatinFill(region, { density: p.density, angle: p.angle })
+      : tatamiFill(region, { density: p.density, angle: p.angle });
+    const topRuns: Point[][] = [top];
 
     for (const run of topRuns) {
       for (const sub of splitLongTravels(run, travelMax)) {
