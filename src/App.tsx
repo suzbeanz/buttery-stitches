@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import TopBar from "./components/TopBar";
 import LayerPanel from "./components/LayerPanel";
-import ToolStrip from "./components/ToolStrip";
+import ToolRail from "./components/ToolRail";
 import CanvasStage from "./components/CanvasStage";
 import SimulatorBar from "./components/SimulatorBar";
 import PropertiesPanel from "./components/PropertiesPanel";
@@ -99,8 +99,9 @@ function Studio({ onHome }: { onHome: () => void }) {
           </div>
         )}
 
+        <ToolRail />
+
         <div className="flex min-w-0 flex-1 flex-col">
-          <ToolStrip />
           <CanvasStage />
           <SimulatorBar />
         </div>
