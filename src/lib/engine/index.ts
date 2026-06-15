@@ -1,9 +1,10 @@
-import type { EmbObject, Point, Project } from "../../types/project";
+import type { EmbObject, Path, Point, Project } from "../../types/project";
 import { resolveParams } from "../../types/project";
 import { distance } from "../geometry";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
-import { tatamiFill, columnSatinFill, splitFillRegions } from "./fill";
+import { tatamiFill, splitFillRegions } from "./fill";
+import { medialSatin, satinCoverage } from "./medial";
 import {
   fillEdgeUnderlay,
   fillParallelUnderlay,
@@ -88,6 +89,24 @@ function addRun(runs: StitchRun[], pts: Point[], underlay: boolean): void {
 }
 
 /**
+ * Minimum fraction of a region a medial satin must cover to be used. Below this
+ * the skeleton produced broken/scattered stitches, so we fall back to tatami.
+ */
+const MIN_SATIN_COVERAGE = 0.82;
+
+/**
+ * Medial-axis satin for a region, but only if it actually fills the glyph.
+ * Returns the per-stroke runs when coverage is good, or `[]` to signal the
+ * caller to use a plain fill instead — so lettering is shiny when it can be and
+ * always solid when it can't.
+ */
+function acceptableSatin(region: Path[], density: number): Path[] {
+  const runs = medialSatin(region, { density });
+  if (runs.length === 0) return [];
+  return satinCoverage(region, runs) >= MIN_SATIN_COVERAGE ? runs : [];
+}
+
+/**
  * The runs for a single object. Splitting a fill into its regions (and underlay
  * from top) here is what lets `generateDesign` jump between them.
  */
@@ -119,23 +138,29 @@ export function generateObjectRuns(object: EmbObject): StitchRun[] {
   // a column fill for shapes too small to skeletonize); broad areas use tatami.
   // Every top run is split where it would cross a counter/gap, so those jump.
   const satin = p.fillStyle === "satin";
-  const travelMax = satin ? 8 : 6;
   for (const region of splitFillRegions(object.paths)) {
+    // Satin lettering follows each stroke's medial axis — but only when it
+    // actually covers the glyph. If the skeleton is poor (junction-heavy or
+    // chunky shapes), we fall back to a plain tatami fill so output is never
+    // broken. `satinRuns` is empty when we fall back.
+    const satinRuns = satin ? acceptableSatin(region, p.density) : [];
+    const usingSatin = satinRuns.length > 0;
+    const travelMax = usingSatin ? 8 : 6;
+
     if (p.underlay) {
       // Edge run for both; a perpendicular tatami pass only under tatami fills
       // (it would show as wrong hatching beneath satin lettering).
       addRun(runs, dropShortStitches(fillEdgeUnderlay(region)), true);
-      if (!satin) {
+      if (!usingSatin) {
         for (const sub of splitLongTravels(fillParallelUnderlay(region, p.angle), travelMax)) {
           addRun(runs, dropShortStitches(sub), true);
         }
       }
     }
 
-    const top = satin
-      ? columnSatinFill(region, { density: p.density, angle: p.angle })
-      : tatamiFill(region, { density: p.density, angle: p.angle });
-    const topRuns: Point[][] = [top];
+    const topRuns: Point[][] = usingSatin
+      ? satinRuns
+      : [tatamiFill(region, { density: p.density, angle: p.angle })];
 
     for (const run of topRuns) {
       for (const sub of splitLongTravels(run, travelMax)) {
