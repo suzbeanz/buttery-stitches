@@ -52,10 +52,10 @@ the living audit/polish list: check items off as they land.
 - [ ] Fabric *photo* backgrounds (not just color) for the mockup.
 
 ## Jot-down (2026-06-15) — to do next
-- [ ] HOMEPAGE THEMING: really lean into the butter brand. Everything styled like
-      it's PRINTED on a butter wrapper — dark navy/blue print ink as the primary,
-      RED used occasionally as the "salted" accent, butter-yellow as a tertiary.
-      Use the butter measurement-ruler lines/style liberally as a motif.
+- [x] HOMEPAGE THEMING: rebuilt as a printed butter wrapper — navy press-ink on
+      cream paper (primary), a "salted" red stamp + eyebrow accents (occasional),
+      butter-yellow as a tertiary highlight (icon chips, step circles), and the
+      butter-stick ruler tick lines used liberally as section dividers/trim.
 - [x] Skeleton quality: chained skeleton segments straight through junctions, so
       an s / serif stems stay one smooth stroke instead of fragmenting. Lettering
       satin coverage jumped to 65/65 regions across all 8 fonts (poppins "s"
