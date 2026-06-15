@@ -178,6 +178,71 @@ function centroid(ring: Path): Point {
 }
 
 /**
+ * The shape's principal (major) axis from its AREA second moments — the natural
+ * "grain" direction a fill should flow along. Area-weighted (not vertex-counted)
+ * so a curve sampled with many points doesn't skew the result.
+ *
+ * Returns the major-axis angle in degrees and the `elongation` (major/minor
+ * standard-deviation ratio): 1 = perfectly round/square, larger = more stretched.
+ */
+export function principalAxis(ring: Path): { angleDeg: number; elongation: number } {
+  const n = ring.length;
+  if (n < 3) return { angleDeg: 0, elongation: 1 };
+
+  // Shoelace area + first/second area moments in one pass.
+  let a2 = 0; // 2·area
+  let cx = 0, cy = 0;
+  let ixx = 0, iyy = 0, ixy = 0;
+  for (let i = 0; i < n; i++) {
+    const p = ring[i];
+    const q = ring[(i + 1) % n];
+    const cross = p.x * q.y - q.x * p.y;
+    a2 += cross;
+    cx += (p.x + q.x) * cross;
+    cy += (p.y + q.y) * cross;
+    iyy += (p.x * p.x + p.x * q.x + q.x * q.x) * cross; // ∫ x² dA · 12
+    ixx += (p.y * p.y + p.y * q.y + q.y * q.y) * cross; // ∫ y² dA · 12
+    ixy += (p.x * q.y + 2 * p.x * p.y + 2 * q.x * q.y + q.x * p.y) * cross; // ∫ xy dA · 24
+  }
+  const area = a2 / 2;
+  if (Math.abs(area) < 1e-9) return { angleDeg: 0, elongation: 1 };
+  cx /= 3 * a2;
+  cy /= 3 * a2;
+
+  // Central variances/covariance of the area distribution.
+  const varX = iyy / (12 * area) - cx * cx;
+  const varY = ixx / (12 * area) - cy * cy;
+  const covXY = ixy / (24 * area) - cx * cy;
+
+  // Major-axis direction and eigenvalues of [[varX, covXY],[covXY, varY]].
+  const angleDeg = (0.5 * Math.atan2(2 * covXY, varX - varY) * 180) / Math.PI;
+  const mean = (varX + varY) / 2;
+  const diff = Math.sqrt(((varX - varY) / 2) ** 2 + covXY * covXY);
+  const lambdaMin = Math.max(0, mean - diff);
+  const elongation = lambdaMin > 1e-9 ? Math.sqrt((mean + diff) / lambdaMin) : Infinity;
+  return { angleDeg, elongation };
+}
+
+/** Below this major/minor ratio a shape reads as roundish/square. */
+const ELONGATION_THRESHOLD = 1.3;
+/** Fill angle (°) for roundish shapes — off-axis so rows don't band on edges. */
+const ROUND_FILL_ANGLE = 45;
+
+/**
+ * The fill angle a region wants (docs/stitch-logic.md §3/#4): elongated shapes
+ * flow along their grain (the major axis) so stitches follow the form; roundish
+ * or square shapes use an off-axis 45° so rows never align with a straight edge
+ * and band. `offsetDeg` (the user's Angle field, default 0) nudges either choice.
+ */
+export function autoFillAngle(rings: Path[], offsetDeg = 0): number {
+  const outer = rings.find((r) => r.length >= 3);
+  if (!outer) return offsetDeg;
+  const { angleDeg, elongation } = principalAxis(outer);
+  const base = elongation >= ELONGATION_THRESHOLD ? angleDeg : ROUND_FILL_ANGLE;
+  return base + offsetDeg;
+}
+
+/**
  * Nonzero-winding spans of the horizontal line `y` across all rings. The rings
  * must be consistently wound (run them through `orientByDepth`): a span is open
  * where the running winding number is non-zero, so counters cut out and

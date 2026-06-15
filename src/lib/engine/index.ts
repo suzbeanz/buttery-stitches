@@ -9,7 +9,7 @@ import { resolveParams, fabricProfile } from "../../types/project";
 import { distance } from "../geometry";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
-import { tatamiFill, splitFillRegions } from "./fill";
+import { tatamiFill, splitFillRegions, autoFillAngle } from "./fill";
 import { medialColumns, satinCoverage, type SatinColumn } from "./medial";
 import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
 import { dropShortStitches, splitLongTravels } from "./resample";
@@ -212,6 +212,9 @@ export function generateObjectRuns(
     const columns = satin ? acceptableSatin(region, density) : [];
     const usingSatin = columns.length > 0;
     const travelMax = usingSatin ? 8 : 6;
+    // Tatami flows along the region's grain (off-axis for roundish shapes), with
+    // the user's Angle field as an offset. Underlay follows the same angle.
+    const fillAngle = usingSatin ? p.angle : autoFillAngle(region, p.angle);
 
     let cursor: Point | null = null;
     if (p.underlay) {
@@ -219,7 +222,7 @@ export function generateObjectRuns(
       // Tatami: inset edge run + perpendicular pass(es).
       const ulRuns = usingSatin
         ? columns.flatMap((c) => columnUnderlay(c.centerline, c.widthMm, weight))
-        : fillUnderlayRuns(region, p.angle, weight);
+        : fillUnderlayRuns(region, fillAngle, weight);
       for (const run of ulRuns) {
         for (const sub of splitLongTravels(run, travelMax)) {
           const u = dropShortStitches(sub);
@@ -236,7 +239,7 @@ export function generateObjectRuns(
             ? runningStitch(c.centerline, p.stitchLength)
             : c.throws,
         )
-      : [tatamiFill(region, { density, angle: p.angle })];
+      : [tatamiFill(region, { density, angle: fillAngle })];
 
     // Sew the strokes nearest-neighbor from where the underlay left off, for the
     // shortest travel between them (pure reordering; geometry unchanged).
