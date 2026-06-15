@@ -10,8 +10,6 @@ import Footer from "./Footer";
 const RED = "#C0392B";
 const NAVY = "#16234A";
 
-const NAV = ["Home", "Pictures", "Words", "Shapes", "Preview", "Export"];
-
 export default function Home({ onStart }: { onStart: () => void }) {
   return (
     <div className="relative h-full overflow-y-auto bg-butter-200 text-navy">
@@ -94,21 +92,12 @@ export default function Home({ onStart }: { onStart: () => void }) {
   );
 }
 
-/** The butter-stick ruler, used as the page nav: labels above, red Tbsp below. */
+/** The butter-stick ruler as a decorative divider, with red Tbsp measurements. */
 function RulerNav() {
   const tbsp = 8;
   return (
-    <nav className="mx-auto mt-9 max-w-2xl select-none" aria-label="Sections">
-      <div
-        className="grid text-center text-xs font-bold uppercase tracking-wide text-navy sm:text-sm"
-        style={{ gridTemplateColumns: `repeat(${NAV.length}, minmax(0, 1fr))` }}
-      >
-        {NAV.map((n) => (
-          <span key={n}>{n}</span>
-        ))}
-      </div>
-
-      <svg viewBox="0 0 800 26" className="mt-1.5 w-full" aria-hidden>
+    <div className="mx-auto mt-9 max-w-2xl select-none" aria-hidden>
+      <svg viewBox="0 0 800 26" className="w-full">
         <line x1="3" y1="13" x2="797" y2="13" stroke={NAVY} strokeWidth="2" />
         {Array.from({ length: tbsp + 1 }).map((_, i) => {
           const x = 3 + (794 * i) / tbsp;
@@ -135,7 +124,7 @@ function RulerNav() {
           <span key={i}>{i + 1} Tbsp</span>
         ))}
       </div>
-    </nav>
+    </div>
   );
 }
 

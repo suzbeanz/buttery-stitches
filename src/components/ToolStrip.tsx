@@ -45,7 +45,7 @@ export default function ToolStrip() {
   const locked = viewMode === "stitch"; // editing tools are inert in stitch view
 
   return (
-    <div className="flex flex-wrap items-center gap-1 border-b border-navy/15 bg-butter-100 px-2 py-1.5">
+    <div className="flex flex-wrap items-center gap-1 border-b border-navy/25 bg-butter-100 px-2 py-1.5">
       {TOOLS.map(({ id, label, Icon }) => (
         <button
           key={id}

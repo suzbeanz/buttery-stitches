@@ -39,9 +39,9 @@ export default function LayerPanel() {
   );
 
   return (
-    <aside className="flex h-full w-60 shrink-0 flex-col border-r border-navy/15 bg-butter-100">
-      <div className="border-b border-navy/15 px-3 py-2 font-butter text-sm font-semibold text-navy">
-        Stitch Order
+    <aside className="flex h-full w-60 shrink-0 flex-col border-r border-navy/25 bg-butter-100">
+      <div className="flex items-center gap-1.5 border-b-2 border-navy bg-butter-200 px-3 py-2 text-xs font-bold uppercase tracking-[0.18em] text-navy">
+        <span className="text-[#C0392B]">*</span> Stitch Order
       </div>
 
       {objects.length === 0 ? (

@@ -77,7 +77,7 @@ export default function DesignPanel() {
   const hasDesign = size.w > 0;
 
   return (
-    <div className="flex flex-col gap-3 border-b border-navy/15 p-3 text-sm">
+    <div className="flex flex-col gap-3 border-b border-navy/25 p-3 text-sm">
       <div className="font-butter text-sm font-semibold text-navy">Design</div>
 
       {/* Hoop */}
