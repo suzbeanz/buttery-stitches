@@ -30,6 +30,14 @@ the living audit/polish list: check items off as they land.
       at junctions are acceptable for now.
 
 ## From user testing (2026-06-15)
+- [x] Hoop mockup only in Stitch view (the physical preview), made realistic
+      (wood ring + tension screw + fabric + inner rim); edit view is a plain
+      working surface.
+- [x] "Draw it" quick-start button now works (dismisses + selects a tool).
+- [x] Per-object "Stitch style: Solid fill (tatami) / Satin columns" picker so the
+      user curates which shapes/fonts satin cleanly (curated-satin approach).
+- [ ] Bundle a couple of monoline/open-source fonts that satin cleanly + flag
+      them satin-capable so "Add words" defaults to satin where it looks good.
 - [x] Quick-start popup dismisses on outside-click / ✕ and doesn't return.
 - [x] Hoop mockup: design previews inside a rounded embroidery-hoop frame with a
       user-chosen fabric background color (presets + custom).
