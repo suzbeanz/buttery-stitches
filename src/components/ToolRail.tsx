@@ -1,4 +1,4 @@
-import { MousePointer2, Spline, X, Magnet, Crosshair, Type, Image as ImageIcon } from "lucide-react";
+import { MousePointer2, Spline, X, Magnet, Grid2x2, Type, Image as ImageIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   useEditorStore,
@@ -100,12 +100,12 @@ export default function ToolRail() {
           <Magnet size={20} />
         </RailBtn>
         <RailBtn
-          label="Guides"
-          tip={guidesEnabled ? "Guides on — click to turn off" : "Guides off — click to turn on"}
+          label="Grid"
+          tip={guidesEnabled ? "Gridlines on — click to turn off" : "Gridlines off — click to turn on"}
           active={guidesEnabled}
           onClick={() => toggleGuides()}
         >
-          <Crosshair size={20} />
+          <Grid2x2 size={20} />
         </RailBtn>
       </Group>
 
