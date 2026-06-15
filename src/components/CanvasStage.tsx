@@ -413,13 +413,13 @@ export default function CanvasStage() {
                   cornerRadius={HOOP_BAND + 22}
                   fillLinearGradientStartPoint={{ x: 0, y: 0 }}
                   fillLinearGradientEndPoint={{ x: 0, y: openH + HOOP_BAND * 2 }}
-                  fillLinearGradientColorStops={[0, "#EEEBE4", 0.5, "#D9D4CB", 1, "#BFB9AF"]}
-                  stroke="#A9A39A"
+                  fillLinearGradientColorStops={[0, "#F4F2ED", 0.5, "#E6E2DB", 1, "#D5CFC5"]}
+                  stroke="#B7B1A8"
                   strokeWidth={1}
-                  shadowColor="#16234A"
-                  shadowOpacity={0.18}
-                  shadowBlur={18}
-                  shadowOffsetY={5}
+                  shadowColor="#000000"
+                  shadowOpacity={0.12}
+                  shadowBlur={16}
+                  shadowOffsetY={4}
                 />
                 {/* Seam between the outer frame and the inner ring. */}
                 <Rect
@@ -863,6 +863,11 @@ function StitchView({
   const upTo = useEditorStore((s) => s.simIndex);
   const segs = useMemo(() => designToSegments(design, upTo), [design, upTo]);
   const needle = useMemo(() => needleAt(design, upTo), [design, upTo]);
+  // Render each stitch at the real thread thickness (~0.4 mm) so a dense fill or
+  // satin reads as solid coverage — threads touch — instead of separate hairline
+  // "scanlines". Clamped so it stays sensible at any zoom.
+  const mmPx = px(1) - px(0);
+  const threadPx = Math.min(4, Math.max(1.4, mmPx * 0.42));
   return (
     <Group listening={false}>
       {segs.map((seg, i) => {
@@ -873,8 +878,8 @@ function StitchView({
             key={i}
             points={seg.points.flatMap((p) => [px(p.x), py(p.y)])}
             stroke={stroke}
-            strokeWidth={seg.underlay ? 0.6 : 1}
-            opacity={seg.underlay ? 0.4 : 1}
+            strokeWidth={seg.underlay ? 0.6 : threadPx}
+            opacity={seg.underlay ? 0.4 : 0.95}
             lineCap="round"
             lineJoin="round"
           />
