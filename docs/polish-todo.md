@@ -84,8 +84,10 @@ the living audit/polish list: check items off as they land.
       the carry instead of subtracting it, so every long straight edge (underlay
       runs, running stitches, satin centerlines) emitted one monster stitch
       (up to ~19 mm). Fixed in engine/resample.ts.
-- [ ] Drag-to-select (marquee/box select): drag on empty canvas to rubber-band
-      a selection rectangle and select every object it touches. (No such tool yet.)
+- [x] Drag-to-select (marquee/box select): with the Select tool, dragging on
+      empty canvas draws a rubber-band rectangle (butter fill, dashed navy) and
+      selects every object it grazes on release; a tiny drag is treated as a
+      click and clears. Pure helpers in src/lib/marquee.ts, unit-tested.
 - [ ] HOOP MOCKUP looks nothing like the reference photo the user sent — rebuild
       the Stitch-view hoop to match it (need the reference image to match wood
       grain / proportions / hardware).

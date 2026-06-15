@@ -25,6 +25,7 @@ import {
   type Bounds,
 } from "../lib/geometry";
 import { snap } from "../lib/snap";
+import { rectFromPoints, rectSpanMm, marqueeSelect } from "../lib/marquee";
 import { smoothPath } from "../lib/smooth";
 import { computeTicksRange } from "../lib/ruler";
 import { mmToInch } from "../lib/units";
@@ -113,6 +114,8 @@ export default function CanvasStage() {
   );
   // Active alignment guide lines (mm) shown while dragging.
   const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] });
+  // Rubber-band marquee (drag-to-select) in mm, while dragging on empty canvas.
+  const [marquee, setMarquee] = useState<{ start: Point; end: Point } | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -239,7 +242,14 @@ export default function CanvasStage() {
     const stage = e.target.getStage();
     if (!stage) return;
     if (!isDrawTool(tool)) {
-      if (e.target === stage) setSelection([]); // click empty canvas clears
+      // Press on empty canvas with the select tool begins a rubber-band marquee;
+      // the actual selection (or a plain clear) is resolved on release.
+      if (e.target === stage && tool === "select") {
+        const p = stagePointMm(stage);
+        if (p) setMarquee({ start: p, end: p });
+      } else if (e.target === stage) {
+        setSelection([]); // click empty canvas clears
+      }
       return;
     }
     const p = stagePointMm(stage);
@@ -247,10 +257,36 @@ export default function CanvasStage() {
   }
 
   function onStageMouseMove(e: Konva.KonvaEventObject<MouseEvent>) {
-    if (viewMode === "stitch" || !isDrawTool(tool)) return;
+    if (viewMode === "stitch") return;
     const stage = e.target.getStage();
-    if (stage) setCursor(stagePointMm(stage));
+    if (!stage) return;
+    if (marquee) {
+      const p = stagePointMm(stage);
+      if (p) setMarquee((m) => (m ? { ...m, end: p } : m));
+      return;
+    }
+    if (!isDrawTool(tool)) return;
+    setCursor(stagePointMm(stage));
   }
+
+  function finishMarquee() {
+    if (!marquee) return;
+    const rect = rectFromPoints(marquee.start.x, marquee.start.y, marquee.end.x, marquee.end.y);
+    // A tiny rectangle is really a click on empty space — clear the selection.
+    // Anything bigger selects every object the box grazes.
+    setSelection(rectSpanMm(rect) < 1 ? [] : marqueeSelect(rect, objectBounds));
+    setMarquee(null);
+  }
+  // Resolve the marquee on any mouse release — even outside the canvas — so the
+  // rubber-band never gets stuck on screen. The ref always holds the latest
+  // closure (fresh marquee + object bounds) without re-subscribing each frame.
+  const finishMarqueeRef = useRef(finishMarquee);
+  finishMarqueeRef.current = finishMarquee;
+  useEffect(() => {
+    const onUp = () => finishMarqueeRef.current();
+    window.addEventListener("mouseup", onUp);
+    return () => window.removeEventListener("mouseup", onUp);
+  }, []);
 
   const drawing = viewMode === "edit" && isDrawTool(tool);
   // Rulers run the full length of the canvas, not just the hoop, so the user
@@ -419,6 +455,22 @@ export default function CanvasStage() {
                       />
                     ))}
                   </Group>
+                )}
+
+                {/* Rubber-band marquee while drag-selecting on empty canvas. */}
+                {marquee && (
+                  <Rect
+                    x={px(Math.min(marquee.start.x, marquee.end.x))}
+                    y={py(Math.min(marquee.start.y, marquee.end.y))}
+                    width={Math.abs(marquee.end.x - marquee.start.x) * scale}
+                    height={Math.abs(marquee.end.y - marquee.start.y) * scale}
+                    fill={C.butter}
+                    opacity={0.18}
+                    stroke={C.navy}
+                    strokeWidth={1}
+                    dash={[4, 3]}
+                    listening={false}
+                  />
                 )}
 
                 {drawing && draft.length > 0 && (
