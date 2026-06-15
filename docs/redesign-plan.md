@@ -18,7 +18,10 @@ NOTE: this supersedes the earlier serif (Playfair/Old Standard) pass.
 - [x] P2 App shell (nameplate, canvas inks, panels, mono numbers).
 - [x] P3 Left tool rail with custom stitch glyphs (+ snap/guides toggles).
 - [x] P4 Fixtures: export menu, dialogs, quick-start, simulator bar in press style.
-- [ ] P5 Voice & accessibility: wholesome microcopy pass; contrast/keyboard QA.
+- [x] P5 (in progress): fixed the blocked Home tooltip (header stacking); warmer
+      editor microcopy; verified contrast (char-on-butter, ink-on-cream all strong)
+      and focus rings. Remaining: dialog Tab focus-trap; the 12 jsx-a11y backdrop
+      warnings (Escape + Cancel already cover them — low priority).
 
 ---
 
