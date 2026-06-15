@@ -48,7 +48,7 @@ describe("ToolRail", () => {
     render(<ToolRail />);
     fireEvent.click(screen.getByRole("button", { name: "Snap" }));
     expect(useEditorStore.getState().snapEnabled).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: "Guides" }));
+    fireEvent.click(screen.getByRole("button", { name: "Grid" }));
     expect(useEditorStore.getState().guidesEnabled).toBe(false);
   });
 });

@@ -82,6 +82,7 @@ export default function CanvasStage() {
   const setCursor = useEditorStore((s) => s.setCursor);
   const clearDraft = useEditorStore((s) => s.clearDraft);
   const smooth = useEditorStore((s) => s.smooth);
+  const guidesEnabled = useEditorStore((s) => s.guidesEnabled); // workspace gridlines
 
   const viewMode = useEditorStore((s) => s.viewMode);
   const simPlaying = useEditorStore((s) => s.simPlaying);
@@ -326,6 +327,16 @@ export default function CanvasStage() {
     [originY, scale, size.height, rulerUnit],
   );
 
+  // Workspace gridline positions (mm), every 10mm across the hoop.
+  const gridLinesMm = useMemo(() => {
+    const step = 10;
+    const x: number[] = [];
+    for (let m = 0; m <= hoop.wMm + 1e-6; m += step) x.push(m);
+    const y: number[] = [];
+    for (let m = 0; m <= hoop.hMm + 1e-6; m += step) y.push(m);
+    return { x, y };
+  }, [hoop.wMm, hoop.hMm]);
+
   return (
     <main
       ref={containerRef}
@@ -500,6 +511,31 @@ export default function CanvasStage() {
 
             {viewMode === "edit" && (
               <>
+                {/* Light workspace gridlines (toggled by the Guides helper) — a
+                    10mm grid clipped to the hoop, drawn under the design. */}
+                {guidesEnabled && (
+                  <Group listening={false}>
+                    {gridLinesMm.x.map((mm, i) => (
+                      <Line
+                        key={`grid-x-${i}`}
+                        points={[px(mm), originY, px(mm), originY + hoopH]}
+                        stroke={C.navy}
+                        strokeWidth={1}
+                        opacity={mm % 50 < 1e-6 ? 0.16 : 0.08}
+                      />
+                    ))}
+                    {gridLinesMm.y.map((mm, i) => (
+                      <Line
+                        key={`grid-y-${i}`}
+                        points={[originX, py(mm), originX + hoopW, py(mm)]}
+                        stroke={C.navy}
+                        strokeWidth={1}
+                        opacity={mm % 50 < 1e-6 ? 0.16 : 0.08}
+                      />
+                    ))}
+                  </Group>
+                )}
+
                 {project.objects
                   .filter((o) => o.visible)
                   .map((o) => (
@@ -946,7 +982,6 @@ function ObjectShape({
   // Part of a multi-selection: dragging moves every selected object together.
   const multi = selected && selectedIds.length > 1;
   const snapEnabled = useEditorStore((s) => s.snapEnabled);
-  const guidesEnabled = useEditorStore((s) => s.guidesEnabled);
   // px per mm — for converting a snap offset (mm) back to canvas pixels.
   const scalePx = px(1) - px(0);
   const stroke = color ? `rgb(${color.rgb.join(",")})` : "#888";
@@ -1009,7 +1044,8 @@ function ObjectShape({
           const res = snap(moving, targets, hoopMm, SNAP_MM);
           if (res.dx !== 0) g.x(g.x() + res.dx * scalePx);
           if (res.dy !== 0) g.y(g.y() + res.dy * scalePx);
-          onGuides(guidesEnabled ? { x: res.guidesX, y: res.guidesY } : { x: [], y: [] });
+          // Alignment guides always show while snapping (no toggle).
+          onGuides({ x: res.guidesX, y: res.guidesY });
         } else {
           onGuides({ x: [], y: [] });
         }
