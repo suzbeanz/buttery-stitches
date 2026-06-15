@@ -65,6 +65,17 @@ the living audit/polish list: check items off as they land.
       (up to ~19 mm). Fixed in engine/resample.ts.
 - [ ] Drag-to-select (marquee/box select): drag on empty canvas to rubber-band
       a selection rectangle and select every object it touches. (No such tool yet.)
+- [ ] HOOP MOCKUP looks nothing like the reference photo the user sent — rebuild
+      the Stitch-view hoop to match it (need the reference image to match wood
+      grain / proportions / hardware).
+- [ ] STITCH-VIEW PLAY still shows an empty frame — playback never reveals
+      stitches. Investigate SimulatorBar rAF + simIndex/simTotal + StitchView
+      reveal; it must animate from 0 and actually draw.
+- [ ] Footer: "Made With ❤️ by Suz" linking LinkedIn
+      (https://www.linkedin.com/in/suzie-schmitt/) and GitHub
+      (https://github.com/suzbeanz/).
+- [ ] Homepage / landing with sections: About, What Buttery Stitches Does, How
+      to use it (marketing page in front of the editor).
 - [ ] Foolproof for 60+: every action obvious and forgiving; plain words; no
       dead-ends; nothing that needs explaining twice.
 - [ ] Keep growing the journey suite: cover the image-import path (quantize →

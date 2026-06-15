@@ -81,7 +81,9 @@ export default function CanvasStage() {
   const smooth = useEditorStore((s) => s.smooth);
 
   const viewMode = useEditorStore((s) => s.viewMode);
+  const simPlaying = useEditorStore((s) => s.simPlaying);
   const setSimTotal = useEditorStore((s) => s.setSimTotal);
+  const setSimIndex = useEditorStore((s) => s.setSimIndex);
   // Note: `simIndex` is intentionally NOT subscribed here. It changes every
   // animation frame during playback; reading it inside StitchView keeps the
   // (hidden) edit layer from re-rendering on every frame.
@@ -89,6 +91,17 @@ export default function CanvasStage() {
   // The assembled design drives both this preview and the exporter.
   const design = useMemo(() => generateDesign(project), [project]);
   useEffect(() => setSimTotal(design.length), [design, setSimTotal]);
+
+  // Whenever Stitch view is showing and we're not mid-playback, pin the cursor
+  // to the FRESH stitch count so the finished design is always on screen. This
+  // is what prevents the "empty hoop" frame: relying on a possibly-stale total
+  // at the moment the view switches could otherwise leave the cursor at 0.
+  useEffect(() => {
+    if (viewMode === "stitch" && !simPlaying) {
+      setSimTotal(design.length);
+      setSimIndex(design.length);
+    }
+  }, [viewMode, simPlaying, design, setSimTotal, setSimIndex]);
 
   // Bounding box of every object (mm) — snap targets while dragging.
   const objectBounds = useMemo(
