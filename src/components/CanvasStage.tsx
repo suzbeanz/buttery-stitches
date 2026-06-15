@@ -52,6 +52,7 @@ const JOIN_SNAP_MM = 3; // snap the closing end of a fill polygon to its start
 
 const C = {
   cream: "#FFFDF3",
+  fabric: "#ECE8DE", // soft neutral "fabric" so light thread colors stay visible
   butter: "#F9E9A6",
   butterDeep: "#EBCB4E",
   navy: "#16234A",
@@ -241,7 +242,7 @@ export default function CanvasStage() {
               y={originY}
               width={hoopW}
               height={hoopH}
-              fill="#ffffff"
+              fill={C.fabric}
               stroke={C.navySoft}
               strokeWidth={1.5}
               dash={[6, 4]}
