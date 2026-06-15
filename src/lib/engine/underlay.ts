@@ -49,6 +49,16 @@ export function fillUnderlay(rings: Path[], topAngle = 0): Path {
   return [...fillEdgeUnderlay(rings), ...fillParallelUnderlay(rings, topAngle)];
 }
 
+/**
+ * Centerline running underlay for a satin stroke. A run straight down the
+ * column's center anchors it to the fabric so the top throws sit flat with loft
+ * — the standard underlay for satin lettering (better than tracing the glyph's
+ * silhouette, which leaves the column interior unsupported).
+ */
+export function centerlineUnderlay(centerline: Path): Path {
+  return centerline.length >= 2 ? runningStitch(centerline, UNDERLAY_STITCH) : [];
+}
+
 /** Edge run around the region outline (pass 1 of the fill underlay). */
 export function fillEdgeUnderlay(rings: Path[]): Path {
   const outer = rings[0];

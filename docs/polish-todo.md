@@ -13,6 +13,9 @@ the living audit/polish list: check items off as they land.
       order (reversing a stroke when its far end is closer) so the needle takes
       the shortest path — fewer, shorter jumps. Pure reordering, geometry intact.
       Verified: "Butters" exports to all 5 formats, longest stitch 5.5mm.
+- [x] Proper satin underlay: a centerline running stitch is laid down each
+      stroke (anchors the column for loft), replacing the glyph-silhouette edge
+      run that left the column interior unsupported. Lighter and more correct.
 - [ ] Next quality passes to consider: inset fill edge-underlay so it hides under
       the top layer; smart tatami angle (principal axis) for broad fills;
       corner mitering on very sharp satin turns.
