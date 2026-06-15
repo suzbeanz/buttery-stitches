@@ -24,19 +24,26 @@ Fixed:
 - [x] Removed 10 unused `@expo-google-fonts/*` deps (fonts ship as bundled .ttf).
 - [x] Fixed stale `CONTRIBUTING.md` "README roadmap" reference.
 
-Deferred (need a decision or are larger — not yet done):
-- [ ] Hoist `generateDesign()` to one memoized source (CanvasStage, DesignPanel,
-      ExportMenu, PropertiesPanel each regenerate it independently). Biggest perf win.
+Deferred — now done:
+- [x] Hoist `generateDesign()` to one memoized source: `designFor(project)` shared
+      by the canvas, validation, exporter, and worksheet.
+- [x] `satinUnderlay` resamples rails to a common count before centerline/edge runs.
+- [x] Douglas–Peucker rewritten iteratively (no deep stack / per-level allocs).
+- [x] Commit name/color text edits on blur (one undo step per rename).
+- [x] Added "salted red" to the Tailwind theme; swapped arbitrary red classes.
+- [x] `manualChunks` splits Konva into its own vendor chunk (chunk warning gone).
+- [x] Dialog focus: move focus into the dialog on open, restore on close
+      (`useDialogFocus`), applied to the text, image, and help dialogs.
+
+Still open (need a decision or are larger):
 - [ ] Counters that *graze* their outer ring aren't cut out (`ringContains` needs
       all sampled points inside) — risk: changing it could re-break script unions.
-- [ ] `satinUnderlay`/`centerlineOf` assume index-aligned rails (wrong on edited/
-      imported satin); resample to a common count first.
-- [ ] Douglas–Peucker is O(n^2) worst case (can hang on huge traced outlines) —
-      make it iterative.
-- [ ] Dialog focus-trap + restore-focus; keyboard path for layer drag-reorder.
-- [ ] Commit name/color text edits on blur (currently one undo step per keystroke).
-- [ ] Single shared palette module + add "salted red" to the Tailwind theme.
-- [ ] Run Playwright e2e (export path) in CI; consider `manualChunks` for Konva.
+- [ ] Full Tab focus-trap inside dialogs (initial/restore focus done; trapping Tab
+      cycling skipped — needs browser verification). Keyboard path for layer
+      drag-reorder (still mouse-only).
+- [ ] Single shared palette module for the Konva/printable-HTML hex literals
+      (Tailwind side can't import it without a loader).
+- [ ] Run Playwright e2e (the export path) in CI — currently unit-only.
 
 ## Auto-digitize (flat image → embroidery) — the big one
 - [x] Anti-aliasing fringe became dozens of thin "running" objects — drop short

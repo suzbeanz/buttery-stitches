@@ -1,4 +1,5 @@
 /** Keyboard-shortcut cheat sheet, toggled with `?`. */
+import { useDialogFocus } from "./useEscapeToClose";
 
 const GROUPS: { title: string; keys: [string, string][] }[] = [
   {
@@ -38,6 +39,7 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
 ];
 
 export default function HelpOverlay({ onClose }: { onClose: () => void }) {
+  const dialogRef = useDialogFocus<HTMLDivElement>();
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 p-4"
@@ -46,10 +48,12 @@ export default function HelpOverlay({ onClose }: { onClose: () => void }) {
       }}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
+        tabIndex={-1}
         aria-label="Keyboard shortcuts"
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border border-navy/20 bg-cream p-5 shadow-2xl"
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border border-navy/20 bg-cream p-5 shadow-2xl outline-none"
       >
         <h2 className="mb-4 font-butter text-lg font-semibold text-navy">
           🧈 Keyboard shortcuts
