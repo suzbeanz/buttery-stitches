@@ -7,6 +7,7 @@ import SimulatorBar from "./components/SimulatorBar";
 import PropertiesPanel from "./components/PropertiesPanel";
 import HelpOverlay from "./components/HelpOverlay";
 import Home from "./components/Home";
+import RulerStrip from "./components/RulerStrip";
 import { useProjectStore } from "./store/projectStore";
 import { useEditorStore, type Tool } from "./store/editorStore";
 import { cloneObject } from "./lib/objects";
@@ -88,8 +89,9 @@ function Studio({ onHome }: { onHome: () => void }) {
   const overlay = "absolute inset-y-0 z-40 shadow-butter";
 
   return (
-    <div className="flex h-full flex-col bg-cream text-navy">
+    <div className="flex h-full flex-col bg-butter-100 text-navy">
       <TopBar onHelp={() => setShowHelp((v) => !v)} onHome={onHome} />
+      <RulerStrip />
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         {layersOpen && (
           <div className={isNarrow ? `${overlay} left-0` : "contents"}>

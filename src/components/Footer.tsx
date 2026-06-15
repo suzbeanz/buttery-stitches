@@ -29,9 +29,6 @@ export default function Footer() {
           <GitHubMark />
         </a>
       </div>
-      <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-navy/45">
-        Distributed by Buttery Stitches · Open Source
-      </p>
     </div>
   );
 }

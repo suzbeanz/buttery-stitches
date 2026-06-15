@@ -31,9 +31,9 @@ export default function PropertiesPanel() {
   );
 
   return (
-    <aside className="flex h-full w-64 shrink-0 flex-col border-l border-navy/15 bg-butter-100">
-      <div className="border-b border-navy/15 px-3 py-2 font-butter text-sm font-semibold text-navy">
-        Properties
+    <aside className="flex h-full w-64 shrink-0 flex-col border-l border-navy/25 bg-butter-100">
+      <div className="flex items-center gap-1.5 border-b-2 border-navy bg-butter-200 px-3 py-2 text-xs font-bold uppercase tracking-[0.18em] text-navy">
+        <span className="text-[#C0392B]">*</span> Properties
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -108,7 +108,7 @@ function ObjectProperties({
   }, [object]);
 
   return (
-    <div className="flex flex-col gap-3 border-b border-navy/15 p-3 text-sm">
+    <div className="flex flex-col gap-3 border-b border-navy/25 p-3 text-sm">
       <Field label="Name">
         <input
           value={object.name}
@@ -288,7 +288,7 @@ function OutlineControl({ fill }: { fill: EmbObject }) {
   };
 
   return (
-    <div className="flex flex-col gap-2 border-b border-navy/15 p-3 text-sm">
+    <div className="flex flex-col gap-2 border-b border-navy/25 p-3 text-sm">
       <span className="text-xs font-semibold uppercase tracking-wide text-navy/60">
         Outline
       </span>
@@ -402,13 +402,13 @@ function ThreadColors() {
                 value={c.brand ?? ""}
                 placeholder="Brand"
                 onChange={(e) => updateColor(c.id, { brand: e.target.value })}
-                className="min-w-0 flex-1 rounded border border-navy/15 bg-butter-50/60 px-1 py-0.5 text-[11px] text-navy outline-none placeholder:text-navy/30"
+                className="min-w-0 flex-1 rounded border border-navy/25 bg-butter-50/60 px-1 py-0.5 text-[11px] text-navy outline-none placeholder:text-navy/30"
               />
               <input
                 value={c.code ?? ""}
                 placeholder="Code"
                 onChange={(e) => updateColor(c.id, { code: e.target.value })}
-                className="w-16 rounded border border-navy/15 bg-butter-50/60 px-1 py-0.5 text-[11px] text-navy outline-none placeholder:text-navy/30"
+                className="w-16 rounded border border-navy/25 bg-butter-50/60 px-1 py-0.5 text-[11px] text-navy outline-none placeholder:text-navy/30"
               />
             </div>
           </li>
