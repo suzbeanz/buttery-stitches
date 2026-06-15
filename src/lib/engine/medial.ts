@@ -346,15 +346,28 @@ export interface MedialOptions {
  */
 const OVERSHOOT_MM = 0.2;
 
+/** One satin stroke: the smoothed centerline (for underlay) and its throws. */
+export interface SatinColumn {
+  centerline: Path;
+  throws: Path;
+}
+
 /**
- * Build satin columns down the medial axis of a fill region. Returns one run of
- * penetrations per skeleton branch, following each stroke's centerline with a
- * width that tracks the real stroke (so serifs and tapers stay covered). Closed
- * loops (the ring of an o, the bowl of an e) are stitched all the way around.
- * Returns `[]` if the region is too small/degenerate to skeletonize (the caller
- * then falls back to a reliable fill).
+ * Just the throws per skeleton branch (back-compat for coverage checks/tests).
  */
 export function medialSatin(rings: Path[], opts: MedialOptions): Path[] {
+  return medialColumns(rings, opts).map((c) => c.throws);
+}
+
+/**
+ * Build satin columns down the medial axis of a fill region — one per skeleton
+ * branch — returning each stroke's smoothed centerline (for a centerline
+ * underlay) and its throws. Width tracks the real stroke (so serifs and tapers
+ * stay covered) and closed loops (the ring of an o, the bowl of an e) are
+ * stitched all the way around. Returns `[]` if the region is too
+ * small/degenerate to skeletonize (the caller then falls back to a reliable fill).
+ */
+export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[] {
   const cellMm = opts.cellMm ?? 0.4;
   const oriented = orientByDepth(rings);
   const grid = rasterize(oriented, cellMm);
@@ -364,7 +377,7 @@ export function medialSatin(rings: Path[], opts: MedialOptions): Path[] {
   const skel = thin(grid);
   const branches = traceSkeleton(skel, grid.w, grid.h);
 
-  const runs: Path[] = [];
+  const columns: SatinColumn[] = [];
   for (const branch of branches) {
     if (branch.length < 2) continue;
     const loop = isLoop(branch);
@@ -431,9 +444,9 @@ export function medialSatin(rings: Path[], opts: MedialOptions): Path[] {
       else pts.push(right[i], left[i]);
     });
     const capped = capSegmentLength(pts, MAX_THROW_MM);
-    if (capped.length >= 2) runs.push(capped);
+    if (capped.length >= 2) columns.push({ centerline: center, throws: capped });
   }
-  return runs;
+  return columns;
 }
 
 /**

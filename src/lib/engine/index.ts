@@ -4,10 +4,11 @@ import { distance } from "../geometry";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
 import { tatamiFill, splitFillRegions } from "./fill";
-import { medialSatin, satinCoverage } from "./medial";
+import { medialColumns, satinCoverage, type SatinColumn } from "./medial";
 import {
   fillEdgeUnderlay,
   fillParallelUnderlay,
+  centerlineUnderlay,
   satinUnderlay,
 } from "./underlay";
 import { dropShortStitches, splitLongTravels } from "./resample";
@@ -139,15 +140,16 @@ function orderByNearest(runs: Point[][], from: Point | null): Point[][] {
 }
 
 /**
- * Medial-axis satin for a region, but only if it actually fills the glyph.
- * Returns the per-stroke runs when coverage is good, or `[]` to signal the
- * caller to use a plain fill instead — so lettering is shiny when it can be and
- * always solid when it can't.
+ * Medial-axis satin columns for a region, but only if they actually fill the
+ * glyph. Returns the per-stroke columns (centerline + throws) when coverage is
+ * good, or `[]` to signal the caller to use a plain fill instead — so lettering
+ * is shiny when it can be and always solid when it can't.
  */
-function acceptableSatin(region: Path[], density: number): Path[] {
-  const runs = medialSatin(region, { density });
-  if (runs.length === 0) return [];
-  return satinCoverage(region, runs) >= MIN_SATIN_COVERAGE ? runs : [];
+function acceptableSatin(region: Path[], density: number): SatinColumn[] {
+  const columns = medialColumns(region, { density });
+  if (columns.length === 0) return [];
+  const coverage = satinCoverage(region, columns.map((c) => c.throws));
+  return coverage >= MIN_SATIN_COVERAGE ? columns : [];
 }
 
 /**
@@ -187,18 +189,26 @@ export function generateObjectRuns(object: EmbObject): StitchRun[] {
     // actually covers the glyph. If the skeleton is poor (junction-heavy or
     // chunky shapes), we fall back to a plain tatami fill so output is never
     // broken. `satinRuns` is empty when we fall back.
-    const satinRuns = satin ? acceptableSatin(region, p.density) : [];
-    const usingSatin = satinRuns.length > 0;
+    const columns = satin ? acceptableSatin(region, p.density) : [];
+    const usingSatin = columns.length > 0;
     const travelMax = usingSatin ? 8 : 6;
 
     let cursor: Point | null = null;
     if (p.underlay) {
-      // Edge run for both; a perpendicular tatami pass only under tatami fills
-      // (it would show as wrong hatching beneath satin lettering).
-      const edge = dropShortStitches(fillEdgeUnderlay(region));
-      addRun(runs, edge, true);
-      if (edge.length) cursor = edge[edge.length - 1];
-      if (!usingSatin) {
+      if (usingSatin) {
+        // Run a centerline underlay down each satin stroke to anchor the column
+        // (proper satin underlay), rather than tracing the glyph silhouette.
+        for (const col of columns) {
+          const run = dropShortStitches(centerlineUnderlay(col.centerline));
+          addRun(runs, run, true);
+          if (run.length) cursor = run[run.length - 1];
+        }
+      } else {
+        // Fill underlay: an edge run around the outline + a perpendicular tatami
+        // pass that the top rows can bite into.
+        const edge = dropShortStitches(fillEdgeUnderlay(region));
+        addRun(runs, edge, true);
+        if (edge.length) cursor = edge[edge.length - 1];
         for (const sub of splitLongTravels(fillParallelUnderlay(region, p.angle), travelMax)) {
           addRun(runs, dropShortStitches(sub), true);
         }
@@ -209,7 +219,7 @@ export function generateObjectRuns(object: EmbObject): StitchRun[] {
     // left off, so the needle takes the shortest path between them — fewer and
     // shorter jumps, a neater stitch-out. Pure reordering; geometry is unchanged.
     const topRuns: Point[][] = usingSatin
-      ? orderByNearest(satinRuns, cursor)
+      ? orderByNearest(columns.map((c) => c.throws), cursor)
       : [tatamiFill(region, { density: p.density, angle: p.angle })];
 
     for (const run of topRuns) {
