@@ -40,8 +40,8 @@ export default function LayerPanel() {
 
   return (
     <aside className="flex h-full w-60 shrink-0 flex-col border-r border-navy/25 bg-butter-100">
-      <div className="flex items-center gap-1.5 border-b-2 border-navy bg-butter-200 px-3 py-2 text-xs font-bold uppercase tracking-[0.18em] text-navy">
-        <span className="text-salted">*</span> Stitch Order
+      <div className="flex items-center gap-1.5 border-b-2 border-navy bg-butter-200 px-3 py-2 font-label text-xs font-semibold uppercase tracking-[0.18em] text-ink-deep">
+        <span className="text-stamp">✦</span> Stitch Order
       </div>
 
       {objects.length === 0 ? (

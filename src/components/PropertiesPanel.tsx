@@ -32,8 +32,8 @@ export default function PropertiesPanel() {
 
   return (
     <aside className="flex h-full w-64 shrink-0 flex-col border-l border-navy/25 bg-butter-100">
-      <div className="flex items-center gap-1.5 border-b-2 border-navy bg-butter-200 px-3 py-2 text-xs font-bold uppercase tracking-[0.18em] text-navy">
-        <span className="text-salted">*</span> Properties
+      <div className="flex items-center gap-1.5 border-b-2 border-navy bg-butter-200 px-3 py-2 font-label text-xs font-semibold uppercase tracking-[0.18em] text-ink-deep">
+        <span className="text-stamp">✦</span> Properties
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -224,9 +224,13 @@ function ObjectProperties({
         </label>
       )}
 
-      <div className="mt-1 flex items-center justify-between rounded bg-butter-200/60 px-2 py-1 text-xs text-navy/80">
-        <span>Stitches</span>
-        <span className="tabular-nums">{stitchCount.toLocaleString()}</span>
+      <div className="mt-1 flex items-center justify-between rounded-sm border border-ink/15 bg-butter-200/50 px-2 py-1 text-navy/80">
+        <span className="font-label text-[11px] font-semibold uppercase tracking-[0.12em]">
+          Stitches
+        </span>
+        <span className="font-mono text-xs tabular-nums">
+          {stitchCount.toLocaleString()}
+        </span>
       </div>
     </div>
   );

@@ -48,14 +48,17 @@ export default function Home({ onStart }: { onStart: () => void }) {
           </div>
         </PressCard>
 
-        <div className="mt-7 text-center">
+        <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
           <PressButton onClick={onStart} className="text-base">
             Start Stitching
           </PressButton>
-          <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.14em] text-char/60">
-            Free · No sign-up · Stays on your machine
-          </p>
+          <PressButton variant="ghost" href="https://github.com/suzbeanz/buttery-stitches">
+            <GithubGlyph /> View on GitHub
+          </PressButton>
         </div>
+        <p className="mt-3 text-center font-mono text-[11px] uppercase tracking-[0.14em] text-char/60">
+          Free · No sign-up · Stays on your machine
+        </p>
       </Col>
 
       <Tape labels={TBSP} className="mt-12" />
@@ -81,7 +84,7 @@ export default function Home({ onStart }: { onStart: () => void }) {
           <Feature title="Picture → Stitches" motif={<ImageMotif />}>
             Drop in a logo or line art and get clean, machine-ready stitches.
           </Feature>
-          <Feature title="Add Words" motif={<StickMotif />}>
+          <Feature title="Add Words" motif={<TypeMotif />}>
             Stitch a name or message in curated fonts — crisp satin or solid fill.
           </Feature>
           <Feature title="Preview &amp; Export" motif={<NeedleMotif />}>
@@ -203,13 +206,27 @@ function ImageMotif() {
     </svg>
   );
 }
-function StickMotif() {
+function TypeMotif() {
+  // A serif "Aa" — clearly "type / add words", in the brand accent face.
   return (
     <svg width="48" height="48" viewBox="0 0 58 58" fill="none" aria-hidden>
-      <rect x="8" y="20" width="42" height="18" rx="2" stroke={INK} strokeWidth="2.5" />
-      <path d="M8 24 L14 20 M8 34 L14 38 M50 24 L44 20 M50 34 L44 38" stroke={INK} strokeWidth="1.5" />
-      <line x1="20" y1="20" x2="20" y2="38" stroke={INK} strokeWidth="1" />
-      <line x1="38" y1="20" x2="38" y2="38" stroke={INK} strokeWidth="1" />
+      <text
+        x="29"
+        y="42"
+        textAnchor="middle"
+        fill={INK}
+        fontFamily="'DM Serif Display', Georgia, serif"
+        fontSize="40"
+      >
+        Aa
+      </text>
+    </svg>
+  );
+}
+function GithubGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12 .5C5.37.5 0 5.87 0 12.5c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.74.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.5.99.11-.78.42-1.31.76-1.61-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.52.12-3.17 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.65.25 2.87.12 3.17.77.84 1.23 1.91 1.23 3.22 0 4.61-2.8 5.62-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58A12.01 12.01 0 0 0 24 12.5C24 5.87 18.63.5 12 .5z" />
     </svg>
   );
 }
