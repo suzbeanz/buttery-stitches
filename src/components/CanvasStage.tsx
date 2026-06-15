@@ -945,6 +945,8 @@ function ObjectShape({
 }) {
   // Part of a multi-selection: dragging moves every selected object together.
   const multi = selected && selectedIds.length > 1;
+  const snapEnabled = useEditorStore((s) => s.snapEnabled);
+  const guidesEnabled = useEditorStore((s) => s.guidesEnabled);
   // px per mm — for converting a snap offset (mm) back to canvas pixels.
   const scalePx = px(1) - px(0);
   const stroke = color ? `rgb(${color.rgb.join(",")})` : "#888";
@@ -1003,10 +1005,14 @@ function ObjectShape({
           minY: base.minY + (b.y - a.y),
           maxY: base.maxY + (b.y - a.y),
         };
-        const res = snap(moving, targets, hoopMm, SNAP_MM);
-        if (res.dx !== 0) g.x(g.x() + res.dx * scalePx);
-        if (res.dy !== 0) g.y(g.y() + res.dy * scalePx);
-        onGuides({ x: res.guidesX, y: res.guidesY });
+        if (snapEnabled) {
+          const res = snap(moving, targets, hoopMm, SNAP_MM);
+          if (res.dx !== 0) g.x(g.x() + res.dx * scalePx);
+          if (res.dy !== 0) g.y(g.y() + res.dy * scalePx);
+          onGuides(guidesEnabled ? { x: res.guidesX, y: res.guidesY } : { x: [], y: [] });
+        } else {
+          onGuides({ x: [], y: [] });
+        }
       }}
       onDragEnd={(e) => {
         onGuides({ x: [], y: [] });

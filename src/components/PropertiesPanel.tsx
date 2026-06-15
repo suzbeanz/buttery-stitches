@@ -347,14 +347,14 @@ function ThreadColors() {
   return (
     <div className="p-3">
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wide text-navy/60">
+        <span className="font-label text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-deep">
           Threads
         </span>
         <button
           onClick={() =>
             addColor({ id: newId("color"), rgb: [120, 120, 120], name: "New" })
           }
-          className="rounded bg-navy px-2 py-0.5 text-xs text-butter-200 hover:bg-navy-light"
+          className="rounded-sm border-2 border-ink bg-ink px-2 py-0.5 font-label text-[10px] font-semibold uppercase tracking-wide text-cream shadow-press-sm hover:bg-ink-deep active:translate-y-[2px] active:shadow-none"
         >
           + Add
         </button>
@@ -364,8 +364,10 @@ function ThreadColors() {
         {colors.map((c) => (
           <li
             key={c.id}
-            className={`flex flex-col gap-1 rounded px-1.5 py-1.5 ${
-              activeColorId === c.id ? "bg-butter-300" : "hover:bg-butter-200/70"
+            className={`flex flex-col gap-1 rounded-sm px-1.5 py-1.5 ${
+              activeColorId === c.id
+                ? "bg-butter-200 ring-1 ring-ink/25"
+                : "hover:bg-butter-200/60"
             }`}
           >
             <div className="flex items-center gap-2">
@@ -387,10 +389,10 @@ function ThreadColors() {
               <button
                 onClick={() => setActiveColorId(c.id)}
                 title="Use for new objects"
-                className={`rounded px-1.5 py-0.5 text-[10px] ${
+                className={`rounded-sm px-1.5 py-0.5 font-label text-[10px] font-semibold uppercase tracking-wide ${
                   activeColorId === c.id
-                    ? "bg-navy text-butter-200"
-                    : "text-navy/60 hover:bg-butter-300/60"
+                    ? "bg-ink text-cream"
+                    : "text-ink/60 hover:bg-butter-300/60"
                 }`}
               >
                 {activeColorId === c.id ? "Active" : "Use"}
@@ -439,7 +441,7 @@ function Field({
 }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-xs text-navy/60">{label}</span>
+      <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/60">{label}</span>
       {children}
     </label>
   );
