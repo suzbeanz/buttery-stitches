@@ -542,18 +542,18 @@ export default function CanvasStage() {
                       <Line
                         key={`gx-${i}`}
                         points={[px(gx), originY, px(gx), originY + hoopH]}
-                        stroke={C.butterDeep}
-                        strokeWidth={1}
-                        dash={[4, 3]}
+                        stroke={C.salted}
+                        strokeWidth={1.25}
+                        dash={[5, 3]}
                       />
                     ))}
                     {guides.y.map((gy, i) => (
                       <Line
                         key={`gy-${i}`}
                         points={[originX, py(gy), originX + hoopW, py(gy)]}
-                        stroke={C.butterDeep}
-                        strokeWidth={1}
-                        dash={[4, 3]}
+                        stroke={C.salted}
+                        strokeWidth={1.25}
+                        dash={[5, 3]}
                       />
                     ))}
                   </Group>

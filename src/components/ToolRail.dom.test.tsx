@@ -36,4 +36,19 @@ describe("ToolRail", () => {
     expect(useEditorStore.getState().smooth).toBe(true);
     expect(curve.getAttribute("aria-pressed")).toBe("true");
   });
+
+  it("opens the Add-words flow from the Make group", () => {
+    render(<ToolRail />);
+    fireEvent.click(screen.getByRole("button", { name: "Words" }));
+    expect(useEditorStore.getState().pendingStart).toBe("text");
+  });
+
+  it("toggles snap and guides", () => {
+    useEditorStore.setState({ snapEnabled: true, guidesEnabled: true });
+    render(<ToolRail />);
+    fireEvent.click(screen.getByRole("button", { name: "Snap" }));
+    expect(useEditorStore.getState().snapEnabled).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Guides" }));
+    expect(useEditorStore.getState().guidesEnabled).toBe(false);
+  });
 });
