@@ -154,6 +154,9 @@ function useGlobalShortcuts(setShowHelp: (fn: (v: boolean) => boolean) => void) 
     function onKey(e: KeyboardEvent) {
       const el = document.activeElement;
       if (el && ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)) return;
+      // Don't let editor shortcuts (tool keys, Space, p, …) leak through an open
+      // modal — they'd silently change tools/view behind the dialog.
+      if (document.querySelector('[aria-modal="true"]')) return;
 
       const editor = useEditorStore.getState();
       const mod = e.metaKey || e.ctrlKey;

@@ -20,7 +20,7 @@ export function createEmptyProject(): Project {
 }
 
 /**
- * Validate and normalise an unknown value into a Project. Throws on anything
+ * Validate and normalize an unknown value into a Project. Throws on anything
  * that clearly isn't a v1 project file. This is intentionally strict — a
  * `.embproj` is meant to be the lossless source of truth, so we surface
  * corruption rather than silently guessing.
@@ -44,7 +44,7 @@ export function parseProject(value: unknown): Project {
   return value as Project;
 }
 
-/** The Project shape is plain JSON, so serialising is trivial. */
+/** The Project shape is plain JSON, so serializing is trivial. */
 export function serializeProject(project: Project): string {
   return JSON.stringify(project, null, 2);
 }

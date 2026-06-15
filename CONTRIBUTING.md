@@ -36,4 +36,4 @@ npm run build      # full production build
 
 - Small, focused commits with descriptive messages.
 - Include or update tests for any stitch-math change.
-- Note which build phase your change belongs to (see the README roadmap).
+- Check it against the running polish list in `docs/polish-todo.md`.

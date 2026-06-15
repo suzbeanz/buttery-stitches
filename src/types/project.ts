@@ -21,7 +21,7 @@ export interface EmbObjectParams {
   density?: number;
   /** fill direction in degrees (default 0). */
   angle?: number;
-  /** add a stabilising underlay pass (default true for fill/satin). */
+  /** add a stabilizing underlay pass (default true for fill/satin). */
   underlay?: boolean;
   /** mm added to satin width to compensate for fabric pull (default 0.2). */
   pullComp?: number;

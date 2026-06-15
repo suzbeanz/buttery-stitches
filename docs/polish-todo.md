@@ -3,6 +3,41 @@
 Working toward a Hatch-by-Wilcom-level, open-source embroidery digitizer. This is
 the living audit/polish list: check items off as they land.
 
+## Full codebase audit (2026-06-15)
+Three-way audit (engine/correctness, React/UI/state, cross-cutting hygiene).
+Baseline: typecheck clean, lint 0 errors / 12 a11y warnings, 240 tests green.
+
+Fixed:
+- [x] Coincident (0 mm) penetrations: assembled design now passes through
+      `collapseCoincident`, dropping same-hole punches where a tie cluster ends on
+      the run's start point or a fill span is narrower than the stitch spacing.
+- [x] Undo/redo left `selectedIds` pointing at deleted objects → ghost
+      Transformer/Properties. Store now reconciles selection whenever the object
+      set changes.
+- [x] Editor shortcuts (tool keys, Space, p) leaked through open modals → guarded
+      on `[aria-modal]`.
+- [x] `useTemporalStore` selector returned a fresh object each call → TopBar
+      re-rendered on every undo-stack tick. Wrapped in `useShallow`.
+- [x] `finishDraft` read colors via a stale render closure (could silently drop a
+      shape) → reads fresh store state.
+- [x] American-spelling fixes (labelled/normalise/serialising/stabilising).
+- [x] Removed 10 unused `@expo-google-fonts/*` deps (fonts ship as bundled .ttf).
+- [x] Fixed stale `CONTRIBUTING.md` "README roadmap" reference.
+
+Deferred (need a decision or are larger — not yet done):
+- [ ] Hoist `generateDesign()` to one memoized source (CanvasStage, DesignPanel,
+      ExportMenu, PropertiesPanel each regenerate it independently). Biggest perf win.
+- [ ] Counters that *graze* their outer ring aren't cut out (`ringContains` needs
+      all sampled points inside) — risk: changing it could re-break script unions.
+- [ ] `satinUnderlay`/`centerlineOf` assume index-aligned rails (wrong on edited/
+      imported satin); resample to a common count first.
+- [ ] Douglas–Peucker is O(n^2) worst case (can hang on huge traced outlines) —
+      make it iterative.
+- [ ] Dialog focus-trap + restore-focus; keyboard path for layer drag-reorder.
+- [ ] Commit name/color text edits on blur (currently one undo step per keystroke).
+- [ ] Single shared palette module + add "salted red" to the Tailwind theme.
+- [ ] Run Playwright e2e (export path) in CI; consider `manualChunks` for Konva.
+
 ## Auto-digitize (flat image → embroidery) — the big one
 - [x] Anti-aliasing fringe became dozens of thin "running" objects — drop short
       thin slivers; only keep long strokes as running.

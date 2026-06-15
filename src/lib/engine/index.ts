@@ -265,6 +265,35 @@ export function generateDesign(
     pushTie(out, prevPoint, toward, { id: lastObj.id, colorId: lastObj.colorId });
   }
 
+  return collapseCoincident(out);
+}
+
+/** Two penetrations closer than this (mm) would punch the same hole. */
+const COINCIDENT_EPS = 0.05;
+
+/**
+ * Drop a penetration that lands on the exact same spot as the one before it
+ * (same color, neither a jump) — the needle would punch the same hole twice,
+ * nesting thread and stressing the needle. These slip in where a tie cluster
+ * ends on the anchor that the following run also starts on, or where a fill span
+ * is narrower than the stitch spacing. Jumps and trims are always preserved.
+ */
+function collapseCoincident(design: EngineStitch[]): EngineStitch[] {
+  const out: EngineStitch[] = [];
+  for (const s of design) {
+    const prev = out[out.length - 1];
+    if (
+      prev &&
+      !prev.jump &&
+      !s.jump &&
+      !s.trim &&
+      prev.colorId === s.colorId &&
+      Math.hypot(s.x - prev.x, s.y - prev.y) < COINCIDENT_EPS
+    ) {
+      continue;
+    }
+    out.push(s);
+  }
   return out;
 }
 

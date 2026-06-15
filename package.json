@@ -17,16 +17,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@expo-google-fonts/bebas-neue": "^0.4.1",
-    "@expo-google-fonts/caveat": "^0.4.2",
-    "@expo-google-fonts/dancing-script": "^0.4.2",
-    "@expo-google-fonts/lobster": "^0.4.1",
-    "@expo-google-fonts/montserrat": "^0.4.2",
-    "@expo-google-fonts/oswald": "^0.4.2",
-    "@expo-google-fonts/pacifico": "^0.4.1",
-    "@expo-google-fonts/playfair-display": "^0.4.2",
-    "@expo-google-fonts/poppins": "^0.4.1",
-    "@expo-google-fonts/roboto-slab": "^0.4.2",
     "imagetracerjs": "^1.2.6",
     "konva": "^9.3.16",
     "lucide-react": "^1.18.0",
