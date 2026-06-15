@@ -36,10 +36,4 @@ describe("ToolRail", () => {
     expect(useEditorStore.getState().smooth).toBe(true);
     expect(curve.getAttribute("aria-pressed")).toBe("true");
   });
-
-  it("opens the Add-words flow via the Make group", () => {
-    render(<ToolRail />);
-    fireEvent.click(screen.getByRole("button", { name: "Words" }));
-    expect(useEditorStore.getState().pendingStart).toBe("text");
-  });
 });

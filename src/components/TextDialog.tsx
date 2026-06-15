@@ -160,7 +160,7 @@ export default function TextDialog({
         aria-label={editObject ? "Edit text" : "Add text"}
         className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border border-navy/20 bg-cream p-4 shadow-2xl outline-none"
       >
-        <h2 className="mb-3 font-butter text-lg font-semibold text-navy">
+        <h2 className="mb-3 font-label uppercase tracking-[0.08em] text-lg font-semibold text-navy">
           {editObject ? "Edit text" : "Add text"}
         </h2>
 

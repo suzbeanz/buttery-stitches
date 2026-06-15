@@ -78,7 +78,9 @@ export default function DesignPanel() {
 
   return (
     <div className="flex flex-col gap-3 border-b border-navy/25 p-3 text-sm">
-      <div className="font-butter text-sm font-semibold text-navy">Design</div>
+      <div className="font-label text-xs font-semibold uppercase tracking-[0.14em] text-ink-deep">
+        Design
+      </div>
 
       {/* Hoop */}
       <label className="flex flex-col gap-1">

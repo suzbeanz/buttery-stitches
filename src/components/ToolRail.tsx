@@ -1,4 +1,4 @@
-import { MousePointer2, Spline, Type, Image as ImageIcon, X } from "lucide-react";
+import { MousePointer2, Spline, X } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   useEditorStore,
@@ -8,10 +8,12 @@ import {
 } from "../store/editorStore";
 
 /**
- * Left vertical tool rail. Tools are grouped (Edit · Stitch · Make) with a label
- * under every icon, and the stitch tools use custom glyphs that DEPICT the
- * stitch they make — so "Fill" reads as an area filled with rows, not a paint
- * bucket, and "Points" reads as path anchors, not a pen. Premium and obvious.
+ * Left vertical tool rail — the tools you pick up to draw and edit. Grouped
+ * Edit (Select · Points) and Stitch (Line · Satin · Fill · Curve), each with a
+ * label, and the stitch tools use custom glyphs that DEPICT the stitch they make
+ * (Fill = an area filled with rows, not a paint bucket). Adding content
+ * (Picture · Words · Shape) lives in the top bar's Insert group, not here, so
+ * nothing is duplicated.
  */
 export default function ToolRail() {
   const tool = useEditorStore((s) => s.tool);
@@ -22,7 +24,6 @@ export default function ToolRail() {
   const setRulerUnit = useEditorStore((s) => s.setRulerUnit);
   const smooth = useEditorStore((s) => s.smooth);
   const toggleSmooth = useEditorStore((s) => s.toggleSmooth);
-  const setPendingStart = useEditorStore((s) => s.setPendingStart);
   const viewMode = useEditorStore((s) => s.viewMode);
   const locked = viewMode === "stitch"; // editing tools are inert in stitch view
   const drawing = isDrawTool(tool) && draft.length > 0;
@@ -30,7 +31,7 @@ export default function ToolRail() {
   const lockTip = "Switch to Edit view to use tools";
 
   return (
-    <aside className="flex w-[68px] shrink-0 flex-col gap-1 overflow-y-auto border-r-2 border-ink bg-cream py-2">
+    <aside className="flex w-[72px] shrink-0 flex-col gap-1 border-r-2 border-ink bg-cream py-2">
       <Group label="Edit">
         <ToolBtn id="select" label="Select" tip="Click to select; drag to move" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <MousePointer2 size={20} />
@@ -51,7 +52,6 @@ export default function ToolRail() {
         <ToolBtn id="fill" label="Fill" tip="Fill an area with stitches — click an outline" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <FillGlyph />
         </ToolBtn>
-        {/* Curve modifier */}
         <RailBtn
           label="Curve"
           tip={locked ? lockTip : "Smooth points into a curve (Line / Satin / Fill)"}
@@ -63,22 +63,14 @@ export default function ToolRail() {
         </RailBtn>
       </Group>
 
-      <Rule />
-      <Group label="Make">
-        <RailBtn label="Words" tip="Add lettering" disabled={locked} onClick={() => setPendingStart("text")}>
-          <Type size={20} />
-        </RailBtn>
-        <RailBtn label="Picture" tip="Turn a picture into stitches" disabled={locked} onClick={() => setPendingStart("image")}>
-          <ImageIcon size={20} />
-        </RailBtn>
-      </Group>
-
       {drawing && (
         <>
           <Rule />
-          <RailBtn label="Cancel" tip="Cancel (Esc)" onClick={() => clearDraft()}>
-            <X size={20} />
-          </RailBtn>
+          <Group label="Drawing">
+            <RailBtn label="Cancel" tip="Cancel (Esc)" onClick={() => clearDraft()}>
+              <X size={20} />
+            </RailBtn>
+          </Group>
         </>
       )}
 

@@ -20,7 +20,8 @@ export function designToSegments(
 ): RenderSegment[] {
   const segs: RenderSegment[] = [];
   let cur: RenderSegment | null = null;
-  const n = Math.max(0, Math.min(upTo, design.length));
+  // `upTo` is fractional during playback — floor it so indices stay integers.
+  const n = Math.max(0, Math.min(Math.floor(upTo), design.length));
 
   for (let i = 0; i < n; i++) {
     const s = design[i];
@@ -39,7 +40,9 @@ export function designToSegments(
 
 /** The needle position after `upTo` events (the last real penetration). */
 export function needleAt(design: EngineStitch[], upTo: number): Point | null {
-  const n = Math.max(0, Math.min(upTo, design.length));
+  // Floor `upTo` (fractional during playback) so `i` is always an integer index;
+  // design[fractional] is undefined and would throw on `.jump`.
+  const n = Math.max(0, Math.min(Math.floor(upTo), design.length));
   for (let i = n - 1; i >= 0; i--) {
     if (!design[i].jump) return { x: design[i].x, y: design[i].y };
   }

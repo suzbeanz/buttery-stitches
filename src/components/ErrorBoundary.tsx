@@ -32,7 +32,7 @@ export default class ErrorBoundary extends Component<Props, State> {
         <div className="text-4xl" aria-hidden>
           🧈
         </div>
-        <h1 className="font-butter text-2xl font-semibold">
+        <h1 className="font-label uppercase tracking-[0.08em] text-2xl font-semibold">
           Something hiccuped
         </h1>
         <p className="max-w-md text-sm text-navy/70">

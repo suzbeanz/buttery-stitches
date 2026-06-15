@@ -30,7 +30,6 @@ import { fixStitches } from "../lib/fix";
 import { makeShapeObject, type ShapeKind } from "../lib/shapes";
 import type { Project } from "../types/project";
 import ExportMenu from "./ExportMenu";
-import GradeStamp from "./GradeStamp";
 
 /** Shapes offered in the insert menu, with their icon and default params. */
 const SHAPES: { kind: ShapeKind; label: string; Icon: LucideIcon }[] = [
@@ -198,7 +197,12 @@ export default function TopBar({
         aria-label="Home"
         className="mx-1.5 flex select-none items-center gap-2 rounded px-1 hover:opacity-80"
       >
-        <GradeStamp size={26} rotate={-7} className="text-butter-200" />
+        {/* Butter-stick mark — high contrast on the press-blue bar. */}
+        <svg width="34" height="22" viewBox="0 0 40 26" fill="none" aria-hidden className="shrink-0">
+          <rect x="1.5" y="4" width="37" height="18" rx="3" fill="#F1DE8B" stroke="#102A57" strokeWidth="1.6" />
+          <line x1="14" y1="4" x2="14" y2="22" stroke="#102A57" strokeWidth="1.2" />
+          <line x1="26" y1="4" x2="26" y2="22" stroke="#102A57" strokeWidth="1.2" />
+        </svg>
         <span className="wordmark hidden text-xl uppercase leading-none text-butter-200 sm:inline">
           Buttery&nbsp;Stitches
         </span>

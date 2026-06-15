@@ -648,7 +648,7 @@ export default function CanvasStage() {
             >
               ✕
             </button>
-            <div className="font-butter text-2xl font-semibold">
+            <div className="font-label uppercase tracking-[0.08em] text-2xl font-semibold">
               Let&apos;s make something 🧈
             </div>
             <p className="mt-1 text-sm text-navy/60">Pick how you&apos;d like to start.</p>
