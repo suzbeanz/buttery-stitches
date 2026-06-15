@@ -11,6 +11,12 @@ export interface FillOptions {
   angle: number;
   /** mm between penetrations along a row (tatami stitch length) */
   stitchLength?: number;
+  /**
+   * Pull compensation (mm): extend each row a touch past the region edge so that,
+   * after the fabric pulls the stitches in, the sewn boundary lands on the drawn
+   * line instead of shy of it (docs/stitch-logic.md §6). Default 0.
+   */
+  pullCompMm?: number;
 }
 
 /** Default tatami stitch length (mm) — the spacing of holes along a row. */
@@ -316,6 +322,10 @@ export function tatamiFill(rings: Path[], opts: FillOptions): Path {
     }
   }
 
+  // Extend each row a touch past the edge for pull compensation, capped so a tiny
+  // span can't be pushed inside-out.
+  const comp = Math.max(0, opts.pullCompMm ?? 0);
+
   const rotated: Point[] = [];
   let k = 0;
   for (let y = minY + density / 2; y <= maxY; y += density, k++) {
@@ -323,7 +333,10 @@ export function tatamiFill(rings: Path[], opts: FillOptions): Path {
     if (spans.length === 0) continue;
     const phase = (k % 2) * (spacing / 2);
     const rowPts: Point[] = [];
-    for (const [x0, x1] of spans) rowPts.push(...alongRow(x0, x1, y, spacing, phase));
+    for (const [x0, x1] of spans) {
+      const c = Math.min(comp, (x1 - x0) / 2);
+      rowPts.push(...alongRow(x0 - c, x1 + c, y, spacing, phase));
+    }
     if (k % 2 === 1) rowPts.reverse(); // serpentine
     rotated.push(...rowPts);
   }

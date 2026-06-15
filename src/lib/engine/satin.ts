@@ -14,6 +14,25 @@ export interface SatinOptions {
 /** Largest column width before a satin stitch should really be a fill. */
 export const SATIN_MAX_WIDTH = 7;
 
+/** Pull-compensation tuning (docs/stitch-logic.md §6) — total mm a column is
+ *  widened so the sewn column matches the drawn one. Wider columns gather the
+ *  fabric more, so the comp grows with width, clamped to a sane band. */
+const PULL_BASE_MM = 0.1;
+const PULL_PER_WIDTH = 0.12;
+const PULL_MIN_MM = 0.2;
+const PULL_MAX_MM = 0.7;
+
+/**
+ * Automatic pull compensation (total mm, split across the two rails) for a satin
+ * column of the given width. Stitches pull the fabric toward the line of
+ * stitching, so a column sews narrower than drawn — and the wider the column the
+ * more it pulls in. `scale` carries the fabric multiplier (knits pull more).
+ */
+export function autoPullCompMm(widthMm: number, scale = 1): number {
+  const raw = PULL_BASE_MM + PULL_PER_WIDTH * Math.max(0, widthMm);
+  return Math.max(PULL_MIN_MM, Math.min(PULL_MAX_MM, raw)) * Math.max(0, scale);
+}
+
 function widen(l: Point, r: Point, by: number): [Point, Point] {
   const d = distance(l, r) || 1;
   const ux = (r.x - l.x) / d;

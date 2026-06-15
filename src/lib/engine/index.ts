@@ -154,8 +154,8 @@ const MAX_SATIN_STROKE_MM = 2.2;
  * the glyph. Otherwise returns `[]` so the caller lays a solid tatami fill —
  * shiny where it helps, crisp and solid where it doesn't, never sloppy.
  */
-function acceptableSatin(region: Path[], density: number): SatinColumn[] {
-  const columns = medialColumns(region, { density });
+function acceptableSatin(region: Path[], density: number, pullScale: number): SatinColumn[] {
+  const columns = medialColumns(region, { density, pullScale });
   if (columns.length === 0) return [];
 
   // Median stroke width across the glyph's strokes; bold/large faces fail this
@@ -209,7 +209,7 @@ export function generateObjectRuns(
   // medial pass falls back to tatami where satin won't cover cleanly.
   const satin = p.fillStyle === "satin";
   for (const region of splitFillRegions(object.paths)) {
-    const columns = satin ? acceptableSatin(region, density) : [];
+    const columns = satin ? acceptableSatin(region, density, fabric.pullMul) : [];
     const usingSatin = columns.length > 0;
     const travelMax = usingSatin ? 8 : 6;
     // Tatami flows along the region's grain (off-axis for roundish shapes), with
@@ -239,7 +239,7 @@ export function generateObjectRuns(
             ? runningStitch(c.centerline, p.stitchLength)
             : c.throws,
         )
-      : [tatamiFill(region, { density, angle: fillAngle })];
+      : [tatamiFill(region, { density, angle: fillAngle, pullCompMm: pullComp })];
 
     // Sew the strokes nearest-neighbor from where the underlay left off, for the
     // shortest travel between them (pure reordering; geometry unchanged).

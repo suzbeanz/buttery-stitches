@@ -125,8 +125,9 @@ run it **first**, **inset ~1 mm** from the edge so it never peeks out, at a
 | Tatami angle | ✅ per-region smart angle — flows along the grain (major axis) for elongated shapes, off-axis 45° for roundish ones; user Angle field is an offset |
 | Fill underlay (inset edge + parallel) | ✅ inset ~1 mm; +criss-cross pass for heavy fabric |
 | Satin underlay (tiered by width) | ✅ center / +edge-walk (≥ 2 mm) / +zig-zag (≥ 4 mm), per user satin **and** per medial column |
-| Pull compensation (satin) | ✅ param, scaled by fabric `pullMul`; ⚠️ not yet auto by width |
-| Fill push/pull compensation | ❌ |
+| Pull compensation (satin) | ✅ width-driven `autoPullCompMm` on medial lettering (scaled by fabric); explicit param on user satin |
+| Fill pull compensation | ✅ rows extended past the edge by a fabric-scaled comp so the sewn boundary lands on the line |
+| Fill push compensation (inset far ends) | ❌ minor; fold into mitering/validation |
 | Satin corners (miter/cap) | ❌ |
 | Max stitch / split satin | ✅ (≤ 7 mm throws, region run-splitting) |
 | Lock stitches, min-stitch, coincident collapse | ✅ |
@@ -150,9 +151,10 @@ run it **first**, **inset ~1 mm** from the edge so it never peeks out, at a
    along their major axis (area second moments), roundish/square shapes use an
    off-axis 45° so rows never band on a straight edge; the user Angle field nudges
    either as an offset. Underlay follows the same angle.
-5. **Auto pull/push compensation** — pull-comp by width; fill push-pull. (Fabric
-   scaling of density/pull/underlay is done — see the `FABRICS` registry; remaining
-   is the *width-driven* auto pull-comp and fill push-pull.)
+5. ✅ **Auto pull/push compensation** — width-driven `autoPullCompMm` widens medial
+   lettering columns (and is fabric-scaled); tatami rows extend past the edge for
+   fill pull comp. (Push insetting at fill far ends is a minor remnant, folded into
+   #6/#8.)
 6. **Satin corner mitering**; **split-satin** for 7–12 mm columns.
 7. **Texture options** — contour/echo fill (organic shapes), then motif/gradient.
 8. **Validation tuning** — flag satin > 7 mm, underlay-off on large fills, etc.

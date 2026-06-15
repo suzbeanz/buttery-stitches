@@ -42,6 +42,25 @@ describe("medialSatin", () => {
     expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(15);
   });
 
+  it("widens the column with width-driven pull compensation", () => {
+    // A 4mm-wide vertical stroke. With pull comp the rails sit a touch outside
+    // the true stroke edge so the sewn column matches the drawing.
+    const stroke: Path = [
+      { x: 10, y: 10 },
+      { x: 14, y: 10 },
+      { x: 14, y: 40 },
+      { x: 10, y: 40 },
+    ];
+    const span = (runs: Path[]) => {
+      const xs = runs.flat().map((p) => p.x);
+      return Math.max(...xs) - Math.min(...xs);
+    };
+    const plain = medialSatin([stroke], { density: 0.5 });
+    const comped = medialSatin([stroke], { density: 0.5, pullScale: 1 });
+    // ~0.58mm total comp for a 4mm stroke → noticeably wider span.
+    expect(span(comped)).toBeGreaterThan(span(plain) + 0.3);
+  });
+
   it("returns nothing for a degenerate tiny region", () => {
     const tiny: Path = [
       { x: 0, y: 0 },
