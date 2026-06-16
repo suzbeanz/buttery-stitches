@@ -16,6 +16,7 @@ export function createEmptyProject(): Project {
     heightMm: DEFAULT_HOOP.hMm,
     hoop: { ...DEFAULT_HOOP },
     fabric: "woven",
+    threadWeight: 40,
     colors: [black],
     objects: [],
   };

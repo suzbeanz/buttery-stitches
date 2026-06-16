@@ -73,6 +73,60 @@ export function planFromDesign(
   return { blocks };
 }
 
+/**
+ * Largest single stitch/jump delta a format tolerates, in 1/10 mm. DST and EXP
+ * use Tajima ternary encoding capped at 12.1 mm (121 units); the binary-coded
+ * formats tolerate ~12.7 mm. Anything longer is silently reinterpreted by the
+ * machine as a jump/trim ("invisible embroidery"), so we split it ourselves.
+ */
+export const MAX_STITCH_TENTHS: Record<EmbFormat, number> = {
+  dst: 121,
+  exp: 121,
+  pes: 127,
+  jef: 127,
+  vp3: 127,
+};
+
+/**
+ * Subdivide any stitch or jump longer than the format's maximum into equal
+ * sub-moves (deterministic; ≤ max each). Trims carry no coordinate, so they pass
+ * through untouched. Splitting is per block — a color change resets the cursor,
+ * and the exporter handles the inter-block connector itself.
+ */
+export function splitPlanForFormat(plan: StitchPlan, format: EmbFormat): StitchPlan {
+  const max = MAX_STITCH_TENTHS[format];
+  const blocks = plan.blocks.map((b) => {
+    const cmds: PlanCmd[] = [];
+    let px = 0;
+    let py = 0;
+    let have = false;
+    for (const cmd of b.cmds) {
+      if (cmd[0] === "t") {
+        cmds.push(cmd);
+        continue;
+      }
+      const [kind, x, y] = cmd;
+      if (have) {
+        const dx = x - px;
+        const dy = y - py;
+        const dist = Math.hypot(dx, dy);
+        if (dist > max) {
+          const n = Math.ceil(dist / max);
+          for (let i = 1; i < n; i++) {
+            cmds.push([kind, Math.round(px + (dx * i) / n), Math.round(py + (dy * i) / n)]);
+          }
+        }
+      }
+      cmds.push([kind, x, y]);
+      px = x;
+      py = y;
+      have = true;
+    }
+    return { rgb: b.rgb, cmds };
+  });
+  return { blocks };
+}
+
 /** Build a plan directly from a project (runs the stitch engine). */
 export function planFromProject(project: Project): StitchPlan {
   return planFromDesign(designFor(project), project.colors);
@@ -112,7 +166,10 @@ export async function exportToBytes(
     const pyodide = await getPyodide(onStage);
     await ensurePython(pyodide);
 
-    pyodide.globals.set("__plan_json", JSON.stringify(plan));
+    // Split any over-long stitch/jump for the target format before serializing,
+    // so the machine never silently turns a long stitch into a jump/trim.
+    const safe = splitPlanForFormat(plan, format);
+    pyodide.globals.set("__plan_json", JSON.stringify(safe));
     pyodide.globals.set("__fmt", format);
     pyodide.globals.set("__pes_version", pesVersion);
 

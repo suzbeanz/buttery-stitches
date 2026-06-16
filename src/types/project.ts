@@ -89,13 +89,15 @@ export interface FabricProfile {
   pullMul: number;
   /** how heavy the underlay should be. */
   underlay: "light" | "standard" | "heavy";
+  /** multiplies stitch length — pile rides longer stitches above the loops. */
+  stitchLenMul: number;
 }
 
 export const FABRICS: Record<FabricType, FabricProfile> = {
-  woven: { name: "Woven (stable)", densityMul: 1.0, pullMul: 1.0, underlay: "standard" },
-  knit: { name: "Knit / stretch", densityMul: 0.9, pullMul: 1.5, underlay: "heavy" },
-  pile: { name: "Pile / fleece", densityMul: 0.85, pullMul: 1.2, underlay: "heavy" },
-  sheer: { name: "Sheer / delicate", densityMul: 1.1, pullMul: 0.7, underlay: "light" },
+  woven: { name: "Woven (stable)", densityMul: 1.0, pullMul: 1.0, underlay: "standard", stitchLenMul: 1.0 },
+  knit: { name: "Knit / stretch", densityMul: 0.9, pullMul: 1.5, underlay: "heavy", stitchLenMul: 1.0 },
+  pile: { name: "Pile / fleece", densityMul: 0.85, pullMul: 1.2, underlay: "heavy", stitchLenMul: 1.15 },
+  sheer: { name: "Sheer / delicate", densityMul: 1.1, pullMul: 0.7, underlay: "light", stitchLenMul: 1.0 },
 };
 
 export const DEFAULT_FABRIC: FabricType = "woven";
@@ -105,6 +107,28 @@ export function fabricProfile(fabric: FabricType | undefined): FabricProfile {
   return FABRICS[fabric ?? DEFAULT_FABRIC];
 }
 
+/**
+ * Thread weight (the "wt" number on the spool). Thinner thread (higher number)
+ * lays a narrower line, so rows must pack tighter to cover; thicker thread opens
+ * up. 40wt is the industry standard baseline.
+ */
+export type ThreadWeight = 30 | 40 | 60;
+
+export const DEFAULT_THREAD_WEIGHT: ThreadWeight = 40;
+
+/** Row-spacing multiplier for a thread weight (≈ −28% gap for fine 60wt,
+ *  +15% for bold 30wt). Multiplies the density gap, so <1 = denser rows. */
+export function threadDensityMul(weight: ThreadWeight | undefined): number {
+  switch (weight ?? DEFAULT_THREAD_WEIGHT) {
+    case 60:
+      return 0.72;
+    case 30:
+      return 1.15;
+    default:
+      return 1.0;
+  }
+}
+
 export interface Project {
   version: 1;
   widthMm: number;
@@ -112,6 +136,8 @@ export interface Project {
   hoop: Hoop;
   /** what it's stitched onto (default "woven"); bends density/underlay/pull. */
   fabric?: FabricType;
+  /** thread weight (default 40wt); bends row density to keep coverage. */
+  threadWeight?: ThreadWeight;
   colors: ThreadColor[];
   /** ORDER = stitch sequence. The first object is stitched first. */
   objects: EmbObject[];
