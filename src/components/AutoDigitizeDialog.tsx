@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle } from "lucide-react";
 import type { Hoop, Project } from "../types/project";
 import { loadImageData } from "../lib/image";
 import { imageDataToObjects, estimateColorComplexity } from "../lib/trace";
@@ -129,9 +130,12 @@ export default function AutoDigitizeDialog({
         </div>
 
         {looksLikePhoto && (
-          <p className="mb-3 rounded bg-butter-200 px-2 py-1.5 text-[12px] text-navy">
-            ⚠️ This looks like a photo. Buttery Stitches is built for logos and line
-            art — expect a rough result, and try fewer colors.
+          <p className="mb-3 flex gap-1.5 rounded bg-butter-200 px-2 py-1.5 text-[12px] text-navy">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0 text-stamp" aria-hidden />
+            <span>
+              This looks like a photo. Buttery Stitches is built for logos and line
+              art — expect a rough result, and try fewer colors.
+            </span>
           </p>
         )}
 
