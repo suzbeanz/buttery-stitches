@@ -4,7 +4,7 @@ import { polylineLength } from "../geometry";
 import { resampleByDistance } from "./resample";
 import { douglasPeucker } from "../trace/simplify";
 import { smoothPath } from "../smooth";
-import { autoPullCompMm, staggeredSatin } from "./satin";
+import { autoPullCompMm, autoSatinDensity, staggeredSatin } from "./satin";
 
 /** Longest single satin throw (mm) before it is split for safety. */
 const MAX_THROW_MM = 7;
@@ -457,13 +457,19 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
     const left = smoothRail(leftRaw, loop);
     const right = smoothRail(rightRaw, loop);
 
+    // Auto-spacing: tighten rows on wide columns (narrow lettering strokes, the
+    // common case, keep the drawn density — see autoSatinDensity).
+    const sortedHalf = [...halves].sort((p, q) => p - q);
+    const medHalf = sortedHalf[sortedHalf.length >> 1] ?? 0;
+    const step = autoSatinDensity(density, Math.max(0, 2 * (medHalf - OVERSHOOT_MM)));
+
     // Choose throw positions so neither rail's gap exceeds the stitch spacing.
     const idx: number[] = [0];
     let last = 0;
     for (let i = 1; i < dense.length; i++) {
       const dl = Math.hypot(left[i].x - left[last].x, left[i].y - left[last].y);
       const dr = Math.hypot(right[i].x - right[last].x, right[i].y - right[last].y);
-      if (Math.max(dl, dr) >= density) {
+      if (Math.max(dl, dr) >= step) {
         idx.push(i);
         last = i;
       }

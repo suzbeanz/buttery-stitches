@@ -214,6 +214,8 @@ export function generateObjectRuns(
   // still WARNS on the requested density; this protects the actual stitch-out.
   const density = Math.max(MIN_SAFE_DENSITY, p.density * fabric.densityMul);
   const pullComp = p.pullComp * fabric.pullMul;
+  // Push (lengthwise) distortion tracks fabric stretch like pull does.
+  const pushComp = p.pushComp * fabric.pullMul;
   const weight = fabric.underlay;
   // Pile rides longer stitches above its loops; other fabrics keep the drawn
   // length. (The MIN floor in resample still protects against sub-mm stitches.)
@@ -235,7 +237,7 @@ export function generateObjectRuns(
     }
     addRun(
       runs,
-      dropShortStitches(satinColumn(left, right, { density, pullComp }), SATIN_MIN_STITCH),
+      dropShortStitches(satinColumn(left, right, { density, pullComp, push: pushComp }), SATIN_MIN_STITCH),
       false,
     );
     return runs;

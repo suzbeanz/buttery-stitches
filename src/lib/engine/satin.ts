@@ -30,12 +30,71 @@ export interface SatinOptions {
   density: number;
   /** mm added to the column width to compensate for fabric pull-in */
   pullComp: number;
+  /** mm trimmed off EACH end to compensate for lengthwise fabric push (open
+   *  columns only — a closed ring has no ends). */
+  push?: number;
   /** widths above this (mm) are too long for a single satin throw */
   maxWidth?: number;
 }
 
 /** Largest column width before a satin stitch should really be a fill. */
 export const SATIN_MAX_WIDTH = 7;
+
+/** Row-gap floor (mm) for auto-spacing — matches the engine's machine-safety
+ *  density floor, so tightening wide columns never bunches thread. */
+const SATIN_DENSITY_FLOOR = 0.36;
+/** Below this width (mm) the drawn density is kept as-is (narrow/mid columns are
+ *  already well covered and are what the safety tests pin down). */
+const AUTO_DENSITY_MIN_WIDTH = 4;
+
+/**
+ * Auto-spacing: a wider satin column needs denser rows to cover fully (AmeFird —
+ * density rises with width). Columns up to {@link AUTO_DENSITY_MIN_WIDTH} mm keep
+ * the drawn gap; wider ones tighten toward a floor. Never looser than asked,
+ * never tighter than the safe floor.
+ */
+export function autoSatinDensity(baseDensity: number, widthMm: number): number {
+  const w = Math.max(0, widthMm);
+  if (w <= AUTO_DENSITY_MIN_WIDTH) return baseDensity;
+  const factor = Math.max(0.85, 1 - 0.04 * (w - AUTO_DENSITY_MIN_WIDTH));
+  // Floor at the safe gap, but never LOOSEN a user who already set it tighter
+  // than the floor (the engine's own MIN_SAFE_DENSITY still guards the hard min).
+  const floor = Math.min(baseDensity, SATIN_DENSITY_FLOOR);
+  return Math.max(floor, Math.min(baseDensity, baseDensity * factor));
+}
+
+/** Walk `by` mm in from the start of an open polyline; returns the shortened
+ *  remainder (≥2 pts). If `by` ≥ the whole length the path is left untouched. */
+function trimStart(path: Path, by: number): Path {
+  if (by <= 0 || path.length < 2) return path;
+  let rem = by;
+  for (let i = 0; i < path.length - 1; i++) {
+    const seg = distance(path[i], path[i + 1]);
+    if (seg >= rem) {
+      const t = rem / (seg || 1);
+      const cut = {
+        x: path[i].x + (path[i + 1].x - path[i].x) * t,
+        y: path[i].y + (path[i + 1].y - path[i].y) * t,
+      };
+      return [cut, ...path.slice(i + 1)];
+    }
+    rem -= seg;
+  }
+  return path;
+}
+
+/** Trim `by` mm off both ends of an open polyline (push compensation). */
+function trimEnds(path: Path, by: number): Path {
+  const a = trimStart(path, by);
+  const b = trimStart([...a].reverse(), by).reverse();
+  return b.length >= 2 ? b : path;
+}
+
+/** A rail that returns (near) to its start is a closed loop (e.g. letter "o"); it
+ *  has no ends to push-compensate. */
+function isClosedRail(p: Path): boolean {
+  return p.length > 2 && distance(p[0], p[p.length - 1]) < 0.5;
+}
 
 /** A throw longer than this multiple of the column's median width is split. */
 const CORNER_SPLIT_RATIO = 1.4;
@@ -84,16 +143,29 @@ function widen(l: Point, r: Point, by: number): [Point, Point] {
 export function satinColumn(
   left: Path,
   right: Path,
-  { density, pullComp, maxWidth = SATIN_MAX_WIDTH }: SatinOptions,
+  { density, pullComp, push = 0, maxWidth = SATIN_MAX_WIDTH }: SatinOptions,
 ): Path {
   if (left.length < 2 || right.length < 2) return [];
-  const step = Math.max(0.05, density);
+
+  // Push compensation: shorten the column's ends so the fabric's lengthwise push
+  // doesn't overshoot the drawn shape. Skip closed rings (no ends).
+  const closed = isClosedRail(left) || isClosedRail(right);
+  const L = push > 0 && !closed ? trimEnds(left, push) : left;
+  const R = push > 0 && !closed ? trimEnds(right, push) : right;
+
+  // Estimate the column width to auto-tighten spacing on wide columns.
+  const wn = 8;
+  const lw = resampleByCount(L, wn);
+  const rw = resampleByCount(R, wn);
+  let wsum = 0;
+  for (let i = 0; i < wn; i++) wsum += distance(lw[i], rw[i]);
+  const step = Math.max(0.05, autoSatinDensity(density, wsum / wn));
 
   // Dense, matched samples down both rails.
-  const len = (polylineLength(left) + polylineLength(right)) / 2;
+  const len = (polylineLength(L) + polylineLength(R)) / 2;
   const dense = Math.max(2, Math.round(len / (step / 4)) + 1);
-  const lp = resampleByCount(left, dense);
-  const rp = resampleByCount(right, dense);
+  const lp = resampleByCount(L, dense);
+  const rp = resampleByCount(R, dense);
 
   // Choose throw positions so neither rail's gap between throws exceeds density.
   const idx: number[] = [0];
