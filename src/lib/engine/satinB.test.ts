@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { satinColumn, autoSatinDensity } from "./satin";
+import { satinColumn, autoSatinDensity, shortStitchPairs } from "./satin";
 import { railsFromCenterline } from "../geometry";
 import type { Path, Point } from "../../types/project";
 
@@ -52,5 +52,35 @@ describe("satin push compensation", () => {
     const a = satinColumn(left, right, { density: 0.4, pullComp: 0.2, push: 0.2 });
     const b = satinColumn(left, right, { density: 0.4, pullComp: 0.2, push: 0.2 });
     expect(a).toEqual(b);
+  });
+});
+
+describe("shortStitchPairs (inner-curve short stitches)", () => {
+  it("leaves a straight column (equal rail gaps) untouched", () => {
+    const ls = [{ x: 0, y: 0 }, { x: 0, y: 1 }, { x: 0, y: 2 }, { x: 0, y: 3 }];
+    const rs = [{ x: 4, y: 0 }, { x: 4, y: 1 }, { x: 4, y: 2 }, { x: 4, y: 3 }];
+    const out = shortStitchPairs(ls, rs);
+    out.forEach(([l, r], k) => {
+      expect(l).toEqual(ls[k]);
+      expect(r).toEqual(rs[k]);
+    });
+  });
+
+  it("pulls alternate inner endpoints toward center on a curve", () => {
+    // Left rail barely advances (inner/concave), right rail advances fast (outer).
+    const ls = [{ x: 0, y: 0 }, { x: 0.1, y: 0 }, { x: 0.2, y: 0 }, { x: 0.3, y: 0 }];
+    const rs = [{ x: 4, y: 0 }, { x: 4, y: 2 }, { x: 4, y: 4 }, { x: 4, y: 6 }];
+    const out = shortStitchPairs(ls, rs);
+    // k=1 is the shortened inner stitch: its left endpoint moved toward the right.
+    expect(out[1][0].x).toBeGreaterThan(ls[1].x + 0.5);
+    // Endpoints (k=0, last) are never shortened.
+    expect(out[0][0]).toEqual(ls[0]);
+    expect(out[3][0]).toEqual(ls[3]);
+  });
+
+  it("is deterministic", () => {
+    const ls = [{ x: 0, y: 0 }, { x: 0.1, y: 0 }, { x: 0.2, y: 0 }];
+    const rs = [{ x: 4, y: 0 }, { x: 4, y: 2 }, { x: 4, y: 4 }];
+    expect(shortStitchPairs(ls, rs)).toEqual(shortStitchPairs(ls, rs));
   });
 });
