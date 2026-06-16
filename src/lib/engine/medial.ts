@@ -30,6 +30,7 @@ interface Grid {
   oy: number;
   cells: Uint8Array; // 1 = inside the region
 }
+export type { Grid };
 
 /** Winding number of `p` w.r.t. the oriented rings (non-zero = inside). */
 function inside(px: number, py: number, rings: Path[]): boolean {
@@ -49,7 +50,7 @@ function inside(px: number, py: number, rings: Path[]): boolean {
   return w !== 0;
 }
 
-function rasterize(rings: Path[], cellMm: number): Grid | null {
+export function rasterize(rings: Path[], cellMm: number): Grid | null {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const ring of rings)
     for (const p of ring) {
@@ -79,7 +80,7 @@ function rasterize(rings: Path[], cellMm: number): Grid | null {
 }
 
 /** Chamfer distance transform (3,4) in cell units; 0 outside. */
-function distanceTransform(g: Grid): Float32Array {
+export function distanceTransform(g: Grid): Float32Array {
   const { w, h, cells } = g;
   const dt = new Float32Array(w * h);
   const BIG = 1e6;
