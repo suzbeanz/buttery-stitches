@@ -340,6 +340,25 @@ function rowSpans(rings: Path[], y: number): [number, number][] {
   return spans;
 }
 
+/** Deterministic fraction in [0,1) — jitter that kills residual moiré. */
+function scatterFrac(k: number): number {
+  const s = Math.sin((k + 1) * 78.233) * 43758.5453;
+  return s - Math.floor(s);
+}
+
+/**
+ * Row stagger as a fraction of one stitch (0 = aligned with the row start). A
+ * 1/4-brick base (0, ¼, ½, ¾ over four rows — the pro default, vs a 1/2 brick
+ * that repeats every two rows) plus a small deterministic jitter, so needle
+ * penetrations never line up into a diagonal "split line" or moiré. Row 0 of the
+ * 4-cycle returns 0 (a full first step, no penetration crowding the span start).
+ */
+function staggerOffset(k: number): number {
+  const q = k % 4;
+  if (q === 0) return 0;
+  return q / 4 + scatterFrac(k) * 0.1; // 0.25–0.85: safely off both span ends
+}
+
 /** Penetrations across one row span, with a phase offset for brick staggering. */
 function alongRow(x0: number, x1: number, y: number, spacing: number, phase: number): Point[] {
   const pts: Point[] = [{ x: x0, y }];
@@ -390,7 +409,7 @@ export function tatamiFill(rings: Path[], opts: FillOptions): Path {
   for (let y = minY + density / 2; y <= maxY; y += density, k++) {
     const spans = rowSpans(rrings, y);
     if (spans.length === 0) continue;
-    const phase = (k % 2) * (spacing / 2);
+    const phase = staggerOffset(k) * spacing;
     const rowPts: Point[] = [];
     for (const [x0, x1] of spans) {
       const c = Math.min(comp, (x1 - x0) / 2);

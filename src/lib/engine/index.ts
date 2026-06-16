@@ -292,9 +292,9 @@ export function generateObjectRuns(
       );
     } else if (contour) {
       const echo = contourFill(region, { density });
-      tops = echo.length ? echo : [tatamiFill(region, { density, angle: fillAngle })];
+      tops = echo.length ? echo : [tatamiFill(region, { density, angle: fillAngle, pullCompMm: pullComp })];
     } else {
-      tops = [tatamiFill(region, { density, angle: fillAngle })];
+      tops = [tatamiFill(region, { density, angle: fillAngle, pullCompMm: pullComp })];
     }
 
     // Sew the strokes nearest-neighbor from where the underlay left off, for the
