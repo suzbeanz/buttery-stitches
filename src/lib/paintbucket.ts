@@ -39,10 +39,17 @@ export function bucketFill(
   const inGrid = (i: number, j: number) => i >= 0 && i < W && j >= 0 && j < H;
   const at1 = (i: number, j: number) => j * W + i;
 
-  // 1. Rasterize every outline segment as a barrier (a 1-cell-thick wall).
+  // 1. Rasterize every outline segment as a barrier. Mark the cell plus its
+  // 4-neighbors so the wall is a couple of cells thick — that bridges the tiny
+  // gaps a freehand loop leaves (so the fill doesn't leak out) and gives a
+  // steadier boundary to trace.
   const barrier = new Uint8Array(W * H);
   const mark = (i: number, j: number) => {
     if (inGrid(i, j)) barrier[at1(i, j)] = 1;
+    if (inGrid(i - 1, j)) barrier[at1(i - 1, j)] = 1;
+    if (inGrid(i + 1, j)) barrier[at1(i + 1, j)] = 1;
+    if (inGrid(i, j - 1)) barrier[at1(i, j - 1)] = 1;
+    if (inGrid(i, j + 1)) barrier[at1(i, j + 1)] = 1;
   };
   for (const ring of outlines) {
     for (let k = 0; k < ring.length - 1; k++) {
@@ -79,6 +86,11 @@ export function bucketFill(
   }
   if (count < 4) return null;
 
+  // 2b. Grow the filled region a few cells so it reaches (and slightly overlaps)
+  // the outline instead of stopping a cell short and leaving a white halo. A
+  // small overlap with the edge is exactly what embroidery wants — no gap.
+  dilate(fill, W, H, 3);
+
   // 3. Trace the filled mask boundary, convert to mm, simplify.
   const rings = marchingSquares(fill, W, H).map((ring) =>
     simplify(
@@ -87,6 +99,25 @@ export function bucketFill(
     ),
   );
   return rings.filter((r) => r.length >= 3);
+}
+
+/** Morphological dilation: grow the set cells (value 1) outward by `iters`
+ *  4-connected rings. Used to push a flood fill out to meet its boundary line. */
+function dilate(mask: Uint8Array, W: number, H: number, iters: number): void {
+  for (let n = 0; n < iters; n++) {
+    const add: number[] = [];
+    for (let j = 0; j < H; j++) {
+      for (let i = 0; i < W; i++) {
+        if (mask[j * W + i]) continue;
+        const up = j > 0 && mask[(j - 1) * W + i];
+        const down = j < H - 1 && mask[(j + 1) * W + i];
+        const lt = i > 0 && mask[j * W + i - 1];
+        const rt = i < W - 1 && mask[j * W + i + 1];
+        if (up || down || lt || rt) add.push(j * W + i);
+      }
+    }
+    for (const c of add) mask[c] = 1;
+  }
 }
 
 /** Mark every cell a grid-space segment passes through (DDA), 1-cell thick. */
