@@ -15,6 +15,7 @@ import {
   Star,
   Minus,
   Paintbrush,
+  PaintBucket,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -96,6 +97,9 @@ export default function ToolRail() {
         </ToolBtn>
         <ToolBtn id="brush" label="Brush" tip="Brush — draw a freehand filled area" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Paintbrush size={20} />
+        </ToolBtn>
+        <ToolBtn id="bucket" label="Bucket" tip="Paint bucket — click an enclosed area to fill it" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+          <PaintBucket size={20} />
         </ToolBtn>
         <RailBtn
           label="Curve"

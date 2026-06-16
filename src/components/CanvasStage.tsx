@@ -26,6 +26,7 @@ import { useEditorStore, isDrawTool } from "../store/editorStore";
 import type { EmbObject, Path, Point, ThreadColor } from "../types/project";
 import { makeObject, makeObjectFromPaths, minPointsFor } from "../lib/objects";
 import { shapeFromDrag, shapeRings, type ShapeKind } from "../lib/shapes";
+import { bucketFill } from "../lib/paintbucket";
 import {
   translatePaths,
   dedupePath,
@@ -307,6 +308,25 @@ export default function CanvasStage() {
     };
   }, []);
 
+  // Paint bucket: flood the clicked area (bounded by existing outlines and the
+  // working area) into a new fill object.
+  function doBucket(at: Point) {
+    const colorId =
+      useEditorStore.getState().activeColorId ??
+      useProjectStore.getState().project.colors[0]?.id;
+    if (!colorId) return;
+    const outlines = project.objects.filter((o) => o.visible).flatMap((o) => o.paths);
+    const ob = pathsBounds(outlines);
+    const area = {
+      minX: Math.min(0, ob?.minX ?? 0) - 2,
+      minY: Math.min(0, ob?.minY ?? 0) - 2,
+      maxX: Math.max(hoop.wMm, ob?.maxX ?? hoop.wMm) + 2,
+      maxY: Math.max(hoop.hMm, ob?.maxY ?? hoop.hMm) + 2,
+    };
+    const rings = bucketFill(outlines, at, area, 0.4);
+    if (rings && rings.length) addObject(makeObjectFromPaths("fill", rings, colorId));
+  }
+
   // Shape tool: commit the dragged bounding box as a premade shape object.
   function finishShape() {
     const d = shapeDraftRef.current;
@@ -416,6 +436,12 @@ export default function CanvasStage() {
       if (p) setShapeDraft({ start: p, end: p });
       return;
     }
+    // Bucket: fill the clicked area.
+    if (tool === "bucket") {
+      const p = stagePointMm(stage);
+      if (p) doBucket(p);
+      return;
+    }
     if (!isDrawTool(tool)) {
       // Press on empty canvas with the select tool begins a rubber-band marquee;
       // the actual selection (or a plain clear) is resolved on release.
@@ -503,6 +529,11 @@ export default function CanvasStage() {
     // Shape: one finger drags the shape's bounding box.
     if (tool === "shape" && p) {
       setShapeDraft({ start: p, end: p });
+      return;
+    }
+    // Bucket: tap to fill the touched area.
+    if (tool === "bucket" && p) {
+      doBucket(p);
       return;
     }
     touchStartRef.current = p ? { mm: p, moved: false } : null;
@@ -663,7 +694,7 @@ export default function CanvasStage() {
             cursor:
               tool === "pan"
                 ? "grab"
-                : drawing || freehand || tool === "shape"
+                : drawing || freehand || tool === "shape" || tool === "bucket"
                   ? "crosshair"
                   : "default",
           }}
