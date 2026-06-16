@@ -17,6 +17,8 @@ import {
   Heart,
   Minus,
   Wand2,
+  Import as ImportIcon,
+  BadgeCheck,
   type LucideIcon,
 } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
@@ -26,9 +28,12 @@ import { downloadProject, loadProjectFromFile } from "../lib/embproj";
 import { buildWorksheet, worksheetHtml } from "../lib/worksheet";
 import { fixStitches } from "../lib/fix";
 import { makeShapeObject, type ShapeKind } from "../lib/shapes";
+import { cloneObject } from "../lib/objects";
+import { newId } from "../lib/id";
 import type { Project } from "../types/project";
 import { toast } from "../store/toastStore";
 import ExportMenu from "./ExportMenu";
+import DesignCheck from "./DesignCheck";
 
 /** Shapes offered in the insert menu, with their icon and default params. */
 const SHAPES: { kind: ShapeKind; label: string; Icon: LucideIcon }[] = [
@@ -62,12 +67,15 @@ export default function TopBar({
   const newProject = useProjectStore((s) => s.newProject);
   const setProject = useProjectStore((s) => s.setProject);
   const addObject = useProjectStore((s) => s.addObject);
+  const addObjects = useProjectStore((s) => s.addObjects);
   const addColor = useProjectStore((s) => s.addColor);
   const fileInput = useRef<HTMLInputElement>(null);
+  const importInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [showText, setShowText] = useState(false);
   const [showShapes, setShowShapes] = useState(false);
+  const [showCheck, setShowCheck] = useState(false);
   const activeColorId = useEditorStore((s) => s.activeColorId);
 
   const updateObject = useProjectStore((s) => s.updateObject);
@@ -110,6 +118,35 @@ export default function TopBar({
       toast("Project opened", "success");
     } catch (err) {
       toast(`Couldn't open that file — ${(err as Error).message}`, "error");
+    }
+  }
+
+  // Import (merge) another saved design into the current one — combine projects
+  // without replacing what you have. Colors are remapped to fresh ids so they
+  // never collide; objects are cloned with new ids and kept where they were.
+  async function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const loaded = await loadProjectFromFile(file);
+      const colorMap = new Map<string, string>();
+      for (const c of loaded.colors) {
+        const fresh = { ...c, id: newId("color") };
+        colorMap.set(c.id, fresh.id);
+        addColor(fresh);
+      }
+      const fallback = activeColorId ?? project.colors[0]?.id ?? "";
+      const objs = loaded.objects.map((o) => {
+        const clone = cloneObject(o);
+        clone.colorId = colorMap.get(o.colorId) ?? fallback;
+        return clone;
+      });
+      if (objs.length) addObjects(objs);
+      toast(`Imported ${objs.length} object${objs.length === 1 ? "" : "s"}`, "success");
+      goEdit();
+    } catch (err) {
+      toast(`Couldn't import that file — ${(err as Error).message}`, "error");
     }
   }
 
@@ -214,6 +251,9 @@ export default function TopBar({
       <BarButton label="Open" onClick={() => fileInput.current?.click()}>
         <FolderOpen size={18} />
       </BarButton>
+      <BarButton label="Import & add a saved design" onClick={() => importInput.current?.click()}>
+        <ImportIcon size={18} />
+      </BarButton>
       <BarButton
         label="Save"
         onClick={() => {
@@ -255,6 +295,9 @@ export default function TopBar({
       </div>
 
       <ExportMenu />
+      <BarButton label="Check design — is it ready to stitch?" onClick={() => setShowCheck(true)}>
+        <BadgeCheck size={18} />
+      </BarButton>
       <BarButton
         label="Clean up the stitching"
         onClick={() => {
@@ -304,12 +347,21 @@ export default function TopBar({
         onChange={onOpenFile}
       />
       <input
+        ref={importInput}
+        type="file"
+        accept=".embproj,application/json"
+        className="hidden"
+        onChange={onImportFile}
+      />
+      <input
         ref={imageInput}
         type="file"
         accept="image/*"
         className="hidden"
         onChange={onPickImage}
       />
+
+      {showCheck && <DesignCheck onClose={() => setShowCheck(false)} />}
 
       {imageFile && (
         <Suspense fallback={null}>
