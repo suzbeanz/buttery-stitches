@@ -41,11 +41,16 @@ const fontsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "lib", "tex
 const FONT_FILE: Record<string, string> = {
   poppins: "Poppins-SemiBold.ttf",
   montserrat: "Montserrat-SemiBold.ttf",
+  oswald: "Oswald-Medium.ttf",
   playfair: "PlayfairDisplay-Bold.ttf",
+  "roboto-slab": "RobotoSlab-Bold.ttf",
   "bebas-neue": "BebasNeue-Regular.ttf",
+  "titan-one": "TitanOne-Regular.ttf",
+  "permanent-marker": "PermanentMarker-Regular.ttf",
   pacifico: "Pacifico-Regular.ttf",
   lobster: "Lobster-Regular.ttf",
   "dancing-script": "DancingScript-Bold.ttf",
+  "great-vibes": "GreatVibes-Regular.ttf",
   caveat: "Caveat-Bold.ttf",
 };
 function loadTtf(file: string): Font {

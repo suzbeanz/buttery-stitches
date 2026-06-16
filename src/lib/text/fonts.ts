@@ -4,21 +4,28 @@
  * in src/lib/text/fonts and are imported with Vite's `?url` so they are bundled
  * into the app and fetched relatively at runtime — no network, no CDN.
  *
- * Every bundled face is licensed under the SIL Open Font License 1.1 (OFL),
- * which permits bundling and redistribution. License text travels with each
- * font's npm package (the LICENSE_FONT file in @expo-google-fonts/*).
+ * Every bundled face is open-source — SIL Open Font License 1.1 (OFL) or Apache
+ * License 2.0 — both of which permit bundling and redistribution. The set leans
+ * toward MEDIUM/BOLD weights with fairly even stroke widths, because those satin
+ * and fill cleanly; hairline faces are avoided (a thin stroke can't hold a satin
+ * column). Per-face license is recorded on each entry below.
  */
 import { parse as parseOpentype } from "opentype.js";
 import type { Font } from "opentype.js";
 
 // `?url` makes Vite emit the file as an asset and hand back its final URL.
 import poppinsUrl from "./fonts/Poppins-SemiBold.ttf?url";
-import playfairUrl from "./fonts/PlayfairDisplay-Bold.ttf?url";
-import pacificoUrl from "./fonts/Pacifico-Regular.ttf?url";
 import montserratUrl from "./fonts/Montserrat-SemiBold.ttf?url";
+import oswaldUrl from "./fonts/Oswald-Medium.ttf?url";
+import playfairUrl from "./fonts/PlayfairDisplay-Bold.ttf?url";
+import robotoSlabUrl from "./fonts/RobotoSlab-Bold.ttf?url";
+import bebasNeueUrl from "./fonts/BebasNeue-Regular.ttf?url";
+import titanOneUrl from "./fonts/TitanOne-Regular.ttf?url";
+import permanentMarkerUrl from "./fonts/PermanentMarker-Regular.ttf?url";
+import pacificoUrl from "./fonts/Pacifico-Regular.ttf?url";
 import lobsterUrl from "./fonts/Lobster-Regular.ttf?url";
 import dancingScriptUrl from "./fonts/DancingScript-Bold.ttf?url";
-import bebasNeueUrl from "./fonts/BebasNeue-Regular.ttf?url";
+import greatVibesUrl from "./fonts/GreatVibes-Regular.ttf?url";
 import caveatUrl from "./fonts/Caveat-Bold.ttf?url";
 
 export interface FontEntry {
@@ -38,54 +45,23 @@ export interface FontEntry {
  * face ships under the SIL Open Font License 1.1 (OFL-1.1).
  */
 export const FONTS: FontEntry[] = [
-  {
-    id: "poppins",
-    name: "Poppins (sans)",
-    url: poppinsUrl,
-    license: "OFL-1.1",
-  },
-  {
-    id: "montserrat",
-    name: "Montserrat (sans)",
-    url: montserratUrl,
-    license: "OFL-1.1",
-  },
-  {
-    id: "playfair",
-    name: "Playfair Display (serif)",
-    url: playfairUrl,
-    license: "OFL-1.1",
-  },
-  {
-    id: "bebas-neue",
-    name: "Bebas Neue (display)",
-    url: bebasNeueUrl,
-    license: "OFL-1.1",
-  },
-  {
-    id: "pacifico",
-    name: "Pacifico (script)",
-    url: pacificoUrl,
-    license: "OFL-1.1",
-  },
-  {
-    id: "lobster",
-    name: "Lobster (script)",
-    url: lobsterUrl,
-    license: "OFL-1.1",
-  },
-  {
-    id: "dancing-script",
-    name: "Dancing Script (script)",
-    url: dancingScriptUrl,
-    license: "OFL-1.1",
-  },
-  {
-    id: "caveat",
-    name: "Caveat (handwriting)",
-    url: caveatUrl,
-    license: "OFL-1.1",
-  },
+  // — Sans —
+  { id: "poppins", name: "Poppins (sans)", url: poppinsUrl, license: "OFL-1.1" },
+  { id: "montserrat", name: "Montserrat (sans)", url: montserratUrl, license: "OFL-1.1" },
+  { id: "oswald", name: "Oswald (condensed)", url: oswaldUrl, license: "OFL-1.1" },
+  // — Serif / slab —
+  { id: "playfair", name: "Playfair Display (serif)", url: playfairUrl, license: "OFL-1.1" },
+  { id: "roboto-slab", name: "Roboto Slab (slab serif)", url: robotoSlabUrl, license: "Apache-2.0" },
+  // — Display —
+  { id: "bebas-neue", name: "Bebas Neue (display)", url: bebasNeueUrl, license: "OFL-1.1" },
+  { id: "titan-one", name: "Titan One (bold round)", url: titanOneUrl, license: "OFL-1.1" },
+  { id: "permanent-marker", name: "Permanent Marker", url: permanentMarkerUrl, license: "Apache-2.0" },
+  // — Script / handwriting —
+  { id: "pacifico", name: "Pacifico (script)", url: pacificoUrl, license: "OFL-1.1" },
+  { id: "lobster", name: "Lobster (script)", url: lobsterUrl, license: "OFL-1.1" },
+  { id: "dancing-script", name: "Dancing Script (script)", url: dancingScriptUrl, license: "OFL-1.1" },
+  { id: "great-vibes", name: "Great Vibes (formal script)", url: greatVibesUrl, license: "OFL-1.1" },
+  { id: "caveat", name: "Caveat (handwriting)", url: caveatUrl, license: "OFL-1.1" },
 ];
 
 export const DEFAULT_FONT_ID = "poppins";
