@@ -81,9 +81,10 @@ body::after {
   );
 }
 
-/* The page's one moving element: the "How It Works" tape, laid in stitch-by-
-   stitch (a stepped left-to-right reveal) when it scrolls into view. Everything
-   else on the homepage is printed and still. */
+/* The page's one moving element: the "How It Works" tape, sewn in stitch-by-
+   stitch when it scrolls into view — a running-stitch fill revealed in discrete
+   steps behind a traveling needle. Everything else on the page is printed and
+   still. */
 @keyframes stitch-in {
   from {
     clip-path: inset(0 100% 0 0);
@@ -92,16 +93,54 @@ body::after {
     clip-path: inset(0 0 0 0);
   }
 }
+/* The needle rides the leading edge: its container grows 0→100% in the same
+   stepped cadence, so the marker hops forward one stitch at a time. */
+@keyframes needle-run {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+@keyframes needle-fade {
+  0% {
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
 .stitch-fill {
   clip-path: inset(0 100% 0 0);
 }
 .stitch-fill.go {
-  animation: stitch-in 1.5s steps(24) forwards;
+  animation: stitch-in 1.9s steps(28) forwards;
+}
+.stitch-needle {
+  width: 0;
+  opacity: 0;
+}
+.stitch-needle.go {
+  animation:
+    needle-run 1.9s steps(28) forwards,
+    needle-fade 1.9s ease forwards;
 }
 @media (prefers-reduced-motion: reduce) {
   .stitch-fill,
   .stitch-fill.go {
     clip-path: inset(0 0 0 0);
+    animation: none;
+  }
+  .stitch-needle,
+  .stitch-needle.go {
+    display: none;
     animation: none;
   }
 }
