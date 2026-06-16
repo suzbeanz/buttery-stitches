@@ -9,192 +9,190 @@ import Footer from "./Footer";
 
 /**
  * The homepage as a printed butter wrapper / editorial spread. Flat Press-Blue
- * ink on churned-butter stock, ruled like ledger paper: full-bleed tablespoon
- * rules run off both edges between sections, and vertical rules drop down each
- * section's margins to meet them — a continuous printed grid. The page is still;
- * the only motion is the "How It Works" tape, sewn in stitch-by-stitch.
+ * ink on churned-butter stock: full-bleed tablespoon rules run off both edges
+ * between sections. The page is still; the only motion is the "How It Works"
+ * tape, sewn in stitch-by-stitch. A sticky closing band grows to fill any
+ * leftover height so the page never trails off into blank stock.
  */
 export default function Home({ onStart }: { onStart: () => void }) {
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="flex min-h-full flex-col">
-        {/* HERO — the label */}
-        <div className="mx-auto w-full max-w-5xl px-6 pt-10 sm:pt-16">
-          <PressCard className="relative overflow-hidden px-6 py-8 sm:px-10 sm:py-10">
-            {/* Warm label-light behind the wordmark — lifts the type off the card. */}
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-0 z-0"
-              style={{
-                background:
-                  "radial-gradient(58% 52% at 50% 46%, rgba(255,253,243,0.75), rgba(255,253,243,0) 72%)",
-              }}
-            />
-            <div className="relative z-10 flex items-center justify-between border-b-[1.5px] border-foil pb-3 font-label text-[12px] font-semibold uppercase tracking-[0.22em] text-ink">
-              <span>Open Source</span>
-              <span>Net Wt. Free</span>
-            </div>
-
-            {/* The grade seal — pinned to the left edge, shown only at lg+ where
-                the card is wide enough to clear the big wordmark. */}
-            <GradeStamp
-              size={74}
-              className="absolute left-6 top-1/2 z-10 hidden -translate-y-1/2 lg:block"
-            />
-
-            <div className="relative z-10 mt-8 text-center">
-              <div className="mb-1.5 font-accent text-2xl italic text-stamp sm:text-3xl">
-                Sweet &amp; Unsalted
-              </div>
-              <div
-                className="font-display text-6xl uppercase leading-[0.95] tracking-wide text-ink sm:text-8xl sm:leading-none"
-                style={{ textShadow: "0 1px 0 rgba(255,253,243,0.55), 0 3px 0 rgba(16,42,87,0.12)" }}
-              >
-                Buttery
-                <br />
-                Stitches
-              </div>
-              {/* Static stamp-red rule. */}
-              <div className="mx-auto mt-5 h-[3px] w-44 max-w-[70%] rounded-full bg-stamp" />
-              <div className="mt-5 font-label text-[12px] font-medium uppercase tracking-[0.4em] text-ink-deep sm:text-sm">
-                Free Embroidery Digitizing
-              </div>
-            </div>
-
-            <div className="relative z-10 mt-7 text-center font-mono text-[12px] uppercase tracking-[0.14em] text-char/80">
-              Pictures, Words &amp; Shapes → Machine-Ready Stitches
-            </div>
-          </PressCard>
-
-          <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
-            <PressButton onClick={onStart} className="text-base">
-              Start Stitching
-            </PressButton>
-            <PressButton variant="ghost" href="https://github.com/suzbeanz/buttery-stitches">
-              <GithubGlyph /> View on GitHub
-            </PressButton>
-          </div>
-          <p className="mt-3 text-center font-mono text-[11px] uppercase tracking-[0.14em] text-char/60">
-            Free · No sign-up · Stays on your machine
-          </p>
-        </div>
-
-        <Tape unit="Tbsp" className="mt-12" />
-
-        {/* 01 — THE SPREAD */}
-        <Row no="Section 01 / Half Cup" title="The Spread" sub="What it does">
-          <p className="max-w-2xl font-body text-[17px] leading-relaxed text-char">
-            Pictures, words, and shapes become machine-ready embroidery — free,
-            open-source, and churned right in your browser.{" "}
-            <b className="text-ink">No AI, no guesswork:</b> every stitch is plain
-            math and logic, measured and exact.
-          </p>
-          <p className="mt-4 max-w-2xl font-accent text-xl italic text-stamp">
-            Named after Butters — a very good girl.
-          </p>
-        </Row>
-
-        <Tape unit="Tbsp" />
-
-        {/* 02 — WHAT'S INSIDE */}
-        <Row no="Section 02 / The Kit" title="What's Inside" sub="Picture · Words · Export">
-          <div className="mt-2 grid grid-cols-1 gap-5 sm:grid-cols-3">
-            <Feature title="Picture → Stitches" motif={<ImageMotif />}>
-              Drop in a logo. Get clean stitches.
-            </Feature>
-            <Feature title="Add Words" motif={<TypeMotif />}>
-              Type a name in curated fonts.
-            </Feature>
-            <Feature title="Preview &amp; Export" motif={<NeedleMotif />}>
-              Watch it sew, then save to your machine.
-            </Feature>
-          </div>
-        </Row>
-
-        <Tape unit="Tbsp" />
-
-        {/* 03 — HOW IT WORKS */}
-        <Row no="Section 03 / The Method" title="How It Works" sub="Math, not magic">
-          <p className="max-w-2xl font-body text-[16px] leading-relaxed text-char">
-            No black-box AI — pure math and logic. Every design gets underlay,
-            tie-offs, and safe stitch lengths, so it sews right the first time:
-          </p>
-          <Tape
-            className="mt-7"
-            fillPct={1}
-            animate
-            labels={["Trace", "Path", "Fill", "Underlay", "Satin", "Tie-off", "Preview", "Export"]}
+    <div className="flex h-full flex-col overflow-y-auto">
+      {/* HERO — the label */}
+      <div className="mx-auto w-full max-w-5xl px-6 pt-10 sm:pt-16">
+        <PressCard className="relative overflow-hidden px-6 py-8 sm:px-10 sm:py-10">
+          {/* Warm label-light behind the wordmark — lifts the type off the card. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-0"
+            style={{
+              background:
+                "radial-gradient(58% 52% at 50% 46%, rgba(255,253,243,0.75), rgba(255,253,243,0) 72%)",
+            }}
           />
-        </Row>
-
-        <Tape unit="Tbsp" />
-
-        {/* 04 — FORMATS */}
-        <Row no="Section 04 / The Tickets" title="The Formats" sub="Home &amp; commercial machines">
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <Stamp variant="solid">PES</Stamp>
-            <Stamp>DST</Stamp>
-            <Stamp>JEF</Stamp>
-            <Stamp variant="red">EXP</Stamp>
-            <Stamp variant="red">VP3</Stamp>
-            <span className="mx-2 font-body text-[15px] text-char/70">
-              — the formats your machine reads.
-            </span>
+          <div className="relative z-10 flex items-center justify-between border-b-[1.5px] border-foil pb-3 font-label text-[12px] font-semibold uppercase tracking-[0.22em] text-ink">
+            <span>Open Source</span>
+            <span>Net Wt. Free</span>
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Stamp>Net Wt. Free</Stamp>
-            <Stamp variant="red">Grade AA</Stamp>
-          </div>
-        </Row>
 
-        <Tape unit="Tbsp" />
+          {/* The grade seal — pinned to the left edge, shown only at lg+ where
+              the card is wide enough to clear the big wordmark. */}
+          <GradeStamp
+            size={74}
+            className="absolute left-6 top-1/2 z-10 hidden -translate-y-1/2 lg:block"
+          />
 
-        {/* 05 — WHY OPEN SOURCE */}
-        <Row no="Section 05 / The Promise" title="Why It's Free" sub="Open source, for everyone">
-          <p className="max-w-2xl font-body text-[17px] leading-relaxed text-char">
-            Professional digitizing software runs{" "}
-            <b className="text-ink">hundreds — even thousands</b> of dollars,
-            putting embroidery pattern design out of reach for most people.
-            Buttery Stitches is free, so it isn&apos;t.
-          </p>
-          <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
-            <Feature title="Free Forever">
-              No license, no subscription. Always free.
-            </Feature>
-            <Feature title="Stays On Your Machine">
-              Runs in your browser. Nothing is uploaded.
-            </Feature>
-            <Feature title="Open &amp; Yours">
-              Open-source, improving in the open.
-            </Feature>
-          </div>
-          <div className="mt-9">
-            <PressButton onClick={onStart} className="text-base">
-              Start Stitching
-            </PressButton>
-          </div>
-        </Row>
-
-        {/* CLOSING BAND — pushed to the bottom so the page never trails off into
-            blank stock. */}
-        <div className="mt-auto">
-          <Tape unit="Tbsp" />
-          <div className="mx-auto w-full max-w-5xl px-6 py-8 text-center">
-            <div className="font-display text-2xl uppercase tracking-wide text-ink-deep sm:text-4xl">
-              Net Wt. Free · 100% Open Source
+          <div className="relative z-10 mt-8 text-center">
+            <div className="mb-1.5 font-accent text-2xl italic text-stamp sm:text-3xl">
+              Sweet &amp; Unsalted
+            </div>
+            <div
+              className="font-display text-6xl uppercase leading-[0.95] tracking-wide text-ink sm:text-8xl sm:leading-none"
+              style={{ textShadow: "0 1px 0 rgba(255,253,243,0.55), 0 3px 0 rgba(16,42,87,0.12)" }}
+            >
+              Buttery
+              <br />
+              Stitches
+            </div>
+            {/* Static stamp-red rule. */}
+            <div className="mx-auto mt-5 h-[3px] w-44 max-w-[70%] rounded-full bg-stamp" />
+            <div className="mt-5 font-label text-[12px] font-medium uppercase tracking-[0.4em] text-ink-deep sm:text-sm">
+              Free Embroidery Digitizing
             </div>
           </div>
-          <Tape unit="Tbsp" />
-          <Footer />
+
+          <div className="relative z-10 mt-7 text-center font-mono text-[12px] uppercase tracking-[0.14em] text-char/80">
+            Pictures, Words &amp; Shapes → Machine-Ready Stitches
+          </div>
+        </PressCard>
+
+        <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+          <PressButton onClick={onStart} className="text-base">
+            Start Stitching
+          </PressButton>
+          <PressButton variant="ghost" href="https://github.com/suzbeanz/buttery-stitches">
+            <GithubGlyph /> View on GitHub
+          </PressButton>
+        </div>
+        <p className="mt-3 text-center font-mono text-[11px] uppercase tracking-[0.14em] text-char/60">
+          Free · No sign-up · Stays on your machine
+        </p>
+      </div>
+
+      <Tape unit="Tbsp" className="mt-12" />
+
+      {/* 01 — THE MILK */}
+      <Row no="Section 01 / The Milk" title="The Spread" sub="What it does">
+        <p className="max-w-2xl font-body text-[17px] leading-relaxed text-char">
+          Pictures, words, and shapes become machine-ready embroidery — free,
+          open-source, and churned right in your browser.{" "}
+          <b className="text-ink">No AI, no guesswork:</b> every stitch is plain
+          math and logic, measured and exact.
+        </p>
+        <p className="mt-4 max-w-2xl font-accent text-xl italic text-stamp">
+          Named after Butters — a very good girl.
+        </p>
+      </Row>
+
+      <Tape unit="Tbsp" />
+
+      {/* 02 — THE KIT */}
+      <Row no="Section 02 / The Kit" title="What's Inside" sub="Picture · Words · Export">
+        <div className="mt-2 grid grid-cols-1 gap-5 sm:grid-cols-3">
+          <Feature title="Picture → Stitches" motif={<ImageMotif />}>
+            Drop in a logo. Get clean stitches.
+          </Feature>
+          <Feature title="Add Words" motif={<TypeMotif />}>
+            Type a name in curated fonts.
+          </Feature>
+          <Feature title="Preview &amp; Export" motif={<NeedleMotif />}>
+            Watch it sew, then save to your machine.
+          </Feature>
+        </div>
+      </Row>
+
+      <Tape unit="Tbsp" />
+
+      {/* 03 — THE CHURN */}
+      <Row no="Section 03 / The Churn" title="How It Works" sub="Math, not magic">
+        <p className="max-w-2xl font-body text-[16px] leading-relaxed text-char">
+          No black-box AI — pure math and logic. Every design gets underlay,
+          tie-offs, and safe stitch lengths, so it sews right the first time:
+        </p>
+        <Tape
+          className="mt-7"
+          fillPct={1}
+          animate
+          labels={["Trace", "Path", "Fill", "Underlay", "Satin", "Tie-off", "Preview", "Export"]}
+        />
+      </Row>
+
+      <Tape unit="Tbsp" />
+
+      {/* 04 — THE FLAVORS */}
+      <Row no="Section 04 / The Flavors" title="The Formats" sub="Home &amp; commercial machines">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Stamp variant="solid">PES</Stamp>
+          <Stamp>DST</Stamp>
+          <Stamp>JEF</Stamp>
+          <Stamp variant="red">EXP</Stamp>
+          <Stamp variant="red">VP3</Stamp>
+          <span className="mx-2 font-body text-[15px] text-char/70">
+            — the formats your machine reads.
+          </span>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Stamp>Net Wt. Free</Stamp>
+          <Stamp variant="red">Grade AA</Stamp>
+        </div>
+      </Row>
+
+      <Tape unit="Tbsp" />
+
+      {/* 05 — THE FREEDOM */}
+      <Row no="Section 05 / The Freedom" title="Why It's Free" sub="Open source, for everyone">
+        <p className="max-w-2xl font-body text-[17px] leading-relaxed text-char">
+          Professional digitizing software runs{" "}
+          <b className="text-ink">hundreds — even thousands</b> of dollars,
+          putting embroidery pattern design out of reach for most people.
+          Buttery Stitches is free, so it isn&apos;t.
+        </p>
+        <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
+          <Feature title="Free Forever">
+            No license, no subscription. Always free.
+          </Feature>
+          <Feature title="Stays On Your Machine">
+            Runs in your browser. Nothing is uploaded.
+          </Feature>
+          <Feature title="Open &amp; Yours">
+            Open-source, improving in the open.
+          </Feature>
+        </div>
+        <div className="mt-9">
+          <PressButton onClick={onStart} className="text-base">
+            Start Stitching
+          </PressButton>
+        </div>
+      </Row>
+
+      <Tape unit="Tbsp" />
+
+      {/* CLOSING BAND — grows to absorb any leftover height so the page fills the
+          screen instead of trailing off into blank stock. */}
+      <div className="flex flex-1 items-center justify-center px-6 py-12">
+        <div className="text-center font-display text-3xl uppercase leading-tight tracking-wide text-ink-deep sm:text-5xl">
+          Net Wt. Free
+          <br />
+          100% Open Source
         </div>
       </div>
+
+      <Tape unit="Tbsp" />
+      <Footer />
     </div>
   );
 }
 
-/** A homepage section ruled like ledger paper: vertical rules drop down both
- *  margins (meeting the full-bleed rules above and below), with the numbered
- *  head and content in the column between them. */
+/** A homepage section: a numbered head and content, in a centered column. */
 function Row({
   no,
   title,
@@ -209,22 +207,9 @@ function Row({
   className?: string;
 }) {
   return (
-    <div className={`relative ${className}`}>
-      {/* vertical ledger rules at the content-column edges (sm+ only) */}
-      <div aria-hidden className="pointer-events-none absolute inset-0">
-        <div className="relative mx-auto h-full max-w-5xl">
-          <div className="absolute inset-y-0 left-6 hidden sm:block">
-            <Tape orientation="vertical" className="h-full" />
-          </div>
-          <div className="absolute inset-y-0 right-6 hidden sm:block">
-            <Tape orientation="vertical" flip className="h-full" />
-          </div>
-        </div>
-      </div>
-      <div className="relative mx-auto max-w-5xl px-6 py-12 sm:px-16">
-        <SectionHead no={no} title={title} sub={sub} />
-        {children}
-      </div>
+    <div className={`mx-auto w-full max-w-5xl px-6 py-12 ${className}`}>
+      <SectionHead no={no} title={title} sub={sub} />
+      {children}
     </div>
   );
 }
