@@ -30,6 +30,68 @@ _WRITERS = {
     "vp3": pe.write_vp3,
 }
 
+_READERS = {
+    "pes": pe.read_pes,
+    "dst": pe.read_dst,
+    "jef": pe.read_jef,
+    "exp": pe.read_exp,
+    "vp3": pe.read_vp3,
+}
+
+
+def _thread_rgb(thread):
+    """0xRRGGBB for a pyembroidery thread, however it stores color."""
+    try:
+        return (thread.get_red() << 16) | (thread.get_green() << 8) | thread.get_blue()
+    except Exception:
+        try:
+            return int(thread.color) & 0xFFFFFF
+        except Exception:
+            return 0
+
+
+def import_design(data, fmt):
+    """Read an embroidery file's bytes into a plain dict of color blocks, each a
+    list of contiguous stitch RUNS (split at jumps / trims / color changes), in
+    pyembroidery's 1/10 mm units. Mirrors the export plan shape so the TS side can
+    rebuild objects. Returns a JSON string."""
+    fmt = fmt.lower()
+    reader = _READERS.get(fmt)
+    if reader is None:
+        raise ValueError("Unsupported format: %s" % fmt)
+
+    pattern = reader(io.BytesIO(bytes(data)))
+    threads = [_thread_rgb(t) for t in pattern.threadlist]
+
+    blocks = []
+    color_idx = 0
+    cur = {"rgb": threads[0] if threads else 0, "runs": []}
+    run = []
+
+    def flush():
+        if len(run) >= 2:
+            cur["runs"].append(run[:])
+        run.clear()
+
+    for x, y, cmd in pattern.stitches:
+        c = cmd & 0xFF
+        if c == pe.STITCH or c == pe.SEW_TO or c == pe.NEEDLE_AT:
+            run.append([x, y])
+        elif c == pe.COLOR_CHANGE or c == pe.NEEDLE_SET:
+            flush()
+            blocks.append(cur)
+            color_idx += 1
+            rgb = threads[color_idx] if color_idx < len(threads) else 0
+            cur = {"rgb": rgb, "runs": []}
+        else:
+            # JUMP, TRIM, STOP, END, … all break the current contiguous run.
+            flush()
+
+    flush()
+    blocks.append(cur)
+    blocks = [b for b in blocks if b["runs"]]
+    return json.dumps({"blocks": blocks})
+
 
 def build_pattern(plan):
     pattern = pe.EmbPattern()

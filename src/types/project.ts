@@ -20,6 +20,9 @@ export interface EmbObjectParams {
   /** running: passes over the line for a bold bean/triple stitch (0/1 = single,
    *  3/5/7 = bean). Default 0 (single). */
   beanRepeats?: number;
+  /** running: emit the path's points verbatim (no resampling) — used for stitches
+   *  imported from an embroidery file so they're preserved exactly. Default false. */
+  raw?: boolean;
   /** fill/satin: mm between rows (default 0.4). */
   density?: number;
   /** fill direction in degrees (default 0). */
@@ -153,6 +156,7 @@ export interface Project {
 export const DEFAULT_PARAMS: Required<EmbObjectParams> = {
   stitchLength: 2.5,
   beanRepeats: 0,
+  raw: false,
   density: 0.4,
   angle: 0,
   underlay: true,
@@ -170,6 +174,7 @@ export function resolveParams(
   return {
     stitchLength: params.stitchLength ?? DEFAULT_PARAMS.stitchLength,
     beanRepeats: params.beanRepeats ?? DEFAULT_PARAMS.beanRepeats,
+    raw: params.raw ?? DEFAULT_PARAMS.raw,
     density: params.density ?? DEFAULT_PARAMS.density,
     angle: params.angle ?? DEFAULT_PARAMS.angle,
     // running stitch never has underlay regardless of stored value
