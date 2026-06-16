@@ -27,6 +27,7 @@ import { buildWorksheet, worksheetHtml } from "../lib/worksheet";
 import { fixStitches } from "../lib/fix";
 import { makeShapeObject, type ShapeKind } from "../lib/shapes";
 import type { Project } from "../types/project";
+import { toast } from "../store/toastStore";
 import ExportMenu from "./ExportMenu";
 
 /** Shapes offered in the insert menu, with their icon and default params. */
@@ -106,8 +107,9 @@ export default function TopBar({
       setProject(loaded);
       // Loading a document is a fresh start; clear undo history.
       useProjectStore.temporal.getState().clear();
+      toast("Project opened", "success");
     } catch (err) {
-      alert(`Could not open project:\n${(err as Error).message}`);
+      toast(`Couldn't open that file — ${(err as Error).message}`, "error");
     }
   }
 
@@ -168,7 +170,7 @@ export default function TopBar({
   function openWorksheet() {
     const ws = buildWorksheet(project);
     if (ws.totalStitches === 0) {
-      alert("Nothing to print yet — add a design first.");
+      toast("Add a design first — there's nothing to print yet.", "info");
       return;
     }
     const html = worksheetHtml(ws, "Buttery Stitches");
@@ -212,7 +214,13 @@ export default function TopBar({
       <BarButton label="Open" onClick={() => fileInput.current?.click()}>
         <FolderOpen size={18} />
       </BarButton>
-      <BarButton label="Save" onClick={() => downloadProject(project)}>
+      <BarButton
+        label="Save"
+        onClick={() => {
+          downloadProject(project);
+          toast("Project saved to your downloads", "success");
+        }}
+      >
         <Save size={18} />
       </BarButton>
 
@@ -230,7 +238,7 @@ export default function TopBar({
           <>
             {/* Presentational backdrop — dismiss is a mouse convenience; keyboard closes via the toggle button. */}
             <div aria-hidden className="fixed inset-0 z-20" onClick={() => setShowShapes(false)} />
-            <div className="absolute left-0 z-30 mt-1 grid w-44 grid-cols-3 gap-1 rounded-md border border-navy/20 bg-cream p-1.5 text-navy shadow-press">
+            <div className="anim-press-in absolute left-0 z-30 mt-1 grid w-44 grid-cols-3 gap-1 rounded-md border border-navy/20 bg-cream p-1.5 text-navy shadow-press">
               {SHAPES.map(({ kind, label, Icon }) => (
                 <button
                   key={kind}
@@ -249,7 +257,10 @@ export default function TopBar({
       <ExportMenu />
       <BarButton
         label="Clean up the stitching"
-        onClick={() => setProject(fixStitches(project))}
+        onClick={() => {
+          setProject(fixStitches(project));
+          toast("Stitching cleaned up", "success");
+        }}
       >
         <Wand2 size={18} />
       </BarButton>
@@ -363,7 +374,7 @@ function BarButton({
       data-tip-align={align}
       aria-label={label}
       aria-pressed={active}
-      className={`grid h-9 w-9 place-items-center rounded-lg text-butter-100 hover:bg-butter-200/15 disabled:cursor-not-allowed disabled:text-butter-200/40 disabled:hover:bg-transparent ${
+      className={`grid h-9 w-9 place-items-center rounded-lg text-butter-100 transition-transform hover:bg-butter-200/15 active:translate-y-px active:bg-butter-200/25 disabled:cursor-not-allowed disabled:text-butter-200/40 disabled:hover:bg-transparent ${
         active ? "bg-butter-200/15 text-butter-200" : ""
       }`}
     >

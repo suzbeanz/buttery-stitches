@@ -69,7 +69,7 @@ export default function LayerPanel() {
                   }
                   setDragIndex(null);
                 }}
-                className={`group flex items-center gap-2 px-2 py-1.5 text-sm ${
+                className={`group flex items-center gap-2 px-2 py-1.5 text-sm transition-colors duration-150 ${
                   selected ? "bg-butter-300" : "hover:bg-butter-200/70"
                 } ${dragIndex === index ? "opacity-50" : ""}`}
               >

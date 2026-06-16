@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Download, AlertTriangle } from "lucide-react";
+import { toast } from "../store/toastStore";
 import type { LoadStage } from "../lib/pyodide/loader";
 import { useProjectStore } from "../store/projectStore";
 import {
@@ -60,8 +61,10 @@ export default function ExportMenu() {
         onStage: setStage,
       });
       setOpen(false);
+      toast(`Exported buttery-stitches.${format} to your downloads`, "success");
     } catch (err) {
       setError((err as Error).message);
+      toast(`Export failed — ${(err as Error).message}`, "error");
     } finally {
       setBusy(false);
     }
@@ -80,7 +83,7 @@ export default function ExportMenu() {
       </button>
 
       {open && (
-        <div className="absolute left-0 z-20 mt-1 max-h-[70vh] w-72 max-w-[90vw] overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-2.5 text-char shadow-press">
+        <div className="anim-press-in absolute left-0 z-20 mt-1 max-h-[70vh] w-72 max-w-[90vw] overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-2.5 text-char shadow-press">
           {empty ? (
             <p className="px-1 py-2 font-body text-[12px] text-char/60">
               Nothing to export yet — draw or import a design first.
@@ -141,9 +144,15 @@ export default function ExportMenu() {
           )}
 
           {busy && (
-            <p className="mt-2 px-1 font-mono text-[11px] text-ink">
-              {STAGE_LABEL[stage] || "Working…"}
-            </p>
+            <div className="mt-2 px-1">
+              <p className="font-mono text-[11px] text-ink">
+                {STAGE_LABEL[stage] || "Working…"}
+              </p>
+              {/* Indeterminate sweep so the multi-second first run never reads as frozen. */}
+              <div className="mt-1 h-[3px] w-full overflow-hidden rounded-full bg-ink/10">
+                <div className="anim-indeterminate h-full w-1/3 rounded-full bg-stamp" />
+              </div>
+            </div>
           )}
           {error && <p className="mt-2 px-1 font-body text-[11px] text-stamp">{error}</p>}
         </div>
