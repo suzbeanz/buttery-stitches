@@ -142,6 +142,55 @@ describe("validateDesign", () => {
     expect(warnings.some((w) => /puckering/i.test(w.message))).toBe(true);
   });
 
+  it("flags a satin column wider than the safe max", () => {
+    const p = createEmptyProject();
+    // Explicit rails 9 mm apart — wider than LIMITS.maxSatinWidth (7 mm).
+    const left = [{ x: 10, y: 10 }, { x: 40, y: 10 }];
+    const right = [{ x: 10, y: 19 }, { x: 40, y: 19 }];
+    const o = makeObjectFromPaths("satin", [left, right], p.colors[0].id, "Wide bar");
+    p.objects = [o];
+    const warnings = validateDesign(generateDesign(p), p);
+    expect(warnings.some((w) => /sews loose|wider than/i.test(w.message))).toBe(true);
+  });
+
+  it("flags a large fill with underlay turned off", () => {
+    const p = createEmptyProject();
+    const o = makeObjectFromPaths(
+      "fill",
+      [[
+        { x: 0, y: 0 },
+        { x: 40, y: 0 },
+        { x: 40, y: 40 },
+        { x: 0, y: 40 },
+      ]],
+      p.colors[0].id,
+      "Big patch",
+    );
+    o.params = { underlay: false };
+    p.objects = [o];
+    const warnings = validateDesign(generateDesign(p), p);
+    expect(warnings.some((w) => /underlay off/i.test(w.message))).toBe(true);
+  });
+
+  it("does not flag a large fill when underlay is on", () => {
+    const p = createEmptyProject();
+    const o = makeObjectFromPaths(
+      "fill",
+      [[
+        { x: 0, y: 0 },
+        { x: 40, y: 0 },
+        { x: 40, y: 40 },
+        { x: 0, y: 40 },
+      ]],
+      p.colors[0].id,
+      "Big patch",
+    );
+    o.params = { underlay: true };
+    p.objects = [o];
+    const warnings = validateDesign(generateDesign(p), p);
+    expect(warnings.some((w) => /underlay off/i.test(w.message))).toBe(false);
+  });
+
   it("is quiet for a clean design", () => {
     const p = createEmptyProject();
     const o = makeObject("running", [{ x: 10, y: 10 }, { x: 30, y: 10 }], p.colors[0].id);

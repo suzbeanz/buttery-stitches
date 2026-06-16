@@ -1,6 +1,9 @@
-import type { Project } from "../../types/project";
+import type { Path, Project } from "../../types/project";
 import { resolveParams } from "../../types/project";
 import { distance } from "../geometry";
+import { polygonArea } from "../trace/classify";
+import { resampleByCount } from "./resample";
+import { SATIN_MAX_WIDTH } from "./satin";
 import { countStitches, type EngineStitch } from "./index";
 
 /** Machine / quality limits used for validation warnings. */
@@ -9,11 +12,25 @@ export const LIMITS = {
   maxStitch: 12, // mm — above this stitches are loose and snag
   minDensity: 0.3, // mm/row — denser than this risks puckering
   maxStitchCount: 25000,
+  maxSatinWidth: SATIN_MAX_WIDTH, // mm — wider satin sews loose; use a fill
+  largeFillAreaMm2: 200, // mm² — a fill this big really wants underlay
 };
 
 export interface Warning {
   level: "warn";
   message: string;
+}
+
+/** Mean rail-to-rail width (mm) of a satin object's two rails. */
+function meanSatinWidthMm(paths: Path[]): number {
+  const [left, right] = paths;
+  if (!left || !right || left.length < 2 || right.length < 2) return 0;
+  const n = Math.max(left.length, right.length);
+  const l = resampleByCount(left, n);
+  const r = resampleByCount(right, n);
+  let sum = 0;
+  for (let i = 0; i < n; i++) sum += distance(l[i], r[i]);
+  return sum / n;
 }
 
 /**
@@ -64,6 +81,34 @@ export function validateDesign(design: EngineStitch[], project: Project): Warnin
       warnings.push({
         level: "warn",
         message: `"${o.name}" density ${density.toFixed(2)} mm is very high — puckering risk.`,
+      });
+    }
+  }
+
+  // A satin column wider than a single throw can span sews loose and floats —
+  // past this it should really be a fill (the engine splits it, but warn anyway).
+  for (const o of project.objects) {
+    if (o.type !== "satin") continue;
+    const width = meanSatinWidthMm(o.paths);
+    if (width > LIMITS.maxSatinWidth) {
+      warnings.push({
+        level: "warn",
+        message: `"${o.name}" satin column is ${width.toFixed(1)} mm wide — wider than ${LIMITS.maxSatinWidth} mm sews loose; consider a fill.`,
+      });
+    }
+  }
+
+  // A large fill with underlay turned off tends to pucker and sits flat (no loft).
+  for (const o of project.objects) {
+    if (o.type !== "fill" && o.type !== "satin") continue;
+    const params = resolveParams(o.type, o.params);
+    if (params.underlay) continue; // underlay on — fine
+    const outer = o.paths[0];
+    const area = outer && outer.length >= 3 ? polygonArea(outer) : 0;
+    if (area > LIMITS.largeFillAreaMm2) {
+      warnings.push({
+        level: "warn",
+        message: `"${o.name}" is a large fill with underlay off — may pucker and sit flat. Turn underlay on.`,
       });
     }
   }
