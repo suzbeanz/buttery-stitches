@@ -117,6 +117,27 @@ describe("lock / tie stitches", () => {
   });
 });
 
+describe("fine strokes are COVERED with satin, not left as a wireframe line", () => {
+  it("a 0.8 mm-wide stroke fills as a satin column (crisp small/script text)", () => {
+    // A thin stroke (~0.8 mm) like a script face at small size. It must satin
+    // (zig-zag covering the whole width), not collapse to one running line down
+    // the centerline — the old RUNNING_COLUMN_MM=1.2 made these a bare wireframe.
+    const stroke: Path = [
+      { x: 10, y: 10 },
+      { x: 10.8, y: 10 },
+      { x: 10.8, y: 34 },
+      { x: 10, y: 34 },
+    ];
+    const o = makeObjectFromPaths("fill", [stroke], "c1");
+    o.params = { fillStyle: "satin", underlay: false };
+    const runs = generateObjectRuns(o);
+    const topPts = runs.filter((r) => !r.underlay).reduce((n, r) => n + r.pts.length, 0);
+    // A satin column over 24 mm at 0.4 mm rows is ~100+ penetrations; a single
+    // running line would be ~12. Anything well above that proves it's satin.
+    expect(topPts).toBeGreaterThan(60);
+  });
+});
+
 describe("travel routing", () => {
   // Total jump (travel) distance in a design.
   function jumpTravel(design: ReturnType<typeof generateDesign>): number {

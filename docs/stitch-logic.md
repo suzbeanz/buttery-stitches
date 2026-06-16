@@ -118,7 +118,8 @@ run it **first**, **inset ~1 mm** from the edge so it never peeks out, at a
 | rule | status |
 |---|---|
 | Running / satin / tatami primitives | ✅ |
-| Type by width — holes-aware `classifyRegion` (running < 1.2 mm, satin ≤ 7 mm, tatami above) | ✅ shared by `fix.ts` and the fill branch; hairline columns auto-run; medial satin accepted up to 6 mm (was 2.2) now that split/density/pull comp keep wide columns clean |
+| Type by width — holes-aware `classifyRegion` (running < 1.2 mm, satin ≤ 7 mm, tatami above) | ✅ shared by `fix.ts` and the fill branch; medial satin accepted up to 6 mm (was 2.2) now that split/density/pull comp keep wide columns clean |
+| Crisp small / script text | ✅ medial columns satin down to 0.6 mm (was 1.2) so fine script/serif strokes are COVERED, not left as a bare wireframe line; satin rails are lightly smoothed so the column edge reads as a clean line. All 8 bundled faces fill completely at 14 mm |
 | Densities + clamps | ✅ fabric-aware (scaled by `densityMul`) |
 | Satin density compensation on curves | ✅ medial **and** user `satinColumn` (dense-sample, throw on `max(dl,dr) ≥ density`) |
 | Tatami brick stagger | ✅ |

@@ -328,6 +328,21 @@ function smoothWidths(halves: number[], closed: boolean): number[] {
   return out;
 }
 
+/** 3-tap moving average over a rail, preserving open endpoints (loops wrap). */
+function smoothRail(rail: Point[], closed: boolean): Point[] {
+  const n = rail.length;
+  if (n < 3) return rail;
+  const out = rail.map((p) => ({ ...p }));
+  for (let i = 0; i < n; i++) {
+    if (!closed && (i === 0 || i === n - 1)) continue;
+    const a = rail[closed ? (i - 1 + n) % n : i - 1];
+    const b = rail[i];
+    const c = rail[closed ? (i + 1) % n : i + 1];
+    out[i] = { x: (a.x + 2 * b.x + c.x) / 4, y: (a.y + 2 * b.y + c.y) / 4 };
+  }
+  return out;
+}
+
 /** A skeleton branch is a closed loop (o, e-counter, …) if its ends meet. */
 function isLoop(branch: [number, number][]): boolean {
   if (branch.length < 8) return false;
@@ -426,16 +441,21 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
     // matches the drawn stroke. `pullScale` carries the fabric multiplier; 0
     // leaves the rails on the true stroke edge.
     const pullScale = opts.pullScale ?? 0;
-    const left: Point[] = [];
-    const right: Point[] = [];
+    const leftRaw: Point[] = [];
+    const rightRaw: Point[] = [];
     for (let i = 0; i < dense.length; i++) {
       const nrm = normalAt(dense, i, loop);
       const trueHalf = halves[i] - OVERSHOOT_MM;
       const comp = pullScale > 0 ? autoPullCompMm(2 * Math.max(0, trueHalf), pullScale) / 2 : 0;
       const half = halves[i] + comp;
-      left.push({ x: dense[i].x + nrm.x * half, y: dense[i].y + nrm.y * half });
-      right.push({ x: dense[i].x - nrm.x * half, y: dense[i].y - nrm.y * half });
+      leftRaw.push({ x: dense[i].x + nrm.x * half, y: dense[i].y + nrm.y * half });
+      rightRaw.push({ x: dense[i].x - nrm.x * half, y: dense[i].y - nrm.y * half });
     }
+    // Lightly smooth each rail so the satin edge reads as a clean line instead of
+    // a faintly wobbly one (the distance transform samples width on a grid). A
+    // 3-tap average barely moves coverage but visibly crisps the column edges.
+    const left = smoothRail(leftRaw, loop);
+    const right = smoothRail(rightRaw, loop);
 
     // Choose throw positions so neither rail's gap exceeds the stitch spacing.
     const idx: number[] = [0];
