@@ -138,14 +138,22 @@ export function capSegmentLength(path: Path, maxLen: number): Path {
  * seam down the column (and tacks the corner diagonal down instead of leaving it
  * loose). A throw that already fits returns just its two endpoints unchanged.
  */
-export function splitThrow(a: Point, b: Point, maxLen: number, phase = 0): Point[] {
+export function splitThrow(a: Point, b: Point, maxLen: number, phase = 0, shift?: number): Point[] {
   if (maxLen <= 0) return [{ ...a }, { ...b }];
   const len = distance(a, b);
   if (len <= maxLen) return [{ ...a }, { ...b }];
   const n = Math.ceil(len / maxLen);
   const lerp = (t: number): Point => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
   const out: Point[] = [{ ...a }];
-  if (phase % 2 === 0) {
+  if (shift !== undefined) {
+    // Scattered split: translate the whole break grid by `shift` of one cell (a
+    // per-throw value) so breaks never line up into a seam down the column. The
+    // grid pitch is unchanged, so every sub-segment still stays ≤ maxLen.
+    for (let i = 0; i < n; i++) {
+      const t = (i + shift) / n;
+      if (t > 1e-9 && t < 1 - 1e-9) out.push(lerp(t));
+    }
+  } else if (phase % 2 === 0) {
     for (let i = 1; i < n; i++) out.push(lerp(i / n));
   } else {
     // Half-step shift: breaks at 0.5/n, 1.5/n, … so they fall between the even

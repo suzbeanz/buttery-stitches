@@ -477,11 +477,13 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
     if (idx[idx.length - 1] !== dense.length - 1) idx.push(dense.length - 1);
 
     // Alternate the leading rail each throw so they chain into a zig-zag; split
-    // any over-wide throw into staggered sub-stitches (split satin, no seam).
+    // any over-wide throw into scattered sub-stitches (split satin, no seam).
+    // (Lettering rails are kept tight by density compensation; short stitches are
+    // reserved for hand-drawn satin curves where columns are wider.)
     const pairs: [Point, Point][] = idx.map((i, k) =>
       k % 2 === 0 ? [left[i], right[i]] : [right[i], left[i]],
     );
-    const capped = staggeredSatin(pairs, MAX_THROW_MM);
+    const capped = staggeredSatin(pairs, MAX_THROW_MM, true);
     if (capped.length >= 2) {
       // Representative stroke width = median rail-to-rail span (drop the edge
       // overshoot we added), used to decide satin-vs-fill upstream.

@@ -10,11 +10,55 @@ import { resampleByCount, splitThrow } from "./resample";
  * already alternates in `pairs`, so the down-rail travel between throws is implicit
  * (and short). Shared by hand-drawn, medial, and column-scan satin.
  */
-export function staggeredSatin(pairs: [Point, Point][], maxLen: number): Path {
+export function staggeredSatin(pairs: [Point, Point][], maxLen: number, scatter = false): Path {
   const out: Point[] = [];
   pairs.forEach(([a, b], k) => {
-    for (const p of splitThrow(a, b, maxLen, k % 2)) out.push(p);
+    const shift = scatter ? scatterShift(k) : undefined;
+    for (const p of splitThrow(a, b, maxLen, k % 2, shift)) out.push(p);
   });
+  return out;
+}
+
+/** Deterministic per-throw shift in [0.15, 0.85) so split breaks scatter across
+ *  throws (kills the seam) yet the design is fully reproducible. */
+function scatterShift(k: number): number {
+  const s = Math.sin((k + 1) * 12.9898) * 43758.5453;
+  return 0.15 + (s - Math.floor(s)) * 0.7;
+}
+
+/** Inset fraction (toward the column center) for a shortened inner-curve stitch. */
+const SHORT_STITCH_INSET = 0.4;
+/** Trigger short stitches when one rail's local gap is below this fraction of the
+ *  other's — i.e. a real concave bend, not a straight run. */
+const SHORT_STITCH_RATIO = 0.6;
+
+/**
+ * "Short stitches" on the inside of a curve. Where one rail advances much less
+ * than the other (the concave/inner edge of a bend), pull every other inner
+ * endpoint in toward the column center so the inner penetrations spread out
+ * instead of piling into a hard ridge — the classic satin-curve smoothing a
+ * digitizer does by hand. Operates on matched rail points (before the zig-zag
+ * alternation); the two ends are never shortened. Straight columns (equal rail
+ * gaps) are returned untouched.
+ */
+export function shortStitchPairs(ls: Point[], rs: Point[]): [Point, Point][] {
+  const out: [Point, Point][] = [];
+  for (let k = 0; k < ls.length; k++) {
+    let l = ls[k];
+    let r = rs[k];
+    if (k > 0 && k < ls.length - 1 && k % 2 === 1) {
+      const gapL = distance(ls[k], ls[k - 1]);
+      const gapR = distance(rs[k], rs[k - 1]);
+      if (gapL > 1e-6 && gapR > 1e-6) {
+        if (gapL < gapR * SHORT_STITCH_RATIO) {
+          l = { x: l.x + (r.x - l.x) * SHORT_STITCH_INSET, y: l.y + (r.y - l.y) * SHORT_STITCH_INSET };
+        } else if (gapR < gapL * SHORT_STITCH_RATIO) {
+          r = { x: r.x + (l.x - r.x) * SHORT_STITCH_INSET, y: r.y + (l.y - r.y) * SHORT_STITCH_INSET };
+        }
+      }
+    }
+    out.push([l, r]);
+  }
   return out;
 }
 
@@ -180,18 +224,25 @@ export function satinColumn(
   }
   if (idx[idx.length - 1] !== dense - 1) idx.push(dense - 1);
 
-  const pairs: [Point, Point][] = idx.map((i, k) => {
-    let [l, r] = [lp[i], rp[i]];
-    if (pullComp > 0) [l, r] = widen(l, r, pullComp);
-    // Alternate the leading rail each throw so they chain into a zig-zag.
-    return k % 2 === 0 ? [l, r] : [r, l];
-  });
+  // Matched rail points at each throw, widened for pull compensation.
+  const wl: Point[] = [];
+  const wr: Point[] = [];
+  for (const i of idx) {
+    const [l, r] = pullComp > 0 ? widen(lp[i], rp[i], pullComp) : [lp[i], rp[i]];
+    wl.push(l);
+    wr.push(r);
+  }
+  // Short stitches smooth the inside of any curve, then alternate the leading
+  // rail so the throws chain into a zig-zag.
+  const short = shortStitchPairs(wl, wr);
+  const pairs: [Point, Point][] = short.map(([l, r], k) => (k % 2 === 0 ? [l, r] : [r, l]));
 
   // Split cap relative to the column's TYPICAL width: a throw much longer than
   // that is either a genuinely wide column (split satin) or a skewed diagonal
   // thrown across a sharp corner — both should break into staggered sub-stitches
-  // (miter the corner), while a straight or gently curved throw stays whole.
+  // (miter the corner), while a straight or gently curved throw stays whole. The
+  // splits are scattered per-throw so wide columns show no seam.
   const medianW = median(pairs.map(([a, b]) => distance(a, b)));
   const cap = Math.min(maxWidth, Math.max(medianW * CORNER_SPLIT_RATIO, MIN_SPLIT_CAP_MM));
-  return staggeredSatin(pairs, cap);
+  return staggeredSatin(pairs, cap, true);
 }
