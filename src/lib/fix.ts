@@ -14,9 +14,15 @@ import { classifyRegion } from "./engine/classify";
  *  - fill:    density clamped to 0.35–0.5 mm, underlay on, and a SMART stitch
  *             type — text and narrow strokes become satin columns (smooth +
  *             shiny lettering), broad areas stay tatami.
- *  - project: objects grouped by color (stable) so the machine trims less.
+ *  - project: objects grouped by color (stable) so the machine trims less, and
+ *             within a color, fills sew first with satin/running details layered
+ *             on top (background → foreground), like a hand-digitized design.
  */
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+/** Layer order within a color: broad fills go down first, then satin columns,
+ *  then running lines/outlines on top — so details aren't buried by a fill. */
+const LAYER_RANK: Record<EmbObject["type"], number> = { fill: 0, satin: 1, running: 2 };
 
 /** Width (mm) below which a fill reads as a stroke and should be satin. */
 export const SATIN_WIDTH_THRESHOLD = 3.5;
@@ -56,7 +62,11 @@ export function fixStitches(project: Project): Project {
     .sort((a, b) => {
       const ca = colorOrder.get(a.o.colorId)!;
       const cb = colorOrder.get(b.o.colorId)!;
-      return ca !== cb ? ca - cb : a.i - b.i;
+      if (ca !== cb) return ca - cb; // group by color (fewest thread changes)
+      const la = LAYER_RANK[a.o.type];
+      const lb = LAYER_RANK[b.o.type];
+      if (la !== lb) return la - lb; // fills first, details on top
+      return a.i - b.i; // otherwise keep the drawn order (stable)
     })
     .map((x) => x.o);
 
