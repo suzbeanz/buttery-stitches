@@ -31,11 +31,13 @@ export default function Home({ onStart }: { onStart: () => void }) {
               <div className="font-accent text-2xl italic text-stamp sm:text-3xl">
                 Sweet &amp; Unsalted
               </div>
-              <div className="font-display text-6xl uppercase leading-[0.82] tracking-wide text-ink sm:text-8xl">
+              <div className="font-display text-6xl uppercase leading-[0.92] tracking-wide text-ink sm:text-8xl sm:leading-[0.82]">
                 Buttery
                 <br />
                 Stitches
               </div>
+              {/* Stamp-red bar that fills in on load. */}
+              <div className="mx-auto mt-4 h-[3px] w-44 max-w-[70%] rounded-full bg-stamp fill-bar" />
               <div className="mt-4 font-label text-[12px] font-medium uppercase tracking-[0.4em] text-ink-deep sm:text-sm">
                 Embroidery Digitizing — Churned to Order
               </div>
