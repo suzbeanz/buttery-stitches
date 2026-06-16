@@ -153,7 +153,7 @@ export default function AutoDigitizeDialog({
             max={12}
             value={numColors}
             onChange={(e) => setNumColors(Number(e.target.value))}
-            className="w-full cursor-pointer accent-navy"
+            className="w-full cursor-pointer accent-ink"
           />
         </label>
 
@@ -162,14 +162,24 @@ export default function AutoDigitizeDialog({
             type="checkbox"
             checked={removeBackground}
             onChange={(e) => setRemoveBackground(e.target.checked)}
+            className="accent-ink"
           />
-          Remove background (drops the largest color area)
+          Remove background
         </label>
 
         {hasExistingWork && (
           <p className="mb-3 text-[12px] text-navy/60">
             This replaces your current design (you can undo it with ⌘/Ctrl+Z).
           </p>
+        )}
+
+        {busy && (
+          <div className="mb-3">
+            <p className="font-mono text-[11px] text-ink">Tracing your image…</p>
+            <div className="mt-1 h-[3px] w-full overflow-hidden rounded-full bg-ink/10">
+              <div className="anim-indeterminate h-full w-1/3 rounded-full bg-stamp" />
+            </div>
+          </div>
         )}
 
         {error && <p className="mb-3 text-[12px] text-stamp">{error}</p>}

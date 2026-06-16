@@ -106,18 +106,18 @@ export default function SimulatorBar() {
               setSimPlaying(false);
               setSimIndex(Number(e.target.value));
             }}
-            className="h-1.5 flex-1 cursor-pointer accent-navy"
+            className="h-1.5 flex-1 cursor-pointer accent-ink"
             aria-label="Scrub stitches"
           />
 
-          <span className="w-28 text-right font-mono text-xs tabular-nums text-navy/70">
+          <span className="w-28 text-right font-mono text-xs tabular-nums text-ink-deep">
             {shown.toLocaleString()} / {simTotal.toLocaleString()}
           </span>
 
           <select
             value={simSpeed}
             onChange={(e) => setSimSpeed(Number(e.target.value))}
-            className="rounded border border-navy/20 bg-butter-50 px-1 py-0.5 text-xs text-navy"
+            className="rounded-sm border-2 border-ink bg-cream px-1.5 py-0.5 font-label text-xs font-semibold uppercase tracking-wide text-ink"
             aria-label="Playback speed"
           >
             {SPEEDS.map((s) => (

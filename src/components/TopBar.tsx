@@ -238,12 +238,12 @@ export default function TopBar({
           <>
             {/* Presentational backdrop — dismiss is a mouse convenience; keyboard closes via the toggle button. */}
             <div aria-hidden className="fixed inset-0 z-20" onClick={() => setShowShapes(false)} />
-            <div className="anim-press-in absolute left-0 z-30 mt-1 grid w-44 grid-cols-3 gap-1 rounded-md border border-navy/20 bg-cream p-1.5 text-navy shadow-press">
+            <div className="anim-press-in absolute left-0 z-30 mt-1 grid w-44 grid-cols-3 gap-1 rounded-sm border-2 border-ink bg-cream p-1.5 text-navy shadow-press">
               {SHAPES.map(({ kind, label, Icon }) => (
                 <button
                   key={kind}
                   onClick={() => insertShape(kind)}
-                  className="flex flex-col items-center gap-1 rounded-md px-1 py-2 text-[11px] hover:bg-butter-200"
+                  className="flex flex-col items-center gap-1 rounded-sm px-1 py-2 text-[11px] hover:bg-butter-200"
                 >
                   <Icon size={18} />
                   {label}

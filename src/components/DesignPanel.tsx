@@ -151,6 +151,7 @@ export default function DesignPanel() {
               type="checkbox"
               checked={lock}
               onChange={(e) => setLock(e.target.checked)}
+              className="accent-ink"
             />
             Lock aspect ratio
           </label>
@@ -167,10 +168,10 @@ export default function DesignPanel() {
 
       {/* Warnings */}
       {warnings.length > 0 && (
-        <ul className="rounded bg-butter-200/60 p-1.5 text-[11px] text-navy/80">
+        <ul className="flex flex-col gap-1 rounded-sm border border-stamp/30 bg-stamp/5 p-2 text-[11px] text-char/80">
           {warnings.map((w, i) => (
             <li key={i} className="flex gap-1.5">
-              <AlertTriangle size={13} className="mt-0.5 shrink-0 text-butter-600" />
+              <AlertTriangle size={13} className="mt-0.5 shrink-0 text-stamp" />
               <span>{w.message}</span>
             </li>
           ))}

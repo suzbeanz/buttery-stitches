@@ -162,7 +162,7 @@ export default function TextDialog({
         aria-label={editObject ? "Edit text" : "Add text"}
         className="anim-press-in max-h-[90vh] w-full max-w-md overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-4 shadow-press outline-none"
       >
-        <h2 className="mb-3 font-label uppercase tracking-[0.08em] text-lg font-semibold text-navy">
+        <h2 className="mb-3 font-label uppercase tracking-[0.08em] text-lg font-semibold text-ink-deep">
           {editObject ? "Edit text" : "Add text"}
         </h2>
 
@@ -173,7 +173,7 @@ export default function TextDialog({
             value={text}
             autoFocus
             onChange={(e) => setText(e.target.value)}
-            className="w-full rounded border border-navy/20 bg-white px-2 py-1.5 text-navy"
+            className="input"
           />
         </label>
 
@@ -182,7 +182,7 @@ export default function TextDialog({
           <select
             value={fontId}
             onChange={(e) => setFontId(e.target.value)}
-            className="w-full rounded border border-navy/20 bg-white px-2 py-1.5 text-navy"
+            className="input"
           >
             {FONTS.map((f) => (
               <option key={f.id} value={f.id}>
@@ -196,17 +196,17 @@ export default function TextDialog({
           <label className="flex-1 text-sm text-navy">
             <div className="mb-1 flex items-center justify-between">
               <span>Height</span>
-              <div className="flex overflow-hidden rounded border border-navy/20 text-[11px]">
+              <div className="flex overflow-hidden rounded-sm border-2 border-ink text-[11px]">
                 {(["in", "mm"] as const).map((u) => (
                   <button
                     key={u}
                     type="button"
                     onClick={() => setUnit(u)}
                     className={
-                      "px-1.5 py-0.5 " +
+                      "px-1.5 py-0.5 font-label font-semibold uppercase " +
                       (unit === u
-                        ? "bg-navy text-butter-200"
-                        : "bg-white text-navy hover:bg-butter-200")
+                        ? "bg-ink text-cream"
+                        : "bg-cream text-ink hover:bg-butter-200")
                     }
                   >
                     {u}
@@ -221,7 +221,7 @@ export default function TextDialog({
               step={sizeStep}
               value={Number(sizeValue.toFixed(unit === "in" ? 2 : 1))}
               onChange={(e) => setSize(Number(e.target.value))}
-              className="w-full rounded border border-navy/20 bg-white px-2 py-1.5 text-navy"
+              className="input"
             />
           </label>
 
@@ -232,7 +232,7 @@ export default function TextDialog({
               step={0.2}
               value={letterSpacingMm}
               onChange={(e) => setLetterSpacingMm(Number(e.target.value) || 0)}
-              className="w-full rounded border border-navy/20 bg-white px-2 py-1.5 text-navy"
+              className="input"
             />
           </label>
         </div>
@@ -247,10 +247,10 @@ export default function TextDialog({
                 onClick={() => setSize(p)}
                 aria-label={`Set height to ${p} ${unit}`}
                 className={
-                  "rounded border px-2.5 py-1 text-[12px] " +
+                  "rounded-sm border-2 px-2.5 py-1 text-[12px] " +
                   (isPresetActive(p)
-                    ? "border-navy bg-navy text-butter-200"
-                    : "border-navy/20 bg-white text-navy hover:bg-butter-200")
+                    ? "border-ink bg-ink text-cream"
+                    : "border-ink/30 bg-cream text-ink hover:bg-butter-200")
                 }
               >
                 {p}
@@ -265,7 +265,7 @@ export default function TextDialog({
             <select
               value={colorChoice}
               onChange={(e) => setColorChoice(e.target.value)}
-              className="flex-1 rounded border border-navy/20 bg-white px-2 py-1.5 text-navy"
+              className="input min-w-0 flex-1"
             >
               {colors.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -279,13 +279,17 @@ export default function TextDialog({
                 type="color"
                 value={newColorHex}
                 onChange={(e) => setNewColorHex(e.target.value)}
-                className="h-8 w-10 cursor-pointer rounded border border-navy/20"
+                className="h-9 w-10 cursor-pointer rounded-sm border-2 border-ink"
               />
             )}
           </div>
         </label>
 
-        <TextPreview layout={layout} colorHex={previewHex(colorChoice, colors, newColorHex)} />
+        <TextPreview
+          layout={layout}
+          colorHex={previewHex(colorChoice, colors, newColorHex)}
+          loading={font === null && !error}
+        />
 
         {error && <p className="mt-2 text-[12px] text-stamp">{error}</p>}
 
@@ -313,9 +317,11 @@ export default function TextDialog({
 function TextPreview({
   layout,
   colorHex,
+  loading,
 }: {
   layout: ReturnType<typeof layoutText> | null;
   colorHex: string;
+  loading?: boolean;
 }) {
   const box = useMemo(() => {
     if (!layout || layout.object.paths.length === 0) return null;
@@ -346,6 +352,8 @@ function TextPreview({
             fillRule="nonzero"
           />
         </svg>
+      ) : loading ? (
+        <span className="font-mono text-[12px] text-ink/55">Loading font…</span>
       ) : (
         <span className="text-[12px] text-navy/40">Preview</span>
       )}

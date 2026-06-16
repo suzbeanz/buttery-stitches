@@ -1150,14 +1150,12 @@ function StitchView({
         }}
       />
       {needle && (
-        <Circle
-          x={px(needle.x)}
-          y={py(needle.y)}
-          radius={3.5}
-          fill={C.cream}
-          stroke={C.navy}
-          strokeWidth={1.5}
-        />
+        <Group x={px(needle.x)} y={py(needle.y)} listening={false}>
+          {/* A flat stamp-red ring around a cream dot — a clear "live needle"
+              marker, in brand ink, no glow. */}
+          <Circle radius={5} stroke={C.salted} strokeWidth={1.25} />
+          <Circle radius={2.6} fill={C.cream} stroke={C.navy} strokeWidth={1.25} />
+        </Group>
       )}
     </Group>
   );

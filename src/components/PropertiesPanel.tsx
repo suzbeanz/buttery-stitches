@@ -60,11 +60,14 @@ export default function PropertiesPanel() {
         <ArrangeSection />
 
         {selected.length === 0 ? (
-          <div className="px-3 py-5 text-sm text-navy/60">
-            Select an object to fine-tune its stitches.
+          <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
+            <SlidersHorizontal size={22} className="text-ink/25" aria-hidden />
+            <p className="font-body text-sm text-navy/60">
+              Select an object to fine-tune its stitches.
+            </p>
           </div>
         ) : selected.length > 1 ? (
-          <div className="px-3 py-5 text-sm text-navy/60">
+          <div className="px-3 py-4 text-center font-body text-sm text-navy/60">
             {selected.length} objects selected.
           </div>
         ) : (
@@ -332,6 +335,7 @@ function ObjectProperties({
             type="checkbox"
             checked={p.underlay ?? DEFAULT_PARAMS.underlay}
             onChange={(e) => onParam({ underlay: e.target.checked })}
+            className="accent-ink"
           />
           Underlay
         </label>
@@ -343,6 +347,7 @@ function ObjectProperties({
             type="checkbox"
             checked={p.outline ?? DEFAULT_PARAMS.outline}
             onChange={(e) => onParam({ outline: e.target.checked })}
+            className="accent-ink"
           />
           Show outline
         </label>
@@ -437,13 +442,14 @@ function OutlineControl({ fill }: { fill: EmbObject }) {
           type="checkbox"
           checked={includeHoles}
           onChange={(e) => setIncludeHoles(e.target.checked)}
+          className="accent-ink"
         />
         Outline holes
       </label>
 
       <button
         onClick={addOutline}
-        className="rounded bg-navy px-2 py-1 text-xs text-butter-200 hover:bg-navy-light"
+        className="rounded-sm border-2 border-ink bg-ink px-3 py-1.5 font-label text-xs font-semibold uppercase tracking-[0.12em] text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none"
       >
         Add satin outline
       </button>
