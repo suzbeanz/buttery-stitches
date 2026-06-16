@@ -185,18 +185,21 @@ function centroid(ring: Path): Point {
 }
 
 /**
- * The shape's principal (major) axis from its AREA second moments — the natural
- * "grain" direction a fill should flow along. Area-weighted (not vertex-counted)
- * so a curve sampled with many points doesn't skew the result.
- *
- * Returns the major-axis angle in degrees and the `elongation` (major/minor
- * standard-deviation ratio): 1 = perfectly round/square, larger = more stretched.
+ * Area moments of a polygon about its OWN centroid: the area plus the central
+ * second moments (∫(x-cx)² dA, ∫(y-cy)² dA, ∫(x-cx)(y-cy) dA). These are additive
+ * across regions, so summing them describes the dominant SHAPE orientation of a
+ * whole object regardless of how its regions are arranged in space.
  */
-export function principalAxis(ring: Path): { angleDeg: number; elongation: number } {
-  const n = ring.length;
-  if (n < 3) return { angleDeg: 0, elongation: 1 };
+interface AreaMoments {
+  area: number;
+  mxx: number;
+  myy: number;
+  mxy: number;
+}
 
-  // Shoelace area + first/second area moments in one pass.
+function areaMoments(ring: Path): AreaMoments {
+  const n = ring.length;
+  if (n < 3) return { area: 0, mxx: 0, myy: 0, mxy: 0 };
   let a2 = 0; // 2·area
   let cx = 0, cy = 0;
   let ixx = 0, iyy = 0, ixy = 0;
@@ -212,16 +215,24 @@ export function principalAxis(ring: Path): { angleDeg: number; elongation: numbe
     ixy += (p.x * q.y + 2 * p.x * p.y + 2 * q.x * q.y + q.x * p.y) * cross; // ∫ xy dA · 24
   }
   const area = a2 / 2;
-  if (Math.abs(area) < 1e-9) return { angleDeg: 0, elongation: 1 };
+  if (Math.abs(area) < 1e-9) return { area: 0, mxx: 0, myy: 0, mxy: 0 };
   cx /= 3 * a2;
   cy /= 3 * a2;
+  // Central moments = raw second moment − area·centroid² (parallel-axis).
+  return {
+    area: Math.abs(area),
+    mxx: iyy / 12 - area * cx * cx,
+    myy: ixx / 12 - area * cy * cy,
+    mxy: ixy / 24 - area * cx * cy,
+  };
+}
 
-  // Central variances/covariance of the area distribution.
-  const varX = iyy / (12 * area) - cx * cx;
-  const varY = ixx / (12 * area) - cy * cy;
-  const covXY = ixy / (24 * area) - cx * cy;
-
-  // Major-axis direction and eigenvalues of [[varX, covXY],[covXY, varY]].
+/** Major-axis angle (°) and elongation from combined area moments. */
+function principalFromMoments(m: AreaMoments): { angleDeg: number; elongation: number } {
+  if (m.area < 1e-9) return { angleDeg: 0, elongation: 1 };
+  const varX = m.mxx / m.area;
+  const varY = m.myy / m.area;
+  const covXY = m.mxy / m.area;
   const angleDeg = (0.5 * Math.atan2(2 * covXY, varX - varY) * 180) / Math.PI;
   const mean = (varX + varY) / 2;
   const diff = Math.sqrt(((varX - varY) / 2) ** 2 + covXY * covXY);
@@ -230,23 +241,63 @@ export function principalAxis(ring: Path): { angleDeg: number; elongation: numbe
   return { angleDeg, elongation };
 }
 
+/**
+ * The shape's principal (major) axis from its AREA second moments — the natural
+ * "grain" direction a fill should flow along. Area-weighted (not vertex-counted)
+ * so a curve sampled with many points doesn't skew the result.
+ */
+export function principalAxis(ring: Path): { angleDeg: number; elongation: number } {
+  return principalFromMoments(areaMoments(ring));
+}
+
 /** Below this major/minor ratio a shape reads as roundish/square. */
 const ELONGATION_THRESHOLD = 1.3;
 /** Fill angle (°) for roundish shapes — off-axis so rows don't band on edges. */
 const ROUND_FILL_ANGLE = 45;
 
+/** Turn a base grain (angle + elongation) into a fill angle with the user offset. */
+function grainToFillAngle(
+  angleDeg: number,
+  elongation: number,
+  offsetDeg: number,
+): number {
+  return (elongation >= ELONGATION_THRESHOLD ? angleDeg : ROUND_FILL_ANGLE) + offsetDeg;
+}
+
 /**
- * The fill angle a region wants (docs/stitch-logic.md §3/#4): elongated shapes
- * flow along their grain (the major axis) so stitches follow the form; roundish
- * or square shapes use an off-axis 45° so rows never align with a straight edge
- * and band. `offsetDeg` (the user's Angle field, default 0) nudges either choice.
+ * ONE coherent fill angle for an entire multi-region object, so every region
+ * shares the same grain and the design reads as a single piece instead of a
+ * patchwork of differently-angled letters/blobs (stitch-direction continuity).
+ * Combines each region's central area moments (about its own centroid), so the
+ * dominant SHAPE orientation wins regardless of how the regions are scattered.
+ */
+export function autoFillAngleForRegions(regions: Path[][], offsetDeg = 0): number {
+  const total: AreaMoments = { area: 0, mxx: 0, myy: 0, mxy: 0 };
+  for (const region of regions) {
+    const outer = region.find((r) => r.length >= 3);
+    if (!outer) continue;
+    const m = areaMoments(outer);
+    total.area += m.area;
+    total.mxx += m.mxx;
+    total.myy += m.myy;
+    total.mxy += m.mxy;
+  }
+  if (total.area < 1e-9) return offsetDeg;
+  const { angleDeg, elongation } = principalFromMoments(total);
+  return grainToFillAngle(angleDeg, elongation, offsetDeg);
+}
+
+/**
+ * The fill angle a single region wants (docs/stitch-logic.md §3/#4): elongated
+ * shapes flow along their grain (the major axis) so stitches follow the form;
+ * roundish or square shapes use an off-axis 45° so rows never align with a
+ * straight edge and band. `offsetDeg` (the user's Angle field) nudges either.
  */
 export function autoFillAngle(rings: Path[], offsetDeg = 0): number {
   const outer = rings.find((r) => r.length >= 3);
   if (!outer) return offsetDeg;
   const { angleDeg, elongation } = principalAxis(outer);
-  const base = elongation >= ELONGATION_THRESHOLD ? angleDeg : ROUND_FILL_ANGLE;
-  return base + offsetDeg;
+  return grainToFillAngle(angleDeg, elongation, offsetDeg);
 }
 
 /**

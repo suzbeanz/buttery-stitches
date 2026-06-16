@@ -122,7 +122,8 @@ run it **first**, **inset ~1 mm** from the edge so it never peeks out, at a
 | Densities + clamps | ✅ fabric-aware (scaled by `densityMul`) |
 | Satin density compensation on curves | ✅ medial **and** user `satinColumn` (dense-sample, throw on `max(dl,dr) ≥ density`) |
 | Tatami brick stagger | ✅ |
-| Tatami angle | ✅ per-region smart angle — flows along the grain (major axis) for elongated shapes, off-axis 45° for roundish ones; user Angle field is an offset |
+| Tatami angle | ✅ smart grain — major axis for elongated shapes, off-axis 45° for roundish; user Angle field offsets it |
+| Stitch-direction continuity | ✅ a multi-region fill shares ONE grain across all its regions (combined central area moments → dominant shape orientation), so a word/logo reads as one piece, not a patchwork of differently-angled letters |
 | Fill underlay (inset edge + parallel) | ✅ inset ~1 mm; +criss-cross pass for heavy fabric |
 | Satin underlay (tiered by width) | ✅ center / +edge-walk (≥ 2 mm) / +zig-zag (≥ 4 mm), per user satin **and** per medial column |
 | Pull compensation (satin) | ✅ width-driven `autoPullCompMm` on medial lettering (scaled by fabric); explicit param on user satin |
