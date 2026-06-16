@@ -55,6 +55,25 @@ const TIE_AMPLITUDE = 0.8;
 const TIE_COUNT = 3;
 /** Stitch length (mm) for a travel run connecting nearby same-color shapes. */
 const TRAVEL_STITCH = 2.5;
+/** Longest same-color gap (mm) we'll sew as a hidden travel UNDER later coverage
+ *  rather than trim. Beyond this, a trim is cheaper than the extra thread. */
+const MAX_COVERED_TRAVEL = 40;
+
+/** Even-odd point-in-region test over a fill object's rings (outer + holes). */
+function pointInRings(p: Point, rings: Point[][]): boolean {
+  let inside = false;
+  for (const ring of rings) {
+    const n = ring.length;
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+      const a = ring[i];
+      const b = ring[j];
+      if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) {
+        inside = !inside;
+      }
+    }
+  }
+  return inside;
+}
 
 /**
  * Build a small cluster of real penetrations that lock the thread at `anchor`.
@@ -450,6 +469,32 @@ export function generateDesign(
     g.runs.map((run) => ({ object: g.object, pts: run.pts, underlay: run.underlay })),
   );
 
+  // Coverage map: a travel can hide UNDER any fill stitched later in the order.
+  const firstIndex = new Map<string, number>();
+  drawn.forEach((d, i) => {
+    if (!firstIndex.has(d.object.id)) firstIndex.set(d.object.id, i);
+  });
+  const laterFills = drawn
+    .map((d) => d.object)
+    .filter((o, i, arr) => o.type === "fill" && arr.findIndex((x) => x.id === o.id) === i);
+  /** True if the whole segment a→b lies under a fill stitched after index `di`. */
+  function coveredBetween(a: Point, b: Point, di: number): boolean {
+    const samples = Math.max(2, Math.ceil(distance(a, b) / 2));
+    for (let s = 0; s <= samples; s++) {
+      const t = s / samples;
+      const p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+      let covered = false;
+      for (const o of laterFills) {
+        if ((firstIndex.get(o.id) ?? -1) > di && pointInRings(p, o.paths)) {
+          covered = true;
+          break;
+        }
+      }
+      if (!covered) return false;
+    }
+    return true;
+  }
+
   const out: EngineStitch[] = [];
   let prevPoint: Point | null = null;
   // The penetration just before prevPoint, so a tie-off can retrace BACKWARD
@@ -472,7 +517,16 @@ export function generateDesign(
       // path (the example PES files run thousands of stitches between trims).
       // Mirror that: a same-color gap up to the trim threshold is stitched as a
       // travel (no jump, no cut); only a longer gap or a color change trims.
-      if (!colorChanged && gap > jumpThreshold && gap <= trimThreshold) {
+      const shortTravel = !colorChanged && gap > jumpThreshold && gap <= trimThreshold;
+      // A longer same-color gap can still be a travel IF it stays hidden under a
+      // fill stitched later — that's how the pro files connect across distance
+      // with almost no trims.
+      const coveredTravel =
+        !colorChanged &&
+        gap > trimThreshold &&
+        gap <= MAX_COVERED_TRAVEL &&
+        coveredBetween(prevPoint, start, di);
+      if (shortTravel || coveredTravel) {
         const travel = runningStitch([prevPoint, start], TRAVEL_STITCH);
         for (const pt of travel.slice(1, -1)) {
           out.push({ x: pt.x, y: pt.y, colorId: object.colorId, objectId: object.id });
