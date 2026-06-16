@@ -5,6 +5,13 @@ import { staggeredSatin } from "./satin";
 /** Longest single satin throw (mm) before it is split for safety. */
 const MAX_THROW_MM = 7;
 
+/**
+ * Densest row spacing (mm) any fill will ever stitch — the same machine-safety
+ * floor the engine applies, enforced here too so a direct caller (a test, the
+ * contour fallback) can't pack thread tighter than the needle can clear.
+ */
+export const MIN_FILL_DENSITY = 0.3;
+
 export interface FillOptions {
   /** mm between scan rows */
   density: number;
@@ -358,7 +365,7 @@ export function tatamiFill(rings: Path[], opts: FillOptions): Path {
   const oriented = orientByDepth(rings);
   if (oriented.length === 0 || oriented[0].length < 3) return [];
   const spacing = opts.stitchLength ?? FILL_STITCH_LENGTH;
-  const density = Math.max(0.05, opts.density);
+  const density = Math.max(MIN_FILL_DENSITY, opts.density);
 
   // Work in a rotated frame where rows are horizontal.
   const pivot = centroid(oriented[0]);
@@ -406,7 +413,7 @@ export function tatamiFill(rings: Path[], opts: FillOptions): Path {
 export function columnSatinFill(rings: Path[], opts: FillOptions): Path {
   const oriented = orientByDepth(rings);
   if (oriented.length === 0 || oriented[0].length < 3) return [];
-  const density = Math.max(0.05, opts.density);
+  const density = Math.max(MIN_FILL_DENSITY, opts.density);
 
   const pivot = centroid(oriented[0]);
   const rrings = oriented.map((r) => r.map((p) => rotatePoint(p, -opts.angle, pivot)));
