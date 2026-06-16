@@ -201,7 +201,7 @@ function RailBtn({
       data-tip-align="start"
       aria-label={label}
       aria-pressed={active}
-      className={`flex w-full flex-col items-center gap-0.5 rounded-sm border-2 px-1 py-1.5 transition-colors disabled:opacity-40 ${
+      className={`flex w-full flex-col items-center gap-0.5 rounded-sm border-2 px-1 py-1.5 transition-[color,background-color,border-color,transform] active:translate-y-px disabled:opacity-40 ${
         active
           ? "border-ink bg-ink text-cream"
           : "border-transparent text-ink hover:border-ink/30 hover:bg-butter-200/60"

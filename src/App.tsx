@@ -7,6 +7,7 @@ import SimulatorBar from "./components/SimulatorBar";
 import PropertiesPanel from "./components/PropertiesPanel";
 import HelpOverlay from "./components/HelpOverlay";
 import Home from "./components/Home";
+import Toaster from "./components/Toaster";
 import { useProjectStore } from "./store/projectStore";
 import { useEditorStore, type Tool } from "./store/editorStore";
 import { cloneObject } from "./lib/objects";
@@ -44,9 +45,12 @@ export default function App() {
     setEntered(true);
   };
 
-  if (!entered) return <Home onStart={enterStudio} />;
-
-  return <Studio onHome={() => setEntered(false)} />;
+  return (
+    <>
+      {entered ? <Studio onHome={() => setEntered(false)} /> : <Home onStart={enterStudio} />}
+      <Toaster />
+    </>
+  );
 }
 
 function Studio({ onHome }: { onHome: () => void }) {
@@ -85,7 +89,7 @@ function Studio({ onHome }: { onHome: () => void }) {
       <TopBar onHelp={() => setShowHelp((v) => !v)} onHome={onHome} />
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         {layersOpen && (
-          <div className={isNarrow ? `${overlay} left-0` : "contents"}>
+          <div className={isNarrow ? `${overlay} anim-drawer-l left-0` : "contents"}>
             <LayerPanel />
           </div>
         )}
@@ -98,7 +102,7 @@ function Studio({ onHome }: { onHome: () => void }) {
         </div>
 
         {propertiesOpen && (
-          <div className={isNarrow ? `${overlay} right-0` : "contents"}>
+          <div className={isNarrow ? `${overlay} anim-drawer-r right-0` : "contents"}>
             <PropertiesPanel />
           </div>
         )}
@@ -108,7 +112,7 @@ function Studio({ onHome }: { onHome: () => void }) {
           // close it with the same top-bar toggle that opened it.
           <div
             aria-hidden
-            className="absolute inset-0 z-30 bg-navy/20"
+            className="anim-scrim-in absolute inset-0 z-30 bg-navy/20"
             onClick={() => {
               setLayersOpen(false);
               setPropertiesOpen(false);

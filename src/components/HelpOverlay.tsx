@@ -45,7 +45,7 @@ export default function HelpOverlay({ onClose }: { onClose: () => void }) {
     // Click-outside closes; keyboard users dismiss with Escape (above).
     // eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 p-4"
+      className="anim-scrim-in fixed inset-0 z-50 flex items-center justify-center bg-navy/40 p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -56,7 +56,7 @@ export default function HelpOverlay({ onClose }: { onClose: () => void }) {
         aria-modal="true"
         tabIndex={-1}
         aria-label="Keyboard shortcuts"
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-5 shadow-press outline-none"
+        className="anim-press-in max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-5 shadow-press outline-none"
       >
         <h2 className="mb-4 font-label uppercase tracking-[0.08em] text-lg font-semibold text-navy">
           🧈 Keyboard shortcuts

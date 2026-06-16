@@ -45,11 +45,16 @@ Raise the floor on photo/logo → stitches.
 ## Phase 3 — Auto-appliqué (later)
 Placement run → STOP → tackdown → satin cover-stitch, with a fabric-color guide.
 
-## Smaller tracked items (fold in opportunistically)
-- Replace `window.alert` error paths with an on-brand inline toast.
-- Design-wide fill-angle override in the Design panel (engine plumbing exists).
-- Edge-walk underlay following the shared grain.
-- Migrate residual `navy/butter/paper` aliases to canonical `ink/cream/char`.
+## Premium polish (ongoing)
+- [x] Motion system: flat, fast, eased entrances (`anim-press-in` dialogs/menus,
+      `anim-drawer-l/r` mobile drawers, `anim-scrim-in` backdrops, `anim-toast-in`),
+      all under `prefers-reduced-motion`. Press feedback on the top bar + tool rail.
+- [x] Toast system (`toastStore` + `Toaster`): confirms Save / Export / Clean-up /
+      Open, replaces the native `alert()`s. Indeterminate export-warm-up bar.
+- [ ] Simulator: subtle needle life + an edit↔stitch crossfade (touches Konva).
+- [ ] Design-wide fill-angle override in the Design panel (engine plumbing exists).
+- [ ] Edge-walk underlay following the shared grain.
+- [ ] Migrate residual `navy/butter/paper` aliases to canonical `ink/cream/char`.
 
 ## Done recently
 Crisp text always (thin strokes satin, smoothed rails); stitch-direction

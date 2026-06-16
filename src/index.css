@@ -63,6 +63,88 @@ body::before {
   }
 }
 
+/* ---- Entrance language: flat, fast, eased. Stamped in, never floated. ---- */
+@keyframes press-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes drawer-l {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes drawer-r {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes indeterminate {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+.anim-press-in {
+  animation: press-in 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.anim-scrim-in {
+  animation: scrim-in 0.15s ease both;
+}
+.anim-drawer-l {
+  animation: drawer-l 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.anim-drawer-r {
+  animation: drawer-r 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.anim-toast-in {
+  animation: toast-in 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.anim-indeterminate {
+  animation: indeterminate 1.1s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .anim-press-in,
+  .anim-scrim-in,
+  .anim-drawer-l,
+  .anim-drawer-r,
+  .anim-toast-in,
+  .anim-indeterminate {
+    animation: none;
+  }
+}
+
 @layer base {
   /* Everything that reacts to the pointer eases gently — small touch, big feel. */
   button,
