@@ -34,7 +34,7 @@ body {
       rgba(255, 255, 255, 0.06) 100%
     ),
     /* edge vignette — the sheet has depth, its margins fall into soft shade */
-      radial-gradient(135% 115% at 50% 40%, rgba(140, 100, 30, 0) 55%, rgba(116, 82, 22, 0.22) 100%),
+      radial-gradient(140% 120% at 50% 42%, rgba(140, 100, 30, 0) 64%, rgba(116, 82, 22, 0.12) 100%),
     /* translucent wax patches (lighter coat + deeper churn) */
       radial-gradient(42% 32% at 17% 20%, rgba(255, 250, 222, 0.7), rgba(255, 250, 222, 0) 72%),
     radial-gradient(38% 30% at 80% 28%, rgba(225, 196, 88, 0.36), rgba(225, 196, 88, 0) 70%),
@@ -58,10 +58,10 @@ body::before {
   inset: 0;
   pointer-events: none;
   z-index: 60;
-  opacity: 0.12;
+  opacity: 0.17;
   mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.62' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 180px 180px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.6' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
 }
 
 /* A second, softer long-fiber streak layer for the waxed-paper sheen. */
@@ -71,7 +71,7 @@ body::after {
   inset: 0;
   pointer-events: none;
   z-index: 59;
-  opacity: 0.04;
+  opacity: 0.07;
   background-image: repeating-linear-gradient(
     100deg,
     rgba(255, 255, 255, 0.6) 0px,
@@ -239,25 +239,20 @@ body::after {
     background-color: #f6efcb;
     background-image:
       /* light catching the top of the sheet */
-      radial-gradient(130% 72% at 50% -10%, rgba(255, 253, 243, 0.85), rgba(255, 253, 243, 0) 58%),
-      /* warm shade pooling toward the bottom edge (depth) */
-        radial-gradient(150% 90% at 50% 122%, rgba(140, 100, 30, 0.14), rgba(140, 100, 30, 0) 54%),
-      /* faint mottling so the stock isn't a flat fill */
-        radial-gradient(60% 50% at 22% 18%, rgba(255, 252, 236, 0.5), rgba(255, 252, 236, 0) 70%),
-      radial-gradient(55% 48% at 84% 88%, rgba(201, 162, 39, 0.12), rgba(201, 162, 39, 0) 72%),
-      /* fine paper fiber */
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.68' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)' opacity='0.09'/%3E%3C/svg%3E");
+      radial-gradient(130% 74% at 50% -10%, rgba(255, 253, 243, 0.72), rgba(255, 253, 243, 0) 60%),
+      /* gentle warm mottling so the stock isn't a flat fill */
+        radial-gradient(62% 52% at 20% 16%, rgba(255, 252, 236, 0.5), rgba(255, 252, 236, 0) 70%),
+      radial-gradient(58% 50% at 84% 30%, rgba(201, 162, 39, 0.1), rgba(201, 162, 39, 0) 72%),
+      /* paper fiber */
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.66' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)' opacity='0.14'/%3E%3C/svg%3E");
     background-size:
-      100% 100%,
       100% 100%,
       100% 100%,
       100% 100%,
       150px 150px;
     box-shadow:
       0 3px 0 #102a57,
-      0 5px 14px -8px rgba(16, 42, 87, 0.3),
-      inset 0 1px 0 rgba(255, 253, 243, 0.75),
-      inset 0 -18px 30px -20px rgba(16, 42, 87, 0.32);
+      inset 0 1px 0 rgba(255, 253, 243, 0.7);
   }
 
   /* Printed field: flat white stock, 2px ink border, square corners. */
