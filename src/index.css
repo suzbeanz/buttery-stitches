@@ -20,28 +20,62 @@ body {
 
 body {
   @apply text-char;
-  /* Churned-butter stock with a soft top highlight — the printed wrapper. */
+  /* Waxed butter-paper stock: a warm base, soft translucent wax blotches that
+     read as uneven coating, and a faint diagonal sheen — like light catching a
+     sheet of wax paper. The fiber grain lives on ::before. */
   background-color: #f1de8b;
-  background-image: radial-gradient(
-    120% 80% at 50% -10%,
-    #f8f2d6 0%,
-    rgba(241, 222, 139, 0) 55%
-  );
+  background-image:
+    /* diagonal waxy sheen */
+    linear-gradient(
+      115deg,
+      rgba(255, 255, 255, 0.1) 0%,
+      rgba(255, 255, 255, 0) 24%,
+      rgba(255, 255, 255, 0) 76%,
+      rgba(255, 255, 255, 0.05) 100%
+    ),
+    /* translucent wax patches (lighter coat + deeper churn) */
+      radial-gradient(42% 32% at 17% 20%, rgba(255, 248, 214, 0.6), rgba(255, 248, 214, 0) 72%),
+    radial-gradient(38% 30% at 80% 28%, rgba(231, 204, 99, 0.3), rgba(231, 204, 99, 0) 70%),
+    radial-gradient(48% 38% at 62% 72%, rgba(255, 248, 214, 0.5), rgba(255, 248, 214, 0) 72%),
+    radial-gradient(32% 26% at 28% 86%, rgba(231, 204, 99, 0.24), rgba(231, 204, 99, 0) 70%),
+    radial-gradient(30% 24% at 92% 80%, rgba(255, 248, 214, 0.4), rgba(255, 248, 214, 0) 72%),
+    /* soft top highlight */
+      radial-gradient(120% 80% at 50% -10%, #f8f2d6 0%, rgba(241, 222, 139, 0) 55%);
   background-attachment: fixed;
   font-family:
     "Libre Franklin", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Faint printed-paper grain over everything. */
+/* Wax-paper fiber grain over everything — fine, with both light and dark
+   flecks so it reads as fibrous parchment rather than TV static. */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 60;
-  opacity: 0.045;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.06;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.62' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+}
+
+/* A second, softer long-fiber streak layer for the waxed-paper sheen. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 59;
+  opacity: 0.04;
+  background-image: repeating-linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.6) 0px,
+    rgba(255, 255, 255, 0) 2px,
+    rgba(16, 42, 87, 0.05) 3px,
+    rgba(255, 255, 255, 0) 6px
+  );
 }
 
 /* Hero flourish: a stamp-red bar that fills left-to-right on load. */

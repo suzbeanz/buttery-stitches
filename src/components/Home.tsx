@@ -12,8 +12,6 @@ import Footer from "./Footer";
  * ink on churned-butter stock, the tablespoon tape running full-bleed between
  * every section as the structural grid, grade stamps, and press-block fixtures.
  */
-const TBSP = ["1 Tbsp", "2 Tbsp", "3 Tbsp", "4 Tbsp", "5 Tbsp", "6 Tbsp", "7 Tbsp", "8 Tbsp"];
-
 export default function Home({ onStart }: { onStart: () => void }) {
   return (
     <div className="h-full overflow-y-auto">
@@ -63,7 +61,7 @@ export default function Home({ onStart }: { onStart: () => void }) {
         </p>
       </Col>
 
-      <Tape labels={TBSP} className="mt-12" />
+      <Tape unit="Tbsp" className="mt-12" />
 
       {/* 01 — THE SPREAD */}
       <Col reveal>
@@ -77,7 +75,7 @@ export default function Home({ onStart }: { onStart: () => void }) {
         </p>
       </Col>
 
-      <Tape labels={TBSP} className="mt-12" />
+      <Tape unit="Tbsp" className="mt-12" />
 
       {/* 02 — WHAT'S INSIDE */}
       <Col reveal>
@@ -95,7 +93,7 @@ export default function Home({ onStart }: { onStart: () => void }) {
         </div>
       </Col>
 
-      <Tape labels={TBSP} className="mt-12" />
+      <Tape unit="Tbsp" className="mt-12" />
 
       {/* 03 — HOW IT WORKS */}
       <Col reveal>
@@ -111,7 +109,7 @@ export default function Home({ onStart }: { onStart: () => void }) {
         />
       </Col>
 
-      <Tape labels={TBSP} className="mt-12" />
+      <Tape unit="Tbsp" className="mt-12" />
 
       {/* 04 — FORMATS */}
       <Col reveal>
@@ -132,7 +130,7 @@ export default function Home({ onStart }: { onStart: () => void }) {
         </div>
       </Col>
 
-      <Tape labels={TBSP} className="mt-12" />
+      <Tape unit="Tbsp" className="mt-12" />
 
       {/* 05 — WHY OPEN SOURCE */}
       <Col reveal>
@@ -155,7 +153,7 @@ export default function Home({ onStart }: { onStart: () => void }) {
         </div>
       </Col>
 
-      <Tape labels={TBSP} className="mt-12" />
+      <Tape unit="Tbsp" className="mt-12" />
 
       {/* FOOTER BAND */}
       <Col reveal className="pb-2">
