@@ -50,7 +50,7 @@ export default function LayerPanel() {
           Nothing stitched yet. Pick a tool and draw, or bring in a picture.
         </div>
       ) : (
-        <ul className="flex-1 overflow-y-auto py-1">
+        <ul className="min-h-0 flex-1 overflow-y-auto py-1">
           {objects.map((o, index) => {
             const color = colorById.get(o.colorId);
             const selected = selectedIds.includes(o.id);

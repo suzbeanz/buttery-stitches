@@ -6,7 +6,16 @@ html,
 body,
 #root {
   height: 100%;
+  /* Use the *dynamic* viewport so the mobile browser's address bar doesn't cut
+     off the bottom of the app (and leave it unreachable in a fixed-height shell). */
+  height: 100dvh;
   margin: 0;
+}
+
+/* Keep touch scrolling inside scroll regions from rubber-banding the document. */
+html,
+body {
+  overscroll-behavior: none;
 }
 
 body {
