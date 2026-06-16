@@ -132,7 +132,8 @@ run it **first**, **inset ~1 mm** from the edge so it never peeks out, at a
 | Satin corners (miter/cap) | ✅ throws longer than ~1.4× the column's median width split into staggered sub-stitches, so a sharp-corner diagonal is tacked down, not loose |
 | Max stitch / split satin | ✅ wide columns split into brick-staggered sub-stitches (no seam); underlay zig-zag also capped |
 | Lock stitches, min-stitch, coincident collapse | ✅ |
-| Color grouping; nearest-neighbor branch routing | ✅ / ⚠️ (not global) |
+| Color grouping; nearest-neighbor routing | ✅ within a region AND across objects: each same-color block is sewn nearest-neighbor (color order/layering preserved), cutting jump/trim travel |
+| Tie-in / tie-off | ✅ retrace lock at every thread break — bites back along the real stitches, capped so it hides under them and never pokes past a small shape's edge |
 | Contour / echo fill | ✅ iso-distance rings (marching squares on the distance transform) — opt-in `fillStyle:"contour"`, handles concavity + holes |
 | Radial / motif / gradient textures | ❌ later |
 | Fabric-type presets driving density/underlay/pull | ✅ `FABRICS` registry (woven/knit/pile/sheer) wired through the engine + UI |
