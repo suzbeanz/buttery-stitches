@@ -3,7 +3,10 @@ import {
   createEmptyProject,
   parseProject,
   serializeProject,
+  defaultObjectName,
+  syncObjectCounter,
 } from "./project";
+import type { EmbObject } from "../types/project";
 
 describe("project serialization", () => {
   it("creates an empty project sized to the default hoop", () => {
@@ -36,5 +39,22 @@ describe("project serialization", () => {
     expect(() =>
       parseProject({ version: 1, widthMm: 100, heightMm: 100 }),
     ).toThrow();
+  });
+});
+
+describe("default object naming", () => {
+  const named = (name: string): EmbObject => ({
+    id: name, name, type: "fill", colorId: "c", paths: [], params: {}, visible: true,
+  });
+
+  it("reseeds only from default-form names, ignoring user renames", () => {
+    // "Leaf 2024" is a user rename and must NOT push the counter to 2025.
+    syncObjectCounter([named("Fill 3"), named("Leaf 2024"), named("Satin 5")]);
+    expect(defaultObjectName("fill")).toBe("Fill 6"); // max default (5) + 1
+  });
+
+  it("starts a fresh document's names at 1", () => {
+    createEmptyProject();
+    expect(defaultObjectName("running")).toBe("Running 1");
   });
 });

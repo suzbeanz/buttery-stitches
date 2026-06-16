@@ -144,9 +144,12 @@ export function defaultObjectName(type: EmbObject["type"]): string {
  * from a stale module-global that only ever climbs across sessions).
  */
 export function syncObjectCounter(objects: EmbObject[]): void {
+  // Only count names still in the default "Fill 3" / "Satin 12" form, so a user
+  // who renames a shape "Leaf 2024" doesn't push the next default to "Fill 2025".
+  const DEFAULT_NAME = /^(?:Fill|Satin|Running) (\d+)$/;
   let max = 0;
   for (const o of objects) {
-    const m = /(\d+)\s*$/.exec(o.name ?? "");
+    const m = DEFAULT_NAME.exec(o.name ?? "");
     if (m) max = Math.max(max, Number(m[1]));
   }
   objectCounter = max;

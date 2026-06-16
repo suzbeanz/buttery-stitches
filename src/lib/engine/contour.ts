@@ -1,5 +1,5 @@
 import type { Path, Point } from "../../types/project";
-import { orientByDepth } from "./fill";
+import { orientByDepth, MIN_FILL_DENSITY } from "./fill";
 import { rasterize, distanceTransform, type Grid } from "./medial";
 import { resampleByDistance } from "./resample";
 
@@ -121,7 +121,7 @@ export function contourFill(rings: Path[], opts: ContourOptions): Path[] {
   const oriented = orientByDepth(rings);
   if (oriented.length === 0 || oriented[0].length < 3) return [];
   const cellMm = opts.cellMm ?? DEFAULT_CELL_MM;
-  const density = Math.max(0.2, opts.density);
+  const density = Math.max(MIN_FILL_DENSITY, opts.density);
   const stitch = opts.stitchLength ?? DEFAULT_STITCH_MM;
 
   const grid: Grid | null = rasterize(oriented, cellMm);

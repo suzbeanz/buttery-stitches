@@ -39,12 +39,12 @@ export default class ErrorBoundary extends Component<Props, State> {
           The app ran into a problem, but your design is safe in memory. Reload to
           pick up where you left off.
         </p>
-        <pre className="max-w-md overflow-auto rounded border border-navy/15 bg-butter-50 p-3 text-left text-xs text-navy/60">
+        <pre className="max-w-md overflow-auto rounded-sm border-2 border-ink/15 bg-butter-50 p-3 text-left text-xs text-navy/60">
           {error.message}
         </pre>
         <button
           onClick={() => window.location.reload()}
-          className="rounded-full bg-navy px-6 py-2.5 font-semibold text-butter-200 hover:bg-navy-light"
+          className="rounded-sm border-2 border-ink bg-ink px-6 py-2.5 font-label text-sm font-semibold uppercase tracking-[0.1em] text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none"
         >
           Reload
         </button>
