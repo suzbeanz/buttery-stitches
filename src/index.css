@@ -10,6 +10,11 @@ body,
      off the bottom of the app (and leave it unreachable in a fixed-height shell). */
   height: 100dvh;
   margin: 0;
+  /* Lock the shell: the document itself never scrolls. Each route owns a single
+     internal scroll container (the homepage's <main>, the editor's panels), so
+     there's no second, outer scroll that drifts past the content into blank
+     space. */
+  overflow: hidden;
 }
 
 /* Keep touch scrolling inside scroll regions from rubber-banding the document. */
