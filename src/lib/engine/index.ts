@@ -229,7 +229,8 @@ export function generateObjectRuns(
   const pullComp = p.pullComp * fabric.pullMul;
   // Push (lengthwise) distortion tracks fabric stretch like pull does.
   const pushComp = p.pushComp * fabric.pullMul;
-  const weight = fabric.underlay;
+  // Underlay heaviness: a per-object override wins over the fabric default.
+  const weight = p.underlayWeight === "auto" ? fabric.underlay : p.underlayWeight;
   // Pile rides longer stitches above its loops; other fabrics keep the drawn
   // length. (The MIN floor in resample still protects against sub-mm stitches.)
   const stitchLength = p.stitchLength * fabric.stitchLenMul;
