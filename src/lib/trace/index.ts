@@ -4,7 +4,7 @@ import { newId } from "../id";
 import { makeObjectFromPaths } from "../objects";
 import { douglasPeucker } from "./simplify";
 import { polygonArea } from "./classify";
-import { quantizeImage } from "./quantize";
+import { quantizeImage, borderBackgroundColor } from "./quantize";
 
 export * from "./simplify";
 export * from "./classify";
@@ -50,8 +50,10 @@ export interface DigitizeOptions {
   minAreaMm2?: number;
   /** shapes thinner than this become running stitches (default 1.2 mm) */
   runningMaxWidth?: number;
-  /** skip the largest-area color (usually the background) */
+  /** skip the background color (usually the fabric) */
   removeBackground?: boolean;
+  /** the detected background RGB (from the image border); falls back to area. */
+  backgroundRgb?: [number, number, number];
 }
 
 export interface DigitizeResult {
@@ -112,20 +114,35 @@ export function tracedataToObjects(
   const simp = (pts: Point[]): Path =>
     douglasPeucker(toMm(pts, mmPerPx, offsetX, offsetY), simplifyTolMm);
 
-  // Identify the background as the color covering the most area.
+  // Identify the background. Prefer the border color (robust: a big subject
+  // isn't the background) by matching it to the nearest palette layer; otherwise
+  // fall back to the largest-area color.
   let bgIndex = -1;
   if (removeBackground) {
-    let maxArea = -1;
-    td.layers.forEach((layer, ci) => {
-      let area = 0;
-      for (const path of layer) {
-        if (!path.isholepath) area += polygonArea(simp(pathToPolylinePx(path)));
-      }
-      if (area > maxArea) {
-        maxArea = area;
-        bgIndex = ci;
-      }
-    });
+    const bg = opts.backgroundRgb;
+    if (bg) {
+      let bd = Infinity;
+      td.palette.forEach((p, ci) => {
+        if (p.a === 0) return;
+        const d = (p.r - bg[0]) ** 2 + (p.g - bg[1]) ** 2 + (p.b - bg[2]) ** 2;
+        if (d < bd) {
+          bd = d;
+          bgIndex = ci;
+        }
+      });
+    } else {
+      let maxArea = -1;
+      td.layers.forEach((layer, ci) => {
+        let area = 0;
+        for (const path of layer) {
+          if (!path.isholepath) area += polygonArea(simp(pathToPolylinePx(path)));
+        }
+        if (area > maxArea) {
+          maxArea = area;
+          bgIndex = ci;
+        }
+      });
+    }
   }
 
   const colors: ThreadColor[] = [];
@@ -207,11 +224,14 @@ export function imageDataToObjects(
   opts: DigitizeOptions,
 ): DigitizeResult {
   const flat = quantizeImage(imageData, numberOfColors);
+  // Detect the background from the (now palette-flat) border unless the caller
+  // already supplied one.
+  const backgroundRgb = opts.backgroundRgb ?? borderBackgroundColor(flat) ?? undefined;
   const td = ImageTracer.imagedataToTracedata(
     { width: flat.width, height: flat.height, data: flat.data } as ImageData,
     { ...TRACE_OPTIONS, numberofcolors: numberOfColors },
   ) as Tracedata;
-  return tracedataToObjects(td, opts);
+  return tracedataToObjects(td, { ...opts, backgroundRgb });
 }
 
 /**

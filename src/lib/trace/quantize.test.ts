@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { quantizeImage, medianCut, type RGB, type RasterImage } from "./quantize";
+import {
+  quantizeImage,
+  medianCut,
+  kmeansPalette,
+  borderBackgroundColor,
+  type RGB,
+  type RasterImage,
+} from "./quantize";
 
 /** Build a RasterImage from a per-pixel painter. */
 function image(
@@ -69,5 +76,44 @@ describe("quantizeImage", () => {
     const img = image(16, 16, (x) => (x < 8 ? [220, 20, 30, 255] : [20, 60, 200, 255]));
     const q = quantizeImage(img, 2);
     expect(distinctColors(q).size).toBe(2);
+  });
+});
+
+describe("kmeansPalette", () => {
+  const near = (p: RGB[], r: number, g: number, b: number) =>
+    p.some((c) => Math.abs(c[0] - r) < 40 && Math.abs(c[1] - g) < 40 && Math.abs(c[2] - b) < 40);
+
+  it("keeps distinct hues separate even when one color dominates", () => {
+    // 90% cream + a little red + a little blue: median-cut tends to merge red &
+    // blue under the cream's weight; k-means should keep all three.
+    const samples: RGB[] = [];
+    for (let i = 0; i < 90; i++) samples.push([245, 238, 200]);
+    for (let i = 0; i < 6; i++) samples.push([200, 48, 44]);
+    for (let i = 0; i < 6; i++) samples.push([40, 70, 150]);
+    const pal = kmeansPalette(samples, 3);
+    expect(pal).toHaveLength(3);
+    expect(near(pal, 245, 238, 200)).toBe(true);
+    expect(near(pal, 200, 48, 44)).toBe(true);
+    expect(near(pal, 40, 70, 150)).toBe(true);
+  });
+
+  it("is deterministic", () => {
+    const samples: RGB[] = Array.from({ length: 50 }, (_, i) => [i * 5, 255 - i * 5, 100] as RGB);
+    expect(kmeansPalette(samples, 4)).toEqual(kmeansPalette(samples, 4));
+  });
+});
+
+describe("borderBackgroundColor", () => {
+  it("returns the dominant border color, not the (bigger) center subject", () => {
+    // Cream border, a large dark subject filling the middle.
+    const img = image(20, 20, (x, y) =>
+      x > 4 && x < 16 && y > 4 && y < 16 ? [30, 30, 30, 255] : [245, 238, 200, 255],
+    );
+    expect(borderBackgroundColor(img)).toEqual([245, 238, 200]);
+  });
+
+  it("returns null for a fully transparent border", () => {
+    const img = image(8, 8, () => [0, 0, 0, 0]);
+    expect(borderBackgroundColor(img)).toBeNull();
   });
 });

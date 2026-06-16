@@ -27,14 +27,20 @@ The editor must work on a phone, not just resize.
 - [x] Keyboard: `[` / `]` re-order, `Ctrl/Cmd+G` group, `Ctrl/Cmd+Shift+G` ungroup.
 - [x] Tests: align math, distribute spacing, `moveOrder`, group selection.
 
-## Phase 2 — Better image digitizing
+## Phase 2 — Better image digitizing (in progress)
 Raise the floor on photo/logo → stitches.
-- Pre-trace cleanup: blur/quantize tuning, background removal, despeckle small
-  regions so tiny islands don't become confetti.
-- Smarter color reduction (perceptual clustering) and a live color count.
-- Map traced regions through the real classifier (satin vs tatami vs running)
-  and merge slivers; order colors to minimize changes.
-- Stronger "this is a photo" guard with a helpful preview.
+- [x] **k-means color clustering** (`kmeansPalette`, Lloyd + spread seeding)
+      replaces median-cut in the quantizer — distinct hues no longer merge to
+      mud when a background dominates the pixel count.
+- [x] **Border-based background detection** (`borderBackgroundColor`) — the most
+      common border color is removed, instead of "largest area" (which wrongly
+      dropped big subjects). Falls back to area when the border is transparent.
+- [x] Area despeckle of tiny regions (existing) keeps confetti out.
+- [ ] Optional: morphological despeckle of the quantized raster to smooth ragged
+      cluster edges on noisy photos.
+- [ ] Map traced regions through the real classifier (satin vs tatami) and
+      merge slivers; order colors to minimize changes.
+- [ ] Stronger "this is a photo" guard with a helpful preview.
 
 ## Phase 3 — Auto-appliqué (later)
 Placement run → STOP → tackdown → satin cover-stitch, with a fabric-color guide.
