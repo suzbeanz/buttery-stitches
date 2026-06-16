@@ -54,6 +54,17 @@ describe("columnUnderlay tiers by width", () => {
     expect(columnUnderlay(centerline, 1.8, "standard")).toHaveLength(1);
     expect(columnUnderlay(centerline, 1.8, "heavy")).toHaveLength(4);
   });
+
+  it("lays the zig-zag BEFORE the edge walk (so the edge isn't pulled in)", () => {
+    // Wide column → [centerline, zig-zag, edge-R, edge-L]. The zig-zag crosses
+    // the whole column (spans both rails); the edge walks each hug one rail.
+    const runs = columnUnderlay(centerline, 5, "standard");
+    expect(runs).toHaveLength(4);
+    const xspan = (p: Path) =>
+      Math.max(...p.map((q) => q.x)) - Math.min(...p.map((q) => q.x));
+    expect(xspan(runs[1])).toBeGreaterThan(xspan(runs[2]) + 1); // zig-zag is run #1
+    expect(xspan(runs[1])).toBeGreaterThan(xspan(runs[3]) + 1);
+  });
 });
 
 describe("fill underlay stays inside the region", () => {
