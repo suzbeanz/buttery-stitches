@@ -12,7 +12,13 @@ import {
 } from "../lib/layout";
 import { designFor } from "../lib/engine";
 import { validateDesign } from "../lib/engine/validate";
-import { FABRICS, DEFAULT_FABRIC, type FabricType } from "../types/project";
+import {
+  FABRICS,
+  DEFAULT_FABRIC,
+  DEFAULT_THREAD_WEIGHT,
+  type FabricType,
+  type ThreadWeight,
+} from "../types/project";
 
 /**
  * Document settings: hoop, design size (with aspect lock + fit-to-hoop), and
@@ -123,6 +129,8 @@ export default function DesignPanel() {
 
       <FabricTypePicker />
 
+      <ThreadWeightPicker />
+
       <FabricPicker />
 
       {/* Design size */}
@@ -212,6 +220,35 @@ function FabricTypePicker() {
         {(Object.keys(FABRICS) as FabricType[]).map((id) => (
           <option key={id} value={id}>
             {FABRICS[id].name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/** Thread weight (wt). Finer thread (higher number) packs rows denser to keep
+ *  coverage; bolder thread opens them up. 40wt is the standard. */
+const THREAD_WEIGHTS: { value: ThreadWeight; label: string }[] = [
+  { value: 30, label: "30 wt (bold)" },
+  { value: 40, label: "40 wt (standard)" },
+  { value: 60, label: "60 wt (fine detail)" },
+];
+
+function ThreadWeightPicker() {
+  const weight = useProjectStore((s) => s.project.threadWeight ?? DEFAULT_THREAD_WEIGHT);
+  const updateProject = useProjectStore((s) => s.updateProject);
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/60">Thread weight</span>
+      <select
+        value={weight}
+        onChange={(e) => updateProject({ threadWeight: Number(e.target.value) as ThreadWeight })}
+        className="input"
+      >
+        {THREAD_WEIGHTS.map((t) => (
+          <option key={t.value} value={t.value}>
+            {t.label}
           </option>
         ))}
       </select>
