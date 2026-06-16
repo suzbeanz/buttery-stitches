@@ -6,6 +6,7 @@ import type {
   Project,
 } from "../../types/project";
 import { resolveParams, fabricProfile } from "../../types/project";
+import { effectiveProfile } from "./profile";
 import { distance } from "../geometry";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
@@ -214,10 +215,13 @@ export function generateObjectRuns(
   const density = Math.max(MIN_SAFE_DENSITY, p.density * fabric.densityMul);
   const pullComp = p.pullComp * fabric.pullMul;
   const weight = fabric.underlay;
+  // Pile rides longer stitches above its loops; other fabrics keep the drawn
+  // length. (The MIN floor in resample still protects against sub-mm stitches.)
+  const stitchLength = p.stitchLength * fabric.stitchLenMul;
   const runs: StitchRun[] = [];
 
   if (object.type === "running") {
-    addRun(runs, dropShortStitches(runningStitch(object.paths[0] ?? [], p.stitchLength)), false);
+    addRun(runs, dropShortStitches(runningStitch(object.paths[0] ?? [], stitchLength)), false);
     return runs;
   }
 
@@ -281,7 +285,7 @@ export function generateObjectRuns(
     if (usingSatin) {
       tops = columns.map((c) =>
         c.widthMm < RUNNING_COLUMN_MM
-          ? runningStitch(c.centerline, p.stitchLength)
+          ? runningStitch(c.centerline, stitchLength)
           : c.throws,
       );
     } else if (contour) {
@@ -379,7 +383,7 @@ export function generateDesign(
   // First pass: expand each visible object into its runs (a fill contributes one
   // run per region), keeping only runs that actually produce penetrations. Keep
   // the runs grouped per object so travel routing can reorder whole objects.
-  const fabric = fabricProfile(project.fabric);
+  const fabric = effectiveProfile(project.fabric, project.threadWeight);
   const groups = project.objects
     .filter((o) => o.visible)
     .map((object) => ({
