@@ -1,4 +1,4 @@
-import { MousePointer2, Spline, X, Magnet, Grid2x2, Type, Image as ImageIcon } from "lucide-react";
+import { MousePointer2, Spline, X, Magnet, Grid2x2, Type, Image as ImageIcon, Hand, Pencil } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   useEditorStore,
@@ -44,6 +44,9 @@ export default function ToolRail() {
         <ToolBtn id="node" label="Points" tip="Drag a shape's points" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <NodeGlyph />
         </ToolBtn>
+        <ToolBtn id="pan" label="Hand" tip="Hand — drag to move the canvas (or hold middle mouse)" tool={tool} setTool={setTool} locked={false} lockTip={lockTip}>
+          <Hand size={20} />
+        </ToolBtn>
       </Group>
 
       <Rule />
@@ -56,6 +59,9 @@ export default function ToolRail() {
         </ToolBtn>
         <ToolBtn id="fill" label="Fill" tip="Fill an area with stitches — click an outline" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <FillGlyph />
+        </ToolBtn>
+        <ToolBtn id="pencil" label="Pencil" tip="Pencil — draw a freehand running stitch" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+          <Pencil size={20} />
         </ToolBtn>
         <RailBtn
           label="Curve"
@@ -198,7 +204,7 @@ function RailBtn({
       onClick={onClick}
       disabled={disabled}
       data-tip={tip}
-      data-tip-align="start"
+      data-tip-side="right"
       aria-label={label}
       aria-pressed={active}
       className={`flex w-full flex-col items-center gap-0.5 rounded-sm border-2 px-1 py-1.5 transition-[color,background-color,border-color,transform] active:translate-y-px disabled:opacity-40 ${

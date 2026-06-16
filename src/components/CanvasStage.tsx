@@ -107,6 +107,9 @@ export default function CanvasStage() {
     startZoom: number;
   } | null>(null);
   const touchStartRef = useRef<{ mm: Point; moved: boolean } | null>(null);
+  // Freehand pencil stroke in progress, and a single-finger pan anchor.
+  const pencilingRef = useRef(false);
+  const panTouchRef = useRef<{ x: number; y: number } | null>(null);
 
   const viewMode = useEditorStore((s) => s.viewMode);
   const simPlaying = useEditorStore((s) => s.simPlaying);
@@ -267,6 +270,32 @@ export default function CanvasStage() {
     clearDraft();
   }
 
+  // Pencil: commit the recorded freehand stroke as a smooth running stitch.
+  function finishPencil() {
+    if (!pencilingRef.current) return;
+    pencilingRef.current = false;
+    const pts = dedupePath(useEditorStore.getState().draft);
+    if (pts.length >= 2) {
+      const colorId =
+        useEditorStore.getState().activeColorId ??
+        useProjectStore.getState().project.colors[0]?.id;
+      if (colorId) addObject(makeObject("running", smoothPath(pts), colorId));
+    }
+    clearDraft();
+  }
+  // Always-fresh ref so the window pointer-up listener finishes the latest stroke.
+  const finishPencilRef = useRef(finishPencil);
+  finishPencilRef.current = finishPencil;
+  useEffect(() => {
+    const end = () => finishPencilRef.current();
+    window.addEventListener("mouseup", end);
+    window.addEventListener("touchend", end);
+    return () => {
+      window.removeEventListener("mouseup", end);
+      window.removeEventListener("touchend", end);
+    };
+  }, []);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const el = document.activeElement;
@@ -330,9 +359,20 @@ export default function CanvasStage() {
 
   function onStageMouseDown(e: Konva.KonvaEventObject<MouseEvent>) {
     if (e.evt.button === 1) return startPan(e); // middle button → pan (any view)
+    if (tool === "pan") return startPan(e); // hand tool → drag to pan (any view)
     if (viewMode === "stitch") return; // simulation view is read-only
     const stage = e.target.getStage();
     if (!stage) return;
+    // Pencil: begin recording a freehand stroke.
+    if (tool === "pencil") {
+      const p = stagePointMm(stage);
+      if (p) {
+        clearDraft();
+        addDraftPoint(p);
+        pencilingRef.current = true;
+      }
+      return;
+    }
     if (!isDrawTool(tool)) {
       // Press on empty canvas with the select tool begins a rubber-band marquee;
       // the actual selection (or a plain clear) is resolved on release.
@@ -352,6 +392,17 @@ export default function CanvasStage() {
     if (viewMode === "stitch") return;
     const stage = e.target.getStage();
     if (!stage) return;
+    // Pencil: append to the freehand stroke (thinned so we don't record a point
+    // every pixel — ~0.8mm spacing keeps the path light and smooth).
+    if (pencilingRef.current) {
+      const p = stagePointMm(stage);
+      if (p) {
+        const d = useEditorStore.getState().draft;
+        const last = d[d.length - 1];
+        if (!last || distance(last, p) >= 0.8) addDraftPoint(p);
+      }
+      return;
+    }
     if (marquee) {
       const p = stagePointMm(stage);
       if (p) setMarquee((m) => (m ? { ...m, end: p } : m));
@@ -386,8 +437,21 @@ export default function CanvasStage() {
       return;
     }
     pinchRef.current = null;
+    // Hand tool: one finger drags the canvas (any view).
+    if (tool === "pan") {
+      const t = e.evt.touches[0];
+      if (t) panTouchRef.current = { x: t.clientX, y: t.clientY };
+      return;
+    }
     if (viewMode === "stitch") return;
     const p = stagePointMm(stage);
+    // Pencil: one finger draws a freehand stroke.
+    if (tool === "pencil" && p) {
+      clearDraft();
+      addDraftPoint(p);
+      pencilingRef.current = true;
+      return;
+    }
     touchStartRef.current = p ? { mm: p, moved: false } : null;
     // Select tool on empty canvas → rubber-band; drawing taps are placed on release.
     if (!isDrawTool(tool) && tool === "select" && e.target === stage && p) {
@@ -411,8 +475,27 @@ export default function CanvasStage() {
       setPan({ x: info.mid.x - mmAtMid.x * newScale - nbX, y: info.mid.y - mmAtMid.y * newScale - nbY });
       return;
     }
+    // Hand tool: pan by the one-finger delta.
+    if (tool === "pan" && panTouchRef.current) {
+      const t = e.evt.touches[0];
+      if (t) {
+        const prev = panTouchRef.current;
+        setPan((pp) => ({ x: pp.x + (t.clientX - prev.x), y: pp.y + (t.clientY - prev.y) }));
+        panTouchRef.current = { x: t.clientX, y: t.clientY };
+      }
+      return;
+    }
     if (viewMode === "stitch") return;
     const p = stagePointMm(stage);
+    // Pencil: append to the freehand stroke (thinned to ~0.8mm spacing).
+    if (pencilingRef.current) {
+      if (p) {
+        const d = useEditorStore.getState().draft;
+        const last = d[d.length - 1];
+        if (!last || distance(last, p) >= 0.8) addDraftPoint(p);
+      }
+      return;
+    }
     const ts = touchStartRef.current;
     if (ts && p && Math.hypot(p.x - ts.mm.x, p.y - ts.mm.y) > 1.5) ts.moved = true;
     if (marquee) {
@@ -423,6 +506,11 @@ export default function CanvasStage() {
   }
 
   function onTouchEnd() {
+    panTouchRef.current = null;
+    if (pencilingRef.current) {
+      finishPencil();
+      return;
+    }
     if (pinchRef.current) {
       pinchRef.current = null;
       return;
@@ -460,6 +548,7 @@ export default function CanvasStage() {
   }, []);
 
   const drawing = viewMode === "edit" && isDrawTool(tool);
+  const freehand = viewMode === "edit" && tool === "pencil";
   // Rulers run the full length of the canvas, not just the hoop, so the user
   // can measure designs that spill past the hoop edge (0 stays on the origin,
   // values go negative to the left/above it). The shaded band on each ruler
@@ -513,7 +602,9 @@ export default function CanvasStage() {
           onTouchMove={onTouchMove}
           onTouchEnd={onTouchEnd}
           onWheel={onWheelZoom}
-          style={{ cursor: drawing ? "crosshair" : "default" }}
+          style={{
+            cursor: tool === "pan" ? "grab" : drawing || freehand ? "crosshair" : "default",
+          }}
         >
           <Layer>
             {viewMode === "stitch" ? (
@@ -774,12 +865,12 @@ export default function CanvasStage() {
                   />
                 )}
 
-                {drawing && draft.length > 0 && (
+                {(drawing || freehand) && draft.length > 0 && (
                   <DraftPreview
                     draft={draft}
-                    cursor={cursorMm}
+                    cursor={freehand ? null : cursorMm}
                     closed={tool === "fill"}
-                    smooth={smooth}
+                    smooth={smooth || freehand}
                     px={px}
                     py={py}
                   />
@@ -1350,20 +1441,18 @@ function ObjectShape({
             ctx.fillStrokeShape(shape);
           }}
           fill={fillColor}
-          onMouseDown={selectable ? (e) => onSelect(e.evt.shiftKey) : undefined}
-          onTap={selectable ? () => onSelect(false) : undefined}
         />
       )}
 
-      {/* Satin renders as a solid column between its rails. */}
+      {/* Satin renders as a solid column between its rails. Selection is handled
+          by the parent Group (events bubble up) — duplicating onMouseDown here
+          would fire onSelect twice and cancel a shift-click toggle. */}
       {satinColumnPts && (
         <Line
           points={satinColumnPts.flatMap((p) => [px(p.x), py(p.y)])}
           closed
           fill={fillColor}
           listening={selectable}
-          onMouseDown={selectable ? (e) => onSelect(e.evt.shiftKey) : undefined}
-          onTap={selectable ? () => onSelect(false) : undefined}
         />
       )}
 

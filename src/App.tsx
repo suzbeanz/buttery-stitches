@@ -160,9 +160,11 @@ function useIsNarrow(): boolean {
 const TOOL_KEYS: Record<string, Tool> = {
   v: "select",
   n: "node",
+  h: "pan",
   r: "running",
   s: "satin",
   f: "fill",
+  b: "pencil",
 };
 
 /** Editor-wide keyboard shortcuts (see HelpOverlay for the full list). */
