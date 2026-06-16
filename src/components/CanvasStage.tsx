@@ -24,7 +24,7 @@ import type Konva from "konva";
 import { useProjectStore } from "../store/projectStore";
 import { useEditorStore, isDrawTool } from "../store/editorStore";
 import type { EmbObject, Path, Point, ThreadColor } from "../types/project";
-import { makeObject, minPointsFor } from "../lib/objects";
+import { makeObject, makeObjectFromPaths, minPointsFor } from "../lib/objects";
 import { shapeFromDrag, shapeRings, type ShapeKind } from "../lib/shapes";
 import {
   translatePaths,
@@ -275,16 +275,22 @@ export default function CanvasStage() {
     clearDraft();
   }
 
-  // Pencil: commit the recorded freehand stroke as a smooth running stitch.
+  // Commit a recorded freehand stroke: the pencil makes a smooth running line,
+  // the brush a smooth filled blob (its outline auto-closes into a fill region).
   function finishPencil() {
     if (!pencilingRef.current) return;
     pencilingRef.current = false;
+    const t = useEditorStore.getState().tool;
     const pts = dedupePath(useEditorStore.getState().draft);
-    if (pts.length >= 2) {
-      const colorId =
-        useEditorStore.getState().activeColorId ??
-        useProjectStore.getState().project.colors[0]?.id;
-      if (colorId) addObject(makeObject("running", smoothPath(pts), colorId));
+    const colorId =
+      useEditorStore.getState().activeColorId ??
+      useProjectStore.getState().project.colors[0]?.id;
+    if (colorId) {
+      if (t === "brush" && pts.length >= 3) {
+        addObject(makeObjectFromPaths("fill", [smoothPath(pts)], colorId));
+      } else if (pts.length >= 2) {
+        addObject(makeObject("running", smoothPath(pts), colorId));
+      }
     }
     clearDraft();
   }
@@ -394,8 +400,8 @@ export default function CanvasStage() {
     if (viewMode === "stitch") return; // simulation view is read-only
     const stage = e.target.getStage();
     if (!stage) return;
-    // Pencil: begin recording a freehand stroke.
-    if (tool === "pencil") {
+    // Pencil / brush: begin recording a freehand stroke.
+    if (tool === "pencil" || tool === "brush") {
       const p = stagePointMm(stage);
       if (p) {
         clearDraft();
@@ -487,8 +493,8 @@ export default function CanvasStage() {
     }
     if (viewMode === "stitch") return;
     const p = stagePointMm(stage);
-    // Pencil: one finger draws a freehand stroke.
-    if (tool === "pencil" && p) {
+    // Pencil / brush: one finger draws a freehand stroke.
+    if ((tool === "pencil" || tool === "brush") && p) {
       clearDraft();
       addDraftPoint(p);
       pencilingRef.current = true;
@@ -599,7 +605,7 @@ export default function CanvasStage() {
   }, []);
 
   const drawing = viewMode === "edit" && isDrawTool(tool);
-  const freehand = viewMode === "edit" && tool === "pencil";
+  const freehand = viewMode === "edit" && (tool === "pencil" || tool === "brush");
   // Rulers run the full length of the canvas, not just the hoop, so the user
   // can measure designs that spill past the hoop edge (0 stays on the origin,
   // values go negative to the left/above it). The shaded band on each ruler
@@ -925,7 +931,7 @@ export default function CanvasStage() {
                   <DraftPreview
                     draft={draft}
                     cursor={freehand ? null : cursorMm}
-                    closed={tool === "fill"}
+                    closed={tool === "fill" || tool === "brush"}
                     smooth={smooth || freehand}
                     px={px}
                     py={py}

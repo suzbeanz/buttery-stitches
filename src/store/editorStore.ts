@@ -17,6 +17,7 @@ export type Tool =
   | "satin"
   | "pan" // hand tool — drag to move the canvas
   | "pencil" // freehand running stitch
+  | "brush" // freehand filled blob
   | "shape"; // drag to place a premade shape (rectangle, ellipse, heart, …)
 
 /** Tools that place points to draw a new object — these map 1:1 to StitchType. */
