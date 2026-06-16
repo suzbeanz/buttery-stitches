@@ -396,10 +396,29 @@ function routeGroups(groups: ObjGroup[]): ObjGroup[] {
  * This single representation drives both the on-canvas simulator and the
  * exporter, so the preview and the file can never disagree.
  */
+/** Connector length (mm) above which the thread is trimmed rather than jumped,
+ *  by fabric. Napped fabrics (pile/fleece) bury long jumps in the loops where
+ *  they snag and are hard to find, so they trim shorter; stretchy knit trims a
+ *  touch shorter too (a dragged jump adds pull/pucker); stable wovens keep the
+ *  longer default (fewer trims = faster, cleaner). */
+function fabricTrimThreshold(fabric: Project["fabric"]): number {
+  switch (fabric) {
+    case "pile":
+      return 5;
+    case "knit":
+      return 6;
+    default:
+      return 8;
+  }
+}
+
 export function generateDesign(
   project: Project,
-  { jumpThreshold = 3, trimThreshold = 8, lockStitches = true }: DesignOptions = {},
+  opts: DesignOptions = {},
 ): EngineStitch[] {
+  const jumpThreshold = opts.jumpThreshold ?? 3;
+  const trimThreshold = opts.trimThreshold ?? fabricTrimThreshold(project.fabric);
+  const lockStitches = opts.lockStitches ?? true;
   // First pass: expand each visible object into its runs (a fill contributes one
   // run per region), keeping only runs that actually produce penetrations. Keep
   // the runs grouped per object so travel routing can reorder whole objects.
