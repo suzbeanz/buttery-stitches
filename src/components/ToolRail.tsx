@@ -14,6 +14,7 @@ import {
   Heart,
   Star,
   Minus,
+  Paintbrush,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -92,6 +93,9 @@ export default function ToolRail() {
         </ToolBtn>
         <ToolBtn id="pencil" label="Pencil" tip="Pencil — draw a freehand running stitch" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Pencil size={20} />
+        </ToolBtn>
+        <ToolBtn id="brush" label="Brush" tip="Brush — draw a freehand filled area" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+          <Paintbrush size={20} />
         </ToolBtn>
         <RailBtn
           label="Curve"

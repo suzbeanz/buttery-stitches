@@ -276,8 +276,13 @@ function useGlobalShortcuts(setShowHelp: (fn: (v: boolean) => boolean) => void) 
         }
         return;
       }
-      // Tool selection (edit view only)
+      // Tool selection. The hand (pan) works in either view (you pan the
+      // simulator too); the rest are edit-view tools.
       const tool = TOOL_KEYS[e.key.toLowerCase()];
+      if (tool === "pan") {
+        editor.setTool("pan");
+        return;
+      }
       if (tool && editor.viewMode === "edit") editor.setTool(tool);
     }
 
