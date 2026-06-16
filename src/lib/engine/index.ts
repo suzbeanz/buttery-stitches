@@ -58,6 +58,11 @@ const TRAVEL_STITCH = 2.5;
 /** Longest same-color gap (mm) we'll sew as a hidden travel UNDER later coverage
  *  rather than trim. Beyond this, a trim is cheaper than the extra thread. */
 const MAX_COVERED_TRAVEL = 40;
+/** Within ONE object (a fill's own spans/regions), bridge gaps up to this far
+ *  with a jump but NEVER cut the thread — cutting fragments a single shape into
+ *  dozens of trimmed pieces (the cause of "shredded" output). Only a longer gap
+ *  inside one object, or any cross-object/color move, actually trims. */
+const INTRA_OBJECT_NO_TRIM = 25;
 
 /** Even-odd point-in-region test over a fill object's rings (outer + holes). */
 function pointInRings(p: Point, rings: Point[][]): boolean {
@@ -502,6 +507,7 @@ export function generateDesign(
   // toward the next shape across the trim.
   let prevToward: Point | null = null;
   let prevColor: string | null = null;
+  let prevObjectId: string | null = null;
 
   drawn.forEach((d, di) => {
     const { object, pts } = d;
@@ -517,7 +523,12 @@ export function generateDesign(
       // path (the example PES files run thousands of stitches between trims).
       // Mirror that: a same-color gap up to the trim threshold is stitched as a
       // travel (no jump, no cut); only a longer gap or a color change trims.
+      const sameObject = prevObjectId === object.id;
       const shortTravel = !colorChanged && gap > jumpThreshold && gap <= trimThreshold;
+      // Moves WITHIN one object (a fill's own spans/regions) are stitched as a
+      // continuous travel up to a generous distance, so the shape sews as one
+      // connected path instead of shattering into jumped/trimmed fragments.
+      const intraTravel = sameObject && gap > jumpThreshold && gap <= INTRA_OBJECT_NO_TRIM;
       // A longer same-color gap can still be a travel IF it stays hidden under a
       // fill stitched later — that's how the pro files connect across distance
       // with almost no trims.
@@ -526,13 +537,17 @@ export function generateDesign(
         gap > trimThreshold &&
         gap <= MAX_COVERED_TRAVEL &&
         coveredBetween(prevPoint, start, di);
-      if (shortTravel || coveredTravel) {
+      if (shortTravel || intraTravel || coveredTravel) {
         const travel = runningStitch([prevPoint, start], TRAVEL_STITCH);
         for (const pt of travel.slice(1, -1)) {
           out.push({ x: pt.x, y: pt.y, colorId: object.colorId, objectId: object.id });
         }
       } else if (colorChanged || gap > jumpThreshold) {
-        trimmed = colorChanged || gap > trimThreshold;
+        // Don't cut the thread for a move WITHIN one object unless it's really far
+        // — a fill's own spans should connect (jump), not shatter into trims.
+        trimmed =
+          colorChanged ||
+          (gap > trimThreshold && (!sameObject || gap > INTRA_OBJECT_NO_TRIM));
         // A trim ends the previous thread run — tie it off by retracing back
         // along the stitches just sewn (falling back to the next start only if
         // the finished run was a single point).
@@ -569,6 +584,7 @@ export function generateDesign(
     prevPoint = pts[pts.length - 1];
     prevToward = pts.length > 1 ? pts[pts.length - 2] : pts[0];
     prevColor = object.colorId;
+    prevObjectId = object.id;
   });
 
   // Tie off the very end of the final thread run.

@@ -28,6 +28,33 @@ describe("travel-run routing", () => {
   });
 });
 
+describe("intra-object continuity (anti-fragmentation)", () => {
+  // A concave fill splits into multiple stitch rows; the gaps between a fill's
+  // OWN spans must connect as continuous travels, not shatter into jumps/trims.
+  // (This was the catastrophic 350 trims+jumps/1000 we saw in real exports.)
+  it("connects a fill's own spans without trimming, even past the trim threshold", () => {
+    // A wide, shallow U: tatami rows hop the central notch (a same-object gap
+    // larger than the woven trim threshold but within INTRA_OBJECT_NO_TRIM).
+    const u = [
+      { x: 0, y: 0 },
+      { x: 40, y: 0 },
+      { x: 40, y: 30 },
+      { x: 28, y: 30 },
+      { x: 28, y: 10 },
+      { x: 12, y: 10 },
+      { x: 12, y: 30 },
+      { x: 0, y: 30 },
+    ];
+    const fill = makeObjectFromPaths("fill", [u], "c1");
+    const project: Project = { ...createEmptyProject(), objects: [fill] };
+    const design = generateDesign(project, { lockStitches: false });
+    // One object → at most a single jump/trim, not one per fragmented row.
+    expect(design.filter((s) => s.trim).length).toBeLessThanOrEqual(1);
+    const jumpsTrims = design.filter((s) => s.jump || s.trim).length;
+    expect((jumpsTrims / design.length) * 1000).toBeLessThan(10);
+  });
+});
+
 describe("underpath travel under coverage", () => {
   const trims = (d: ReturnType<typeof generateDesign>) => d.filter((s) => s.trim).length;
   // c1 dots 28mm apart (> trim threshold); a later c2 fill either covers the
