@@ -53,6 +53,8 @@ export interface DesignOptions {
 const TIE_AMPLITUDE = 0.8;
 /** Number of penetrations in one tie/lock cluster. */
 const TIE_COUNT = 3;
+/** Stitch length (mm) for a travel run connecting nearby same-color shapes. */
+const TRAVEL_STITCH = 2.5;
 
 /**
  * Build a small cluster of real penetrations that lock the thread at `anchor`.
@@ -465,7 +467,17 @@ export function generateDesign(
     let trimmed = false;
     if (prevPoint) {
       const gap = distance(prevPoint, start);
-      if (colorChanged || gap > jumpThreshold) {
+      // Real digitizers almost never cut the thread between nearby same-color
+      // shapes — they sew a short TRAVEL run so the whole color is one continuous
+      // path (the example PES files run thousands of stitches between trims).
+      // Mirror that: a same-color gap up to the trim threshold is stitched as a
+      // travel (no jump, no cut); only a longer gap or a color change trims.
+      if (!colorChanged && gap > jumpThreshold && gap <= trimThreshold) {
+        const travel = runningStitch([prevPoint, start], TRAVEL_STITCH);
+        for (const pt of travel.slice(1, -1)) {
+          out.push({ x: pt.x, y: pt.y, colorId: object.colorId, objectId: object.id });
+        }
+      } else if (colorChanged || gap > jumpThreshold) {
         trimmed = colorChanged || gap > trimThreshold;
         // A trim ends the previous thread run — tie it off by retracing back
         // along the stitches just sewn (falling back to the next start only if
