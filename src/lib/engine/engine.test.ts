@@ -19,6 +19,7 @@ import {
   orientByDepth,
   principalAxis,
   autoFillAngle,
+  autoFillAngleForRegions,
 } from "./fill";
 import { fillUnderlay, satinUnderlay } from "./underlay";
 
@@ -530,6 +531,29 @@ describe("principalAxis & autoFillAngle (smart tatami angle)", () => {
 
   it("adds the user's offset to the automatic angle", () => {
     expect(autoFillAngle([rotRect(20, 20, 0)], 10)).toBeCloseTo(55, 5);
+  });
+
+  it("gives a multi-region object ONE shared grain (continuity)", () => {
+    const bar = (cy: number): Path =>
+      [
+        { x: 0, y: cy - 4 },
+        { x: 40, y: cy - 4 },
+        { x: 40, y: cy + 4 },
+        { x: 0, y: cy + 4 },
+      ];
+    // Two horizontal bars STACKED vertically. The arrangement is tall, but each
+    // SHAPE is horizontal — the grain must follow the shapes (~0°), not the layout.
+    const angle = autoFillAngleForRegions([[bar(0)], [bar(40)]]);
+    expect(axisMod(angle)).toBeCloseTo(0, 0);
+  });
+
+  it("matches single-region autoFillAngle when there's one region", () => {
+    const region = [rotRect(40, 8, 25)];
+    expect(autoFillAngleForRegions([region])).toBeCloseTo(autoFillAngle(region), 4);
+  });
+
+  it("two roundish regions stay off-axis 45°", () => {
+    expect(autoFillAngleForRegions([[rotRect(18, 18, 0)], [rotRect(20, 20, 0)]])).toBeCloseTo(45, 5);
   });
 });
 

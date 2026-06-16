@@ -9,7 +9,7 @@ import { resolveParams, fabricProfile } from "../../types/project";
 import { distance } from "../geometry";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
-import { tatamiFill, splitFillRegions, autoFillAngle } from "./fill";
+import { tatamiFill, splitFillRegions, autoFillAngleForRegions } from "./fill";
 import { contourFill } from "./contour";
 import { medialColumns, satinCoverage, type SatinColumn } from "./medial";
 import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
@@ -237,16 +237,21 @@ export function generateObjectRuns(
   // axis (very thin ones run as a single line); broad areas use tatami; the
   // medial pass falls back to tatami where satin won't cover cleanly.
   const satin = p.fillStyle === "satin";
-  for (const region of splitFillRegions(object.paths)) {
+  const regions = splitFillRegions(object.paths);
+  // ONE grain angle for the whole object so every tatami region flows the same
+  // way — a word or multi-blob logo reads as a single piece, not a patchwork of
+  // differently-angled letters (stitch-direction continuity). The user's Angle
+  // field offsets it.
+  const tatamiAngle = autoFillAngleForRegions(regions, p.angle);
+  for (const region of regions) {
     const columns = satin ? acceptableSatin(region, density, fabric.pullMul) : [];
     const usingSatin = columns.length > 0;
     const contour = !usingSatin && p.fillStyle === "contour";
     const travelMax = usingSatin ? 8 : 6;
     // Satin and contour rows are dense like satin; tatami uses the general floor.
     const minStitch = usingSatin || contour ? SATIN_MIN_STITCH : undefined;
-    // Tatami flows along the region's grain (off-axis for roundish shapes), with
-    // the user's Angle field as an offset. Underlay follows the same angle.
-    const fillAngle = usingSatin ? p.angle : autoFillAngle(region, p.angle);
+    // Tatami flows along the object's shared grain. Underlay follows the same angle.
+    const fillAngle = usingSatin ? p.angle : tatamiAngle;
 
     let cursor: Point | null = null;
     if (p.underlay) {
