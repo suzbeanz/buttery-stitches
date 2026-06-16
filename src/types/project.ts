@@ -25,6 +25,9 @@ export interface EmbObjectParams {
   underlay?: boolean;
   /** mm added to satin width to compensate for fabric pull (default 0.2). */
   pullComp?: number;
+  /** mm trimmed off each satin column end to compensate for lengthwise fabric
+   *  push (default 0.2; open columns only). */
+  pushComp?: number;
   /** draw the object's border outline in the editor (default true). */
   outline?: boolean;
   /** how a fill is stitched: tatami (broad areas), satin columns (lettering), or
@@ -150,6 +153,7 @@ export const DEFAULT_PARAMS: Required<EmbObjectParams> = {
   angle: 0,
   underlay: true,
   pullComp: 0.2,
+  pushComp: 0.2,
   outline: true,
   fillStyle: "tatami",
 };
@@ -167,6 +171,7 @@ export function resolveParams(
     underlay:
       type === "running" ? false : (params.underlay ?? DEFAULT_PARAMS.underlay),
     pullComp: params.pullComp ?? DEFAULT_PARAMS.pullComp,
+    pushComp: params.pushComp ?? DEFAULT_PARAMS.pushComp,
     outline: params.outline ?? DEFAULT_PARAMS.outline,
     fillStyle: params.fillStyle ?? DEFAULT_PARAMS.fillStyle,
   };
