@@ -81,21 +81,27 @@ body::after {
   );
 }
 
-/* Hero flourish: a stamp-red bar that fills left-to-right on load. */
-@keyframes fill-bar {
+/* The page's one moving element: the "How It Works" tape, laid in stitch-by-
+   stitch (a stepped left-to-right reveal) when it scrolls into view. Everything
+   else on the homepage is printed and still. */
+@keyframes stitch-in {
   from {
-    transform: scaleX(0);
+    clip-path: inset(0 100% 0 0);
   }
   to {
-    transform: scaleX(1);
+    clip-path: inset(0 0 0 0);
   }
 }
-.fill-bar {
-  transform-origin: left center;
-  animation: fill-bar 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.25s both;
+.stitch-fill {
+  clip-path: inset(0 100% 0 0);
+}
+.stitch-fill.go {
+  animation: stitch-in 1.5s steps(24) forwards;
 }
 @media (prefers-reduced-motion: reduce) {
-  .fill-bar {
+  .stitch-fill,
+  .stitch-fill.go {
+    clip-path: inset(0 0 0 0);
     animation: none;
   }
 }
@@ -179,28 +185,6 @@ body::after {
   .anim-toast-in,
   .anim-indeterminate {
     animation: none;
-  }
-}
-
-/* Editorial scroll reveal: sections rise + fade as they enter view. */
-.reveal {
-  opacity: 0;
-  transform: translateY(14px);
-}
-.reveal-in {
-  opacity: 1;
-  transform: none;
-  transition:
-    opacity 0.55s ease,
-    transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
-}
-@media (prefers-reduced-motion: reduce) {
-  .reveal {
-    opacity: 1;
-    transform: none;
-  }
-  .reveal-in {
-    transition: none;
   }
 }
 

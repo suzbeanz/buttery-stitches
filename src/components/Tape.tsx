@@ -1,17 +1,19 @@
+import { useEffect, useRef, useState } from "react";
+
 /**
  * The measuring-tape ruler — the brand's structural device, lifted from the
  * tablespoon marks on a stick of butter. Drawn like a graduation *printed on the
  * page itself*: flat Press-Blue ink, a tick hierarchy (major / half / quarter),
- * and a foil hairline, roughed with a faint ink grain so it reads as letterpress
- * on paper rather than a crisp vector line.
+ * a foil hairline, and a faint ink grain so it reads as letterpress on paper.
  *
- * Two modes:
- *  - RULER (pass `unit`): a printed graduation. Pure CSS at a FIXED pitch — no
- *    measuring, no JS, no snapping. The ticks simply run the width of the page
- *    and dissolve at both margins (masked), so nothing ever pops, slices, or
- *    resizes as the window changes. It's just ink on the paper.
- *  - STEPS (pass `labels`): a fixed set of labeled divisions (e.g. a progress
- *    meter) that spread to fill the width.
+ * Modes:
+ *  - RULER (`unit`): a printed graduation at a FIXED pitch — pure CSS, no
+ *    measuring, no snapping. Ticks run the length and dissolve at the margins
+ *    (masked), so nothing pops or resizes. `orientation="vertical"` runs it down
+ *    a left margin as a section divider.
+ *  - STEPS (`labels`): a fixed set of labeled divisions (a progress meter). With
+ *    `animate`, the red fill is laid in stitch-by-stitch when it scrolls into
+ *    view — the one moving thing on the page; everything else is printed.
  *
  * Flat by rule — no rounded ends, no soft shadow.
  */
@@ -26,11 +28,46 @@ const HALF_PX = MAJOR_PX / 2;
 const INK_GRAIN =
   "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='t'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23t)' opacity='0.08'/%3E%3C/svg%3E\")";
 
+const Grain = () => (
+  <div
+    className="pointer-events-none absolute inset-0 opacity-60 mix-blend-multiply"
+    style={{ backgroundImage: INK_GRAIN, backgroundSize: "120px 120px" }}
+  />
+);
+
+/** One-shot "is it on screen yet" flag — used only to trigger the stitch fill. */
+function useInView(enabled: boolean) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [shown, setShown] = useState(!enabled);
+  useEffect(() => {
+    if (!enabled) return;
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      setShown(true);
+      return;
+    }
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (e.isIntersecting) {
+          setShown(true);
+          io.disconnect();
+        }
+      },
+      { threshold: 0.35 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [enabled]);
+  return { ref, shown };
+}
+
 export default function Tape({
   labels,
   majors = 8,
   fillPct,
   unit,
+  orientation = "horizontal",
+  animate = false,
   className = "",
 }: {
   /** fixed labeled divisions that fill the width (steps mode). */
@@ -39,80 +76,92 @@ export default function Tape({
   majors?: number;
   /** 0..1 — fill the tape in Stamp Red to show progress. */
   fillPct?: number;
-  /** ruler mode: a printed graduation at fixed pitch (labels are intentionally
-   *  omitted — the marks alone are the device, and nothing pops on resize). */
+  /** ruler mode: a printed graduation at fixed pitch (marks only). */
   unit?: string;
+  /** vertical rulers run down a left margin as section dividers. */
+  orientation?: "horizontal" | "vertical";
+  /** lay the red fill in stitch-by-stitch when it scrolls into view. */
+  animate?: boolean;
   className?: string;
 }) {
-  const rulerMode = !labels && unit !== undefined;
+  const { ref, shown } = useInView(animate);
 
-  if (rulerMode) {
-    // A static, resolution-independent printed rule. The ticks are CSS gradients
-    // at a fixed pixel pitch; a horizontal mask fades them out at both margins so
-    // the partial end ticks dissolve into the paper instead of slicing or jumping.
-    const fade = "linear-gradient(to right, transparent 0, #000 4%, #000 96%, transparent 100%)";
+  // VERTICAL RULER — a printed rule down a left margin (decorative divider).
+  if (orientation === "vertical") {
+    const fade = "linear-gradient(to bottom, transparent 0, #000 6%, #000 94%, transparent 100%)";
+    const tick = (w: string, pitch: number, op: number, weight: number) => (
+      <div
+        className={`absolute inset-y-0 left-0 ${w}`}
+        style={{
+          backgroundImage: `repeating-linear-gradient(to bottom, ${INK} 0 ${weight}px, transparent ${weight}px 100%)`,
+          backgroundSize: `100% ${pitch}px`,
+          opacity: op,
+          maskImage: fade,
+          WebkitMaskImage: fade,
+        }}
+      />
+    );
     return (
-      <div aria-hidden className={`relative h-[22px] w-full shrink-0 overflow-hidden ${className}`}>
-        {/* the rule */}
-        <div className="absolute inset-x-0 top-0 border-t-[2.5px] border-ink opacity-90" />
-        {/* foil hairline just under the rule */}
-        <div className="absolute inset-x-0 top-[3px] h-px bg-foil/55" />
-        {/* graduation ticks (faded at the margins) */}
-        <div
-          className="absolute inset-x-0 top-0 h-4"
-          style={{
-            backgroundImage: `repeating-linear-gradient(to right, ${INK} 0 2px, transparent 2px 100%)`,
-            backgroundSize: `${MAJOR_PX}px 16px`,
-            opacity: 0.9,
-            maskImage: fade,
-            WebkitMaskImage: fade,
-          }}
-        />
-        <div
-          className="absolute inset-x-0 top-0 h-[12px] opacity-75"
-          style={{
-            backgroundImage: `repeating-linear-gradient(to right, ${INK} 0 1.75px, transparent 1.75px 100%)`,
-            backgroundSize: `${HALF_PX}px 12px`,
-            maskImage: fade,
-            WebkitMaskImage: fade,
-          }}
-        />
-        <div
-          className="absolute inset-x-0 top-0 h-[9px] opacity-50"
-          style={{
-            backgroundImage: `repeating-linear-gradient(to right, ${INK} 0 1.5px, transparent 1.5px 100%)`,
-            backgroundSize: `${MINOR_PX}px 9px`,
-            maskImage: fade,
-            WebkitMaskImage: fade,
-          }}
-        />
-        {/* pressed-ink grain */}
-        <div
-          className="pointer-events-none absolute inset-0 opacity-60 mix-blend-multiply"
-          style={{ backgroundImage: INK_GRAIN, backgroundSize: "120px 120px" }}
-        />
+      <div aria-hidden className={`relative w-[22px] shrink-0 overflow-hidden ${className}`}>
+        <div className="absolute inset-y-0 left-0 border-l-[2.5px] border-ink opacity-90" />
+        <div className="absolute inset-y-0 left-[3px] w-px bg-foil/55" />
+        {tick("w-4", MAJOR_PX, 0.9, 2)}
+        {tick("w-3", HALF_PX, 0.7, 1.75)}
+        {tick("w-[9px]", MINOR_PX, 0.45, 1.5)}
+        <Grain />
       </div>
     );
   }
 
-  // STEPS MODE: a fixed set of labeled divisions that spread to fill the width.
+  // RULER MODE — a static printed graduation; ticks fade into the margins.
+  const rulerMode = !labels && unit !== undefined;
+  if (rulerMode) {
+    const fade = "linear-gradient(to right, transparent 0, #000 4%, #000 96%, transparent 100%)";
+    const tick = (h: string, pitch: number, op: number, weight: number) => (
+      <div
+        className={`absolute inset-x-0 top-0 ${h}`}
+        style={{
+          backgroundImage: `repeating-linear-gradient(to right, ${INK} 0 ${weight}px, transparent ${weight}px 100%)`,
+          backgroundSize: `${pitch}px 100%`,
+          opacity: op,
+          maskImage: fade,
+          WebkitMaskImage: fade,
+        }}
+      />
+    );
+    return (
+      <div aria-hidden className={`relative h-[22px] w-full shrink-0 overflow-hidden ${className}`}>
+        <div className="absolute inset-x-0 top-0 border-t-[2.5px] border-ink opacity-90" />
+        <div className="absolute inset-x-0 top-[3px] h-px bg-foil/55" />
+        {tick("h-4", MAJOR_PX, 0.9, 2)}
+        {tick("h-[12px]", HALF_PX, 0.75, 1.75)}
+        {tick("h-[9px]", MINOR_PX, 0.5, 1.5)}
+        <Grain />
+      </div>
+    );
+  }
+
+  // STEPS MODE — a fixed set of labeled divisions that spread to fill the width.
   const divisions = labels?.length ?? majors;
   const majorSize = `calc(100% / ${divisions}) 16px`;
   const minorSize = `calc(100% / ${divisions * 4}) 9px`;
+  // The fill is a row of running stitches (red dashes); when animated it's
+  // revealed left-to-right in discrete steps, like being sewn in.
+  const stitches = `repeating-linear-gradient(to right, ${RED} 0 9px, ${RED}40 9px 13px)`;
 
   return (
     <div
+      ref={ref}
       aria-hidden
       className={`relative ${labels ? "h-11" : "h-5"} w-full shrink-0 overflow-hidden ${className}`}
     >
-      {/* the rule */}
       <div className="absolute inset-x-0 top-0 border-t-[2.5px] border-ink" />
       <div className="absolute inset-x-0 top-[3px] h-px bg-foil/55" />
-      {/* red progress fill */}
+      {/* red running-stitch fill */}
       {fillPct !== undefined && (
         <div
-          className="absolute left-0 top-[2.5px] h-[13px]"
-          style={{ width: `${Math.max(0, Math.min(1, fillPct)) * 100}%`, background: RED, opacity: 0.85 }}
+          className={`absolute left-0 top-[2.5px] h-[13px] ${animate ? `stitch-fill ${shown ? "go" : ""}` : ""}`}
+          style={{ width: `${Math.max(0, Math.min(1, fillPct)) * 100}%`, backgroundImage: stitches }}
         />
       )}
       {/* major ticks */}
@@ -134,11 +183,7 @@ export default function Tape({
       {/* end caps */}
       <div className="absolute left-0 top-0 h-[22px] w-[2.5px] bg-ink" />
       <div className="absolute right-0 top-0 h-[22px] w-[2.5px] bg-ink" />
-      {/* pressed-ink grain */}
-      <div
-        className="pointer-events-none absolute inset-0 opacity-60 mix-blend-multiply"
-        style={{ backgroundImage: INK_GRAIN, backgroundSize: "120px 120px" }}
-      />
+      <Grain />
       {/* labels */}
       {labels && (
         <div className="absolute inset-x-0 top-[24px] flex">
