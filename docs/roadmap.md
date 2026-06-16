@@ -51,7 +51,13 @@ Placement run → STOP → tackdown → satin cover-stitch, with a fabric-color 
       all under `prefers-reduced-motion`. Press feedback on the top bar + tool rail.
 - [x] Toast system (`toastStore` + `Toaster`): confirms Save / Export / Clean-up /
       Open, replaces the native `alert()`s. Indeterminate export-warm-up bar.
-- [ ] Simulator: subtle needle life + an edit↔stitch crossfade (touches Konva).
+- [x] Visual consistency: TextDialog uses the shared `.input` + press-button
+      language; SimulatorBar speed/scrubber/readout on-brand; empty Layers/
+      Properties states are icon hint-cards; `accent-ink` on every checkbox/range;
+      shapes menu squared; DesignPanel warnings use the stamp-red caution style;
+      "Loading font…" + "Tracing your image…" busy notes (indeterminate bars).
+- [x] Simulator needle is a flat stamp-red ring + cream dot (clear live marker).
+- [ ] Edit↔stitch crossfade (touches Konva); design-wide fill-angle override.
 - [ ] Design-wide fill-angle override in the Design panel (engine plumbing exists).
 - [ ] Edge-walk underlay following the shared grain.
 - [ ] Migrate residual `navy/butter/paper` aliases to canonical `ink/cream/char`.
