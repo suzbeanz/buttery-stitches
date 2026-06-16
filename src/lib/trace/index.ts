@@ -2,6 +2,7 @@ import ImageTracer from "imagetracerjs";
 import type { EmbObject, Path, Point, ThreadColor } from "../../types/project";
 import { newId } from "../id";
 import { makeObjectFromPaths } from "../objects";
+import { smoothClosedRing } from "../smooth";
 import { douglasPeucker } from "./simplify";
 import { polygonArea } from "./classify";
 import { quantizeImage, borderBackgroundColor } from "./quantize";
@@ -181,7 +182,9 @@ export function tracedataToObjects(
         .filter(Boolean)
         .map((h) => simp(pathToPolylinePx(h)))
         .filter((h) => polygonArea(h) >= minAreaMm2);
-      fillRings.push(outer, ...holes);
+      // Smooth the simplified outline into a soft curve so the fill follows the
+      // shape instead of the tracer's pixel stair-steps (the "blocky" look).
+      fillRings.push(smoothClosedRing(outer, 0.8), ...holes.map((h) => smoothClosedRing(h, 0.8)));
     });
 
     if (fillRings.length > 0) {

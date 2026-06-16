@@ -74,6 +74,22 @@ export function smoothPath(path: Path, options: SmoothOptions = {}): Path {
 }
 
 /**
+ * Smooth a CLOSED ring into a soft curve, wrapping the seam so the join is as
+ * smooth as the rest of the loop. Used to de-facet traced/flood-filled region
+ * outlines so fills follow natural curves instead of stair-steps.
+ */
+export function smoothClosedRing(ring: Path, maxSegmentMm = 0.6): Path {
+  if (ring.length < 4) return ring.map((p) => ({ ...p }));
+  const n = ring.length;
+  const padded = [ring[n - 1], ...ring, ring[0], ring[1]];
+  const sm = smoothPath(padded, { maxSegmentMm });
+  // Trim the leading/trailing padding (~one control segment each side).
+  const seg = Math.round(sm.length / padded.length);
+  const core = sm.slice(seg, sm.length - seg * 2);
+  return core.length >= 3 ? core : ring.map((p) => ({ ...p }));
+}
+
+/**
  * Centripetal Catmull-Rom interpolation of the spline through p1→p2, using p0
  * and p3 as the neighboring tangent controls. t runs 0 (at p1) to 1 (at p2).
  */
