@@ -267,7 +267,7 @@ export default function TopBar({
 
       <div className="flex-1" />
 
-      <span className="px-1 text-xs text-butter-200/70">
+      <span className="hidden px-1 text-xs text-butter-200/70 sm:inline">
         {project.objects.length} object
         {project.objects.length === 1 ? "" : "s"}
       </span>
