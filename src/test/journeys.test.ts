@@ -228,6 +228,14 @@ describe("journey: drop a shape → add a satin outline → export", () => {
     });
   }
 
+  it("a contour (echo) fill on an organic shape sews cleanly", () => {
+    const store = useProjectStore.getState();
+    const heart = makeShapeObject("heart", { width: 50, height: 50 }, colorId());
+    heart.params = { ...heart.params, fillStyle: "contour" };
+    store.addObject(heart);
+    expectSewable(useProjectStore.getState().project);
+  });
+
   it("adding a satin outline in a second color yields two color blocks", () => {
     const store = useProjectStore.getState();
     const cId = colorId();

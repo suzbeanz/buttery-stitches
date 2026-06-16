@@ -10,6 +10,7 @@ import { distance } from "../geometry";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
 import { tatamiFill, splitFillRegions, autoFillAngle } from "./fill";
+import { contourFill } from "./contour";
 import { medialColumns, satinCoverage, type SatinColumn } from "./medial";
 import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
 import { dropShortStitches, splitLongTravels } from "./resample";
@@ -232,14 +233,22 @@ export function generateObjectRuns(
       }
     }
 
-    // Top layer. Hairline columns become a single running line; the rest satin.
-    const tops: Point[][] = usingSatin
-      ? columns.map((c) =>
-          c.widthMm < RUNNING_COLUMN_MM
-            ? runningStitch(c.centerline, p.stitchLength)
-            : c.throws,
-        )
-      : [tatamiFill(region, { density, angle: fillAngle, pullCompMm: pullComp })];
+    // Top layer. Satin: hairline columns become a single running line, the rest
+    // satin. Contour: rings that echo the outline. Otherwise a tatami fill (also
+    // the fallback when contour can't seat a ring in a too-thin shape).
+    let tops: Point[][];
+    if (usingSatin) {
+      tops = columns.map((c) =>
+        c.widthMm < RUNNING_COLUMN_MM
+          ? runningStitch(c.centerline, p.stitchLength)
+          : c.throws,
+      );
+    } else if (p.fillStyle === "contour") {
+      const echo = contourFill(region, { density });
+      tops = echo.length ? echo : [tatamiFill(region, { density, angle: fillAngle, pullCompMm: pullComp })];
+    } else {
+      tops = [tatamiFill(region, { density, angle: fillAngle, pullCompMm: pullComp })];
+    }
 
     // Sew the strokes nearest-neighbor from where the underlay left off, for the
     // shortest travel between them (pure reordering; geometry unchanged).

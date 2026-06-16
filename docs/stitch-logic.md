@@ -132,7 +132,8 @@ run it **first**, **inset ~1 mm** from the edge so it never peeks out, at a
 | Max stitch / split satin | ✅ wide columns split into brick-staggered sub-stitches (no seam); underlay zig-zag also capped |
 | Lock stitches, min-stitch, coincident collapse | ✅ |
 | Color grouping; nearest-neighbor branch routing | ✅ / ⚠️ (not global) |
-| Contour / radial / motif / gradient textures | ❌ |
+| Contour / echo fill | ✅ iso-distance rings (marching squares on the distance transform) — opt-in `fillStyle:"contour"`, handles concavity + holes |
+| Radial / motif / gradient textures | ❌ later |
 | Fabric-type presets driving density/underlay/pull | ✅ `FABRICS` registry (woven/knit/pile/sheer) wired through the engine + UI |
 | Validation (min/max stitch, density, hoop, count) | ✅ (could warn on satin > 7 mm specifically) |
 
@@ -160,7 +161,11 @@ run it **first**, **inset ~1 mm** from the edge so it never peeks out, at a
    skewed diagonal across a sharp corner) breaks into brick-staggered sub-stitches,
    so wide columns show no center seam and corners aren't loose. Shared by
    hand-drawn satin, medial lettering, column-scan fill, and underlay zig-zags.
-7. **Texture options** — contour/echo fill (organic shapes), then motif/gradient.
+7. ✅ **Contour / echo fill** — `contourFill` lays rings that echo the outline via
+   iso-distance contours of the region's distance transform (marching squares), so
+   they stay evenly spaced, never self-intersect on concave shapes, and handle holes
+   for free. Opt-in via `fillStyle:"contour"`; falls back to tatami when too thin.
+   (Motif / gradient textures still to come.)
 8. **Validation tuning** — flag satin > 7 mm, underlay-off on large fills, etc.
 
 Each step ships behind the existing journey/coverage tests + CPython export checks,
