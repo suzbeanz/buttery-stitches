@@ -25,6 +25,9 @@ export interface EmbObjectParams {
   raw?: boolean;
   /** fill/satin: mm between rows (default 0.4). */
   density?: number;
+  /** fill: mm between penetrations ALONG a tatami row (default 4). Shorter =
+   *  denser, more secure texture; longer = smoother sheen, fewer stitches. */
+  fillStitchLength?: number;
   /** fill direction in degrees (default 0). */
   angle?: number;
   /** add a stabilizing underlay pass (default true for fill/satin). */
@@ -161,6 +164,7 @@ export const DEFAULT_PARAMS: Required<EmbObjectParams> = {
   beanRepeats: 0,
   raw: false,
   density: 0.4,
+  fillStitchLength: 4,
   angle: 0,
   underlay: true,
   underlayWeight: "auto",
@@ -180,6 +184,7 @@ export function resolveParams(
     beanRepeats: params.beanRepeats ?? DEFAULT_PARAMS.beanRepeats,
     raw: params.raw ?? DEFAULT_PARAMS.raw,
     density: params.density ?? DEFAULT_PARAMS.density,
+    fillStitchLength: params.fillStitchLength ?? DEFAULT_PARAMS.fillStitchLength,
     angle: params.angle ?? DEFAULT_PARAMS.angle,
     // running stitch never has underlay regardless of stored value
     underlay:
