@@ -61,7 +61,7 @@ export default function Home({ onStart }: { onStart: () => void }) {
           </div>
 
           <div className="relative z-10 mt-7 text-center font-mono text-[12px] uppercase tracking-[0.14em] text-char/80">
-            Pictures, Words &amp; Shapes → Machine-Ready Stitches
+            Images, Words &amp; Shapes → Machine-Ready Stitches
           </div>
         </PressCard>
 
@@ -83,7 +83,7 @@ export default function Home({ onStart }: { onStart: () => void }) {
       {/* 01 — THE MILK */}
       <Row no="01 / The Milk" title="The Spread" sub="What it does">
         <p className="max-w-2xl font-body text-[17px] leading-relaxed text-char">
-          Pictures, words, and shapes become machine-ready embroidery files.
+          Images, words, and shapes become machine-ready embroidery files.
           It&apos;s free, open-source, and churned right in your browser.
         </p>
         <p className="mt-4 max-w-2xl font-accent text-xl italic text-stamp">
@@ -94,12 +94,12 @@ export default function Home({ onStart }: { onStart: () => void }) {
       <Tape unit="Tbsp" />
 
       {/* 02 — THE KIT */}
-      <Row no="02 / The Kit" title="What's Inside" sub="Picture · Words · Export">
+      <Row no="02 / The Kit" title="What's Inside" sub="Image · Words · Export">
         <p className="max-w-2xl font-body text-[17px] leading-relaxed text-char">
           Simple, familiar tools that make stitch design as easy as it can be.
         </p>
         <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
-          <Feature title="Picture → Stitches" motif={<ImageMotif />}>
+          <Feature title="Image → Stitches" motif={<ImageMotif />}>
             Drop in a logo. Get clean stitches.
           </Feature>
           <Feature title="Add Words" motif={<TypeMotif />}>

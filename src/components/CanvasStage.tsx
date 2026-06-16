@@ -978,7 +978,7 @@ export default function CanvasStage() {
             <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <StartButton
                 icon={ImageIcon}
-                label="Use a picture"
+                label="Use an image"
                 hint="Turn a photo or logo into stitches"
                 onClick={() => useEditorStore.getState().setPendingStart("image")}
               />

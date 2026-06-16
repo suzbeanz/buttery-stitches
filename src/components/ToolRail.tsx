@@ -90,7 +90,7 @@ export default function ToolRail() {
         <RailBtn label="Words" tip="Add lettering" disabled={locked} onClick={() => setPendingStart("text")}>
           <Type size={20} />
         </RailBtn>
-        <RailBtn label="Picture" tip="Turn a picture into stitches" disabled={locked} onClick={() => setPendingStart("image")}>
+        <RailBtn label="Image" tip="Turn an image into stitches" disabled={locked} onClick={() => setPendingStart("image")}>
           <ImageIcon size={20} />
         </RailBtn>
       </Group>

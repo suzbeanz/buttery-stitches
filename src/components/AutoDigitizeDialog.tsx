@@ -115,11 +115,11 @@ export default function AutoDigitizeDialog({
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
-        aria-label="Turn a picture into stitches"
+        aria-label="Turn an image into stitches"
         className="anim-press-in max-h-[90vh] w-full max-w-md overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-4 shadow-press outline-none"
       >
         <h2 className="mb-3 font-label uppercase tracking-[0.08em] text-lg font-semibold text-navy">
-          Turn a picture into stitches
+          Turn an image into stitches
         </h2>
 
         <div className="mb-3 flex justify-center rounded border border-navy/10 bg-[repeating-conic-gradient(#eee_0_25%,#fff_0_50%)] bg-[length:16px_16px] p-2">
