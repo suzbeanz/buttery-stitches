@@ -1,5 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { X, Image as ImageIcon, Type, Pencil, type LucideIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  X,
+  Image as ImageIcon,
+  Type,
+  Pencil,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  type LucideIcon,
+} from "lucide-react";
 import {
   Stage,
   Layer,
@@ -49,6 +58,9 @@ import { designToSegments, needleAt } from "../lib/engine/render";
 
 const RULER = 22; // px thickness of the top/left rulers
 const PADDING = 48; // px breathing room around the hoop (room for frame + bracket)
+const MIN_ZOOM = 0.5; // furthest out (half the fit size)
+const MAX_ZOOM = 10; // closest in (10× the fit size)
+const ZOOM_STEP = 1.25; // per button press / wheel notch
 const SNAP_MM = 3; // snap distance (mm) for alignment to hoop/object edges
 const JOIN_SNAP_MM = 3; // snap the closing end of a fill polygon to its start
 const HOOP_BAND = 14; // px thickness of the hoop frame in the mockup
@@ -84,6 +96,10 @@ export default function CanvasStage() {
   const clearDraft = useEditorStore((s) => s.clearDraft);
   const smooth = useEditorStore((s) => s.smooth);
   const guidesEnabled = useEditorStore((s) => s.guidesEnabled); // workspace gridlines
+
+  // Viewport zoom (1 = fit-to-workspace) and pan (px), shared by edit + stitch.
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
 
   const viewMode = useEditorStore((s) => s.viewMode);
   const simPlaying = useEditorStore((s) => s.simPlaying);
@@ -138,12 +154,17 @@ export default function CanvasStage() {
   const { hoop } = project;
   const availW = size.width - RULER - PADDING * 2;
   const availH = size.height - RULER - PADDING * 2;
-  const scale =
+  // Base "fit" scale (hoop fills the workspace), then the user's zoom on top.
+  const fitScale =
     availW > 0 && availH > 0 ? Math.min(availW / hoop.wMm, availH / hoop.hMm) : 1;
+  const scale = fitScale * zoom;
   const hoopW = hoop.wMm * scale;
   const hoopH = hoop.hMm * scale;
-  const originX = RULER + PADDING + (availW - hoopW) / 2;
-  const originY = RULER + PADDING + (availH - hoopH) / 2;
+  // Hoop is centered at fit, then shifted by the user's pan (px).
+  const baseOriginX = RULER + PADDING + (availW - hoopW) / 2;
+  const baseOriginY = RULER + PADDING + (availH - hoopH) / 2;
+  const originX = baseOriginX + pan.x;
+  const originY = baseOriginY + pan.y;
 
   // Hoop-mockup geometry: the frame opening is larger than the stitchable field,
   // so there's visible fabric margin beyond the workable area (as on a real hoop).
@@ -158,6 +179,36 @@ export default function CanvasStage() {
     x: (sx - originX) / scale,
     y: (sy - originY) / scale,
   });
+
+  // Re-zoom so the mm point currently under (anchorX, anchorY) px stays put.
+  function zoomToAnchor(nextZoom: number, anchorX: number, anchorY: number) {
+    const z = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, nextZoom));
+    const mx = (anchorX - originX) / scale;
+    const my = (anchorY - originY) / scale;
+    const newScale = fitScale * z;
+    const nbX = RULER + PADDING + (availW - hoop.wMm * newScale) / 2;
+    const nbY = RULER + PADDING + (availH - hoop.hMm * newScale) / 2;
+    setZoom(z);
+    setPan({ x: anchorX - mx * newScale - nbX, y: anchorY - my * newScale - nbY });
+  }
+
+  function onWheelZoom(e: Konva.KonvaEventObject<WheelEvent>) {
+    e.evt.preventDefault();
+    const stage = e.target.getStage();
+    const ptr = stage?.getPointerPosition();
+    if (!ptr) return;
+    zoomToAnchor(zoom * (e.evt.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP), ptr.x, ptr.y);
+  }
+
+  // Buttons zoom toward the center of the workspace.
+  const centerX = RULER + (size.width - RULER) / 2;
+  const centerY = RULER + (size.height - RULER) / 2;
+  const zoomIn = () => zoomToAnchor(zoom * ZOOM_STEP, centerX, centerY);
+  const zoomOut = () => zoomToAnchor(zoom / ZOOM_STEP, centerX, centerY);
+  const resetView = () => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  };
 
   const colorById = useMemo(
     () => new Map<string, ThreadColor>(project.colors.map((c) => [c.id, c])),
@@ -253,7 +304,25 @@ export default function CanvasStage() {
     return pos ? toMm(pos.x, pos.y) : null;
   }
 
+  // Middle-mouse drag pans the workspace (in either view) without disturbing
+  // tools or selection.
+  function startPan(e: Konva.KonvaEventObject<MouseEvent>) {
+    e.evt.preventDefault();
+    const sx = e.evt.clientX;
+    const sy = e.evt.clientY;
+    const sp = { ...pan };
+    const move = (ev: MouseEvent) =>
+      setPan({ x: sp.x + (ev.clientX - sx), y: sp.y + (ev.clientY - sy) });
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  }
+
   function onStageMouseDown(e: Konva.KonvaEventObject<MouseEvent>) {
+    if (e.evt.button === 1) return startPan(e); // middle button → pan (any view)
     if (viewMode === "stitch") return; // simulation view is read-only
     const stage = e.target.getStage();
     if (!stage) return;
@@ -351,6 +420,7 @@ export default function CanvasStage() {
           onMouseDown={onStageMouseDown}
           onMouseMove={onStageMouseMove}
           onDblClick={finishDraft}
+          onWheel={onWheelZoom}
           style={{ cursor: drawing ? "crosshair" : "default" }}
         >
           <Layer>
@@ -667,6 +737,34 @@ export default function CanvasStage() {
         </Stage>
       )}
 
+      {/* Zoom controls — work in both edit and stitch view. */}
+      {size.width > 0 && (
+        <div className="absolute bottom-3 right-3 flex flex-col overflow-hidden rounded-sm border-2 border-ink bg-cream shadow-press-sm">
+          <ZoomButton label="Zoom in" onClick={zoomIn} disabled={zoom >= MAX_ZOOM - 1e-6}>
+            <ZoomIn size={16} strokeWidth={2} />
+          </ZoomButton>
+          <button
+            onClick={resetView}
+            aria-label="Fit to view"
+            title="Fit to view"
+            className="grid h-8 w-8 place-items-center border-y border-ink/20 font-mono text-[10px] font-semibold text-ink-deep hover:bg-butter-200"
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+          <ZoomButton label="Zoom out" onClick={zoomOut} disabled={zoom <= MIN_ZOOM + 1e-6}>
+            <ZoomOut size={16} strokeWidth={2} />
+          </ZoomButton>
+          <button
+            onClick={resetView}
+            aria-label="Reset view"
+            title="Reset view"
+            className="grid h-8 w-8 place-items-center border-t border-ink/20 text-ink-deep hover:bg-butter-200"
+          >
+            <Maximize2 size={15} strokeWidth={2} />
+          </button>
+        </div>
+      )}
+
       {viewMode === "edit" &&
         project.objects.length === 0 &&
         draft.length === 0 &&
@@ -731,6 +829,30 @@ export default function CanvasStage() {
 // ---------------------------------------------------------------------------
 
 /** Big friendly action in the empty-state quick-start guide. */
+function ZoomButton({
+  label,
+  onClick,
+  disabled,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className="grid h-8 w-8 place-items-center text-ink-deep hover:bg-butter-200 disabled:opacity-30"
+    >
+      {children}
+    </button>
+  );
+}
+
 function StartButton({
   icon: Icon,
   label,
