@@ -224,10 +224,11 @@ describe("tracedataToObjects", () => {
       offsetX: 100,
       offsetY: 50,
     });
-    // a 4px square at 0.5 mm/px => 2 mm square, offset to (100,50)
+    // a 4px square at 0.5 mm/px => 2 mm square, offset to (100,50). The outline
+    // is smoothed (corners round slightly), so allow a sub-mm tolerance.
     const xs = objects[0].paths[0].map((p) => p.x);
-    expect(Math.min(...xs)).toBeCloseTo(100);
-    expect(Math.max(...xs)).toBeCloseTo(102);
+    expect(Math.min(...xs)).toBeCloseTo(100, 0);
+    expect(Math.max(...xs)).toBeCloseTo(102, 0);
   });
 });
 
