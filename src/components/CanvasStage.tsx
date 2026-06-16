@@ -914,7 +914,7 @@ export default function CanvasStage() {
         </div>
       )}
 
-      <div className="pointer-events-none absolute bottom-2 right-3 rounded-sm bg-navy/85 px-2 py-0.5 font-mono text-[11px] tracking-wide text-butter-100">
+      <div className="pointer-events-none absolute bottom-2 left-3 rounded-sm bg-navy/85 px-2 py-0.5 font-mono text-[11px] tracking-wide text-butter-100">
         {rulerUnit === "inch"
           ? `${mmToInch(project.widthMm).toFixed(2)} × ${mmToInch(project.heightMm).toFixed(2)} in`
           : `${project.widthMm.toFixed(0)} × ${project.heightMm.toFixed(0)} mm`}
@@ -1033,7 +1033,7 @@ function Ruler({
             {t.label !== undefined && (
               <Text
                 x={horizontal ? pos + 2 : 1}
-                y={horizontal ? 2 : pos + 1}
+                y={horizontal ? 5 : pos + 1}
                 text={t.label}
                 fontSize={8}
                 fill={C.navy}

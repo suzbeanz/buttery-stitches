@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import Tape from "./Tape";
 import PressButton from "./PressButton";
 import PressCard from "./PressCard";
@@ -9,14 +9,16 @@ import Footer from "./Footer";
 
 /**
  * The homepage as a printed butter wrapper / editorial spread. Flat Press-Blue
- * ink on churned-butter stock, the tablespoon tape running full-bleed between
- * every section as the structural grid, grade stamps, and press-block fixtures.
+ * ink on churned-butter stock; a tablespoon tape rules between every section and
+ * a vertical rule runs down each section's margin as a consistent fixture. The
+ * page is printed and still — the only motion is the "How It Works" tape, sewn
+ * in stitch-by-stitch as it scrolls into view.
  */
 export default function Home({ onStart }: { onStart: () => void }) {
   return (
     <div className="h-full overflow-y-auto">
       {/* HERO — the label */}
-      <Col className="pt-10 sm:pt-16">
+      <div className="mx-auto max-w-5xl px-6 pt-10 sm:pt-16">
         <PressCard className="relative overflow-hidden px-6 py-8 sm:px-10 sm:py-10">
           {/* Warm label-light behind the wordmark — lifts the type off the card. */}
           <div
@@ -32,9 +34,8 @@ export default function Home({ onStart }: { onStart: () => void }) {
             <span>Net Wt. Free · 100% Free</span>
           </div>
 
-          {/* Flanking seals — pinned to the card edges and shown only at lg+,
-              where the card is wide enough to clear the big wordmark (they used
-              to crowd it on medium screens). */}
+          {/* Flanking seals — pinned to the card edges, shown only at lg+ where
+              the card is wide enough to clear the big wordmark. */}
           <GradeStamp
             size={74}
             className="absolute left-6 top-1/2 z-10 hidden -translate-y-1/2 lg:block"
@@ -60,15 +61,15 @@ export default function Home({ onStart }: { onStart: () => void }) {
               <br />
               Stitches
             </div>
-            {/* Stamp-red bar that fills in on load. */}
-            <div className="mx-auto mt-5 h-[3px] w-44 max-w-[70%] rounded-full bg-stamp fill-bar" />
+            {/* Static stamp-red rule. */}
+            <div className="mx-auto mt-5 h-[3px] w-44 max-w-[70%] rounded-full bg-stamp" />
             <div className="mt-5 font-label text-[12px] font-medium uppercase tracking-[0.4em] text-ink-deep sm:text-sm">
-              Embroidery Digitizing — Churned to Order
+              Free Embroidery Digitizing
             </div>
           </div>
 
           <div className="relative z-10 mt-7 text-center font-mono text-[12px] uppercase tracking-[0.14em] text-char/80">
-            Net Wt. Free · Pictures, Words &amp; Shapes → Machine-Ready Stitches
+            Pictures, Words &amp; Shapes → Machine-Ready Stitches
           </div>
         </PressCard>
 
@@ -83,61 +84,60 @@ export default function Home({ onStart }: { onStart: () => void }) {
         <p className="mt-3 text-center font-mono text-[11px] uppercase tracking-[0.14em] text-char/60">
           Free · No sign-up · Stays on your machine
         </p>
-      </Col>
+      </div>
 
-      <Tape unit="Tbsp" className="mt-12" />
+      <Tape unit="Tbsp" className="mx-auto mt-12 max-w-5xl px-6" />
 
       {/* 01 — THE SPREAD */}
-      <Col reveal>
-        <SectionHead no="Section 01 / Half Cup" title="The Spread" sub="What it does" />
+      <Section no="Section 01 / Half Cup" title="The Spread" sub="What it does">
         <p className="max-w-2xl font-body text-[17px] leading-relaxed text-char">
-          Buttery Stitches turns pictures, words, and shapes into machine-ready
-          embroidery files — churned right in your browser, free and open-source.
-          It borrows the honest confidence of a dairy-case butter label:{" "}
-          <b className="text-ink">one good product, plainly made.</b> No gradients,
-          no startup gloss — just clean stitches, measured and exact.
+          Pictures, words, and shapes become machine-ready embroidery — free,
+          open-source, and churned right in your browser.{" "}
+          <b className="text-ink">No AI, no guesswork:</b> every stitch is plain
+          math and logic, measured and exact.
         </p>
-      </Col>
+        <p className="mt-4 max-w-2xl font-accent text-xl italic text-stamp">
+          Named after Butters — a very good girl.
+        </p>
+      </Section>
 
-      <Tape unit="Tbsp" className="mt-12" />
+      <Tape unit="Tbsp" className="mx-auto mt-12 max-w-5xl px-6" />
 
       {/* 02 — WHAT'S INSIDE */}
-      <Col reveal>
-        <SectionHead no="Section 02 / The Kit" title="What's Inside" sub="Picture · Words · Export" />
+      <Section no="Section 02 / The Kit" title="What's Inside" sub="Picture · Words · Export">
         <div className="mt-2 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <Feature title="Picture → Stitches" motif={<ImageMotif />}>
-            Drop in a logo or line art and get clean, machine-ready stitches.
+            Drop in a logo. Get clean stitches.
           </Feature>
           <Feature title="Add Words" motif={<TypeMotif />}>
-            Stitch a name or message in curated fonts — crisp satin or solid fill.
+            Type a name in curated fonts.
           </Feature>
           <Feature title="Preview &amp; Export" motif={<NeedleMotif />}>
-            Watch it sew inside the hoop, then save to your machine's format.
+            Watch it sew, then save to your machine.
           </Feature>
         </div>
-      </Col>
+      </Section>
 
-      <Tape unit="Tbsp" className="mt-12" />
+      <Tape unit="Tbsp" className="mx-auto mt-12 max-w-5xl px-6" />
 
       {/* 03 — HOW IT WORKS */}
-      <Col reveal>
-        <SectionHead no="Section 03 / The Method" title="How It Works" sub="Trace → Export" />
+      <Section no="Section 03 / The Method" title="How It Works" sub="Math, not magic">
         <p className="max-w-2xl font-body text-[16px] leading-relaxed text-char">
-          Every design is portioned the same careful way — underlay, tie-offs, and
-          safe stitch lengths so it sews reliably. The tape fills as it's digitized:
+          No black-box AI — pure math and logic. Every design gets underlay,
+          tie-offs, and safe stitch lengths, so it sews right the first time:
         </p>
         <Tape
           className="mt-7"
           fillPct={1}
+          animate
           labels={["Trace", "Path", "Fill", "Underlay", "Satin", "Tie-off", "Preview", "Export"]}
         />
-      </Col>
+      </Section>
 
-      <Tape unit="Tbsp" className="mt-12" />
+      <Tape unit="Tbsp" className="mx-auto mt-12 max-w-5xl px-6" />
 
       {/* 04 — FORMATS */}
-      <Col reveal>
-        <SectionHead no="Section 04 / The Tickets" title="The Formats" sub="Home &amp; commercial machines" />
+      <Section no="Section 04 / The Tickets" title="The Formats" sub="Home &amp; commercial machines">
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <Stamp variant="solid">PES</Stamp>
           <Stamp>DST</Stamp>
@@ -152,85 +152,70 @@ export default function Home({ onStart }: { onStart: () => void }) {
           <Stamp>Net Wt. Free</Stamp>
           <Stamp variant="red">Grade AA</Stamp>
         </div>
-      </Col>
+      </Section>
 
-      <Tape unit="Tbsp" className="mt-12" />
+      <Tape unit="Tbsp" className="mx-auto mt-12 max-w-5xl px-6" />
 
       {/* 05 — WHY OPEN SOURCE */}
-      <Col reveal>
-        <SectionHead no="Section 05 / The Promise" title="Why It's Free" sub="Open source, for everyone" />
+      <Section no="Section 05 / The Promise" title="Why It's Free" sub="Open source, for everyone">
         <div className="mt-2 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <Feature title="Free Forever">
-            Pro digitizing software costs hundreds. This costs nothing, always.
+            Pro tools cost hundreds. This is always free.
           </Feature>
           <Feature title="Stays On Your Machine">
-            Everything runs in your browser. Nothing is ever uploaded.
+            Runs in your browser. Nothing is uploaded.
           </Feature>
           <Feature title="Open &amp; Yours">
-            Open-source and improving in the open — proof that free can be the best.
+            Open-source, improving in the open.
           </Feature>
         </div>
-        <div className="mt-9 text-center">
+        <div className="mt-9 sm:pl-0">
           <PressButton onClick={onStart} className="text-base">
             Start Stitching
           </PressButton>
         </div>
-      </Col>
+      </Section>
 
-      <Tape unit="Tbsp" className="mt-12" />
+      <Tape unit="Tbsp" className="mx-auto mt-12 max-w-5xl px-6" />
 
       {/* FOOTER BAND */}
-      <Col reveal className="pb-2">
+      <div className="mx-auto max-w-5xl px-6 pb-2">
         <div className="border-y-[3px] border-ink py-5 text-center">
           <div className="font-display text-2xl uppercase tracking-wide text-ink-deep sm:text-4xl">
             Net Wt. Free · 100% Open Source
           </div>
         </div>
-      </Col>
+      </div>
       <Footer />
     </div>
   );
 }
 
-/** Reveal an element once it scrolls into view (one-shot). */
-function useReveal() {
-  const ref = useRef<HTMLDivElement>(null);
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || typeof IntersectionObserver === "undefined") {
-      setShown(true);
-      return;
-    }
-    const io = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setShown(true);
-          io.disconnect();
-        }
-      },
-      { rootMargin: "0px 0px -8% 0px", threshold: 0.04 },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
-  return { ref, shown };
-}
-
-function Col({
+/** A homepage section: numbered head, a vertical printed rule down its margin
+ *  (the consistent per-section fixture), and content. */
+function Section({
+  no,
+  title,
+  sub,
   children,
   className = "",
-  reveal = false,
 }: {
+  no: string;
+  title: string;
+  sub?: string;
   children: ReactNode;
   className?: string;
-  reveal?: boolean;
 }) {
-  const { ref, shown } = useReveal();
-  const rev = reveal ? `reveal ${shown ? "reveal-in" : ""}` : "";
   return (
-    <div ref={reveal ? ref : undefined} className={`mx-auto max-w-5xl px-6 ${rev} ${className}`}>
-      {children}
+    <div className={`relative mx-auto max-w-5xl px-6 ${className}`}>
+      {/* vertical ruler divider — hidden on narrow screens to keep copy roomy */}
+      <div aria-hidden className="absolute bottom-3 left-6 top-3 hidden sm:block">
+        <Tape orientation="vertical" className="h-full" />
+      </div>
+      <div className="sm:pl-12">
+        <SectionHead no={no} title={title} sub={sub} />
+        {children}
+      </div>
     </div>
   );
 }
