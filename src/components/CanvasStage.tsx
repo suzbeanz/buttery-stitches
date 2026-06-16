@@ -25,6 +25,7 @@ import { useProjectStore } from "../store/projectStore";
 import { useEditorStore, isDrawTool } from "../store/editorStore";
 import type { EmbObject, Path, Point, ThreadColor } from "../types/project";
 import { makeObject, minPointsFor } from "../lib/objects";
+import { shapeFromDrag, shapeRings, type ShapeKind } from "../lib/shapes";
 import {
   translatePaths,
   dedupePath,
@@ -84,6 +85,7 @@ export default function CanvasStage() {
   const addObject = useProjectStore((s) => s.addObject);
 
   const tool = useEditorStore((s) => s.tool);
+  const shapeKind = useEditorStore((s) => s.shapeKind);
   const draft = useEditorStore((s) => s.draft);
   const cursorMm = useEditorStore((s) => s.cursorMm);
   const rulerUnit = useEditorStore((s) => s.rulerUnit);
@@ -146,6 +148,9 @@ export default function CanvasStage() {
   const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] });
   // Rubber-band marquee (drag-to-select) in mm, while dragging on empty canvas.
   const [marquee, setMarquee] = useState<{ start: Point; end: Point } | null>(null);
+  // In-progress shape drag (mm) for the shape tool — its bounding box sizes the
+  // premade shape, committed on release.
+  const [shapeDraft, setShapeDraft] = useState<{ start: Point; end: Point } | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -296,6 +301,32 @@ export default function CanvasStage() {
     };
   }, []);
 
+  // Shape tool: commit the dragged bounding box as a premade shape object.
+  function finishShape() {
+    const d = shapeDraftRef.current;
+    if (!d) return;
+    setShapeDraft(null);
+    const colorId =
+      useEditorStore.getState().activeColorId ??
+      useProjectStore.getState().project.colors[0]?.id;
+    if (!colorId) return;
+    const obj = shapeFromDrag(useEditorStore.getState().shapeKind, d.start, d.end, colorId);
+    if (obj) addObject(obj);
+  }
+  const shapeDraftRef = useRef(shapeDraft);
+  shapeDraftRef.current = shapeDraft;
+  const finishShapeRef = useRef(finishShape);
+  finishShapeRef.current = finishShape;
+  useEffect(() => {
+    const end = () => finishShapeRef.current();
+    window.addEventListener("mouseup", end);
+    window.addEventListener("touchend", end);
+    return () => {
+      window.removeEventListener("mouseup", end);
+      window.removeEventListener("touchend", end);
+    };
+  }, []);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const el = document.activeElement;
@@ -373,6 +404,12 @@ export default function CanvasStage() {
       }
       return;
     }
+    // Shape: begin a drag whose bounding box sizes the shape.
+    if (tool === "shape") {
+      const p = stagePointMm(stage);
+      if (p) setShapeDraft({ start: p, end: p });
+      return;
+    }
     if (!isDrawTool(tool)) {
       // Press on empty canvas with the select tool begins a rubber-band marquee;
       // the actual selection (or a plain clear) is resolved on release.
@@ -401,6 +438,11 @@ export default function CanvasStage() {
         const last = d[d.length - 1];
         if (!last || distance(last, p) >= 0.8) addDraftPoint(p);
       }
+      return;
+    }
+    if (shapeDraft) {
+      const p = stagePointMm(stage);
+      if (p) setShapeDraft((d) => (d ? { ...d, end: p } : d));
       return;
     }
     if (marquee) {
@@ -452,6 +494,11 @@ export default function CanvasStage() {
       pencilingRef.current = true;
       return;
     }
+    // Shape: one finger drags the shape's bounding box.
+    if (tool === "shape" && p) {
+      setShapeDraft({ start: p, end: p });
+      return;
+    }
     touchStartRef.current = p ? { mm: p, moved: false } : null;
     // Select tool on empty canvas → rubber-band; drawing taps are placed on release.
     if (!isDrawTool(tool) && tool === "select" && e.target === stage && p) {
@@ -494,6 +541,10 @@ export default function CanvasStage() {
         const last = d[d.length - 1];
         if (!last || distance(last, p) >= 0.8) addDraftPoint(p);
       }
+      return;
+    }
+    if (shapeDraft) {
+      if (p) setShapeDraft((d) => (d ? { ...d, end: p } : d));
       return;
     }
     const ts = touchStartRef.current;
@@ -603,7 +654,12 @@ export default function CanvasStage() {
           onTouchEnd={onTouchEnd}
           onWheel={onWheelZoom}
           style={{
-            cursor: tool === "pan" ? "grab" : drawing || freehand ? "crosshair" : "default",
+            cursor:
+              tool === "pan"
+                ? "grab"
+                : drawing || freehand || tool === "shape"
+                  ? "crosshair"
+                  : "default",
           }}
         >
           <Layer>
@@ -876,6 +932,20 @@ export default function CanvasStage() {
                   />
                 )}
 
+                {/* Live preview of the shape being dragged. */}
+                {shapeDraft &&
+                  shapePreviewRings(shapeKind, shapeDraft.start, shapeDraft.end).map((ring, i) => (
+                    <Line
+                      key={`shape-preview-${i}`}
+                      points={ring.flatMap((p) => [px(p.x), py(p.y)])}
+                      stroke={C.navy}
+                      strokeWidth={1.5}
+                      dash={[4, 3]}
+                      closed={shapeKind !== "line"}
+                      listening={false}
+                    />
+                  ))}
+
                 <Transformer
                   ref={trRef}
                   rotateEnabled
@@ -1144,6 +1214,15 @@ function Ruler({
       ))}
     </Group>
   );
+}
+
+/** Preview rings (mm) for a shape being dragged between two corner points. */
+function shapePreviewRings(kind: ShapeKind, start: Point, end: Point): Path[] {
+  if (kind === "line") return [[start, end]];
+  const w = Math.max(0.1, Math.abs(end.x - start.x));
+  const h = Math.max(0.1, Math.abs(end.y - start.y));
+  const c = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+  return translatePaths(shapeRings(kind, { width: w, height: h }), c.x, c.y);
 }
 
 function DraftPreview({

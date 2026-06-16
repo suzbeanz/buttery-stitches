@@ -13,7 +13,7 @@
  */
 
 import type { EmbObject, Path, Point } from "../types/project";
-import { pathsBounds, translatePaths } from "./geometry";
+import { distance, pathsBounds, translatePaths } from "./geometry";
 import { makeObjectFromPaths } from "./objects";
 
 /** The premade shapes the editor can stamp onto the canvas. */
@@ -259,4 +259,30 @@ export function makeShapeObject(
   const placed = translatePaths(rings, center.x, center.y);
   const type = kind === "line" ? "running" : "fill";
   return makeObjectFromPaths(type, placed, colorId);
+}
+
+/** Smallest drag (mm) that counts as placing a shape (vs an accidental click). */
+const MIN_SHAPE_MM = 0.5;
+
+/**
+ * Build a shape object from a drag gesture's two corner points (mm). Closed
+ * shapes fill the drag's bounding box; a `line` runs from the first corner to the
+ * second (so it can be drawn at any angle, not just horizontal). Returns null for
+ * a drag too small to be intentional.
+ */
+export function shapeFromDrag(
+  kind: ShapeKind,
+  a: Point,
+  b: Point,
+  colorId: string,
+): EmbObject | null {
+  if (kind === "line") {
+    if (distance(a, b) < MIN_SHAPE_MM) return null;
+    return makeObjectFromPaths("running", [[{ ...a }, { ...b }]], colorId);
+  }
+  const width = Math.abs(b.x - a.x);
+  const height = Math.abs(b.y - a.y);
+  if (width < MIN_SHAPE_MM || height < MIN_SHAPE_MM) return null;
+  const center = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  return makeShapeObject(kind, { center, width, height }, colorId);
 }
