@@ -2,12 +2,15 @@ import { useEffect, useRef, useState } from "react";
 
 /**
  * The measuring-tape ruler — the brand's structural device, lifted from the
- * tablespoon marks on a stick of butter. A flat Press-Blue rule with major
- * divisions + 4 minor ticks each, taller end-caps, and Space-Mono labels.
+ * tablespoon marks on a stick of butter, drawn like a graduation printed on old
+ * paper: a Press-Blue rule with a tick hierarchy (major / half / quarter),
+ * letterpressed numerals, and a foil hairline.
  *
  * Two modes:
- *  - RULER (pass `unit`): a true measuring tape. Ticks sit at a FIXED spacing
- *    and never stretch — widening the window simply reveals more of them.
+ *  - RULER (pass `unit`): a true measuring tape. Ticks sit at a FIXED pitch and
+ *    are never sliced — the strip snaps to a whole number of major divisions and
+ *    centers, so widening the window adds clean, full graduations rather than a
+ *    half-cut tick that grows and shrinks at the edge.
  *  - STEPS (pass `labels`): a fixed set of labeled divisions (e.g. a progress
  *    meter) that spread to fill the width.
  *
@@ -18,6 +21,7 @@ const RED = "#B23A2E";
 /** Fixed ruler graduations: a labeled major every 132px, a minor every 33px. */
 const MAJOR_PX = 132;
 const MINOR_PX = MAJOR_PX / 4;
+const HALF_PX = MAJOR_PX / 2;
 
 export default function Tape({
   labels,
@@ -49,28 +53,30 @@ export default function Tape({
   }, [rulerMode]);
 
   const divisions = labels?.length ?? majors;
-  // Tick gradient size: a fixed pixel pitch in ruler mode (so marks don't
-  // stretch — more appear as the tape gets wider); a fraction of the width in
-  // steps mode (so N labels spread evenly).
-  const majorSize = rulerMode ? `${MAJOR_PX}px 16px` : `calc(100% / ${divisions}) 16px`;
-  const minorSize = rulerMode ? `${MINOR_PX}px 9px` : `calc(100% / ${divisions * 4}) 9px`;
 
-  // Labels: fixed-width segments in ruler mode (count follows the width); evenly
-  // spread flex children in steps mode.
-  const rulerCount = rulerMode ? Math.max(2, Math.floor(width / MAJOR_PX)) : 0;
+  // RULER: snap the printed strip to a whole number of majors and center it.
+  // The tick gradients then tile the strip *exactly*, so the end tick is always
+  // a full mark (never a sliced one that resizes with the window) and the small
+  // side margins read like the blank ends of a printed rule.
+  const wholeMajors = Math.max(1, Math.floor(width / MAJOR_PX));
+  const stripW = rulerMode ? wholeMajors * MAJOR_PX : 0;
   const rulerLabels = rulerMode
-    ? Array.from({ length: rulerCount }, (_, i) => `${i + 1} ${unit}`)
+    ? Array.from({ length: wholeMajors }, (_, i) => `${i + 1} ${unit}`)
     : null;
+
+  // STEPS: tick gradient spans a fraction of the width so N labels spread evenly.
+  const stepMajor = `calc(100% / ${divisions}) 16px`;
+  const stepMinor = `calc(100% / ${divisions * 4}) 9px`;
   const hasLabels = Boolean(labels || rulerMode);
 
-  return (
-    <div
-      ref={ref}
-      aria-hidden
-      className={`relative ${hasLabels ? "h-11" : "h-5"} w-full shrink-0 overflow-hidden ${className}`}
-    >
+  // The graduated band (rule + ticks + caps). Reused for both modes; in ruler
+  // mode it's wrapped in a centered, whole-major-wide strip.
+  const band = (sizeMajor: string, sizeMinor: string, sizeHalf?: string) => (
+    <>
       {/* the rule */}
       <div className="absolute inset-x-0 top-0 border-t-[2.5px] border-ink" />
+      {/* foil hairline just under the rule — a printed-band flourish */}
+      <div className="absolute inset-x-0 top-[3px] h-px bg-foil/60" />
       {/* red progress fill */}
       {fillPct !== undefined && (
         <div
@@ -83,37 +89,79 @@ export default function Tape({
         className="absolute inset-x-0 top-0 h-4"
         style={{
           backgroundImage: `repeating-linear-gradient(to right, ${INK} 0 2px, transparent 2px 100%)`,
-          backgroundSize: majorSize,
+          backgroundSize: sizeMajor,
         }}
       />
+      {/* half ticks (ruler only) */}
+      {sizeHalf && (
+        <div
+          className="absolute inset-x-0 top-0 h-[12px] opacity-80"
+          style={{
+            backgroundImage: `repeating-linear-gradient(to right, ${INK} 0 1.75px, transparent 1.75px 100%)`,
+            backgroundSize: sizeHalf,
+          }}
+        />
+      )}
       {/* minor ticks */}
       <div
         className="absolute inset-x-0 top-0 h-[9px] opacity-55"
         style={{
           backgroundImage: `repeating-linear-gradient(to right, ${INK} 0 1.5px, transparent 1.5px 100%)`,
-          backgroundSize: minorSize,
+          backgroundSize: sizeMinor,
         }}
       />
       {/* end caps */}
       <div className="absolute left-0 top-0 h-[22px] w-[2.5px] bg-ink" />
       <div className="absolute right-0 top-0 h-[22px] w-[2.5px] bg-ink" />
-      {/* labels — steps mode: evenly spread; ruler mode: fixed-width segments. */}
+    </>
+  );
+
+  return (
+    <div
+      ref={ref}
+      aria-hidden
+      className={`relative ${hasLabels ? "h-11" : "h-5"} w-full shrink-0 overflow-hidden ${className}`}
+    >
+      {/* faint printed-ink grain over the whole band, so the ticks read as
+          letterpress on paper rather than crisp vector lines. */}
+      <div
+        className="pointer-events-none absolute inset-0 z-10 opacity-[0.5] mix-blend-multiply"
+        style={{
+          backgroundImage:
+            "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='t'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.4 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23t)' opacity='0.06'/%3E%3C/svg%3E\")",
+          backgroundSize: "120px 120px",
+        }}
+      />
+
+      {/* RULER MODE: a centered strip snapped to whole majors. */}
+      {rulerMode && (
+        <div className="absolute left-1/2 top-0 h-full -translate-x-1/2" style={{ width: `${stripW}px` }}>
+          {band(`${MAJOR_PX}px 16px`, `${MINOR_PX}px 9px`, `${HALF_PX}px 12px`)}
+          {rulerLabels && (
+            <div className="absolute inset-x-0 top-[24px] flex">
+              {rulerLabels.map((l, i) => (
+                <span
+                  key={i}
+                  style={{ width: `${MAJOR_PX}px`, textShadow: "0 1px 0 rgba(255,253,243,0.6)" }}
+                  className="shrink-0 text-center font-mono text-[11px] uppercase tracking-wide text-stamp"
+                >
+                  {l}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* STEPS MODE: ticks + labels spread across the full width. */}
+      {!rulerMode && band(stepMajor, stepMinor)}
       {labels && (
         <div className="absolute inset-x-0 top-[24px] flex">
           {labels.map((l, i) => (
-            <span key={i} className="flex-1 text-center font-mono text-[11px] uppercase tracking-wide text-stamp">
-              {l}
-            </span>
-          ))}
-        </div>
-      )}
-      {rulerLabels && (
-        <div className="absolute inset-x-0 top-[24px] flex">
-          {rulerLabels.map((l, i) => (
             <span
               key={i}
-              style={{ width: `${MAJOR_PX}px` }}
-              className="shrink-0 text-center font-mono text-[11px] uppercase tracking-wide text-stamp"
+              style={{ textShadow: "0 1px 0 rgba(255,253,243,0.6)" }}
+              className="flex-1 text-center font-mono text-[11px] uppercase tracking-wide text-stamp"
             >
               {l}
             </span>
