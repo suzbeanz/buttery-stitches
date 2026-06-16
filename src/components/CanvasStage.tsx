@@ -323,7 +323,7 @@ export default function CanvasStage() {
       maxX: Math.max(hoop.wMm, ob?.maxX ?? hoop.wMm) + 2,
       maxY: Math.max(hoop.hMm, ob?.maxY ?? hoop.hMm) + 2,
     };
-    const rings = bucketFill(outlines, at, area, 0.4);
+    const rings = bucketFill(outlines, at, area, 0.3);
     if (rings && rings.length) addObject(makeObjectFromPaths("fill", rings, colorId));
   }
 
