@@ -498,8 +498,8 @@ function prevColorObj(
   drawn: { object: EmbObject }[],
   di: number,
 ): { id: string; colorId: string } {
-  const prev = drawn[di - 1].object;
-  return { id: prev.id, colorId: prev.colorId };
+  const prev = (drawn[di - 1] ?? drawn[di])?.object;
+  return prev ? { id: prev.id, colorId: prev.colorId } : { id: "", colorId: "" };
 }
 
 /** Append a tie/lock cluster of real penetrations to `out`. */

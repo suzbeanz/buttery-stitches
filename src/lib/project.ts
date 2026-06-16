@@ -41,12 +41,88 @@ export function parseProject(value: unknown): Project {
   if (typeof p.widthMm !== "number" || typeof p.heightMm !== "number") {
     throw new Error("Project file is missing dimensions.");
   }
-  // We trust the shape beyond this point; deeper per-field validation can be
-  // layered in later without changing the file format.
-  const project = value as Project;
+  // Normalize each object so a slightly-malformed file (a hand edit, a truncated
+  // download, an older export) can't sail past the loader and then CRASH the
+  // pure engine on the next render. We recover optional fields (params, paths,
+  // visible) and fail loud only on structurally-broken ones (unknown type, no
+  // color). Valid files are unchanged, so the round trip stays lossless.
+  const project: Project = {
+    ...(value as Project),
+    widthMm: Math.max(1, p.widthMm as number),
+    heightMm: Math.max(1, p.heightMm as number),
+    hoop: normalizeHoop(p.hoop),
+    colors: (p.colors as unknown[]).map(normalizeColor),
+    objects: (p.objects as unknown[]).map(normalizeObject),
+  };
   // Continue numbering new objects from where the opened document left off.
-  syncObjectCounter(project.objects ?? []);
+  syncObjectCounter(project.objects);
   return project;
+}
+
+/** A safe hoop (positive dimensions) so the canvas fit math can't divide by zero. */
+function normalizeHoop(raw: unknown): Project["hoop"] {
+  const h = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
+  const wMm = Number(h.wMm);
+  const hMm = Number(h.hMm);
+  if (!Number.isFinite(wMm) || wMm <= 0 || !Number.isFinite(hMm) || hMm <= 0) {
+    return { ...DEFAULT_HOOP };
+  }
+  return { name: typeof h.name === "string" ? h.name : "Custom", wMm, hMm };
+}
+
+const VALID_TYPES = new Set(["running", "satin", "fill"]);
+
+/** Coerce one stored object into a safe EmbObject (or throw if unrecoverable). */
+function normalizeObject(raw: unknown, i: number): EmbObject {
+  if (typeof raw !== "object" || raw === null) {
+    throw new Error(`Project object #${i + 1} is not valid.`);
+  }
+  const o = raw as Record<string, unknown>;
+  if (typeof o.type !== "string" || !VALID_TYPES.has(o.type)) {
+    throw new Error(`Project object #${i + 1} has an unknown stitch type.`);
+  }
+  if (typeof o.colorId !== "string") {
+    throw new Error(`Project object #${i + 1} has no color.`);
+  }
+  const paths = Array.isArray(o.paths)
+    ? o.paths
+        .filter(Array.isArray)
+        .map((ring) =>
+          (ring as unknown[])
+            .filter(
+              (pt): pt is { x: number; y: number } =>
+                typeof pt === "object" &&
+                pt !== null &&
+                Number.isFinite((pt as { x: unknown }).x) &&
+                Number.isFinite((pt as { y: unknown }).y),
+            )
+            .map((pt) => ({ x: pt.x, y: pt.y })),
+        )
+    : [];
+  return {
+    ...(raw as EmbObject),
+    id: typeof o.id === "string" ? o.id : newId("obj"),
+    name: typeof o.name === "string" ? o.name : defaultObjectName(o.type as EmbObject["type"]),
+    type: o.type as EmbObject["type"],
+    paths,
+    params: typeof o.params === "object" && o.params !== null ? (o.params as EmbObject["params"]) : {},
+    visible: o.visible !== false,
+  };
+}
+
+/** Coerce one stored color into a safe ThreadColor. */
+function normalizeColor(raw: unknown, i: number): ThreadColor {
+  if (typeof raw !== "object" || raw === null) {
+    throw new Error(`Project color #${i + 1} is not valid.`);
+  }
+  const c = raw as Record<string, unknown>;
+  const rgb = Array.isArray(c.rgb) ? c.rgb : [];
+  const ch = (v: unknown) => Math.max(0, Math.min(255, Math.round(Number(v) || 0)));
+  return {
+    ...(raw as ThreadColor),
+    id: typeof c.id === "string" ? c.id : newId("color"),
+    rgb: [ch(rgb[0]), ch(rgb[1]), ch(rgb[2])],
+  };
 }
 
 /** The Project shape is plain JSON, so serializing is trivial. */
