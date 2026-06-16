@@ -83,13 +83,11 @@ export default function Home({ onStart }: { onStart: () => void }) {
       {/* 01 — THE MILK */}
       <Row no="01 / The Milk" title="The Spread" sub="What it does">
         <p className="max-w-2xl font-body text-[17px] leading-relaxed text-char">
-          Pictures, words, and shapes become machine-ready embroidery — free,
-          open-source, and churned right in your browser.{" "}
-          <b className="text-ink">No AI, no guesswork:</b> every stitch is plain
-          math and logic, measured and exact.
+          Pictures, words, and shapes become machine-ready embroidery files.
+          It&apos;s free, open-source, and churned right in your browser.
         </p>
         <p className="mt-4 max-w-2xl font-accent text-xl italic text-stamp">
-          Named after Butters — a very good girl.
+          Named after Butters, a very good girl.
         </p>
       </Row>
 
@@ -97,7 +95,10 @@ export default function Home({ onStart }: { onStart: () => void }) {
 
       {/* 02 — THE KIT */}
       <Row no="02 / The Kit" title="What's Inside" sub="Picture · Words · Export">
-        <div className="mt-2 grid grid-cols-1 gap-5 sm:grid-cols-3">
+        <p className="max-w-2xl font-body text-[17px] leading-relaxed text-char">
+          Simple, familiar tools that make stitch design as easy as it can be.
+        </p>
+        <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <Feature title="Picture → Stitches" motif={<ImageMotif />}>
             Drop in a logo. Get clean stitches.
           </Feature>
@@ -115,8 +116,8 @@ export default function Home({ onStart }: { onStart: () => void }) {
       {/* 03 — THE CHURN */}
       <Row no="03 / The Churn" title="How It Works" sub="Math, not magic">
         <p className="max-w-2xl font-body text-[16px] leading-relaxed text-char">
-          No black-box AI — pure math and logic. Every design gets underlay,
-          tie-offs, and safe stitch lengths, so it sews right the first time:
+          No AI. Pure math and logic. Every design gets underlay, tie-offs, and
+          safe stitch lengths, so it sews right the first time:
         </p>
         <Tape
           className="mt-7"
@@ -130,19 +131,19 @@ export default function Home({ onStart }: { onStart: () => void }) {
 
       {/* 04 — THE FLAVORS */}
       <Row no="04 / The Flavors" title="The Formats" sub="Home &amp; commercial machines">
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <Stamp variant="solid">PES</Stamp>
-          <Stamp>DST</Stamp>
-          <Stamp>JEF</Stamp>
-          <Stamp variant="red">EXP</Stamp>
-          <Stamp variant="red">VP3</Stamp>
-          <span className="mx-2 font-body text-[15px] text-char/70">
-            — the formats your machine reads.
-          </span>
+        <p className="max-w-2xl font-body text-[17px] leading-relaxed text-char">
+          Export your files in the format your machine uses.
+        </p>
+        <div className="mt-5 flex flex-wrap items-center gap-2">
+          <Stamp tip="Brother">PES</Stamp>
+          <Stamp tip="Tajima">DST</Stamp>
+          <Stamp tip="Janome">JEF</Stamp>
+          <Stamp variant="red" tip="Melco">EXP</Stamp>
+          <Stamp variant="red" tip="Husqvarna Viking">VP3</Stamp>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          <Stamp>Net Wt. Free</Stamp>
-          <Stamp variant="red">Grade AA</Stamp>
+          <Stamp tip="And it always will be">Net Wt. Free</Stamp>
+          <Stamp variant="red" tip="Just like Butters">Grade AA</Stamp>
         </div>
       </Row>
 
@@ -178,19 +179,16 @@ export default function Home({ onStart }: { onStart: () => void }) {
 
       {/* CLOSING PANEL — the wrapper's back cover: seal + wordmark, sized to its
           content so the page ends cleanly at the footer (no trailing blank). */}
-      <div className="flex flex-col items-center justify-center gap-5 px-6 py-12 text-center">
+      <div className="flex flex-col items-center justify-center gap-4 px-6 py-12 text-center">
         <GradeStamp size={66} />
-        <div className="font-display text-3xl uppercase leading-tight tracking-wide text-ink-deep sm:text-5xl">
-          Net Wt. Free.99
-          <br />
-          100% Open Source
+        <div className="font-display text-4xl uppercase leading-none tracking-wide text-ink-deep sm:text-6xl">
+          Net Weight Free.99
         </div>
         <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-char/60">
-          Made fresh in your browser
+          Churned Fresh In Your Browser
         </p>
       </div>
 
-      <Tape unit="Tbsp" />
       <Footer />
     </div>
   );

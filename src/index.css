@@ -112,21 +112,33 @@ body::after {
   0% {
     opacity: 0;
   }
-  8% {
+  6% {
     opacity: 1;
   }
-  88% {
+  90% {
     opacity: 1;
   }
   100% {
     opacity: 0;
   }
 }
+/* The needle pumps up and down — one poke per stitch as it travels. */
+@keyframes needle-bob {
+  0% {
+    transform: translateY(-5px);
+  }
+  50% {
+    transform: translateY(1px);
+  }
+  100% {
+    transform: translateY(-5px);
+  }
+}
 .stitch-fill {
   clip-path: inset(0 100% 0 0);
 }
 .stitch-fill.go {
-  animation: stitch-in 1.9s steps(28) forwards;
+  animation: stitch-in 2.1s steps(40) forwards;
 }
 .stitch-needle {
   width: 0;
@@ -134,8 +146,11 @@ body::after {
 }
 .stitch-needle.go {
   animation:
-    needle-run 1.9s steps(28) forwards,
-    needle-fade 1.9s ease forwards;
+    needle-run 2.1s steps(40) forwards,
+    needle-fade 2.1s ease forwards;
+}
+.stitch-needle.go .stitch-bob {
+  animation: needle-bob 0.105s steps(2) 20 both;
 }
 @media (prefers-reduced-motion: reduce) {
   .stitch-fill,
@@ -144,7 +159,8 @@ body::after {
     animation: none;
   }
   .stitch-needle,
-  .stitch-needle.go {
+  .stitch-needle.go,
+  .stitch-needle.go .stitch-bob {
     display: none;
     animation: none;
   }

@@ -7,7 +7,7 @@ import { Heart } from "lucide-react";
  */
 export default function Footer() {
   return (
-    <div className="px-6 py-6 text-center text-navy">
+    <div className="bg-ink px-6 py-7 text-center text-cream">
       <p className="flex items-center justify-center gap-1.5 text-sm font-semibold">
         Made With
         <Heart size={15} className="fill-stamp text-stamp" aria-hidden />
@@ -20,7 +20,7 @@ export default function Footer() {
           target="_blank"
           rel="noreferrer"
           aria-label="Suz on LinkedIn"
-          className="grid h-10 w-10 place-items-center rounded-full border-2 border-navy text-navy transition-colors hover:bg-navy hover:text-butter-200"
+          className="grid h-10 w-10 place-items-center rounded-full border-2 border-cream/50 text-cream transition-colors hover:bg-cream hover:text-ink"
         >
           <LinkedInMark />
         </a>
@@ -29,7 +29,7 @@ export default function Footer() {
           target="_blank"
           rel="noreferrer"
           aria-label="Suz on GitHub"
-          className="grid h-10 w-10 place-items-center rounded-full border-2 border-navy text-navy transition-colors hover:bg-navy hover:text-butter-200"
+          className="grid h-10 w-10 place-items-center rounded-full border-2 border-cream/50 text-cream transition-colors hover:bg-cream hover:text-ink"
         >
           <GitHubMark />
         </a>
