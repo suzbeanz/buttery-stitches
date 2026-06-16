@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Tape from "./Tape";
 import PressButton from "./PressButton";
 import PressCard from "./PressCard";
@@ -66,7 +66,7 @@ export default function Home({ onStart }: { onStart: () => void }) {
       <Tape labels={TBSP} className="mt-12" />
 
       {/* 01 — THE SPREAD */}
-      <Col>
+      <Col reveal>
         <SectionHead no="Section 01 / Half Cup" title="The Spread" sub="What it does" />
         <p className="max-w-2xl font-body text-[17px] leading-relaxed text-char">
           Buttery Stitches turns pictures, words, and shapes into machine-ready
@@ -80,7 +80,7 @@ export default function Home({ onStart }: { onStart: () => void }) {
       <Tape labels={TBSP} className="mt-12" />
 
       {/* 02 — WHAT'S INSIDE */}
-      <Col>
+      <Col reveal>
         <SectionHead no="Section 02 / The Kit" title="What's Inside" sub="Picture · Words · Export" />
         <div className="mt-2 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <Feature title="Picture → Stitches" motif={<ImageMotif />}>
@@ -98,7 +98,7 @@ export default function Home({ onStart }: { onStart: () => void }) {
       <Tape labels={TBSP} className="mt-12" />
 
       {/* 03 — HOW IT WORKS */}
-      <Col>
+      <Col reveal>
         <SectionHead no="Section 03 / The Method" title="How It Works" sub="Trace → Export" />
         <p className="max-w-2xl font-body text-[16px] leading-relaxed text-char">
           Every design is portioned the same careful way — underlay, tie-offs, and
@@ -114,7 +114,7 @@ export default function Home({ onStart }: { onStart: () => void }) {
       <Tape labels={TBSP} className="mt-12" />
 
       {/* 04 — FORMATS */}
-      <Col>
+      <Col reveal>
         <SectionHead no="Section 04 / The Tickets" title="The Formats" sub="Home &amp; commercial machines" />
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <Stamp variant="solid">PES</Stamp>
@@ -135,7 +135,7 @@ export default function Home({ onStart }: { onStart: () => void }) {
       <Tape labels={TBSP} className="mt-12" />
 
       {/* 05 — WHY OPEN SOURCE */}
-      <Col>
+      <Col reveal>
         <SectionHead no="Section 05 / The Promise" title="Why It's Free" sub="Open source, for everyone" />
         <div className="mt-2 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <Feature title="Free Forever">
@@ -158,7 +158,7 @@ export default function Home({ onStart }: { onStart: () => void }) {
       <Tape labels={TBSP} className="mt-12" />
 
       {/* FOOTER BAND */}
-      <Col className="pb-2">
+      <Col reveal className="pb-2">
         <div className="border-y-[3px] border-ink py-5 text-center">
           <div className="font-display text-2xl uppercase tracking-wide text-ink-deep sm:text-4xl">
             Net Wt. Free · 100% Open Source
@@ -170,9 +170,47 @@ export default function Home({ onStart }: { onStart: () => void }) {
   );
 }
 
-/** Centered measured column; the tape rules run full-bleed outside it. */
-function Col({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`mx-auto max-w-5xl px-6 ${className}`}>{children}</div>;
+/** Reveal an element once it scrolls into view (one-shot). */
+function useReveal() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      setShown(true);
+      return;
+    }
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setShown(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: "0px 0px -8% 0px", threshold: 0.04 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return { ref, shown };
+}
+
+function Col({
+  children,
+  className = "",
+  reveal = false,
+}: {
+  children: ReactNode;
+  className?: string;
+  reveal?: boolean;
+}) {
+  const { ref, shown } = useReveal();
+  const rev = reveal ? `reveal ${shown ? "reveal-in" : ""}` : "";
+  return (
+    <div ref={reveal ? ref : undefined} className={`mx-auto max-w-5xl px-6 ${rev} ${className}`}>
+      {children}
+    </div>
+  );
 }
 
 function Feature({
