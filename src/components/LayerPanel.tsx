@@ -52,7 +52,7 @@ export default function LayerPanel() {
         <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
           <ListOrdered size={22} className="text-ink/25" aria-hidden />
           <p className="font-body text-sm text-navy/60">
-            Nothing stitched yet. Pick a tool and draw, or bring in a picture.
+            Nothing stitched yet. Pick a tool and draw, or bring in an image.
           </p>
         </div>
       ) : (
