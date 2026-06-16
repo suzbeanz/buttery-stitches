@@ -17,6 +17,9 @@ export type Path = Point[];
 export interface EmbObjectParams {
   /** running: mm between needle penetrations (default 2.5). */
   stitchLength?: number;
+  /** running: passes over the line for a bold bean/triple stitch (0/1 = single,
+   *  3/5/7 = bean). Default 0 (single). */
+  beanRepeats?: number;
   /** fill/satin: mm between rows (default 0.4). */
   density?: number;
   /** fill direction in degrees (default 0). */
@@ -149,6 +152,7 @@ export interface Project {
 /** Default parameter values, applied wherever a param is omitted. */
 export const DEFAULT_PARAMS: Required<EmbObjectParams> = {
   stitchLength: 2.5,
+  beanRepeats: 0,
   density: 0.4,
   angle: 0,
   underlay: true,
@@ -165,6 +169,7 @@ export function resolveParams(
 ): Required<EmbObjectParams> {
   return {
     stitchLength: params.stitchLength ?? DEFAULT_PARAMS.stitchLength,
+    beanRepeats: params.beanRepeats ?? DEFAULT_PARAMS.beanRepeats,
     density: params.density ?? DEFAULT_PARAMS.density,
     angle: params.angle ?? DEFAULT_PARAMS.angle,
     // running stitch never has underlay regardless of stored value

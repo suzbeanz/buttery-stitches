@@ -266,13 +266,27 @@ function ObjectProperties({
       </Field>
 
       {object.type === "running" && (
-        <NumberField
-          label="Stitch length (mm)"
-          value={p.stitchLength ?? DEFAULT_PARAMS.stitchLength}
-          step={0.1}
-          min={0.5}
-          onChange={(v) => onParam({ stitchLength: v })}
-        />
+        <>
+          <NumberField
+            label="Stitch length (mm)"
+            value={p.stitchLength ?? DEFAULT_PARAMS.stitchLength}
+            step={0.1}
+            min={0.5}
+            onChange={(v) => onParam({ stitchLength: v })}
+          />
+          <Field label="Line weight">
+            <select
+              value={p.beanRepeats ?? DEFAULT_PARAMS.beanRepeats}
+              onChange={(e) => onParam({ beanRepeats: Number(e.target.value) })}
+              className="input"
+            >
+              <option value={0}>Single</option>
+              <option value={3}>Bold — triple (3×)</option>
+              <option value={5}>Bolder — bean (5×)</option>
+              <option value={7}>Boldest — bean (7×)</option>
+            </select>
+          </Field>
+        </>
       )}
 
       {(object.type === "fill" || object.type === "satin") && (
@@ -325,6 +339,13 @@ function ObjectProperties({
             step={0.05}
             min={0}
             onChange={(v) => onParam({ pullComp: v })}
+          />
+          <NumberField
+            label="Push comp (mm)"
+            value={p.pushComp ?? DEFAULT_PARAMS.pushComp}
+            step={0.05}
+            min={0}
+            onChange={(v) => onParam({ pushComp: v })}
           />
         </>
       )}

@@ -198,6 +198,19 @@ const SATIN_MIN_STITCH = 0.3;
 /** Densest row spacing (mm) the engine will ever stitch — denser packs/jams. */
 const MIN_SAFE_DENSITY = 0.3;
 
+/** Retrace a running line `repeats` times (alternating direction) for a bean /
+ *  triple stitch. The shared turnaround vertex is dropped each pass so no two
+ *  consecutive penetrations coincide (they'd otherwise collapse). */
+function beanPath(line: Point[], repeats: number): Point[] {
+  if (line.length < 2) return line;
+  let out = [...line];
+  for (let i = 1; i < repeats; i++) {
+    const pass = i % 2 === 1 ? [...line].reverse() : [...line];
+    out = out.concat(pass.slice(1));
+  }
+  return out;
+}
+
 /**
  * The runs for a single object. Splitting a fill into its regions (and underlay
  * from top) here is what lets `generateDesign` jump between them. The `fabric`
@@ -223,7 +236,12 @@ export function generateObjectRuns(
   const runs: StitchRun[] = [];
 
   if (object.type === "running") {
-    addRun(runs, dropShortStitches(runningStitch(object.paths[0] ?? [], stitchLength)), false);
+    const line = dropShortStitches(runningStitch(object.paths[0] ?? [], stitchLength));
+    // Bean / triple stitch: retrace the line N times (forward/back/forward) for a
+    // bold, durable outline. The repeats land in the same holes but are never
+    // CONSECUTIVE (the turnarounds skip the shared vertex), so they survive the
+    // coincident-collapse and read as a heavier line.
+    addRun(runs, p.beanRepeats >= 3 ? beanPath(line, p.beanRepeats) : line, false);
     return runs;
   }
 
