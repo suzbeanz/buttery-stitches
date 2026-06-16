@@ -1034,18 +1034,21 @@ function StitchView({
     <Group listening={false}>
       <Shape
         sceneFunc={(ctx) => {
+          // Stroke each STITCH as its own round-capped capsule (a separate
+          // subpath) rather than one polyline per run. Overlapping capsules read
+          // as solid satin and solid tatami, while the sharp serpentine turns at
+          // a fill's edge no longer round-join into a ragged, "spiky" fringe.
+          ctx.setAttr("lineCap", "round");
           for (const seg of segs) {
-            if (seg.points.length === 0) continue;
+            if (seg.points.length < 2) continue;
             const c = colorById.get(seg.colorId);
             ctx.beginPath();
-            ctx.moveTo(px(seg.points[0].x), py(seg.points[0].y));
             for (let i = 1; i < seg.points.length; i++) {
+              ctx.moveTo(px(seg.points[i - 1].x), py(seg.points[i - 1].y));
               ctx.lineTo(px(seg.points[i].x), py(seg.points[i].y));
             }
             ctx.setAttr("strokeStyle", c ? `rgb(${c.rgb.join(",")})` : "#888");
             ctx.setAttr("lineWidth", seg.underlay ? 0.6 : threadPx);
-            ctx.setAttr("lineCap", "round");
-            ctx.setAttr("lineJoin", "round");
             ctx.setAttr("globalAlpha", seg.underlay ? 0.4 : 0.95);
             ctx.stroke();
           }

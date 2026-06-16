@@ -118,7 +118,7 @@ run it **first**, **inset ~1 mm** from the edge so it never peeks out, at a
 | rule | status |
 |---|---|
 | Running / satin / tatami primitives | ✅ |
-| Type by width — holes-aware `classifyRegion` (running < 1.2 mm, satin ≤ 7 mm, tatami above) | ✅ shared by `fix.ts` and the fill branch; hairline columns auto-run |
+| Type by width — holes-aware `classifyRegion` (running < 1.2 mm, satin ≤ 7 mm, tatami above) | ✅ shared by `fix.ts` and the fill branch; hairline columns auto-run; medial satin accepted up to 6 mm (was 2.2) now that split/density/pull comp keep wide columns clean |
 | Densities + clamps | ✅ fabric-aware (scaled by `densityMul`) |
 | Satin density compensation on curves | ✅ medial **and** user `satinColumn` (dense-sample, throw on `max(dl,dr) ≥ density`) |
 | Tatami brick stagger | ✅ |
@@ -126,8 +126,8 @@ run it **first**, **inset ~1 mm** from the edge so it never peeks out, at a
 | Fill underlay (inset edge + parallel) | ✅ inset ~1 mm; +criss-cross pass for heavy fabric |
 | Satin underlay (tiered by width) | ✅ center / +edge-walk (≥ 2 mm) / +zig-zag (≥ 4 mm), per user satin **and** per medial column |
 | Pull compensation (satin) | ✅ width-driven `autoPullCompMm` on medial lettering (scaled by fabric); explicit param on user satin |
-| Fill pull compensation | ✅ rows extended past the edge by a fabric-scaled comp so the sewn boundary lands on the line |
-| Fill push compensation (inset far ends) | ❌ minor; fold into mitering/validation |
+| Fill pull/push compensation | ⚠️ deferred — a per-row edge extension frayed slanted edges, so it was reverted; do it as a directional region outset instead |
+| Satin density preserved | ✅ satin keeps a 0.15 mm floor (its ~0.4 mm rows sit below the 0.5 mm general min-stitch, which would otherwise cull every other throw) |
 | Satin corners (miter/cap) | ✅ throws longer than ~1.4× the column's median width split into staggered sub-stitches, so a sharp-corner diagonal is tacked down, not loose |
 | Max stitch / split satin | ✅ wide columns split into brick-staggered sub-stitches (no seam); underlay zig-zag also capped |
 | Lock stitches, min-stitch, coincident collapse | ✅ |

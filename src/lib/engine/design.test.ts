@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import type { Project } from "../../types/project";
+import type { Path, Project } from "../../types/project";
 import { createEmptyProject } from "../project";
 import { makeObject, makeObjectFromPaths } from "../objects";
-import { generateDesign, countStitches, countColorChanges } from "./index";
+import { generateDesign, generateObjectRuns, countStitches, countColorChanges } from "./index";
 import { validateDesign, LIMITS } from "./validate";
 
 function projectWith(...objs: Project["objects"]): Project {
@@ -112,6 +112,25 @@ describe("lock / tie stitches", () => {
     const extra = locked.filter((s) => !s.jump).length - plainCount;
     expect(extra).toBe(7); // 8 tie penetrations minus the collapsed same-hole punch
     expect(locked.filter((s) => s.jump)).toHaveLength(0); // single run, no travel
+  });
+});
+
+describe("satin density is preserved (not thinned by the min-stitch floor)", () => {
+  it("keeps the dense throws of a satin column instead of culling every other one", () => {
+    // A straight 4 mm-wide, 24 mm-long satin column at 0.4 mm density. Its
+    // down-rail steps are ~0.4 mm — below the 0.5 mm general floor. If the floor
+    // were applied to satin it would drop half the penetrations and shred the
+    // column; the satin floor (0.15 mm) must keep them.
+    const left: Path = [{ x: 0, y: 0 }, { x: 0, y: 24 }];
+    const right: Path = [{ x: 4, y: 0 }, { x: 4, y: 24 }];
+    const obj = makeObjectFromPaths("satin", [left, right], "c1");
+    obj.params = { density: 0.4, underlay: false };
+    const runs = generateObjectRuns(obj);
+    const top = runs.find((r) => !r.underlay)!;
+    // ~24 mm / 0.4 ≈ 60 throws × 2 rail points ≈ 120 penetrations. Applying the
+    // 0.5 mm general floor would cull the ~0.4 mm down-rail steps and roughly
+    // halve this to ~60; the satin floor keeps the column dense.
+    expect(top.pts.length).toBeGreaterThan(100);
   });
 });
 

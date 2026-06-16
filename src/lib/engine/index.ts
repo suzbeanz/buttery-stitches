@@ -142,12 +142,13 @@ function orderByNearest(runs: Point[][], from: Point | null): Point[][] {
 }
 
 /**
- * Widest stroke (mm) that still reads as clean satin. Wider strokes — bold or
- * large block lettering — look sloppy as satin (long, splaying throws) and
- * belong in a solid tatami fill, exactly like the printed letterform. Satin is
- * reserved for genuinely narrow strokes (thin and script faces).
+ * Widest stroke (mm) that still reads as clean satin. With density compensation,
+ * pull compensation, and staggered split satin all in place, columns up to this
+ * width sew as smooth, shiny satin — which is what most lettering (script AND
+ * regular capitals) wants. Genuinely broad strokes beyond this (heavy block
+ * faces) still fall to a solid tatami fill, exactly like the printed letterform.
  */
-const MAX_SATIN_STROKE_MM = 2.2;
+const MAX_SATIN_STROKE_MM = 6;
 
 /**
  * Medial-axis satin columns for a region, but only if they'd actually look good:
@@ -171,6 +172,15 @@ function acceptableSatin(region: Path[], density: number, pullScale: number): Sa
 
 /** A medial column thinner than this stitches as a single running line, not satin. */
 const RUNNING_COLUMN_MM = 1.2;
+
+/**
+ * Min-stitch for SATIN runs. Satin is intentionally dense — its row spacing
+ * (≈0.3–0.5 mm) is the gap between consecutive same-rail penetrations, well below
+ * the 0.5 mm general minimum. Thinning satin at 0.5 mm would cull every other
+ * throw and shred a smooth column into a sparse, spiky zig-zag, so satin keeps a
+ * much smaller floor (only truly coincident punches are dropped, by the assembler).
+ */
+const SATIN_MIN_STITCH = 0.15;
 
 /**
  * The runs for a single object. Splitting a fill into its regions (and underlay
@@ -197,10 +207,14 @@ export function generateObjectRuns(
     if (!left || !right) return runs;
     if (p.underlay) {
       for (const run of satinUnderlay(left, right, weight)) {
-        addRun(runs, dropShortStitches(run), true);
+        addRun(runs, dropShortStitches(run, SATIN_MIN_STITCH), true);
       }
     }
-    addRun(runs, dropShortStitches(satinColumn(left, right, { density, pullComp })), false);
+    addRun(
+      runs,
+      dropShortStitches(satinColumn(left, right, { density, pullComp }), SATIN_MIN_STITCH),
+      false,
+    );
     return runs;
   }
 
@@ -212,7 +226,10 @@ export function generateObjectRuns(
   for (const region of splitFillRegions(object.paths)) {
     const columns = satin ? acceptableSatin(region, density, fabric.pullMul) : [];
     const usingSatin = columns.length > 0;
+    const contour = !usingSatin && p.fillStyle === "contour";
     const travelMax = usingSatin ? 8 : 6;
+    // Satin and contour rows are dense like satin; tatami uses the general floor.
+    const minStitch = usingSatin || contour ? SATIN_MIN_STITCH : undefined;
     // Tatami flows along the region's grain (off-axis for roundish shapes), with
     // the user's Angle field as an offset. Underlay follows the same angle.
     const fillAngle = usingSatin ? p.angle : autoFillAngle(region, p.angle);
@@ -243,11 +260,11 @@ export function generateObjectRuns(
           ? runningStitch(c.centerline, p.stitchLength)
           : c.throws,
       );
-    } else if (p.fillStyle === "contour") {
+    } else if (contour) {
       const echo = contourFill(region, { density });
-      tops = echo.length ? echo : [tatamiFill(region, { density, angle: fillAngle, pullCompMm: pullComp })];
+      tops = echo.length ? echo : [tatamiFill(region, { density, angle: fillAngle })];
     } else {
-      tops = [tatamiFill(region, { density, angle: fillAngle, pullCompMm: pullComp })];
+      tops = [tatamiFill(region, { density, angle: fillAngle })];
     }
 
     // Sew the strokes nearest-neighbor from where the underlay left off, for the
@@ -255,7 +272,7 @@ export function generateObjectRuns(
     const ordered = usingSatin ? orderByNearest(tops, cursor) : tops;
     for (const run of ordered) {
       for (const sub of splitLongTravels(run, travelMax)) {
-        addRun(runs, dropShortStitches(sub), false);
+        addRun(runs, dropShortStitches(sub, minStitch), false);
       }
     }
   }
