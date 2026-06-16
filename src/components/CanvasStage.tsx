@@ -100,6 +100,13 @@ export default function CanvasStage() {
   // Viewport zoom (1 = fit-to-workspace) and pan (px), shared by edit + stitch.
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  // Active two-finger gesture (pinch-zoom + pan) and single-touch tap tracking.
+  const pinchRef = useRef<{
+    startDist: number;
+    mmAtMid: Point;
+    startZoom: number;
+  } | null>(null);
+  const touchStartRef = useRef<{ mm: Point; moved: boolean } | null>(null);
 
   const viewMode = useEditorStore((s) => s.viewMode);
   const simPlaying = useEditorStore((s) => s.simPlaying);
@@ -354,6 +361,81 @@ export default function CanvasStage() {
     setCursor(stagePointMm(stage));
   }
 
+  // --- touch: pinch-zoom + two-finger pan, and tap-to-draw/select ---
+  function twoFinger(stage: Konva.Stage): { dist: number; mid: { x: number; y: number } } | null {
+    const ps = stage.getPointersPositions();
+    if (ps.length < 2) return null;
+    const [a, b] = ps;
+    return {
+      dist: Math.hypot(a.x - b.x, a.y - b.y) || 1,
+      mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+    };
+  }
+
+  function onTouchStart(e: Konva.KonvaEventObject<TouchEvent>) {
+    const stage = e.target.getStage();
+    if (!stage) return;
+    if (e.evt.touches.length >= 2) {
+      // Begin a pinch — cancel any single-finger marquee/tap in progress.
+      setMarquee(null);
+      touchStartRef.current = null;
+      const info = twoFinger(stage);
+      if (info) {
+        pinchRef.current = { startDist: info.dist, mmAtMid: toMm(info.mid.x, info.mid.y), startZoom: zoom };
+      }
+      return;
+    }
+    pinchRef.current = null;
+    if (viewMode === "stitch") return;
+    const p = stagePointMm(stage);
+    touchStartRef.current = p ? { mm: p, moved: false } : null;
+    // Select tool on empty canvas → rubber-band; drawing taps are placed on release.
+    if (!isDrawTool(tool) && tool === "select" && e.target === stage && p) {
+      setMarquee({ start: p, end: p });
+    }
+  }
+
+  function onTouchMove(e: Konva.KonvaEventObject<TouchEvent>) {
+    const stage = e.target.getStage();
+    if (!stage) return;
+    if (pinchRef.current && e.evt.touches.length >= 2) {
+      const info = twoFinger(stage);
+      if (!info) return;
+      const { startDist, mmAtMid, startZoom } = pinchRef.current;
+      const z = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, (startZoom * info.dist) / startDist));
+      const newScale = fitScale * z;
+      const nbX = RULER + PADDING + (availW - hoop.wMm * newScale) / 2;
+      const nbY = RULER + PADDING + (availH - hoop.hMm * newScale) / 2;
+      // Zoom about the pinch midpoint AND pan with it (so two fingers also drag).
+      setZoom(z);
+      setPan({ x: info.mid.x - mmAtMid.x * newScale - nbX, y: info.mid.y - mmAtMid.y * newScale - nbY });
+      return;
+    }
+    if (viewMode === "stitch") return;
+    const p = stagePointMm(stage);
+    const ts = touchStartRef.current;
+    if (ts && p && Math.hypot(p.x - ts.mm.x, p.y - ts.mm.y) > 1.5) ts.moved = true;
+    if (marquee) {
+      if (p) setMarquee((m) => (m ? { ...m, end: p } : m));
+      return;
+    }
+    if (isDrawTool(tool)) setCursor(p);
+  }
+
+  function onTouchEnd() {
+    if (pinchRef.current) {
+      pinchRef.current = null;
+      return;
+    }
+    if (viewMode !== "stitch") {
+      const ts = touchStartRef.current;
+      // A clean tap with a draw tool places a polygon point.
+      if (ts && !ts.moved && isDrawTool(tool)) addDraftPoint(ts.mm);
+    }
+    touchStartRef.current = null;
+    finishMarquee();
+  }
+
   function finishMarquee() {
     if (!marquee) return;
     const rect = rectFromPoints(marquee.start.x, marquee.start.y, marquee.end.x, marquee.end.y);
@@ -370,7 +452,11 @@ export default function CanvasStage() {
   useEffect(() => {
     const onUp = () => finishMarqueeRef.current();
     window.addEventListener("mouseup", onUp);
-    return () => window.removeEventListener("mouseup", onUp);
+    window.addEventListener("touchend", onUp);
+    return () => {
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("touchend", onUp);
+    };
   }, []);
 
   const drawing = viewMode === "edit" && isDrawTool(tool);
@@ -411,7 +497,9 @@ export default function CanvasStage() {
     <main
       ref={containerRef}
       className="relative min-w-0 flex-1 overflow-hidden"
-      style={{ background: C.cream }}
+      // touch-action none so the browser doesn't scroll/zoom the page while the
+      // user draws, pans, or pinch-zooms on the canvas.
+      style={{ background: C.cream, touchAction: "none" }}
     >
       {size.width > 0 && (
         <Stage
@@ -420,6 +508,10 @@ export default function CanvasStage() {
           onMouseDown={onStageMouseDown}
           onMouseMove={onStageMouseMove}
           onDblClick={finishDraft}
+          onDblTap={finishDraft}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
           onWheel={onWheelZoom}
           style={{ cursor: drawing ? "crosshair" : "default" }}
         >
