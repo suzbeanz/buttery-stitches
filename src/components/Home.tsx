@@ -16,7 +16,7 @@ import Footer from "./Footer";
  */
 export default function Home({ onStart }: { onStart: () => void }) {
   return (
-    <div className="flex h-full flex-col overflow-y-auto">
+    <div className="h-full overflow-y-auto">
       {/* HERO — the label */}
       <div className="mx-auto w-full max-w-5xl px-6 pt-10 sm:pt-16">
         <PressCard className="relative overflow-hidden px-6 py-8 sm:px-10 sm:py-10">
@@ -176,11 +176,9 @@ export default function Home({ onStart }: { onStart: () => void }) {
 
       <Tape unit="Tbsp" />
 
-      {/* CLOSING PANEL — the wrapper's back cover. Grows to absorb any leftover
-          height so the page fills the screen instead of trailing off into blank
-          stock, with the seal + wordmark centered so it reads as a deliberate
-          end panel at any height. */}
-      <div className="flex flex-1 flex-col items-center justify-center gap-5 px-6 py-14 text-center">
+      {/* CLOSING PANEL — the wrapper's back cover: seal + wordmark, sized to its
+          content so the page ends cleanly at the footer (no trailing blank). */}
+      <div className="flex flex-col items-center justify-center gap-5 px-6 py-12 text-center">
         <GradeStamp size={66} />
         <div className="font-display text-3xl uppercase leading-tight tracking-wide text-ink-deep sm:text-5xl">
           Net Wt. Free.99
