@@ -57,6 +57,8 @@ export interface EmbObject {
   visible: boolean;
   /** present on text objects so they can be re-edited (double-click). */
   text?: TextSpec;
+  /** objects sharing a groupId select and move together. */
+  groupId?: string;
 }
 
 export interface ThreadColor {

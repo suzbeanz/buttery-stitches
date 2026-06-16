@@ -10,6 +10,8 @@ import type {
 } from "../types/project";
 import { createEmptyProject } from "../lib/project";
 import { translatePaths } from "../lib/geometry";
+import { expandGroups } from "../lib/objects";
+import { newId } from "../lib/id";
 
 /**
  * Single project store. The `project` object is the entire editable document;
@@ -38,6 +40,12 @@ export interface ProjectState {
   /** Translate several objects together (one undo step). */
   moveObjects: (ids: string[], dxMm: number, dyMm: number) => void;
   reorderObjects: (fromIndex: number, toIndex: number) => void;
+  /** Move the selected objects in stitch order: one step or all the way. */
+  moveOrder: (ids: string[], dir: "earlier" | "later" | "first" | "last") => void;
+  /** Tie objects into one group (select/move/align together). */
+  groupObjects: (ids: string[]) => void;
+  /** Remove the group tag from any of these objects' groups. */
+  ungroupObjects: (ids: string[]) => void;
 
   addColor: (color: ThreadColor) => void;
   updateColor: (id: string, patch: Partial<ThreadColor>) => void;
@@ -163,6 +171,66 @@ export const useProjectStore = create<ProjectState>()(
           return { project: { ...s.project, objects } };
         }),
 
+      moveOrder: (ids, dir) =>
+        set((s) => {
+          const sel = new Set(ids);
+          if (sel.size === 0) return s;
+          let objects = [...s.project.objects];
+          if (dir === "first" || dir === "last") {
+            const picked = objects.filter((o) => sel.has(o.id));
+            const rest = objects.filter((o) => !sel.has(o.id));
+            objects = dir === "first" ? [...picked, ...rest] : [...rest, ...picked];
+          } else if (dir === "earlier") {
+            // Shift the selected block one step toward index 0 (stitched earlier).
+            for (let i = 1; i < objects.length; i++) {
+              if (sel.has(objects[i].id) && !sel.has(objects[i - 1].id)) {
+                [objects[i - 1], objects[i]] = [objects[i], objects[i - 1]];
+              }
+            }
+          } else {
+            // "later" — one step toward the end (stitched later, sits on top).
+            for (let i = objects.length - 2; i >= 0; i--) {
+              if (sel.has(objects[i].id) && !sel.has(objects[i + 1].id)) {
+                [objects[i], objects[i + 1]] = [objects[i + 1], objects[i]];
+              }
+            }
+          }
+          return { project: { ...s.project, objects } };
+        }),
+
+      groupObjects: (ids) =>
+        set((s) => {
+          if (ids.length < 2) return s;
+          const sel = new Set(ids);
+          const gid = newId("grp");
+          return {
+            project: {
+              ...s.project,
+              objects: s.project.objects.map((o) =>
+                sel.has(o.id) ? { ...o, groupId: gid } : o,
+              ),
+            },
+          };
+        }),
+
+      ungroupObjects: (ids) =>
+        set((s) => {
+          const sel = new Set(ids);
+          // Every group touched by the selection is dissolved.
+          const groups = new Set(
+            s.project.objects.filter((o) => sel.has(o.id) && o.groupId).map((o) => o.groupId),
+          );
+          if (groups.size === 0) return s;
+          return {
+            project: {
+              ...s.project,
+              objects: s.project.objects.map((o) =>
+                o.groupId && groups.has(o.groupId) ? { ...o, groupId: undefined } : o,
+              ),
+            },
+          };
+        }),
+
       addColor: (color) =>
         set((s) => ({
           project: { ...s.project, colors: [...s.project.colors, color] },
@@ -178,7 +246,8 @@ export const useProjectStore = create<ProjectState>()(
           },
         })),
 
-      setSelection: (ids) => set({ selectedIds: ids }),
+      setSelection: (ids) =>
+        set((s) => ({ selectedIds: expandGroups(s.project.objects, ids) })),
     }),
     {
       // Keep selection out of the undo history.
