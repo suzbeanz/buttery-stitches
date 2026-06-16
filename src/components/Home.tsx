@@ -17,30 +17,42 @@ export default function Home({ onStart }: { onStart: () => void }) {
     <div className="h-full overflow-y-auto">
       {/* HERO — the label */}
       <Col className="pt-10 sm:pt-16">
-        <PressCard className="px-6 py-8 sm:px-10 sm:py-10">
+        <PressCard className="relative px-6 py-8 sm:px-10 sm:py-10">
           <div className="flex items-center justify-between border-b-[1.5px] border-foil pb-3 font-label text-[12px] font-semibold uppercase tracking-[0.22em] text-ink">
             <span>Open Source</span>
             <span>Net Wt. Free · 100% Free</span>
           </div>
 
-          <div className="mt-7 flex flex-wrap items-center justify-center gap-x-7 gap-y-4">
-            <GradeStamp size={74} className="hidden sm:block" />
-            <div className="text-center leading-none">
-              <div className="font-accent text-2xl italic text-stamp sm:text-3xl">
-                Sweet &amp; Unsalted
-              </div>
-              <div className="font-display text-6xl uppercase leading-[0.92] tracking-wide text-ink sm:text-8xl sm:leading-[0.82]">
-                Buttery
-                <br />
-                Stitches
-              </div>
-              {/* Stamp-red bar that fills in on load. */}
-              <div className="mx-auto mt-4 h-[3px] w-44 max-w-[70%] rounded-full bg-stamp fill-bar" />
-              <div className="mt-4 font-label text-[12px] font-medium uppercase tracking-[0.4em] text-ink-deep sm:text-sm">
-                Embroidery Digitizing — Churned to Order
-              </div>
+          {/* Flanking seals — pinned to the card edges and shown only at lg+,
+              where the card is wide enough to clear the big wordmark (they used
+              to crowd it on medium screens). */}
+          <GradeStamp
+            size={74}
+            className="absolute left-6 top-1/2 hidden -translate-y-1/2 lg:block"
+          />
+          <GradeStamp
+            size={74}
+            rotate={7}
+            top="Made"
+            big="100"
+            bottom="% Open"
+            className="absolute right-6 top-1/2 hidden -translate-y-1/2 lg:block"
+          />
+
+          <div className="mt-7 text-center leading-none">
+            <div className="font-accent text-2xl italic text-stamp sm:text-3xl">
+              Sweet &amp; Unsalted
             </div>
-            <GradeStamp size={74} rotate={7} top="Made" big="100" bottom="% Open" className="hidden sm:block" />
+            <div className="font-display text-6xl uppercase leading-[0.92] tracking-wide text-ink sm:text-8xl sm:leading-[0.82]">
+              Buttery
+              <br />
+              Stitches
+            </div>
+            {/* Stamp-red bar that fills in on load. */}
+            <div className="mx-auto mt-4 h-[3px] w-44 max-w-[70%] rounded-full bg-stamp fill-bar" />
+            <div className="mt-4 font-label text-[12px] font-medium uppercase tracking-[0.4em] text-ink-deep sm:text-sm">
+              Embroidery Digitizing — Churned to Order
+            </div>
           </div>
 
           <div className="mt-7 text-center font-mono text-[12px] uppercase tracking-[0.14em] text-char/80">
