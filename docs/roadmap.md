@@ -65,6 +65,23 @@ Placement run → STOP → tackdown → satin cover-stitch, with a fabric-color 
 - [ ] Migrate residual `navy/paper` aliases to canonical `ink/cream` (pure
       hygiene — same pixels — done opportunistically in touched files).
 
+## Foundations hardening (done)
+A correctness/robustness audit of the core systems, then fixes + tests:
+- [x] `parseProject` now NORMALIZES every opened file — recovers missing
+      `params`/`paths`/`visible`/`id`/`name`, strips non-finite vertices, clamps
+      rgb + dimensions + hoop, and fails LOUD on unrecoverable shapes (unknown
+      type, no color). A slightly-malformed `.embproj` can no longer sail past the
+      loader and crash the pure engine on the next render.
+- [x] Export finite-coordinate gate: non-finite coords can never reach
+      `int(NaN)` in pyembroidery (closed at the `planFromDesign` boundary).
+- [x] Exports are serialized (they share Pyodide globals) — two quick exports
+      can't produce a file for the wrong plan/format.
+- [x] `newId` fallback is collision-proof (monotonic counter); `prevColorObj`
+      guarded against the empty/first-run edge.
+- [x] New `foundations.test.ts`: lossless round-trip of every field, engine
+      determinism + reference memoization, no-NaN on degenerate geometry,
+      malformed-file recovery/rejection. Verified store mutations are immutable.
+
 ## Done recently
 Crisp text always (thin strokes satin, smoothed rails); stitch-direction
 continuity; travel routing + retrace ties; machine-safety floors; QA/QC pass

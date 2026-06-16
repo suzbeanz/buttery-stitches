@@ -51,7 +51,11 @@ export function planFromDesign(
   let current: PlanBlock | null = null;
   let currentColor: string | null = null;
 
-  design.forEach((s, idx) => {
+  design.forEach((s) => {
+    // Belt-and-suspenders: never let a non-finite coordinate reach the file
+    // (it would become int(NaN) in pyembroidery and fail the export opaquely).
+    // The engine shouldn't produce these, but a malformed import might.
+    if (!Number.isFinite(s.x) || !Number.isFinite(s.y)) return;
     const startsBlock = s.colorId !== currentColor;
     if (startsBlock) {
       current = { rgb: rgbById.get(s.colorId) ?? 0, cmds: [] };
@@ -64,7 +68,6 @@ export function planFromDesign(
     const x = mmToTenths(s.x);
     const y = mmToTenths(s.y);
     current!.cmds.push(s.jump ? ["j", x, y] : ["s", x, y]);
-    void idx;
   });
 
   return { blocks };
@@ -97,24 +100,34 @@ export interface ExportOptions {
 }
 
 /** Build the embroidery file bytes for a plan. Loads Pyodide on first use. */
+// Exports share Pyodide globals (__plan_json/__fmt), so two overlapping calls
+// would clobber each other's plan. Serialize them through a single chain.
+let exportChain: Promise<unknown> = Promise.resolve();
+
 export async function exportToBytes(
   plan: StitchPlan,
   { format, pesVersion = 1, onStage }: ExportOptions,
 ): Promise<Uint8Array> {
-  const pyodide = await getPyodide(onStage);
-  await ensurePython(pyodide);
+  const run = exportChain.then(async () => {
+    const pyodide = await getPyodide(onStage);
+    await ensurePython(pyodide);
 
-  pyodide.globals.set("__plan_json", JSON.stringify(plan));
-  pyodide.globals.set("__fmt", format);
-  pyodide.globals.set("__pes_version", pesVersion);
+    pyodide.globals.set("__plan_json", JSON.stringify(plan));
+    pyodide.globals.set("__fmt", format);
+    pyodide.globals.set("__pes_version", pesVersion);
 
-  const result = (await pyodide.runPythonAsync(
-    `export_bytes(__plan_json, __fmt, __pes_version)`,
-  )) as { toJs: () => Uint8Array; destroy: () => void };
+    const result = (await pyodide.runPythonAsync(
+      `export_bytes(__plan_json, __fmt, __pes_version)`,
+    )) as { toJs: () => Uint8Array; destroy: () => void };
 
-  const bytes = result.toJs();
-  result.destroy();
-  return bytes;
+    const bytes = result.toJs();
+    result.destroy();
+    return bytes;
+  });
+  // Keep the chain alive even if this export rejects, so a failure doesn't
+  // permanently wedge later exports.
+  exportChain = run.catch(() => undefined);
+  return run;
 }
 
 /** Trigger a browser download of raw bytes. */
