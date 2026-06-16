@@ -300,6 +300,16 @@ function ObjectProperties({
       )}
 
       {object.type === "fill" && (
+        <NumberField
+          label="Stitch length (mm)"
+          value={p.fillStitchLength ?? DEFAULT_PARAMS.fillStitchLength}
+          step={0.5}
+          min={1}
+          onChange={(v) => onParam({ fillStitchLength: v })}
+        />
+      )}
+
+      {object.type === "fill" && (
         <Field label="Stitch style">
           <select
             value={p.fillStyle ?? DEFAULT_PARAMS.fillStyle}
