@@ -1,4 +1,5 @@
 import type { Path, Point } from "../types/project";
+import { smoothPath } from "./smooth";
 
 /**
  * Paint-bucket fill. Given the outlines already on the canvas and a click point,
@@ -89,16 +90,38 @@ export function bucketFill(
   // 2b. Grow the filled region a few cells so it reaches (and slightly overlaps)
   // the outline instead of stopping a cell short and leaving a white halo. A
   // small overlap with the edge is exactly what embroidery wants — no gap.
-  dilate(fill, W, H, 3);
+  dilate(fill, W, H, 2);
 
-  // 3. Trace the filled mask boundary, convert to mm, simplify.
-  const rings = marchingSquares(fill, W, H).map((ring) =>
-    simplify(
-      ring.map((p) => ({ x: bounds.minX + p.x * cell, y: bounds.minY + p.y * cell })),
-      cell * 0.9,
-    ),
-  );
-  return rings.filter((r) => r.length >= 3);
+  // 3. Trace the filled mask boundary, convert to mm, simplify, then smooth into
+  // a soft closed curve (Catmull-Rom) so the fill edge follows a natural line
+  // instead of the raster's facets.
+  const rings = marchingSquares(fill, W, H)
+    .map((ring) => {
+      const mm = simplify(
+        ring.map((p) => ({ x: bounds.minX + p.x * cell, y: bounds.minY + p.y * cell })),
+        cell * 0.9,
+      );
+      return smoothClosed(mm);
+    })
+    .filter((r) => r.length >= 3);
+  return rings;
+}
+
+/** Smooth a closed ring with a Catmull-Rom spline that wraps the seam (so the
+ *  join is as smooth as the rest of the loop). */
+function smoothClosed(ring: Path): Path {
+  if (ring.length < 4) return ring;
+  // Pad with wrapped neighbors so the spline is continuous around the seam, then
+  // keep exactly one loop's worth of the smoothed output.
+  const n = ring.length;
+  const padded = [ring[n - 1], ...ring, ring[0], ring[1]];
+  const smooth = smoothPath(padded, { maxSegmentMm: 0.6 });
+  // Drop the leading/trailing padding samples (everything before the 2nd control
+  // point and after the (n+1)-th) is approximated by trimming a fixed fraction.
+  const start = Math.round(smooth.length / padded.length);
+  const endTrim = Math.round((smooth.length / padded.length) * 2);
+  const core = smooth.slice(start, smooth.length - endTrim);
+  return core.length >= 3 ? core : ring;
 }
 
 /** Morphological dilation: grow the set cells (value 1) outward by `iters`

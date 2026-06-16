@@ -19,13 +19,16 @@ describe("bucketFill", () => {
     const rings = bucketFill([square], { x: 10, y: 10 }, bounds, 0.5);
     expect(rings).not.toBeNull();
     const b = pathsBounds(rings!)!;
-    // The traced region sits inside the square and roughly fills it.
-    expect(b.minX).toBeGreaterThan(-1);
-    expect(b.minY).toBeGreaterThan(-1);
-    expect(b.maxX).toBeLessThan(21);
-    expect(b.maxY).toBeLessThan(21);
-    expect(b.maxX - b.minX).toBeGreaterThan(15);
-    expect(b.maxY - b.minY).toBeGreaterThan(15);
+    // The fill reaches and slightly overlaps the square's edges (no gap), so it
+    // tracks the 0–20 box closely (within a small overlap/smoothing margin).
+    expect(b.minX).toBeGreaterThan(-3);
+    expect(b.minX).toBeLessThan(1);
+    expect(b.minY).toBeGreaterThan(-3);
+    expect(b.minY).toBeLessThan(1);
+    expect(b.maxX).toBeLessThan(23);
+    expect(b.maxX).toBeGreaterThan(19);
+    expect(b.maxY).toBeLessThan(23);
+    expect(b.maxY).toBeGreaterThan(19);
   });
 
   it("returns null when the click lands on a line", () => {
