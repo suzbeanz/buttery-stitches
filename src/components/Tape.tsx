@@ -19,7 +19,6 @@ import { useEffect, useRef, useState } from "react";
  * Flat by rule — no rounded ends, no soft shadow.
  */
 const INK = "#173A7A";
-const RED = "#B23A2E";
 /** Fixed ruler graduations: a major every 132px, a half every 66, a minor every 33. */
 const MAJOR_PX = 132;
 const MINOR_PX = MAJOR_PX / 4;
@@ -149,8 +148,9 @@ export default function Tape({
   const divisions = labels?.length ?? majors;
   const majorSize = `calc(100% / ${divisions}) 16px`;
   const minorSize = `calc(100% / ${divisions * 4}) 9px`;
-  // The fill is a row of running stitches — short red dashes with a thread sheen.
-  const stitches = `linear-gradient(to bottom, rgba(255,255,255,0.35), rgba(0,0,0,0.12)), repeating-linear-gradient(to right, ${RED} 0 11px, transparent 11px 16px)`;
+  // The fill is a band of dense satin stitches — packed slightly-diagonal red
+  // threads with a glossy top-to-bottom sheen, like a real satin column.
+  const stitches = `linear-gradient(to bottom, rgba(255,255,255,0.32), rgba(255,255,255,0) 38%, rgba(0,0,0,0.2)), repeating-linear-gradient(80deg, #c2412f 0 2px, #a02f1f 2px 4px)`;
 
   return (
     <div
@@ -184,11 +184,21 @@ export default function Tape({
         }}
       />
       {/* the traveling needle that lays the fill (animated only) — its width
-          grows 0→100% in step with the reveal, carrying the marker on its edge */}
+          grows 0→100% in step with the reveal, carrying a bobbing needle on its
+          leading edge that pokes a stitch into the band at each step. */}
       {fillPct !== undefined && animate && (
-        <div className={`stitch-needle pointer-events-none absolute left-0 top-[1px] z-10 ${shown ? "go" : ""}`}>
-          <span className="absolute right-0 grid h-[14px] w-[14px] -translate-x-1/2 place-items-center rounded-full border-2 border-stamp bg-cream">
-            <span className="h-[5px] w-[5px] rounded-full bg-ink" />
+        <div className={`stitch-needle pointer-events-none absolute left-0 top-0 z-10 h-full ${shown ? "go" : ""}`}>
+          <span className="stitch-bob absolute right-0 top-[-8px] -mr-[7px]">
+            <svg width="14" height="22" viewBox="0 0 14 22" fill="none" aria-hidden>
+              {/* cloth penetration point */}
+              <circle cx="7" cy="18" r="2.4" fill="#B23A2E" opacity="0.85" />
+              {/* steel needle */}
+              <line x1="7" y1="1" x2="7" y2="14" stroke="#173A7A" strokeWidth="2" strokeLinecap="round" />
+              <ellipse cx="7" cy="4" rx="1.6" ry="2.2" stroke="#173A7A" strokeWidth="1" fill="none" />
+              <path d="M5.4 13.5 L7 18 L8.6 13.5 Z" fill="#173A7A" />
+              {/* a flick of red thread through the eye */}
+              <path d="M5.5 3.5 q-3.6 2 -1.3 5.5" stroke="#B23A2E" strokeWidth="1.3" fill="none" strokeLinecap="round" />
+            </svg>
           </span>
         </div>
       )}
