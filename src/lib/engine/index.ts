@@ -175,8 +175,13 @@ function acceptableSatin(region: Path[], density: number, pullScale: number): Sa
   return coverage >= MIN_SATIN_COVERAGE ? columns : [];
 }
 
-/** A medial column thinner than this stitches as a single running line, not satin. */
-const RUNNING_COLUMN_MM = 1.2;
+/**
+ * A medial column thinner than this stitches as a single running line, not satin.
+ * Kept low so genuinely fine strokes — script faces, serif hairlines, small text —
+ * still get a COVERING satin column (crisp, filled) instead of a bare wireframe
+ * line; only true hairlines (< 0.6 mm) run as a single line.
+ */
+const RUNNING_COLUMN_MM = 0.6;
 
 /**
  * Min-stitch for SATIN runs. Satin is intentionally dense — its row spacing
