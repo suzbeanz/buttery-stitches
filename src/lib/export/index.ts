@@ -187,6 +187,33 @@ export async function exportToBytes(
   return run;
 }
 
+/** A design read back from an embroidery file: color blocks of contiguous stitch
+ *  RUNS, in 1/10 mm units (mirrors the export plan shape). */
+export interface ImportedPlan {
+  blocks: { rgb: number; runs: [number, number][][] }[];
+}
+
+/** Read an embroidery file's bytes into an {@link ImportedPlan} via pyembroidery.
+ *  Serialized through the same chain as exports so they never clobber globals. */
+export async function importDesignBytes(
+  bytes: Uint8Array,
+  format: EmbFormat,
+  onStage?: (stage: LoadStage) => void,
+): Promise<ImportedPlan> {
+  const run = exportChain.then(async () => {
+    const pyodide = await getPyodide(onStage);
+    await ensurePython(pyodide);
+    pyodide.globals.set("__import_bytes", bytes);
+    pyodide.globals.set("__import_fmt", format);
+    const json = (await pyodide.runPythonAsync(
+      `import_design(__import_bytes, __import_fmt)`,
+    )) as string;
+    return JSON.parse(json) as ImportedPlan;
+  });
+  exportChain = run.catch(() => undefined);
+  return run;
+}
+
 /** Trigger a browser download of raw bytes. */
 export function downloadBytes(
   bytes: Uint8Array,

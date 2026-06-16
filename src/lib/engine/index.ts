@@ -236,6 +236,12 @@ export function generateObjectRuns(
   const runs: StitchRun[] = [];
 
   if (object.type === "running") {
+    // Raw (imported) stitches are emitted exactly as stored — no resampling, no
+    // bean — so an imported design's penetrations are preserved verbatim.
+    if (p.raw) {
+      addRun(runs, (object.paths[0] ?? []).map((q) => ({ ...q })), false);
+      return runs;
+    }
     const line = dropShortStitches(runningStitch(object.paths[0] ?? [], stitchLength));
     // Bean / triple stitch: retrace the line N times (forward/back/forward) for a
     // bold, durable outline. The repeats land in the same holes but are never

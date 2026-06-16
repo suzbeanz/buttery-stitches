@@ -32,6 +32,8 @@ import { cloneObject } from "../lib/objects";
 import { newId } from "../lib/id";
 import type { Project } from "../types/project";
 import { toast } from "../store/toastStore";
+import { importDesignBytes, EMB_FORMATS, type EmbFormat } from "../lib/export";
+import { buildImportedObjects } from "../lib/embImport";
 import ExportMenu from "./ExportMenu";
 import DesignCheck from "./DesignCheck";
 
@@ -124,10 +126,36 @@ export default function TopBar({
   // Import (merge) another saved design into the current one — combine projects
   // without replacing what you have. Colors are remapped to fresh ids so they
   // never collide; objects are cloned with new ids and kept where they were.
+  // Import an existing embroidery file (.pes/.dst/.jef/.exp/.vp3) as raw stitches
+  // added to the design — preserved exactly, not re-digitized.
+  async function importStitchFile(file: File, fmt: EmbFormat) {
+    try {
+      toast("Reading design… (first import loads the stitch engine)", "info");
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const plan = await importDesignBytes(bytes, fmt);
+      const { colors, objects } = buildImportedObjects(plan, file.name.replace(/\.[^.]+$/, ""));
+      if (objects.length === 0) {
+        toast("No stitches found in that file.", "info");
+        return;
+      }
+      colors.forEach(addColor);
+      addObjects(objects);
+      toast(`Imported ${objects.length} stitch run${objects.length === 1 ? "" : "s"}`, "success");
+      goEdit();
+    } catch (err) {
+      toast(`Couldn't import that file — ${(err as Error).message}`, "error");
+    }
+  }
+
   async function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    const ext = (file.name.split(".").pop() ?? "").toLowerCase();
+    if ((EMB_FORMATS as readonly string[]).includes(ext)) {
+      await importStitchFile(file, ext as EmbFormat);
+      return;
+    }
     try {
       const loaded = await loadProjectFromFile(file);
       const colorMap = new Map<string, string>();
@@ -251,7 +279,7 @@ export default function TopBar({
       <BarButton label="Open" onClick={() => fileInput.current?.click()}>
         <FolderOpen size={18} />
       </BarButton>
-      <BarButton label="Import & add a saved design" onClick={() => importInput.current?.click()}>
+      <BarButton label="Import & add a design (.embproj, .pes, .dst, .jef, .exp, .vp3)" onClick={() => importInput.current?.click()}>
         <ImportIcon size={18} />
       </BarButton>
       <BarButton
@@ -349,7 +377,7 @@ export default function TopBar({
       <input
         ref={importInput}
         type="file"
-        accept=".embproj,application/json"
+        accept=".embproj,.pes,.dst,.jef,.exp,.vp3,application/json"
         className="hidden"
         onChange={onImportFile}
       />
