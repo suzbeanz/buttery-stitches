@@ -792,8 +792,11 @@ export default function CanvasStage() {
                   ignoreStroke
                   anchorFill={C.cream}
                   anchorStroke={C.navy}
+                  anchorStrokeWidth={1.5}
+                  anchorCornerRadius={2}
                   borderStroke={C.navy}
-                  anchorSize={8}
+                  borderStrokeWidth={1.5}
+                  anchorSize={9}
                 />
               </>
             )}
@@ -1124,8 +1127,22 @@ function StitchView({
   // satin reads as solid coverage instead of separate hairline "scanlines".
   const mmPx = px(1) - px(0);
   const threadPx = Math.min(4, Math.max(1.4, mmPx * 0.42));
+  // Fade the stitched preview in when entering Stitch view — a gentle "watch it
+  // sew" reveal (instant under prefers-reduced-motion).
+  const groupRef = useRef<Konva.Group>(null);
+  useEffect(() => {
+    const g = groupRef.current;
+    if (!g) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) {
+      g.opacity(1);
+      return;
+    }
+    g.opacity(0);
+    g.to({ opacity: 1, duration: 0.25 });
+  }, []);
   return (
-    <Group listening={false}>
+    <Group ref={groupRef} listening={false}>
       <Shape
         sceneFunc={(ctx) => {
           // Stroke each STITCH as its own round-capped capsule (a separate

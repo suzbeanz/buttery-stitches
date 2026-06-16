@@ -57,10 +57,13 @@ Placement run → STOP → tackdown → satin cover-stitch, with a fabric-color 
       shapes menu squared; DesignPanel warnings use the stamp-red caution style;
       "Loading font…" + "Tracing your image…" busy notes (indeterminate bars).
 - [x] Simulator needle is a flat stamp-red ring + cream dot (clear live marker).
-- [ ] Edit↔stitch crossfade (touches Konva); design-wide fill-angle override.
+- [x] Edit↔stitch crossfade — the stitched preview fades in on entering Stitch
+      view (instant under prefers-reduced-motion). Selection handles refined
+      (rounded ink anchors, crisper border).
 - [ ] Design-wide fill-angle override in the Design panel (engine plumbing exists).
 - [ ] Edge-walk underlay following the shared grain.
-- [ ] Migrate residual `navy/butter/paper` aliases to canonical `ink/cream/char`.
+- [ ] Migrate residual `navy/paper` aliases to canonical `ink/cream` (pure
+      hygiene — same pixels — done opportunistically in touched files).
 
 ## Done recently
 Crisp text always (thin strokes satin, smoothed rails); stitch-direction
