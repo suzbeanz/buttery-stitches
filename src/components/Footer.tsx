@@ -1,3 +1,5 @@
+import { Heart } from "lucide-react";
+
 /**
  * Site footer — a warm signature with links to the maker. Used on the homepage
  * (the editor itself is full-screen, so it carries no footer). The brand marks
@@ -6,8 +8,10 @@
 export default function Footer() {
   return (
     <div className="px-6 py-6 text-center text-navy">
-      <p className="text-sm font-semibold">
-        Made With <span aria-label="love">❤️</span> by Suz
+      <p className="flex items-center justify-center gap-1.5 text-sm font-semibold">
+        Made With
+        <Heart size={15} className="fill-stamp text-stamp" aria-label="love" />
+        by Suz
       </p>
       <div className="mt-3 flex items-center justify-center gap-3">
         <a

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { X, Image as ImageIcon, Type, Pencil, type LucideIcon } from "lucide-react";
 import {
   Stage,
   Layer,
@@ -682,7 +683,7 @@ export default function CanvasStage() {
               aria-label="Close"
               className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full text-navy/40 hover:bg-butter-200 hover:text-navy"
             >
-              ✕
+              <X size={16} strokeWidth={2.25} />
             </button>
             <div className="font-label uppercase tracking-[0.08em] text-2xl font-semibold">
               Let&apos;s make something 🧈
@@ -690,19 +691,19 @@ export default function CanvasStage() {
             <p className="mt-1 text-sm text-navy/60">Pick how you&apos;d like to start.</p>
             <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <StartButton
-                emoji="🖼️"
+                icon={ImageIcon}
                 label="Use a picture"
                 hint="Turn a photo or logo into stitches"
                 onClick={() => useEditorStore.getState().setPendingStart("image")}
               />
               <StartButton
-                emoji="🔤"
+                icon={Type}
                 label="Add words"
                 hint="Stitch a name or message"
                 onClick={() => useEditorStore.getState().setPendingStart("text")}
               />
               <StartButton
-                emoji="✏️"
+                icon={Pencil}
                 label="Draw it"
                 hint="Draw your own shape"
                 onClick={() => {
@@ -731,12 +732,12 @@ export default function CanvasStage() {
 
 /** Big friendly action in the empty-state quick-start guide. */
 function StartButton({
-  emoji,
+  icon: Icon,
   label,
   hint,
   onClick,
 }: {
-  emoji: string;
+  icon: LucideIcon;
   label: string;
   hint: string;
   onClick: () => void;
@@ -746,9 +747,8 @@ function StartButton({
       onClick={onClick}
       className="flex flex-col items-center gap-1 rounded-sm border-2 border-ink bg-cream px-3 py-3 text-ink shadow-press-sm transition-transform hover:bg-butter-200 active:translate-y-[2px] active:shadow-none"
     >
-      <span className="text-2xl" aria-hidden>
-        {emoji}
-      </span>
+      <Icon size={26} strokeWidth={1.75} aria-hidden />
+
       <span className="font-label text-sm font-semibold uppercase tracking-wide">{label}</span>
       <span className="font-body text-[11px] text-char/60">{hint}</span>
     </button>
