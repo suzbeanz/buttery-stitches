@@ -1,4 +1,21 @@
-import { MousePointer2, Spline, X, Magnet, Grid2x2, Type, Image as ImageIcon, Hand, Pencil } from "lucide-react";
+import {
+  MousePointer2,
+  Spline,
+  X,
+  Magnet,
+  Grid2x2,
+  Type,
+  Image as ImageIcon,
+  Hand,
+  Pencil,
+  Square,
+  Circle,
+  Triangle,
+  Heart,
+  Star,
+  Minus,
+  type LucideIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import {
   useEditorStore,
@@ -6,6 +23,7 @@ import {
   type Tool,
   type RulerUnit,
 } from "../store/editorStore";
+import type { ShapeKind } from "../lib/shapes";
 
 /**
  * Left vertical tool rail — the tools you pick up to draw and edit. Grouped
@@ -15,6 +33,16 @@ import {
  * (Picture · Words · Shape) lives in the top bar's Insert group, not here, so
  * nothing is duplicated.
  */
+/** The premade shapes offered in the Shapes group (icon + short label). */
+const SHAPES: { kind: ShapeKind; label: string; icon: LucideIcon }[] = [
+  { kind: "rectangle", label: "Box", icon: Square },
+  { kind: "ellipse", label: "Circle", icon: Circle },
+  { kind: "triangle", label: "Triangle", icon: Triangle },
+  { kind: "heart", label: "Heart", icon: Heart },
+  { kind: "star", label: "Star", icon: Star },
+  { kind: "line", label: "Line", icon: Minus },
+];
+
 export default function ToolRail() {
   const tool = useEditorStore((s) => s.tool);
   const setTool = useEditorStore((s) => s.setTool);
@@ -29,6 +57,8 @@ export default function ToolRail() {
   const toggleSnap = useEditorStore((s) => s.toggleSnap);
   const toggleGuides = useEditorStore((s) => s.toggleGuides);
   const setPendingStart = useEditorStore((s) => s.setPendingStart);
+  const shapeKind = useEditorStore((s) => s.shapeKind);
+  const setShapeKind = useEditorStore((s) => s.setShapeKind);
   const viewMode = useEditorStore((s) => s.viewMode);
   const locked = viewMode === "stitch"; // editing tools are inert in stitch view
   const drawing = isDrawTool(tool) && draft.length > 0;
@@ -36,7 +66,7 @@ export default function ToolRail() {
   const lockTip = "Switch to Edit view to use tools";
 
   return (
-    <aside className="flex w-[72px] shrink-0 flex-col gap-1 border-r-2 border-ink bg-cream py-2">
+    <aside className="flex w-[72px] shrink-0 flex-col gap-1 overflow-y-auto border-r-2 border-ink bg-cream py-2">
       <Group label="Edit">
         <ToolBtn id="select" label="Select" tip="Click to select; drag to move" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <MousePointer2 size={20} />
@@ -72,6 +102,25 @@ export default function ToolRail() {
         >
           <Spline size={20} />
         </RailBtn>
+      </Group>
+
+      <Rule />
+      <Group label="Shapes">
+        {SHAPES.map(({ kind, label, icon: Icon }) => (
+          <RailBtn
+            key={kind}
+            label={label}
+            tip={locked ? lockTip : `Drag to draw a ${label.toLowerCase()}`}
+            active={!locked && tool === "shape" && shapeKind === kind}
+            disabled={locked}
+            onClick={() => {
+              setShapeKind(kind);
+              setTool("shape");
+            }}
+          >
+            <Icon size={20} />
+          </RailBtn>
+        ))}
       </Group>
 
       {drawing && (

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { EmbObject, Point, StitchType } from "../types/project";
+import type { ShapeKind } from "../lib/shapes";
 
 /**
  * Transient editor UI state — current tool, in-progress drawing, ruler units,
@@ -15,7 +16,8 @@ export type Tool =
   | "fill"
   | "satin"
   | "pan" // hand tool — drag to move the canvas
-  | "pencil"; // freehand running stitch
+  | "pencil" // freehand running stitch
+  | "shape"; // drag to place a premade shape (rectangle, ellipse, heart, …)
 
 /** Tools that place points to draw a new object — these map 1:1 to StitchType. */
 export const DRAW_TOOLS: StitchType[] = ["running", "satin", "fill"];
@@ -32,6 +34,8 @@ export type ViewMode = "edit" | "stitch";
 
 interface EditorState {
   tool: Tool;
+  /** which premade shape the `shape` tool stamps (rectangle, ellipse, …). */
+  shapeKind: ShapeKind;
   /** points placed so far for the in-progress drawing (mm coordinates). */
   draft: Point[];
   /** live cursor position in mm while drawing (for the rubber-band preview). */
@@ -76,6 +80,7 @@ interface EditorState {
   simSpeed: number;
 
   setTool: (tool: Tool) => void;
+  setShapeKind: (kind: ShapeKind) => void;
   addDraftPoint: (p: Point) => void;
   setCursor: (p: Point | null) => void;
   clearDraft: () => void;
@@ -107,6 +112,7 @@ interface EditorState {
 
 export const useEditorStore = create<EditorState>((set) => ({
   tool: "select",
+  shapeKind: "rectangle",
   draft: [],
   cursorMm: null,
   activeColorId: null,
@@ -130,6 +136,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   simSpeed: 400,
 
   setTool: (tool) => set({ tool, draft: [], cursorMm: null }),
+  setShapeKind: (shapeKind) => set({ shapeKind }),
   addDraftPoint: (p) => set((s) => ({ draft: [...s.draft, p] })),
   setCursor: (p) => set({ cursorMm: p }),
   clearDraft: () => set({ draft: [], cursorMm: null }),
