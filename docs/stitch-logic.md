@@ -135,7 +135,7 @@ run it **first**, **inset ~1 mm** from the edge so it never peeks out, at a
 | Contour / echo fill | ✅ iso-distance rings (marching squares on the distance transform) — opt-in `fillStyle:"contour"`, handles concavity + holes |
 | Radial / motif / gradient textures | ❌ later |
 | Fabric-type presets driving density/underlay/pull | ✅ `FABRICS` registry (woven/knit/pile/sheer) wired through the engine + UI |
-| Validation (min/max stitch, density, hoop, count) | ✅ (could warn on satin > 7 mm specifically) |
+| Validation (min/max stitch, density, hoop, count) | ✅ + warns on satin columns > 7 mm and large fills with underlay off |
 
 ---
 
@@ -166,7 +166,16 @@ run it **first**, **inset ~1 mm** from the edge so it never peeks out, at a
    they stay evenly spaced, never self-intersect on concave shapes, and handle holes
    for free. Opt-in via `fillStyle:"contour"`; falls back to tatami when too thin.
    (Motif / gradient textures still to come.)
-8. **Validation tuning** — flag satin > 7 mm, underlay-off on large fills, etc.
+8. ✅ **Validation tuning** — added non-blocking warnings for satin columns wider
+   than 7 mm (sew loose → use a fill) and large fills with underlay turned off
+   (pucker / no loft), alongside the existing min/max stitch, hoop, density, and
+   count checks.
+
+---
+
+**Roadmap complete.** Next horizons (beyond this list): motif / gradient textures,
+global travel routing, automatic appliqué placement stitches, and richer per-fabric
+thread presets.
 
 Each step ships behind the existing journey/coverage tests + CPython export checks,
 and is verifiable by metrics (coverage, rail/row spacing, longest stitch, count).
