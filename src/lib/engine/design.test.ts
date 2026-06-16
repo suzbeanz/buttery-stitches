@@ -217,6 +217,18 @@ describe("validateDesign", () => {
     expect(validateDesign(generateDesign(p), p)).toEqual([]);
   });
 
+  it("does NOT flag dense satin's ~0.4 mm rows as too-short stitches", () => {
+    // Satin runs below the old 0.5 mm warning line by design; that's normal, not
+    // a skip risk, so it must not raise a false "machine may skip" warning.
+    const left: Path = [{ x: 10, y: 10 }, { x: 10, y: 34 }];
+    const right: Path = [{ x: 13, y: 10 }, { x: 13, y: 34 }];
+    const o = makeObjectFromPaths("satin", [left, right], "c1");
+    o.params = { density: 0.4 };
+    const p = projectWith(o);
+    const warnings = validateDesign(generateDesign(p), p);
+    expect(warnings.some((w) => /shorter than/i.test(w.message))).toBe(false);
+  });
+
   it("never emits two coincident penetrations in a row (no same-hole punches)", () => {
     // A filled square with lock stitches: the tie clusters and fill spans must
     // not leave a 0 mm stitch where the needle would punch the same hole.

@@ -127,7 +127,8 @@ run it **first**, **inset ~1 mm** from the edge so it never peeks out, at a
 | Satin underlay (tiered by width) | ✅ center / +edge-walk (≥ 2 mm) / +zig-zag (≥ 4 mm), per user satin **and** per medial column |
 | Pull compensation (satin) | ✅ width-driven `autoPullCompMm` on medial lettering (scaled by fabric); explicit param on user satin |
 | Fill pull/push compensation | ⚠️ deferred — a per-row edge extension frayed slanted edges, so it was reverted; do it as a directional region outset instead |
-| Satin density preserved | ✅ satin keeps a 0.15 mm floor (its ~0.4 mm rows sit below the 0.5 mm general min-stitch, which would otherwise cull every other throw) |
+| Satin density preserved | ✅ satin keeps a 0.3 mm floor: dense enough to stay solid, high enough that density compensation can't pack the concave edge of a tight curve into a thread-clogging ridge |
+| Machine-safety floors (anti-clog) | ✅ hard `MIN_SAFE_DENSITY` 0.3 mm row spacing (no params/fabric mul can pack tighter) + 0.3 mm satin min-stitch; validator warns at 0.25 mm. Verified: tight satin rings, script, and reckless 0.02 mm fills all stitch out with 0 sub-0.3 mm consecutive punches |
 | Satin corners (miter/cap) | ✅ throws longer than ~1.4× the column's median width split into staggered sub-stitches, so a sharp-corner diagonal is tacked down, not loose |
 | Max stitch / split satin | ✅ wide columns split into brick-staggered sub-stitches (no seam); underlay zig-zag also capped |
 | Lock stitches, min-stitch, coincident collapse | ✅ |
