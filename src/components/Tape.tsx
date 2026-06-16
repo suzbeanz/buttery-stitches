@@ -8,12 +8,13 @@ import { useEffect, useRef, useState } from "react";
  *
  * Modes:
  *  - RULER (`unit`): a printed graduation at a FIXED pitch — pure CSS, no
- *    measuring, no snapping. Ticks run the length and dissolve at the margins
- *    (masked), so nothing pops or resizes. `orientation="vertical"` runs it down
- *    a left margin as a section divider.
+ *    measuring. Horizontal rules run full-bleed and off both page edges; a
+ *    `orientation="vertical"` rule runs down a margin (use `flip` for the right
+ *    margin). Together they form the page's ledger grid.
  *  - STEPS (`labels`): a fixed set of labeled divisions (a progress meter). With
- *    `animate`, the red fill is laid in stitch-by-stitch when it scrolls into
- *    view — the one moving thing on the page; everything else is printed.
+ *    `animate`, the red fill is sewn in stitch-by-stitch — a running-stitch fill
+ *    laid down behind a traveling needle as it scrolls into view. It's the one
+ *    moving thing on the page; everything else is printed and still.
  *
  * Flat by rule — no rounded ends, no soft shadow.
  */
@@ -67,6 +68,7 @@ export default function Tape({
   fillPct,
   unit,
   orientation = "horizontal",
+  flip = false,
   animate = false,
   className = "",
 }: {
@@ -78,17 +80,19 @@ export default function Tape({
   fillPct?: number;
   /** ruler mode: a printed graduation at fixed pitch (marks only). */
   unit?: string;
-  /** vertical rulers run down a left margin as section dividers. */
+  /** vertical rulers run down a margin as a ledger rule. */
   orientation?: "horizontal" | "vertical";
-  /** lay the red fill in stitch-by-stitch when it scrolls into view. */
+  /** mirror a vertical rule for the right margin (rule on the right, ticks left). */
+  flip?: boolean;
+  /** sew the red fill in stitch-by-stitch when it scrolls into view. */
   animate?: boolean;
   className?: string;
 }) {
   const { ref, shown } = useInView(animate);
 
-  // VERTICAL RULER — a printed rule down a left margin (decorative divider).
+  // VERTICAL RULER — a printed rule down a margin; ticks reach top and bottom so
+  // it meets the horizontal rules above and below (the ledger grid).
   if (orientation === "vertical") {
-    const fade = "linear-gradient(to bottom, transparent 0, #000 6%, #000 94%, transparent 100%)";
     const tick = (w: string, pitch: number, op: number, weight: number) => (
       <div
         className={`absolute inset-y-0 left-0 ${w}`}
@@ -96,13 +100,15 @@ export default function Tape({
           backgroundImage: `repeating-linear-gradient(to bottom, ${INK} 0 ${weight}px, transparent ${weight}px 100%)`,
           backgroundSize: `100% ${pitch}px`,
           opacity: op,
-          maskImage: fade,
-          WebkitMaskImage: fade,
         }}
       />
     );
     return (
-      <div aria-hidden className={`relative w-[22px] shrink-0 overflow-hidden ${className}`}>
+      <div
+        aria-hidden
+        className={`relative w-[22px] shrink-0 overflow-hidden ${className}`}
+        style={flip ? { transform: "scaleX(-1)" } : undefined}
+      >
         <div className="absolute inset-y-0 left-0 border-l-[2.5px] border-ink opacity-90" />
         <div className="absolute inset-y-0 left-[3px] w-px bg-foil/55" />
         {tick("w-4", MAJOR_PX, 0.9, 2)}
@@ -113,10 +119,10 @@ export default function Tape({
     );
   }
 
-  // RULER MODE — a static printed graduation; ticks fade into the margins.
+  // RULER MODE — a static printed graduation; ticks run full-bleed to (and off)
+  // both edges, like the rule continues past the page.
   const rulerMode = !labels && unit !== undefined;
   if (rulerMode) {
-    const fade = "linear-gradient(to right, transparent 0, #000 4%, #000 96%, transparent 100%)";
     const tick = (h: string, pitch: number, op: number, weight: number) => (
       <div
         className={`absolute inset-x-0 top-0 ${h}`}
@@ -124,8 +130,6 @@ export default function Tape({
           backgroundImage: `repeating-linear-gradient(to right, ${INK} 0 ${weight}px, transparent ${weight}px 100%)`,
           backgroundSize: `${pitch}px 100%`,
           opacity: op,
-          maskImage: fade,
-          WebkitMaskImage: fade,
         }}
       />
     );
@@ -145,9 +149,8 @@ export default function Tape({
   const divisions = labels?.length ?? majors;
   const majorSize = `calc(100% / ${divisions}) 16px`;
   const minorSize = `calc(100% / ${divisions * 4}) 9px`;
-  // The fill is a row of running stitches (red dashes); when animated it's
-  // revealed left-to-right in discrete steps, like being sewn in.
-  const stitches = `repeating-linear-gradient(to right, ${RED} 0 9px, ${RED}40 9px 13px)`;
+  // The fill is a row of running stitches — short red dashes with a thread sheen.
+  const stitches = `linear-gradient(to bottom, rgba(255,255,255,0.35), rgba(0,0,0,0.12)), repeating-linear-gradient(to right, ${RED} 0 11px, transparent 11px 16px)`;
 
   return (
     <div
@@ -180,6 +183,15 @@ export default function Tape({
           backgroundSize: minorSize,
         }}
       />
+      {/* the traveling needle that lays the fill (animated only) — its width
+          grows 0→100% in step with the reveal, carrying the marker on its edge */}
+      {fillPct !== undefined && animate && (
+        <div className={`stitch-needle pointer-events-none absolute left-0 top-[1px] z-10 ${shown ? "go" : ""}`}>
+          <span className="absolute right-0 grid h-[14px] w-[14px] -translate-x-1/2 place-items-center rounded-full border-2 border-stamp bg-cream">
+            <span className="h-[5px] w-[5px] rounded-full bg-ink" />
+          </span>
+        </div>
+      )}
       {/* end caps */}
       <div className="absolute left-0 top-0 h-[22px] w-[2.5px] bg-ink" />
       <div className="absolute right-0 top-0 h-[22px] w-[2.5px] bg-ink" />
