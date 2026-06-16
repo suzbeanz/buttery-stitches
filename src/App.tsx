@@ -12,6 +12,7 @@ import { useProjectStore } from "./store/projectStore";
 import { useEditorStore, type Tool } from "./store/editorStore";
 import { cloneObject } from "./lib/objects";
 import { downloadProject } from "./lib/embproj";
+import { loadAutosave, saveAutosave } from "./lib/autosave";
 
 /** How far (mm) a pasted or duplicated object is offset so it doesn't hide the original. */
 const PASTE_OFFSET_MM = 3;
@@ -38,7 +39,55 @@ function isAppRoute(): boolean {
   return window.location.pathname.replace(/\/+$/, "") === APP_PATH;
 }
 
+/**
+ * Persist the design to the device and pick it back up on reload/crash/deploy, so
+ * work is never lost — and so a stale-deploy chunk error can self-heal by
+ * reloading to the fresh build without losing anything.
+ */
+function useAutosave(): void {
+  useEffect(() => {
+    // Restore once at startup (before any edits), then keep saving on change.
+    const saved = loadAutosave();
+    if (saved) {
+      useProjectStore.getState().setProject(saved);
+      useProjectStore.temporal.getState().clear(); // a restore isn't an undo step
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const unsub = useProjectStore.subscribe((s, prev) => {
+      if (s.project === prev.project) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => saveAutosave(useProjectStore.getState().project), 800);
+    });
+    return () => {
+      clearTimeout(timer);
+      unsub();
+    };
+  }, []);
+
+  // Self-heal a stale-deploy chunk error: a tab opened before a deploy fails to
+  // fetch a renamed lazy chunk. Save and reload to the fresh build (no work lost
+  // thanks to autosave); guard against a reload loop.
+  useEffect(() => {
+    const onPreloadError = (e: Event) => {
+      const KEY = "bs:lastReload";
+      const now = Date.now();
+      if (now - Number(sessionStorage.getItem(KEY) || 0) < 8000) return;
+      e.preventDefault();
+      try {
+        sessionStorage.setItem(KEY, String(now));
+      } catch {
+        /* ignore */
+      }
+      saveAutosave(useProjectStore.getState().project);
+      window.location.reload();
+    };
+    window.addEventListener("vite:preloadError", onPreloadError);
+    return () => window.removeEventListener("vite:preloadError", onPreloadError);
+  }, []);
+}
+
 export default function App() {
+  useAutosave();
   const [onApp, setOnApp] = useState<boolean>(isAppRoute);
 
   // Keep React in sync with browser back/forward navigation.
