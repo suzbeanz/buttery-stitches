@@ -23,11 +23,35 @@ export function useDialogFocus<T extends HTMLElement>() {
   useEffect(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null;
     const node = ref.current;
-    const focusable = node?.querySelector<HTMLElement>(
-      'input:not([disabled]),button:not([disabled]),select,textarea,[tabindex="0"]',
-    );
-    (focusable ?? node)?.focus();
-    return () => previouslyFocused?.focus?.();
+    const selector =
+      'input:not([disabled]),button:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex="0"]';
+    const firstFocusable = node?.querySelector<HTMLElement>(selector);
+    (firstFocusable ?? node)?.focus();
+
+    // Trap Tab within the dialog so focus can't wander to the page behind the
+    // modal (aria-modal alone doesn't stop the Tab key).
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Tab" || !node) return;
+      const items = Array.from(node.querySelectorAll<HTMLElement>(selector)).filter(
+        (el) => el.offsetParent !== null,
+      );
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || active === node)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("keydown", onKey, true);
+      previouslyFocused?.focus?.();
+    };
   }, []);
   return ref;
 }

@@ -128,7 +128,7 @@ export default function SimulatorBar() {
           </select>
         </>
       ) : (
-        <span className="text-xs text-navy/50">
+        <span className="text-xs text-navy/70">
           Switch to <b>Stitch view</b> to watch the design redraw stitch by stitch.
         </span>
       )}

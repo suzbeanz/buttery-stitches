@@ -9,6 +9,7 @@ export function createEmptyProject(): Project {
     rgb: [20, 20, 20],
     name: "Black",
   };
+  objectCounter = 0; // a brand-new document numbers its objects from 1
   return {
     version: 1,
     widthMm: DEFAULT_HOOP.wMm,
@@ -42,7 +43,10 @@ export function parseProject(value: unknown): Project {
   }
   // We trust the shape beyond this point; deeper per-field validation can be
   // layered in later without changing the file format.
-  return value as Project;
+  const project = value as Project;
+  // Continue numbering new objects from where the opened document left off.
+  syncObjectCounter(project.objects ?? []);
+  return project;
 }
 
 /** The Project shape is plain JSON, so serializing is trivial. */
@@ -56,4 +60,18 @@ export function defaultObjectName(type: EmbObject["type"]): string {
   objectCounter += 1;
   const label = type[0].toUpperCase() + type.slice(1);
   return `${label} ${objectCounter}`;
+}
+
+/**
+ * Re-seed the default-name counter from a project's existing names, so a freshly
+ * opened or newly created document numbers from where it actually left off (not
+ * from a stale module-global that only ever climbs across sessions).
+ */
+export function syncObjectCounter(objects: EmbObject[]): void {
+  let max = 0;
+  for (const o of objects) {
+    const m = /(\d+)\s*$/.exec(o.name ?? "");
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  objectCounter = max;
 }

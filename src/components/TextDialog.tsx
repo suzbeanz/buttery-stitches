@@ -146,6 +146,8 @@ export default function TextDialog({
   }
 
   return (
+    // Click-outside closes; keyboard users dismiss with Escape (useEscapeToClose).
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 p-4"
       onClick={(e) => {
@@ -285,7 +287,7 @@ export default function TextDialog({
 
         <TextPreview layout={layout} colorHex={previewHex(colorChoice, colors, newColorHex)} />
 
-        {error && <p className="mt-2 text-[12px] text-red-600">{error}</p>}
+        {error && <p className="mt-2 text-[12px] text-stamp">{error}</p>}
 
         <div className="mt-4 flex justify-end gap-2">
           <button

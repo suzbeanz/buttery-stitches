@@ -62,15 +62,8 @@ function Studio({ onHome }: { onHome: () => void }) {
 
   const [showHelp, setShowHelp] = useState(false);
   useGlobalShortcuts(setShowHelp);
-
-  // The help overlay closes on any key press (any button dismisses it); a click
-  // anywhere outside the panel closes it too (handled in HelpOverlay).
-  useEffect(() => {
-    if (!showHelp) return;
-    const close = () => setShowHelp(false);
-    window.addEventListener("keydown", close);
-    return () => window.removeEventListener("keydown", close);
-  }, [showHelp]);
+  // HelpOverlay dismisses itself on Escape or an outside click (so keyboard users
+  // can Tab through it first) — it must NOT close on any keydown.
 
   // Collapsible side panels: on narrow screens they slide over the canvas
   // (so it's never squeezed) and default to closed; on wide screens they sit
@@ -85,7 +78,7 @@ function Studio({ onHome }: { onHome: () => void }) {
     setPropertiesOpen(!isNarrow);
   }, [isNarrow, setLayersOpen, setPropertiesOpen]);
 
-  const overlay = "absolute inset-y-0 z-40 shadow-butter";
+  const overlay = "absolute inset-y-0 z-40 shadow-press";
 
   return (
     <div className="flex h-full flex-col bg-paper text-navy">
@@ -111,7 +104,10 @@ function Studio({ onHome }: { onHome: () => void }) {
         )}
 
         {isNarrow && (layersOpen || propertiesOpen) && (
+          // Presentational scrim — tap to close the open drawer; keyboard users
+          // close it with the same top-bar toggle that opened it.
           <div
+            aria-hidden
             className="absolute inset-0 z-30 bg-navy/20"
             onClick={() => {
               setLayersOpen(false);
@@ -125,12 +121,18 @@ function Studio({ onHome }: { onHome: () => void }) {
   );
 }
 
-/** True when the viewport is narrow enough that side panels should overlay. */
+/** True when the viewport is narrow enough that side panels should overlay.
+ *  Initialized synchronously from the media query so the very first paint is
+ *  correct — otherwise a phone briefly renders both panels inline and crushes
+ *  the canvas to nothing before the effect can correct it. */
+const NARROW_QUERY = "(max-width: 1023px)";
 function useIsNarrow(): boolean {
-  const [narrow, setNarrow] = useState(false);
+  const [narrow, setNarrow] = useState(
+    () => typeof window !== "undefined" && !!window.matchMedia?.(NARROW_QUERY).matches,
+  );
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
-    const mq = window.matchMedia("(max-width: 1023px)");
+    const mq = window.matchMedia(NARROW_QUERY);
     const update = () => setNarrow(mq.matches);
     update();
     mq.addEventListener("change", update);

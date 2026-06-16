@@ -249,9 +249,8 @@ const NEW_COLOR = "__new__";
  */
 function OutlineControl({ fill }: { fill: EmbObject }) {
   const colors = useProjectStore((s) => s.project.colors);
-  const addObject = useProjectStore((s) => s.addObject);
+  const insertObjectsAfter = useProjectStore((s) => s.insertObjectsAfter);
   const addColor = useProjectStore((s) => s.addColor);
-  const reorderObjects = useProjectStore((s) => s.reorderObjects);
 
   const [widthMm, setWidthMm] = useState(DEFAULT_OUTLINE_WIDTH);
   // Default to a different color than the fill so the outline is visible.
@@ -277,16 +276,9 @@ function OutlineControl({ fill }: { fill: EmbObject }) {
     });
     if (outlines.length === 0) return;
 
-    // addObject appends to the end, so add each outline and then move it to sit
-    // immediately after the fill (and after any earlier outlines we just added).
-    outlines.forEach((outline, i) => {
-      addObject(outline);
-      const from = useProjectStore.getState().project.objects.length - 1;
-      const fillIndex = useProjectStore
-        .getState()
-        .project.objects.findIndex((o) => o.id === fill.id);
-      reorderObjects(from, fillIndex + 1 + i);
-    });
+    // Insert all outline rings right after the fill in ONE step, so the whole
+    // action is a single undo (never a half-applied, mis-ordered outline).
+    insertObjectsAfter(fill.id, outlines);
   };
 
   return (
@@ -380,7 +372,8 @@ function ThreadColors() {
                   updateColor(c.id, { rgb: hexToRgb(e.target.value) })
                 }
                 className="h-5 w-5 shrink-0 cursor-pointer rounded border border-navy/30 bg-transparent p-0"
-                title="Change color"
+                title={`Change color for ${c.name ?? "thread"}`}
+                aria-label={`Change color for ${c.name ?? "thread"}`}
               />
               <CommitInput
                 value={c.name ?? ""}

@@ -861,6 +861,8 @@ export default function CanvasStage() {
         project.objects.length === 0 &&
         draft.length === 0 &&
         !startDismissed && (
+        // Tapping the empty area dismisses the hint; the X button gives the keyboard path.
+        // eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
         <div
           className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center text-navy"
           onClick={(e) => {
@@ -902,7 +904,7 @@ export default function CanvasStage() {
                 }}
               />
             </div>
-            <p className="mt-3 text-xs text-navy/45">
+            <p className="mt-3 text-xs text-navy/70">
               New here? Press <b>?</b> any time for help.
             </p>
           </div>

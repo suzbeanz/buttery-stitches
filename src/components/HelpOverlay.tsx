@@ -1,12 +1,12 @@
 /** Keyboard-shortcut cheat sheet, toggled with `?`. */
-import { useDialogFocus } from "./useEscapeToClose";
+import { useDialogFocus, useEscapeToClose } from "./useEscapeToClose";
 
 const GROUPS: { title: string; keys: [string, string][] }[] = [
   {
     title: "Tools",
     keys: [
       ["V", "Select"],
-      ["N", "Node edit"],
+      ["N", "Points"],
       ["R", "Running"],
       ["S", "Satin"],
       ["F", "Fill"],
@@ -40,7 +40,10 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
 
 export default function HelpOverlay({ onClose }: { onClose: () => void }) {
   const dialogRef = useDialogFocus<HTMLDivElement>();
+  useEscapeToClose(onClose);
   return (
+    // Click-outside closes; keyboard users dismiss with Escape (above).
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 p-4"
       onClick={(e) => {
@@ -61,7 +64,7 @@ export default function HelpOverlay({ onClose }: { onClose: () => void }) {
         <div className="grid grid-cols-2 gap-x-8 gap-y-4">
           {GROUPS.map((g) => (
             <div key={g.title}>
-              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-navy/50">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-navy/70">
                 {g.title}
               </div>
               <ul className="flex flex-col gap-1">
@@ -80,7 +83,7 @@ export default function HelpOverlay({ onClose }: { onClose: () => void }) {
         <div className="mt-5 text-right">
           <button
             onClick={onClose}
-            className="rounded bg-navy px-3 py-1.5 text-sm text-butter-200 hover:bg-navy-light"
+            className="rounded-sm border-2 border-ink bg-ink px-3 py-1.5 font-label text-sm font-semibold uppercase tracking-[0.1em] text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none"
           >
             Close
           </button>
