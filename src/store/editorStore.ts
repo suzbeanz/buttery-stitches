@@ -8,7 +8,14 @@ import type { EmbObject, Point, StitchType } from "../types/project";
  * undo history.
  */
 
-export type Tool = "select" | "node" | "running" | "fill" | "satin";
+export type Tool =
+  | "select"
+  | "node"
+  | "running"
+  | "fill"
+  | "satin"
+  | "pan" // hand tool — drag to move the canvas
+  | "pencil"; // freehand running stitch
 
 /** Tools that place points to draw a new object — these map 1:1 to StitchType. */
 export const DRAW_TOOLS: StitchType[] = ["running", "satin", "fill"];

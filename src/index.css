@@ -311,7 +311,7 @@ body::after {
     box-shadow: 0 6px 20px -10px rgba(22, 35, 74, 0.6);
     opacity: 0;
     pointer-events: none;
-    z-index: 60;
+    z-index: 70;
     transition: opacity 0.08s ease;
   }
   [data-tip]:hover::after,
@@ -322,6 +322,15 @@ body::after {
   [data-tip-side="top"]::after {
     top: auto;
     bottom: calc(100% + 6px);
+  }
+  /* Right-side tooltips — for the narrow vertical tool rail, so the label sits
+     out over the canvas instead of being clipped below the rail. */
+  [data-tip-side="right"]::after {
+    top: 50%;
+    bottom: auto;
+    left: calc(100% + 8px);
+    right: auto;
+    transform: translateY(-50%);
   }
   /* Edge buttons anchor the tooltip to a side so it doesn't run off-screen. */
   [data-tip-align="start"]::after {

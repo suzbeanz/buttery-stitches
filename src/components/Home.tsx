@@ -81,7 +81,7 @@ export default function Home({ onStart }: { onStart: () => void }) {
       <Tape unit="Tbsp" className="mt-12" />
 
       {/* 01 — THE MILK */}
-      <Row no="Section 01 / The Milk" title="The Spread" sub="What it does">
+      <Row no="01 / The Milk" title="The Spread" sub="What it does">
         <p className="max-w-2xl font-body text-[17px] leading-relaxed text-char">
           Pictures, words, and shapes become machine-ready embroidery — free,
           open-source, and churned right in your browser.{" "}
@@ -96,7 +96,7 @@ export default function Home({ onStart }: { onStart: () => void }) {
       <Tape unit="Tbsp" />
 
       {/* 02 — THE KIT */}
-      <Row no="Section 02 / The Kit" title="What's Inside" sub="Picture · Words · Export">
+      <Row no="02 / The Kit" title="What's Inside" sub="Picture · Words · Export">
         <div className="mt-2 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <Feature title="Picture → Stitches" motif={<ImageMotif />}>
             Drop in a logo. Get clean stitches.
@@ -113,7 +113,7 @@ export default function Home({ onStart }: { onStart: () => void }) {
       <Tape unit="Tbsp" />
 
       {/* 03 — THE CHURN */}
-      <Row no="Section 03 / The Churn" title="How It Works" sub="Math, not magic">
+      <Row no="03 / The Churn" title="How It Works" sub="Math, not magic">
         <p className="max-w-2xl font-body text-[16px] leading-relaxed text-char">
           No black-box AI — pure math and logic. Every design gets underlay,
           tie-offs, and safe stitch lengths, so it sews right the first time:
@@ -129,7 +129,7 @@ export default function Home({ onStart }: { onStart: () => void }) {
       <Tape unit="Tbsp" />
 
       {/* 04 — THE FLAVORS */}
-      <Row no="Section 04 / The Flavors" title="The Formats" sub="Home &amp; commercial machines">
+      <Row no="04 / The Flavors" title="The Formats" sub="Home &amp; commercial machines">
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <Stamp variant="solid">PES</Stamp>
           <Stamp>DST</Stamp>
@@ -149,7 +149,7 @@ export default function Home({ onStart }: { onStart: () => void }) {
       <Tape unit="Tbsp" />
 
       {/* 05 — THE FREEDOM */}
-      <Row no="Section 05 / The Freedom" title="Why It's Free" sub="Open source, for everyone">
+      <Row no="05 / The Freedom" title="Why It's Free" sub="Open source, for everyone">
         <p className="max-w-2xl font-body text-[17px] leading-relaxed text-char">
           Professional digitizing software runs{" "}
           <b className="text-ink">hundreds — even thousands</b> of dollars,
@@ -176,14 +176,20 @@ export default function Home({ onStart }: { onStart: () => void }) {
 
       <Tape unit="Tbsp" />
 
-      {/* CLOSING BAND — grows to absorb any leftover height so the page fills the
-          screen instead of trailing off into blank stock. */}
-      <div className="flex flex-1 items-center justify-center px-6 py-12">
-        <div className="text-center font-display text-3xl uppercase leading-tight tracking-wide text-ink-deep sm:text-5xl">
-          Net Wt. Free
+      {/* CLOSING PANEL — the wrapper's back cover. Grows to absorb any leftover
+          height so the page fills the screen instead of trailing off into blank
+          stock, with the seal + wordmark centered so it reads as a deliberate
+          end panel at any height. */}
+      <div className="flex flex-1 flex-col items-center justify-center gap-5 px-6 py-14 text-center">
+        <GradeStamp size={66} />
+        <div className="font-display text-3xl uppercase leading-tight tracking-wide text-ink-deep sm:text-5xl">
+          Net Wt. Free.99
           <br />
           100% Open Source
         </div>
+        <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-char/60">
+          Made fresh in your browser
+        </p>
       </div>
 
       <Tape unit="Tbsp" />
