@@ -8,7 +8,10 @@ import { countStitches, type EngineStitch } from "./index";
 
 /** Machine / quality limits used for validation warnings. */
 export const LIMITS = {
-  minStitch: 0.5, // mm — below this the machine may skip or jam
+  minStitch: 0.25, // mm — below this the needle re-punches a hole (skip/jam).
+  // Note: satin and dense fills legitimately run ~0.3–0.4 mm rows, which is NOT a
+  // skip risk; only a near-same-hole (< 0.25 mm) punch is. The engine already
+  // floors stitches at 0.3 mm, so this warns only if something truly tiny slips in.
   maxStitch: 12, // mm — above this stitches are loose and snag
   minDensity: 0.3, // mm/row — denser than this risks puckering
   maxStitchCount: 25000,

@@ -175,12 +175,17 @@ const RUNNING_COLUMN_MM = 1.2;
 
 /**
  * Min-stitch for SATIN runs. Satin is intentionally dense — its row spacing
- * (≈0.3–0.5 mm) is the gap between consecutive same-rail penetrations, well below
- * the 0.5 mm general minimum. Thinning satin at 0.5 mm would cull every other
- * throw and shred a smooth column into a sparse, spiky zig-zag, so satin keeps a
- * much smaller floor (only truly coincident punches are dropped, by the assembler).
+ * (≈0.3–0.5 mm) is the gap between consecutive same-rail penetrations, below the
+ * 0.5 mm general minimum, so thinning at 0.5 mm would shred a column into a sparse
+ * zig-zag. But the floor must NOT go so low that the concave edge of a tight curve
+ * packs thread (density compensation deliberately bunches the inner rail). At
+ * 0.3 mm straight columns keep their full ~0.4 mm density while the sub-0.3 mm
+ * inner-curve buildup that clogs the needle is merged away.
  */
-const SATIN_MIN_STITCH = 0.15;
+const SATIN_MIN_STITCH = 0.3;
+
+/** Densest row spacing (mm) the engine will ever stitch — denser packs/jams. */
+const MIN_SAFE_DENSITY = 0.3;
 
 /**
  * The runs for a single object. Splitting a fill into its regions (and underlay
@@ -192,7 +197,11 @@ export function generateObjectRuns(
   fabric: FabricProfile = fabricProfile(undefined),
 ): StitchRun[] {
   const p = resolveParams(object.type, object.params);
-  const density = p.density * fabric.densityMul;
+  // Hard machine-safety floor on row spacing: no matter what the user (or the
+  // fabric multiplier) asks for, never pack rows tighter than this — denser than
+  // ~0.3 mm just builds a ridge of thread that jams the needle. The validator
+  // still WARNS on the requested density; this protects the actual stitch-out.
+  const density = Math.max(MIN_SAFE_DENSITY, p.density * fabric.densityMul);
   const pullComp = p.pullComp * fabric.pullMul;
   const weight = fabric.underlay;
   const runs: StitchRun[] = [];
