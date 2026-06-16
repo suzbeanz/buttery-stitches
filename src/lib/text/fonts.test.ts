@@ -13,13 +13,21 @@ const here = dirname(fileURLToPath(import.meta.url));
 const FILE_BY_ID: Record<string, string> = {
   poppins: "Poppins-SemiBold.ttf",
   montserrat: "Montserrat-SemiBold.ttf",
+  oswald: "Oswald-Medium.ttf",
   playfair: "PlayfairDisplay-Bold.ttf",
+  "roboto-slab": "RobotoSlab-Bold.ttf",
   "bebas-neue": "BebasNeue-Regular.ttf",
+  "titan-one": "TitanOne-Regular.ttf",
+  "permanent-marker": "PermanentMarker-Regular.ttf",
   pacifico: "Pacifico-Regular.ttf",
   lobster: "Lobster-Regular.ttf",
   "dancing-script": "DancingScript-Bold.ttf",
+  "great-vibes": "GreatVibes-Regular.ttf",
   caveat: "Caveat-Bold.ttf",
 };
+
+/** Open-source licenses we accept for a bundled face. */
+const OPEN_LICENSES = ["OFL-1.1", "Apache-2.0"];
 
 describe("font registry", () => {
   it("lists the full bundled set with stable, unique ids", () => {
@@ -32,11 +40,11 @@ describe("font registry", () => {
     expect(FONTS.some((f) => f.id === DEFAULT_FONT_ID)).toBe(true);
   });
 
-  it("every entry has a name, url, and OFL-1.1 license", () => {
+  it("every entry has a name, url, and an open-source license", () => {
     for (const f of FONTS) {
       expect(f.name.length).toBeGreaterThan(0);
       expect(f.url.length).toBeGreaterThan(0);
-      expect(f.license).toBe("OFL-1.1");
+      expect(OPEN_LICENSES, `font ${f.id} license`).toContain(f.license);
     }
   });
 

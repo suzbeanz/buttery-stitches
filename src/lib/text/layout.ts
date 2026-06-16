@@ -154,6 +154,21 @@ export interface TextLayoutResult {
  * letters this tall"). If the text has no geometry (e.g. only spaces) the
  * object has no rings.
  */
+/**
+ * Glyphs for a string, resilient to fonts whose OpenType shaping features
+ * (GSUB/ccmp ligatures) opentype.js can't process — it throws on those. We try
+ * the shaped path first; on failure we fall back to per-character base glyphs
+ * (no ligatures/contextual forms, which is fine for embroidery lettering), so
+ * every valid font is usable rather than crashing the text tool.
+ */
+function glyphsFor(font: Font, text: string) {
+  try {
+    return font.stringToGlyphs(text);
+  } catch {
+    return Array.from(text).map((ch) => font.charToGlyph(ch));
+  }
+}
+
 export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
   const {
     text,
@@ -179,7 +194,7 @@ export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
   // letterSpacingMm as mm-at-final-size and back it out after scaling. To keep
   // the layout pure and single-pass we accumulate advances in font units and
   // add the spacing in font units using the *ascender-based* provisional scale.
-  const glyphs = font.stringToGlyphs(text);
+  const glyphs = glyphsFor(font, text);
 
   // Provisional scale from ascender so spacing in mm is meaningful pre-bbox.
   // Final scale (from bbox) is applied to everything uniformly afterwards, so
