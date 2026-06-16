@@ -79,6 +79,43 @@ describe("projectStore — QA fixes", () => {
     expect(useProjectStore.getState().project.objects.map((o) => o.id)).toEqual([a.id, b.id]);
   });
 
+  it("moveOrder shifts the selection one step and all the way", () => {
+    const cId = useProjectStore.getState().project.colors[0].id;
+    const a = makeObject("fill", line, cId);
+    const b = makeObject("fill", line, cId);
+    const c = makeObject("fill", line, cId);
+    useProjectStore.getState().addObjects([a, b, c]); // [a, b, c]
+    const order = () => useProjectStore.getState().project.objects.map((o) => o.id);
+
+    useProjectStore.getState().moveOrder([a.id], "later"); // [b, a, c]
+    expect(order()).toEqual([b.id, a.id, c.id]);
+    useProjectStore.getState().moveOrder([a.id], "last"); // [b, c, a]
+    expect(order()).toEqual([b.id, c.id, a.id]);
+    useProjectStore.getState().moveOrder([a.id], "first"); // [a, b, c]
+    expect(order()).toEqual([a.id, b.id, c.id]);
+  });
+
+  it("grouping makes a member-click select the whole group", () => {
+    const cId = useProjectStore.getState().project.colors[0].id;
+    const a = makeObject("fill", line, cId);
+    const b = makeObject("fill", line, cId);
+    const c = makeObject("fill", line, cId);
+    useProjectStore.getState().addObjects([a, b, c]);
+
+    useProjectStore.getState().groupObjects([a.id, b.id]);
+    // Selecting just one group member expands to the whole group.
+    useProjectStore.getState().setSelection([a.id]);
+    expect(new Set(useProjectStore.getState().selectedIds)).toEqual(new Set([a.id, b.id]));
+    // A non-grouped object selects alone.
+    useProjectStore.getState().setSelection([c.id]);
+    expect(useProjectStore.getState().selectedIds).toEqual([c.id]);
+
+    // Ungroup dissolves it.
+    useProjectStore.getState().ungroupObjects([a.id]);
+    useProjectStore.getState().setSelection([a.id]);
+    expect(useProjectStore.getState().selectedIds).toEqual([a.id]);
+  });
+
   it("hiding an object removes it from the selection", () => {
     const colorId = useProjectStore.getState().project.colors[0].id;
     const a = makeObject("fill", line, colorId);

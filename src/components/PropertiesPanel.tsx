@@ -1,5 +1,22 @@
-import { useEffect, useMemo, useState } from "react";
-import { SlidersHorizontal } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  SlidersHorizontal,
+  AlignStartVertical,
+  AlignCenterVertical,
+  AlignEndVertical,
+  AlignStartHorizontal,
+  AlignCenterHorizontal,
+  AlignEndHorizontal,
+  AlignHorizontalDistributeCenter,
+  AlignVerticalDistributeCenter,
+  SendToBack,
+  BringToFront,
+  ChevronUp,
+  ChevronDown,
+  Group,
+  Ungroup,
+} from "lucide-react";
+import { alignObjects, distributeObjects, type AlignEdge } from "../lib/arrange";
 import { useProjectStore } from "../store/projectStore";
 import { useEditorStore } from "../store/editorStore";
 import { DEFAULT_PARAMS } from "../types/project";
@@ -40,6 +57,8 @@ export default function PropertiesPanel() {
       <div className="min-h-0 flex-1 overflow-y-auto">
         <DesignPanel />
 
+        <ArrangeSection />
+
         {selected.length === 0 ? (
           <div className="px-3 py-5 text-sm text-navy/60">
             Select an object to fine-tune its stitches.
@@ -79,6 +98,109 @@ export default function PropertiesPanel() {
 }
 
 // ---------------------------------------------------------------------------
+
+/** A compact icon button used by the Arrange controls. */
+function ArrangeBtn({
+  label,
+  onClick,
+  disabled,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      data-tip={label}
+      aria-label={label}
+      className="grid h-8 flex-1 place-items-center rounded-sm border border-ink/25 bg-cream text-ink-deep hover:bg-butter-200 disabled:opacity-30 disabled:hover:bg-cream"
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * Align, distribute, and re-order the current selection. Align uses the
+ * selection's combined box (2+) or the hoop (a lone object); distribute needs 3+;
+ * order moves objects in the stitch sequence (later = sits on top).
+ */
+function ArrangeSection() {
+  const objects = useProjectStore((s) => s.project.objects);
+  const selectedIds = useProjectStore((s) => s.selectedIds);
+  const hoop = useProjectStore((s) => s.project.hoop);
+  const updateProject = useProjectStore((s) => s.updateProject);
+  const moveOrder = useProjectStore((s) => s.moveOrder);
+  const groupObjects = useProjectStore((s) => s.groupObjects);
+  const ungroupObjects = useProjectStore((s) => s.ungroupObjects);
+  const n = selectedIds.length;
+  const selectedSet = new Set(selectedIds);
+  const anyGrouped = objects.some((o) => selectedSet.has(o.id) && o.groupId);
+  if (n === 0) return null;
+
+  const align = (edge: AlignEdge) =>
+    updateProject({ objects: alignObjects(objects, selectedIds, edge, hoop) });
+  const distribute = (axis: "h" | "v") =>
+    updateProject({ objects: distributeObjects(objects, selectedIds, axis) });
+
+  return (
+    <div className="flex flex-col gap-2 border-b border-navy/25 p-3 text-sm">
+      <span className="font-label text-xs font-semibold uppercase tracking-[0.14em] text-ink-deep">
+        Arrange
+      </span>
+
+      <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/60">
+        {n >= 2 ? "Align selection" : "Align in hoop"}
+      </span>
+      <div className="flex gap-1">
+        <ArrangeBtn label="Align left" onClick={() => align("left")}><AlignStartVertical size={15} /></ArrangeBtn>
+        <ArrangeBtn label="Align centers (horizontal)" onClick={() => align("hcenter")}><AlignCenterVertical size={15} /></ArrangeBtn>
+        <ArrangeBtn label="Align right" onClick={() => align("right")}><AlignEndVertical size={15} /></ArrangeBtn>
+        <ArrangeBtn label="Align top" onClick={() => align("top")}><AlignStartHorizontal size={15} /></ArrangeBtn>
+        <ArrangeBtn label="Align middles (vertical)" onClick={() => align("vcenter")}><AlignCenterHorizontal size={15} /></ArrangeBtn>
+        <ArrangeBtn label="Align bottom" onClick={() => align("bottom")}><AlignEndHorizontal size={15} /></ArrangeBtn>
+      </div>
+
+      <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/60">
+        Distribute {n < 3 && <span className="normal-case tracking-normal text-ink/40">(needs 3+)</span>}
+      </span>
+      <div className="flex gap-1">
+        <ArrangeBtn label="Distribute horizontally" disabled={n < 3} onClick={() => distribute("h")}>
+          <AlignHorizontalDistributeCenter size={15} />
+        </ArrangeBtn>
+        <ArrangeBtn label="Distribute vertically" disabled={n < 3} onClick={() => distribute("v")}>
+          <AlignVerticalDistributeCenter size={15} />
+        </ArrangeBtn>
+      </div>
+
+      <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/60">
+        Order
+      </span>
+      <div className="flex gap-1">
+        <ArrangeBtn label="Send to back (stitch first)" onClick={() => moveOrder(selectedIds, "first")}><SendToBack size={15} /></ArrangeBtn>
+        <ArrangeBtn label="Backward (stitch earlier)" onClick={() => moveOrder(selectedIds, "earlier")}><ChevronUp size={15} /></ArrangeBtn>
+        <ArrangeBtn label="Forward (stitch later)" onClick={() => moveOrder(selectedIds, "later")}><ChevronDown size={15} /></ArrangeBtn>
+        <ArrangeBtn label="Bring to front (stitch last)" onClick={() => moveOrder(selectedIds, "last")}><BringToFront size={15} /></ArrangeBtn>
+      </div>
+
+      <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/60">
+        Group
+      </span>
+      <div className="flex gap-1">
+        <ArrangeBtn label="Group" disabled={n < 2} onClick={() => groupObjects(selectedIds)}>
+          <Group size={15} />
+        </ArrangeBtn>
+        <ArrangeBtn label="Ungroup" disabled={!anyGrouped} onClick={() => ungroupObjects(selectedIds)}>
+          <Ungroup size={15} />
+        </ArrangeBtn>
+      </div>
+    </div>
+  );
+}
 
 function ObjectProperties({
   object,

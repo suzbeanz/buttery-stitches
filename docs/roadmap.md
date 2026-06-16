@@ -16,18 +16,16 @@ The editor must work on a phone, not just resize.
 - [ ] Compact the top bar / simulator bar on narrow screens if they still crowd
       the canvas (consider a single scrollable row instead of wrapping).
 
-## Phase 1 — Arrange: align, distribute, group, layer order (NEXT)
-Everyday layout power. Pure geometry + store actions; no engine changes.
-- **Align** selected objects: left / center / right / top / middle / bottom
-  (to the selection's bounds, or to the hoop when one object is selected).
-- **Distribute** 3+ objects: even horizontal / vertical spacing.
-- **Group / ungroup**: a group id on objects so they select & move together;
-  the canvas treats a group as one selection unit.
-- **Layer order in the Layers panel**: move an object up/down one step, and to
-  front/back — small buttons per row, plus keyboard (`[` / `]`). Reuse the
-  existing `reorderObjects` store action.
-- Toolbar/cluster UI: an "Arrange" control group, enabled on multi-select.
-- Tests: align math, distribute spacing, group move is one undo step, reorder.
+## Phase 1 — Arrange: align, distribute, group, layer order ✅
+- [x] **Align** (left/center/right/top/middle/bottom) — to the selection's box,
+      or to the hoop when one object is selected (`src/lib/arrange.ts`).
+- [x] **Distribute** 3+ objects: even horizontal / vertical center spacing.
+- [x] **Group / ungroup** (`groupId` on objects; `setSelection` expands to the
+      whole group via `expandGroups`, so they select/move/align/delete together).
+- [x] **Layer order**: per-row up/down in the Layers panel, plus an Arrange
+      control group (to back / backward / forward / to front) on any selection.
+- [x] Keyboard: `[` / `]` re-order, `Ctrl/Cmd+G` group, `Ctrl/Cmd+Shift+G` ungroup.
+- [x] Tests: align math, distribute spacing, `moveOrder`, group selection.
 
 ## Phase 2 — Better image digitizing
 Raise the floor on photo/logo → stitches.

@@ -220,7 +220,24 @@ function useGlobalShortcuts(setShowHelp: (fn: (v: boolean) => boolean) => void) 
         }
         return;
       }
+      // Group / ungroup the selection.
+      if (mod && e.key.toLowerCase() === "g") {
+        e.preventDefault();
+        const ps = useProjectStore.getState();
+        if (e.shiftKey) ps.ungroupObjects(ps.selectedIds);
+        else ps.groupObjects(ps.selectedIds);
+        return;
+      }
       if (mod) return; // leave other Ctrl/Cmd combos to the browser
+
+      // Re-order the selection in the stitch sequence ( [ = earlier, ] = later ).
+      if (e.key === "[" || e.key === "]") {
+        const ps = useProjectStore.getState();
+        if (ps.selectedIds.length) {
+          ps.moveOrder(ps.selectedIds, e.key === "[" ? "earlier" : "later");
+        }
+        return;
+      }
 
       // Help
       if (e.key === "?") {

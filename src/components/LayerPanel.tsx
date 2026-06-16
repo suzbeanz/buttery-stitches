@@ -8,6 +8,8 @@ import {
   AlignJustify,
   Minus,
   ListOrdered,
+  ChevronUp,
+  ChevronDown,
   type LucideIcon,
 } from "lucide-react";
 import { useProjectStore } from "../store/projectStore";
@@ -32,6 +34,7 @@ export default function LayerPanel() {
   const updateObject = useProjectStore((s) => s.updateObject);
   const removeObjects = useProjectStore((s) => s.removeObjects);
   const reorderObjects = useProjectStore((s) => s.reorderObjects);
+  const moveOrder = useProjectStore((s) => s.moveOrder);
 
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const colorById = useMemo(
@@ -93,6 +96,24 @@ export default function LayerPanel() {
                     return <Icon size={13} className="shrink-0 text-navy/60" aria-hidden />;
                   })()}
                   <span className="flex-1 truncate text-navy">{o.name}</span>
+                </button>
+                <button
+                  data-tip="Move up (stitch earlier)"
+                  aria-label="Move up"
+                  disabled={index === 0}
+                  onClick={() => moveOrder([o.id], "earlier")}
+                  className="grid h-8 w-7 place-items-center rounded text-navy/55 hover:bg-butter-300/60 hover:text-navy disabled:opacity-25 disabled:hover:bg-transparent"
+                >
+                  <ChevronUp size={15} />
+                </button>
+                <button
+                  data-tip="Move down (stitch later)"
+                  aria-label="Move down"
+                  disabled={index === objects.length - 1}
+                  onClick={() => moveOrder([o.id], "later")}
+                  className="grid h-8 w-7 place-items-center rounded text-navy/55 hover:bg-butter-300/60 hover:text-navy disabled:opacity-25 disabled:hover:bg-transparent"
+                >
+                  <ChevronDown size={15} />
                 </button>
                 <button
                   data-tip={o.visible ? "Hide" : "Show"}

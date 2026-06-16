@@ -12,6 +12,25 @@ import {
 export const DEFAULT_SATIN_WIDTH = 4;
 
 /**
+ * Expand a set of selected ids to include every group-mate: selecting one member
+ * of a group selects the whole group (so they move/align/delete together).
+ */
+export function expandGroups(objects: EmbObject[], ids: string[]): string[] {
+  const want = new Set(ids);
+  const groups = new Set<string>();
+  for (const o of objects) {
+    if (o.groupId && want.has(o.id)) groups.add(o.groupId);
+  }
+  if (groups.size === 0) return ids;
+  const out = new Set(ids);
+  for (const o of objects) {
+    if (o.groupId && groups.has(o.groupId)) out.add(o.id);
+  }
+  // Preserve document order for stable, predictable selection.
+  return objects.filter((o) => out.has(o.id)).map((o) => o.id);
+}
+
+/**
  * Build an EmbObject of the given type from a drawn path of points (mm).
  *  - running: the path is used as-is (open polyline).
  *  - fill:    the path is the region outline (closed when stitched/rendered).
