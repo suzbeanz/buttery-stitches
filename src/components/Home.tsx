@@ -43,7 +43,7 @@ export default function Home({ onStart }: { onStart: () => void }) {
             <div className="font-accent text-2xl italic text-stamp sm:text-3xl">
               Sweet &amp; Unsalted
             </div>
-            <div className="font-display text-6xl uppercase leading-[0.92] tracking-wide text-ink sm:text-8xl sm:leading-[0.82]">
+            <div className="font-display text-6xl uppercase leading-[0.95] tracking-wide text-ink sm:text-8xl sm:leading-[0.9]">
               Buttery
               <br />
               Stitches
