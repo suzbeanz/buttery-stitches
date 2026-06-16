@@ -18,6 +18,7 @@ export type Tool =
   | "pan" // hand tool — drag to move the canvas
   | "pencil" // freehand running stitch
   | "brush" // freehand filled blob
+  | "bucket" // click an enclosed area to fill it
   | "shape"; // drag to place a premade shape (rectangle, ellipse, heart, …)
 
 /** Tools that place points to draw a new object — these map 1:1 to StitchType. */
