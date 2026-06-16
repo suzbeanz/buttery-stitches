@@ -145,6 +145,28 @@ body::before {
   }
 }
 
+/* Editorial scroll reveal: sections rise + fade as they enter view. */
+.reveal {
+  opacity: 0;
+  transform: translateY(14px);
+}
+.reveal-in {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 0.55s ease,
+    transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+  .reveal-in {
+    transition: none;
+  }
+}
+
 @layer base {
   /* Everything that reacts to the pointer eases gently — small touch, big feel. */
   button,
