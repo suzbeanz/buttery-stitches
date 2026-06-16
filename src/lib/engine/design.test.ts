@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import type { Path, Project } from "../../types/project";
 import { createEmptyProject } from "../project";
 import { makeObject, makeObjectFromPaths } from "../objects";
+import { makeShapeObject } from "../shapes";
+import { pathsBounds, translatePaths } from "../geometry";
 import { generateDesign, generateObjectRuns, countStitches, countColorChanges } from "./index";
 import { validateDesign, LIMITS } from "./validate";
 
@@ -112,6 +114,55 @@ describe("lock / tie stitches", () => {
     const extra = locked.filter((s) => !s.jump).length - plainCount;
     expect(extra).toBe(7); // 8 tie penetrations minus the collapsed same-hole punch
     expect(locked.filter((s) => s.jump)).toHaveLength(0); // single run, no travel
+  });
+});
+
+describe("travel routing", () => {
+  // Total jump (travel) distance in a design.
+  function jumpTravel(design: ReturnType<typeof generateDesign>): number {
+    let t = 0;
+    for (let i = 1; i < design.length; i++) {
+      if (design[i].jump) t += Math.hypot(design[i].x - design[i - 1].x, design[i].y - design[i - 1].y);
+    }
+    return t;
+  }
+
+  it("sews same-color objects nearest-neighbor, cutting travel vs array order", () => {
+    const p = createEmptyProject();
+    const cId = p.colors[0].id;
+    // Four dots at the corners, listed in a deliberately criss-crossing order.
+    const dot = (x: number, y: number) => {
+      const o = makeShapeObject("ellipse", { width: 6, height: 6 }, cId);
+      const b = pathsBounds(o.paths)!;
+      const cx = (b.minX + b.maxX) / 2;
+      const cy = (b.minY + b.maxY) / 2;
+      return { obj: { ...o, paths: translatePaths(o.paths, x - cx, y - cy) }, c: { x, y } };
+    };
+    const order = [dot(10, 10), dot(90, 90), dot(90, 10), dot(10, 90)];
+    p.objects = order.map((d) => d.obj);
+
+    // Naive travel = straight through the array order between centroids.
+    let naive = 0;
+    for (let i = 1; i < order.length; i++) {
+      naive += Math.hypot(order[i].c.x - order[i - 1].c.x, order[i].c.y - order[i - 1].c.y);
+    }
+    const routed = jumpTravel(generateDesign(p, { lockStitches: false }));
+    expect(routed).toBeLessThan(naive);
+  });
+
+  it("never reorders across a color change (color order is preserved)", () => {
+    const p = createEmptyProject();
+    p.colors = [
+      { id: "c1", rgb: [0, 0, 0] },
+      { id: "c2", rgb: [255, 0, 0] },
+    ];
+    const a = makeObject("running", [{ x: 0, y: 0 }, { x: 5, y: 0 }], "c1");
+    const b = makeObject("running", [{ x: 40, y: 0 }, { x: 45, y: 0 }], "c2");
+    p.objects = [a, b];
+    const design = generateDesign(p, { lockStitches: false });
+    // c1 stitches all precede c2 stitches — block order unchanged.
+    const firstC2 = design.findIndex((s) => s.colorId === "c2");
+    expect(design.slice(0, firstC2).every((s) => s.colorId === "c1")).toBe(true);
   });
 });
 

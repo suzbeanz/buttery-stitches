@@ -55,10 +55,13 @@ const TIE_COUNT = 3;
 
 /**
  * Build a small cluster of real penetrations that lock the thread at `anchor`.
- * The cluster zig-zags ~`TIE_AMPLITUDE` mm toward `toward` and back, ending on
- * `anchor` so the following (or preceding) stitching continues cleanly. These
- * are genuine needle penetrations, never jumps, so the machine actually
- * fastens the thread instead of relying on tension alone.
+ * The cluster zig-zags toward `toward` and back, ending on `anchor` so the
+ * following (or preceding) stitching continues cleanly. The bite is the actual
+ * distance to the neighboring penetration, capped at `TIE_AMPLITUDE` — so on
+ * dense satin/fill the lock lands exactly ON the first real stitch (hidden under
+ * it, never poking past the edge of a small shape), and on sparse running it's a
+ * tidy ~0.8 mm tack. Genuine needle penetrations, never jumps, so the machine
+ * actually fastens the thread instead of relying on tension alone.
  */
 function tieStitches(anchor: Point, toward: Point): Point[] {
   const dx = toward.x - anchor.x;
@@ -67,7 +70,9 @@ function tieStitches(anchor: Point, toward: Point): Point[] {
   // Aim the tie along the run direction; fall back to +x for a degenerate point.
   const ux = len > 1e-6 ? dx / len : 1;
   const uy = len > 1e-6 ? dy / len : 0;
-  const near: Point = { x: anchor.x + ux * TIE_AMPLITUDE, y: anchor.y + uy * TIE_AMPLITUDE };
+  // Bite no further than the real neighbor stitch, so the lock hides under it.
+  const bite = Math.min(TIE_AMPLITUDE, len > 1e-6 ? len : TIE_AMPLITUDE);
+  const near: Point = { x: anchor.x + ux * bite, y: anchor.y + uy * bite };
 
   const out: Point[] = [];
   for (let i = 0; i < TIE_COUNT; i++) out.push(i % 2 === 0 ? near : { ...anchor });
@@ -299,6 +304,56 @@ export function generateObjectStitches(
   };
 }
 
+/** An object together with its generated runs, the unit of travel routing. */
+interface ObjGroup {
+  object: EmbObject;
+  runs: StitchRun[];
+}
+
+const groupStart = (g: ObjGroup): Point => g.runs[0].pts[0];
+const groupEnd = (g: ObjGroup): Point => {
+  const last = g.runs[g.runs.length - 1].pts;
+  return last[last.length - 1];
+};
+
+/**
+ * Order object-groups to minimize travel. Color blocks (maximal runs of the same
+ * thread color, in their original sequence) are preserved so the color order and
+ * layering never change; inside each block the objects are sewn nearest-neighbor,
+ * continuing from where the previous block left off. A whole object's runs stay
+ * together and in order (underlay before top), so only the travel between objects
+ * is optimized — never the stitching within one.
+ */
+function routeGroups(groups: ObjGroup[]): ObjGroup[] {
+  const out: ObjGroup[] = [];
+  let cursor: Point | null = null;
+  let i = 0;
+  while (i < groups.length) {
+    let j = i;
+    while (j < groups.length && groups[j].object.colorId === groups[i].object.colorId) j++;
+    const remaining = groups.slice(i, j);
+    while (remaining.length > 0) {
+      let best = 0;
+      if (cursor) {
+        let bestDist = Infinity;
+        for (let k = 0; k < remaining.length; k++) {
+          const s = groupStart(remaining[k]);
+          const d = Math.hypot(s.x - cursor.x, s.y - cursor.y);
+          if (d < bestDist) {
+            bestDist = d;
+            best = k;
+          }
+        }
+      }
+      const [chosen] = remaining.splice(best, 1);
+      out.push(chosen);
+      cursor = groupEnd(chosen);
+    }
+    i = j;
+  }
+  return out;
+}
+
 /**
  * Assemble every visible object (in stitch order) into one ordered stream of
  * needle events, inserting jumps for long travels, trims on color changes and
@@ -312,23 +367,31 @@ export function generateDesign(
   { jumpThreshold = 3, trimThreshold = 8, lockStitches = true }: DesignOptions = {},
 ): EngineStitch[] {
   // First pass: expand each visible object into its runs (a fill contributes one
-  // run per region), keeping only runs that actually produce penetrations. The
-  // travel logic below then jumps/trims between consecutive runs — including
-  // between the disjoint regions of a single fill.
+  // run per region), keeping only runs that actually produce penetrations. Keep
+  // the runs grouped per object so travel routing can reorder whole objects.
   const fabric = fabricProfile(project.fabric);
-  const drawn = project.objects
+  const groups = project.objects
     .filter((o) => o.visible)
-    .flatMap((object) =>
-      generateObjectRuns(object, fabric).map((run) => ({
-        object,
-        pts: run.pts,
-        underlay: run.underlay,
-      })),
-    )
-    .filter((d) => d.pts.length > 0);
+    .map((object) => ({
+      object,
+      runs: generateObjectRuns(object, fabric).filter((r) => r.pts.length > 0),
+    }))
+    .filter((g) => g.runs.length > 0);
+
+  // Route the objects to shorten travel: within each maximal block of same-color
+  // objects, sew them nearest-neighbor instead of in array order. Color blocks
+  // stay in their original sequence, so layering and color order are unchanged —
+  // this only cuts the jump/trim distance between same-color shapes.
+  const drawn = routeGroups(groups).flatMap((g) =>
+    g.runs.map((run) => ({ object: g.object, pts: run.pts, underlay: run.underlay })),
+  );
 
   const out: EngineStitch[] = [];
   let prevPoint: Point | null = null;
+  // The penetration just before prevPoint, so a tie-off can retrace BACKWARD
+  // along the stitches it just sewed (a hidden lock) instead of biting forward
+  // toward the next shape across the trim.
+  let prevToward: Point | null = null;
   let prevColor: string | null = null;
 
   drawn.forEach((d, di) => {
@@ -342,8 +405,12 @@ export function generateDesign(
       const gap = distance(prevPoint, start);
       if (colorChanged || gap > jumpThreshold) {
         trimmed = colorChanged || gap > trimThreshold;
-        // A trim ends the previous thread run — tie it off where we left it.
-        if (lockStitches && trimmed) pushTie(out, prevPoint, start, prevColorObj(drawn, di));
+        // A trim ends the previous thread run — tie it off by retracing back
+        // along the stitches just sewn (falling back to the next start only if
+        // the finished run was a single point).
+        if (lockStitches && trimmed) {
+          pushTie(out, prevPoint, prevToward ?? start, prevColorObj(drawn, di));
+        }
         out.push({
           x: start.x,
           y: start.y,
@@ -372,6 +439,7 @@ export function generateDesign(
     });
 
     prevPoint = pts[pts.length - 1];
+    prevToward = pts.length > 1 ? pts[pts.length - 2] : pts[0];
     prevColor = object.colorId;
   });
 
