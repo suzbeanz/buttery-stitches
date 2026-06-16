@@ -20,11 +20,11 @@ import { validateDesign } from "../lib/engine/validate";
 
 const STAGE_LABEL: Record<LoadStage, string> = {
   idle: "",
-  "loading-runtime": "Loading Python runtime…",
-  "loading-micropip": "Loading micropip…",
-  "installing-pyembroidery": "Installing pyembroidery…",
+  "loading-runtime": "Warming up the export engine…",
+  "loading-micropip": "Warming up the export engine…",
+  "installing-pyembroidery": "Almost ready…",
   ready: "Ready",
-  error: "Failed to load",
+  error: "Couldn't start the export engine",
 };
 
 export default function ExportMenu() {
@@ -80,7 +80,7 @@ export default function ExportMenu() {
       </button>
 
       {open && (
-        <div className="absolute left-0 z-20 mt-1 w-72 rounded-sm border-[2.5px] border-ink bg-cream p-2.5 text-char shadow-press">
+        <div className="absolute left-0 z-20 mt-1 max-h-[70vh] w-72 max-w-[90vw] overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-2.5 text-char shadow-press">
           {empty ? (
             <p className="px-1 py-2 font-body text-[12px] text-char/60">
               Nothing to export yet — draw or import a design first.
@@ -134,8 +134,8 @@ export default function ExportMenu() {
                 ))}
               </div>
 
-              <p className="mt-2.5 px-1 font-body text-[10px] text-char/50">
-                First export loads the Python runtime (a few seconds, then cached).
+              <p className="mt-2.5 px-1 font-body text-[10px] text-char/70">
+                The first export takes a few seconds to get ready, then it's instant.
               </p>
             </>
           )}

@@ -129,6 +129,9 @@ export function convertObjectType(
     const width =
       object.type === "satin" ? satinWidthOf(object.paths) : DEFAULT_SATIN_WIDTH;
     const center = object.paths[0] ?? [];
+    // A satin column needs a real centerline (≥2 points) to build rails from.
+    // For degenerate geometry, just retype without inventing empty rails.
+    if (center.length < 2) return { type: newType };
     const [left, right] = railsFromCenterline(center, width);
     return { type: newType, paths: [left, right] };
   }

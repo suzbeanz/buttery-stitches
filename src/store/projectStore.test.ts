@@ -53,3 +53,43 @@ describe("projectStore.addObjects", () => {
     expect(useProjectStore.getState().selectedIds).toEqual([]);
   });
 });
+
+describe("projectStore — QA fixes", () => {
+  beforeEach(() => {
+    useProjectStore.setState({ project: createEmptyProject(), selectedIds: [] });
+    useProjectStore.temporal.getState().clear();
+  });
+
+  it("insertObjectsAfter places objects right after the anchor in one undo step", () => {
+    const colorId = useProjectStore.getState().project.colors[0].id;
+    const a = makeObject("fill", line, colorId);
+    const b = makeObject("running", line, colorId);
+    useProjectStore.getState().addObjects([a, b]); // [a, b]
+
+    const o1 = makeObject("satin", line, colorId);
+    const o2 = makeObject("satin", line, colorId);
+    useProjectStore.getState().insertObjectsAfter(a.id, [o1, o2]);
+
+    const { project, selectedIds } = useProjectStore.getState();
+    expect(project.objects.map((o) => o.id)).toEqual([a.id, o1.id, o2.id, b.id]);
+    expect(selectedIds).toEqual([o1.id, o2.id]);
+
+    // Whole insertion is a SINGLE undo step.
+    useProjectStore.temporal.getState().undo();
+    expect(useProjectStore.getState().project.objects.map((o) => o.id)).toEqual([a.id, b.id]);
+  });
+
+  it("hiding an object removes it from the selection", () => {
+    const colorId = useProjectStore.getState().project.colors[0].id;
+    const a = makeObject("fill", line, colorId);
+    useProjectStore.getState().addObject(a);
+    expect(useProjectStore.getState().selectedIds).toEqual([a.id]);
+
+    useProjectStore.getState().updateObject(a.id, { visible: false });
+    expect(useProjectStore.getState().selectedIds).toEqual([]);
+
+    // Showing it again does not force-select it (no surprise reselection).
+    useProjectStore.getState().updateObject(a.id, { visible: true });
+    expect(useProjectStore.getState().selectedIds).toEqual([]);
+  });
+});

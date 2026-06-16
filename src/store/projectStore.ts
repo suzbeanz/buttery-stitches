@@ -30,6 +30,8 @@ export interface ProjectState {
 
   addObject: (object: EmbObject) => void;
   addObjects: (objects: EmbObject[]) => void;
+  /** Insert objects immediately after `afterId` in ONE step (atomic undo). */
+  insertObjectsAfter: (afterId: string, objects: EmbObject[]) => void;
   removeObjects: (ids: string[]) => void;
   updateObject: (id: string, patch: Partial<EmbObject>) => void;
   updateObjectParams: (id: string, patch: Partial<EmbObjectParams>) => void;
@@ -79,6 +81,19 @@ export const useProjectStore = create<ProjectState>()(
           selectedIds: objects.map((o) => o.id),
         })),
 
+      insertObjectsAfter: (afterId, objects) =>
+        set((s) => {
+          if (objects.length === 0) return s;
+          const idx = s.project.objects.findIndex((o) => o.id === afterId);
+          const next = [...s.project.objects];
+          // After the anchor (or at the end if it's gone), in one mutation.
+          next.splice(idx < 0 ? next.length : idx + 1, 0, ...objects);
+          return {
+            project: { ...s.project, objects: next },
+            selectedIds: objects.map((o) => o.id),
+          };
+        }),
+
       removeObjects: (ids) =>
         set((s) => {
           const remove = new Set(ids);
@@ -99,6 +114,12 @@ export const useProjectStore = create<ProjectState>()(
               o.id === id ? { ...o, ...patch } : o,
             ),
           },
+          // Hiding an object drops it from the selection — a hidden object can't
+          // be on the canvas, so it shouldn't stay the active, editable target.
+          selectedIds:
+            patch.visible === false
+              ? s.selectedIds.filter((sid) => sid !== id)
+              : s.selectedIds,
         })),
 
       updateObjectParams: (id, patch) =>

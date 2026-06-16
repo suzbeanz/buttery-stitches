@@ -102,4 +102,11 @@ describe("convertObjectType", () => {
       expect(p.y).toBeCloseTo(line[i].y);
     });
   });
+
+  it("converting a degenerate (1-point) object to satin doesn't invent empty rails", () => {
+    const degenerate: EmbObject = { ...running, paths: [[{ x: 5, y: 5 }]] };
+    const patch = convertObjectType(degenerate, "satin");
+    expect(patch.type).toBe("satin");
+    expect(patch.paths).toBeUndefined(); // keeps original geometry, no [[],[]]
+  });
 });

@@ -10,7 +10,8 @@ export default function Footer() {
     <div className="px-6 py-6 text-center text-navy">
       <p className="flex items-center justify-center gap-1.5 text-sm font-semibold">
         Made With
-        <Heart size={15} className="fill-stamp text-stamp" aria-label="love" />
+        <Heart size={15} className="fill-stamp text-stamp" aria-hidden />
+        <span className="sr-only">love</span>
         by Suz
       </p>
       <div className="mt-3 flex items-center justify-center gap-3">

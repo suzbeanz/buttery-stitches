@@ -178,7 +178,7 @@ export default function TopBar({
   }
 
   return (
-    <header className="relative z-30 flex flex-wrap items-center gap-0.5 border-b border-navy-dark bg-navy px-2 py-2 text-butter-100 shadow-butter">
+    <header className="relative z-30 flex flex-wrap items-center gap-0.5 border-b border-navy-dark bg-navy px-2 py-2 text-butter-100 shadow-press">
       <BarButton
         label={layersOpen ? "Hide layers" : "Show layers"}
         onClick={toggleLayers}
@@ -228,8 +228,9 @@ export default function TopBar({
         </BarButton>
         {showShapes && (
           <>
-            <div className="fixed inset-0 z-20" onClick={() => setShowShapes(false)} />
-            <div className="absolute left-0 z-30 mt-1 grid w-44 grid-cols-3 gap-1 rounded-md border border-navy/20 bg-cream p-1.5 text-navy shadow-butter">
+            {/* Presentational backdrop — dismiss is a mouse convenience; keyboard closes via the toggle button. */}
+            <div aria-hidden className="fixed inset-0 z-20" onClick={() => setShowShapes(false)} />
+            <div className="absolute left-0 z-30 mt-1 grid w-44 grid-cols-3 gap-1 rounded-md border border-navy/20 bg-cream p-1.5 text-navy shadow-press">
               {SHAPES.map(({ kind, label, Icon }) => (
                 <button
                   key={kind}

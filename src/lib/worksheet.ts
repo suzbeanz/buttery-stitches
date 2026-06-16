@@ -104,23 +104,30 @@ export function worksheetHtml(worksheet: Worksheet, title = "Buttery Stitches"):
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8" />
 <title>${esc(title)} — Thread Worksheet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Libre+Franklin:wght@400;600&display=swap" rel="stylesheet" />
 <style>
-  :root { --navy:#20305F; --butter:#F3E8BC; --cream:#FFFDF3; --salted:#A5402C; }
-  body { font-family: Georgia, "Times New Roman", serif; color: var(--navy);
+  /* Pressed Butter brand tokens — match the app exactly. */
+  :root { --ink:#173A7A; --ink-deep:#102A57; --butter:#F1DE8B; --cream:#F6EFCB; --stamp:#B23A2E; --char:#25241C; }
+  body { font-family: "Libre Franklin", "Helvetica Neue", Arial, sans-serif; color: var(--char);
          background: var(--cream); margin: 2rem; }
-  h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
-  .sub { color:#555; margin:0 0 1.25rem; }
+  h1 { font-family: "Oswald", "Arial Narrow", sans-serif; text-transform: uppercase;
+       letter-spacing: .04em; font-size: 1.5rem; color: var(--ink-deep); margin: 0 0 .25rem; }
+  .sub { color: var(--ink); margin:0 0 1.25rem; }
   .totals { display:flex; gap:2rem; margin: 0 0 1.25rem; }
-  .totals div span { display:block; font-size:1.4rem; font-weight:bold; }
+  .totals div { font-size:.8rem; text-transform:uppercase; letter-spacing:.08em; color:var(--ink); }
+  .totals div span { display:block; font-family:"Oswald",sans-serif; font-size:1.5rem; font-weight:600; color:var(--ink-deep); }
   table { width:100%; border-collapse: collapse; }
-  th, td { text-align:left; padding:.5rem .6rem; border-bottom:1px solid #ddd; }
-  th { background: var(--butter); }
+  th, td { text-align:left; padding:.5rem .6rem; border-bottom:1px solid rgba(23,58,122,.18); }
+  th { background: var(--butter); color: var(--ink-deep); font-size:.8rem; text-transform:uppercase; letter-spacing:.06em; }
   .num { text-align:right; font-variant-numeric: tabular-nums; }
-  .swatch { display:inline-block; width:22px; height:22px; border-radius:4px;
-            border:1px solid rgba(0,0,0,.3); vertical-align:middle; }
+  .swatch { display:inline-block; width:22px; height:22px; border-radius:2px;
+            border:1.5px solid var(--ink-deep); vertical-align:middle; }
   .print { margin-top:1.5rem; }
-  button { font:inherit; padding:.5rem 1rem; background:var(--navy); color:var(--butter);
-           border:none; border-radius:6px; cursor:pointer; }
+  button { font-family:"Oswald",sans-serif; text-transform:uppercase; letter-spacing:.08em;
+           padding:.5rem 1rem; background:var(--ink); color:var(--cream);
+           border:2px solid var(--ink-deep); border-radius:2px; box-shadow:0 2px 0 var(--ink-deep); cursor:pointer; }
   @media print { .print { display:none; } body { margin:0; background:#fff; } }
 </style></head>
 <body>

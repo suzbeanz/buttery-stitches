@@ -90,7 +90,7 @@ export default function LayerPanel() {
                   />
                   {(() => {
                     const Icon = TYPE_ICON[o.type];
-                    return <Icon size={13} className="shrink-0 text-navy/45" aria-hidden />;
+                    return <Icon size={13} className="shrink-0 text-navy/60" aria-hidden />;
                   })()}
                   <span className="flex-1 truncate text-navy">{o.name}</span>
                 </button>
@@ -98,7 +98,7 @@ export default function LayerPanel() {
                   data-tip={o.visible ? "Hide" : "Show"}
                   aria-label={o.visible ? "Hide" : "Show"}
                   onClick={() => updateObject(o.id, { visible: !o.visible })}
-                  className="grid h-6 w-6 place-items-center rounded text-navy/60 hover:bg-butter-300/60 hover:text-navy"
+                  className="grid h-8 w-8 place-items-center rounded text-navy/70 hover:bg-butter-300/60 hover:text-navy"
                 >
                   {o.visible ? <Eye size={15} /> : <EyeOff size={15} />}
                 </button>
@@ -106,7 +106,7 @@ export default function LayerPanel() {
                   data-tip="Delete"
                   aria-label="Delete"
                   onClick={() => removeObjects([o.id])}
-                  className="grid h-6 w-6 place-items-center rounded text-navy/40 opacity-0 hover:bg-red-50 hover:text-red-600 group-hover:opacity-100"
+                  className="grid h-8 w-8 place-items-center rounded text-ink/45 opacity-0 hover:bg-stamp/10 hover:text-stamp group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100"
                 >
                   <Trash2 size={15} />
                 </button>

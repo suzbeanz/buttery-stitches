@@ -162,7 +162,7 @@ export default function DesignPanel() {
           </button>
         </>
       ) : (
-        <p className="text-xs text-navy/50">Add a design to set its size.</p>
+        <p className="text-xs text-navy/70">Add a design to set its size.</p>
       )}
 
       {/* Warnings */}
