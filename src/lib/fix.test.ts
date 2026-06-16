@@ -54,4 +54,13 @@ describe("fixStitches", () => {
     const colors = fixStitches(p).objects.map((o) => o.colorId);
     expect(colors).toEqual(["red", "red", "blue"]);
   });
+
+  it("layers fills first, details on top within a color (background → foreground)", () => {
+    const p = createEmptyProject();
+    const outline = makeObject("running", [{ x: 0, y: 0 }, { x: 5, y: 0 }], "c1");
+    const fill = makeObjectFromPaths("fill", [broadFill], "c1");
+    p.objects = [outline, fill]; // drawn outline-first
+    const types = fixStitches({ ...p, objects: [outline, fill] }).objects.map((o) => o.type);
+    expect(types).toEqual(["fill", "running"]); // fill sews before the outline
+  });
 });
