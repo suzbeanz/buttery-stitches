@@ -362,6 +362,25 @@ function ObjectProperties({
         </label>
       )}
 
+      {object.type !== "running" && (p.underlay ?? DEFAULT_PARAMS.underlay) && (
+        <Field label="Underlay weight">
+          <select
+            value={p.underlayWeight ?? DEFAULT_PARAMS.underlayWeight}
+            onChange={(e) =>
+              onParam({
+                underlayWeight: e.target.value as "auto" | "light" | "standard" | "heavy",
+              })
+            }
+            className="input"
+          >
+            <option value="auto">Auto (from fabric)</option>
+            <option value="light">Light — edge only</option>
+            <option value="standard">Standard</option>
+            <option value="heavy">Heavy — extra support</option>
+          </select>
+        </Field>
+      )}
+
       {object.type !== "running" && (
         <label className="flex items-center gap-2 text-navy">
           <input

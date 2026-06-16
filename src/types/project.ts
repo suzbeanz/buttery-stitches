@@ -29,6 +29,9 @@ export interface EmbObjectParams {
   angle?: number;
   /** add a stabilizing underlay pass (default true for fill/satin). */
   underlay?: boolean;
+  /** how heavy the underlay is. "auto" follows the fabric; the rest override it
+   *  per object (light → just an edge, heavy → edge + zig-zag/criss-cross). */
+  underlayWeight?: "auto" | "light" | "standard" | "heavy";
   /** mm added to satin width to compensate for fabric pull (default 0.2). */
   pullComp?: number;
   /** mm trimmed off each satin column end to compensate for lengthwise fabric
@@ -160,6 +163,7 @@ export const DEFAULT_PARAMS: Required<EmbObjectParams> = {
   density: 0.4,
   angle: 0,
   underlay: true,
+  underlayWeight: "auto",
   pullComp: 0.2,
   pushComp: 0.2,
   outline: true,
@@ -180,6 +184,7 @@ export function resolveParams(
     // running stitch never has underlay regardless of stored value
     underlay:
       type === "running" ? false : (params.underlay ?? DEFAULT_PARAMS.underlay),
+    underlayWeight: params.underlayWeight ?? DEFAULT_PARAMS.underlayWeight,
     pullComp: params.pullComp ?? DEFAULT_PARAMS.pullComp,
     pushComp: params.pushComp ?? DEFAULT_PARAMS.pushComp,
     outline: params.outline ?? DEFAULT_PARAMS.outline,
