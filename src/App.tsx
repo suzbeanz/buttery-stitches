@@ -23,31 +23,43 @@ const PASTE_OFFSET_MM = 3;
  *   Right  — design settings, selection properties, threads
  * Top bar spans the full width. Global keyboard shortcuts live here.
  */
-/** localStorage key remembering that the user has already entered the studio. */
-const ENTERED_KEY = "bs:entered";
+// Path-based routing so the homepage lives at "/" and the studio at "/app":
+// the URL is the single source of truth, so reloading "/" stays on the
+// homepage and "/app" deep-links straight into the editor (a 404.html fallback
+// on the static host serves this SPA for the deep path). BASE_URL is honored so
+// it also works when the app is hosted under a sub-path.
+const BASE = import.meta.env.BASE_URL.replace(/\/+$/, ""); // "" when served at root
+const APP_PATH = `${BASE}/app`;
+const HOME_PATH = `${BASE}/`;
+
+/** Is the current location the studio route? (tolerant of a trailing slash) */
+function isAppRoute(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.location.pathname.replace(/\/+$/, "") === APP_PATH;
+}
 
 export default function App() {
-  // Show the marketing homepage first; once the user enters the studio we
-  // remember it so returning visitors land straight in the editor.
-  const [entered, setEntered] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem(ENTERED_KEY) === "1";
-    } catch {
-      return false;
+  const [onApp, setOnApp] = useState<boolean>(isAppRoute);
+
+  // Keep React in sync with browser back/forward navigation.
+  useEffect(() => {
+    const sync = () => setOnApp(isAppRoute());
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, []);
+
+  const go = (app: boolean) => {
+    const path = app ? APP_PATH : HOME_PATH;
+    if (window.location.pathname.replace(/\/+$/, "") !== path.replace(/\/+$/, "")) {
+      window.history.pushState({}, "", path);
     }
-  });
-  const enterStudio = () => {
-    try {
-      localStorage.setItem(ENTERED_KEY, "1");
-    } catch {
-      /* private mode — fine, just don't persist */
-    }
-    setEntered(true);
+    setOnApp(app);
+    window.scrollTo(0, 0);
   };
 
   return (
     <>
-      {entered ? <Studio onHome={() => setEntered(false)} /> : <Home onStart={enterStudio} />}
+      {onApp ? <Studio onHome={() => go(false)} /> : <Home onStart={() => go(true)} />}
       <Toaster />
     </>
   );
