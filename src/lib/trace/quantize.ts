@@ -78,6 +78,111 @@ export function medianCut(colors: RGB[], numColors: number): RGB[] {
   return boxes.map(averageColor);
 }
 
+/** Squared RGB distance. */
+function dist2(a: RGB, r: number, g: number, b: number): number {
+  return (a[0] - r) ** 2 + (a[1] - g) ** 2 + (a[2] - b) ** 2;
+}
+
+/**
+ * k-means color palette (Lloyd's algorithm) with a deterministic, well-spread
+ * seeding: start from the overall mean, then repeatedly add the sample farthest
+ * from the chosen centers (k-means++ greedy). This separates distinct hues a
+ * dominant background would otherwise starve under plain median-cut — e.g. a red
+ * mark and a blue mark on cream stay red and blue instead of merging to mud.
+ */
+export function kmeansPalette(samples: RGB[], numColors: number, iters = 12): RGB[] {
+  const k = Math.max(1, numColors);
+  if (samples.length <= k) return samples.map((c) => [...c] as RGB);
+
+  // --- seed: mean, then farthest-point (greedy k-means++) ---
+  const centers: RGB[] = [averageColor(samples)];
+  while (centers.length < k) {
+    let far: RGB = samples[0];
+    let farD = -1;
+    for (const s of samples) {
+      let md = Infinity;
+      for (const c of centers) md = Math.min(md, dist2(c, s[0], s[1], s[2]));
+      if (md > farD) {
+        farD = md;
+        far = s;
+      }
+    }
+    if (farD <= 0) break; // no distinct colors left
+    centers.push([...far] as RGB);
+  }
+
+  // --- Lloyd iterations ---
+  for (let it = 0; it < iters; it++) {
+    const sum = centers.map(() => [0, 0, 0, 0]); // r,g,b,count
+    for (const s of samples) {
+      let bi = 0;
+      let bd = Infinity;
+      for (let c = 0; c < centers.length; c++) {
+        const d = dist2(centers[c], s[0], s[1], s[2]);
+        if (d < bd) {
+          bd = d;
+          bi = c;
+        }
+      }
+      const acc = sum[bi];
+      acc[0] += s[0];
+      acc[1] += s[1];
+      acc[2] += s[2];
+      acc[3]++;
+    }
+    let moved = 0;
+    for (let c = 0; c < centers.length; c++) {
+      const acc = sum[c];
+      if (acc[3] === 0) continue; // keep an empty cluster's center
+      const nc: RGB = [
+        Math.round(acc[0] / acc[3]),
+        Math.round(acc[1] / acc[3]),
+        Math.round(acc[2] / acc[3]),
+      ];
+      moved += Math.abs(nc[0] - centers[c][0]) + Math.abs(nc[1] - centers[c][1]) + Math.abs(nc[2] - centers[c][2]);
+      centers[c] = nc;
+    }
+    if (moved === 0) break; // converged
+  }
+  return centers;
+}
+
+/**
+ * The most common opaque color along the image's outer border — a far more
+ * robust "background" guess than "largest area" (a subject can be the biggest
+ * region without being the background). Returns null for a fully transparent
+ * border. Best run on the quantized raster so border pixels are palette colors.
+ */
+export function borderBackgroundColor(img: RasterImage): RGB | null {
+  const { width, height, data } = img;
+  if (width < 2 || height < 2) return null;
+  const counts = new Map<number, number>();
+  const tally = (x: number, y: number) => {
+    const o = (y * width + x) * 4;
+    if (data[o + 3] < ALPHA_CUTOFF) return;
+    const key = (data[o] << 16) | (data[o + 1] << 8) | data[o + 2];
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  };
+  for (let x = 0; x < width; x++) {
+    tally(x, 0);
+    tally(x, height - 1);
+  }
+  for (let y = 0; y < height; y++) {
+    tally(0, y);
+    tally(width - 1, y);
+  }
+  let bestKey = -1;
+  let bestN = 0;
+  for (const [key, n] of counts) {
+    if (n > bestN) {
+      bestN = n;
+      bestKey = key;
+    }
+  }
+  if (bestKey < 0) return null;
+  return [(bestKey >> 16) & 255, (bestKey >> 8) & 255, bestKey & 255];
+}
+
 /** Nearest palette color to (r,g,b) by squared Euclidean distance. */
 function nearest(palette: RGB[], r: number, g: number, b: number): RGB {
   let best = palette[0];
@@ -110,7 +215,9 @@ export function quantizeImage(img: RasterImage, numColors: number): QuantizedIma
     if (data[o + 3] < ALPHA_CUTOFF) continue;
     samples.push([data[o], data[o + 1], data[o + 2]]);
   }
-  const palette = medianCut(samples, n);
+  // k-means gives tighter, better-separated clusters than median-cut when a
+  // background dominates the pixel count (the common logo-on-white case).
+  const palette = kmeansPalette(samples, n);
 
   const out = new Uint8ClampedArray(data.length);
   for (let i = 0; i < total; i++) {
