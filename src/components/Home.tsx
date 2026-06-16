@@ -17,8 +17,17 @@ export default function Home({ onStart }: { onStart: () => void }) {
     <div className="h-full overflow-y-auto">
       {/* HERO — the label */}
       <Col className="pt-10 sm:pt-16">
-        <PressCard className="relative px-6 py-8 sm:px-10 sm:py-10">
-          <div className="flex items-center justify-between border-b-[1.5px] border-foil pb-3 font-label text-[12px] font-semibold uppercase tracking-[0.22em] text-ink">
+        <PressCard className="relative overflow-hidden px-6 py-8 sm:px-10 sm:py-10">
+          {/* Warm label-light behind the wordmark — lifts the type off the card. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-0"
+            style={{
+              background:
+                "radial-gradient(58% 52% at 50% 46%, rgba(255,253,243,0.75), rgba(255,253,243,0) 72%)",
+            }}
+          />
+          <div className="relative z-10 flex items-center justify-between border-b-[1.5px] border-foil pb-3 font-label text-[12px] font-semibold uppercase tracking-[0.22em] text-ink">
             <span>Open Source</span>
             <span>Net Wt. Free · 100% Free</span>
           </div>
@@ -28,7 +37,7 @@ export default function Home({ onStart }: { onStart: () => void }) {
               to crowd it on medium screens). */}
           <GradeStamp
             size={74}
-            className="absolute left-6 top-1/2 hidden -translate-y-1/2 lg:block"
+            className="absolute left-6 top-1/2 z-10 hidden -translate-y-1/2 lg:block"
           />
           <GradeStamp
             size={74}
@@ -36,26 +45,29 @@ export default function Home({ onStart }: { onStart: () => void }) {
             top="Made"
             big="100"
             bottom="% Open"
-            className="absolute right-6 top-1/2 hidden -translate-y-1/2 lg:block"
+            className="absolute right-6 top-1/2 z-10 hidden -translate-y-1/2 lg:block"
           />
 
-          <div className="mt-7 text-center leading-none">
-            <div className="font-accent text-2xl italic text-stamp sm:text-3xl">
+          <div className="relative z-10 mt-8 text-center">
+            <div className="mb-1.5 font-accent text-2xl italic text-stamp sm:text-3xl">
               Sweet &amp; Unsalted
             </div>
-            <div className="font-display text-6xl uppercase leading-[0.95] tracking-wide text-ink sm:text-8xl sm:leading-[0.9]">
+            <div
+              className="font-display text-6xl uppercase leading-[0.95] tracking-wide text-ink sm:text-8xl sm:leading-none"
+              style={{ textShadow: "0 1px 0 rgba(255,253,243,0.55), 0 3px 0 rgba(16,42,87,0.12)" }}
+            >
               Buttery
               <br />
               Stitches
             </div>
             {/* Stamp-red bar that fills in on load. */}
-            <div className="mx-auto mt-4 h-[3px] w-44 max-w-[70%] rounded-full bg-stamp fill-bar" />
-            <div className="mt-4 font-label text-[12px] font-medium uppercase tracking-[0.4em] text-ink-deep sm:text-sm">
+            <div className="mx-auto mt-5 h-[3px] w-44 max-w-[70%] rounded-full bg-stamp fill-bar" />
+            <div className="mt-5 font-label text-[12px] font-medium uppercase tracking-[0.4em] text-ink-deep sm:text-sm">
               Embroidery Digitizing — Churned to Order
             </div>
           </div>
 
-          <div className="mt-7 text-center font-mono text-[12px] uppercase tracking-[0.14em] text-char/80">
+          <div className="relative z-10 mt-7 text-center font-mono text-[12px] uppercase tracking-[0.14em] text-char/80">
             Net Wt. Free · Pictures, Words &amp; Shapes → Machine-Ready Stitches
           </div>
         </PressCard>
