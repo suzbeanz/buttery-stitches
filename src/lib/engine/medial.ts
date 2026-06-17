@@ -12,6 +12,9 @@ import { marchingSquares, simplify } from "../paintbucket";
 const MAX_THROW_MM = 7;
 /** Shortest stroke (mm) worth satining; below this it is thinning noise. */
 const MIN_BRANCH_MM = 2;
+/** Above this many skeleton branches a region is a big auto-digitized blob, not
+ *  lettering — skip the pairwise junction miter there (costly, less needed). */
+const MITER_MAX_BRANCHES = 16;
 
 /**
  * Auto-satin via the medial axis. Real embroidery lettering is satin columns that
@@ -473,7 +476,8 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
   const skel = thin(grid);
   const branches = traceSkeleton(skel, grid.w, grid.h);
 
-  const columns: SatinColumn[] = [];
+  // Pass 1 — clean centerline per skeleton branch.
+  const prepped: { center: Path; loop: boolean }[] = [];
   for (const branch of branches) {
     if (branch.length < 2) continue;
     const loop = isLoop(branch);
@@ -491,9 +495,24 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
     // Clean the centerline: drop the pixel staircase, then smooth it.
     const center = smoothPath(douglasPeucker(raw, cellMm * 1.2), { maxSegmentMm: 0.8 });
     if (center.length < 2) continue;
+    prepped.push({ center, loop });
+  }
 
-    const col = buildColumn(center, loop, oriented, grid, dt, cellMm, opts, true, true);
+  // Pass 2 — build longest-first, each MITERED against the longer strokes (the
+  // multi-way junction solver: the dominant stroke runs through, branches abut).
+  // Skipped for a huge auto-digitized region (many branches) where the pairwise
+  // miter would be costly and crisp junctions matter less than for lettering.
+  const miter = prepped.length <= MITER_MAX_BRANCHES;
+  const order = prepped
+    .map((_, i) => i)
+    .sort((a, b) => polylineLength(prepped[b].center) - polylineLength(prepped[a].center));
+  const columns: SatinColumn[] = [];
+  const higher: Path[] = [];
+  for (const i of order) {
+    const { center, loop } = prepped[i];
+    const col = buildColumn(center, loop, oriented, grid, dt, cellMm, opts, true, true, miter ? higher.slice() : []);
     if (col) columns.push(col);
+    if (miter) higher.push(douglasPeucker(center, 0.5));
   }
   return dedupeColumns(columns, oriented, cellMm);
 }
@@ -532,16 +551,22 @@ export function columnsFromCenterlines(
     }
   }
 
-  // Pass 2 — build each column, MITERED against its siblings so the strokes that
-  // meet at a junction abut along a clean seam (no overlap, no fan). Trim junction
-  // ends but keep every stroke (authored strokes are all real, never stubs). The
-  // miter only needs the siblings' rough path, so coarsen them for speed.
-  const coarse = centers.map((c) => douglasPeucker(c, 0.5));
+  // Pass 2 — build each column MITERED against its neighbours, by PRIORITY: the
+  // longest stroke runs THROUGH a junction (covering its core), shorter strokes
+  // ABUT it. So each column is clipped only against the LONGER ones already built.
+  // This is how a junction is digitized by hand — the main stroke is continuous,
+  // the branches butt against it — and it leaves a clean star seam with no core
+  // patch (the through-stroke fills the core, so the residual fill has nothing to
+  // do there). The miter only needs each neighbour's rough path, so coarsen it.
+  const order = centers
+    .map((_, i) => i)
+    .sort((a, b) => polylineLength(centers[b]) - polylineLength(centers[a]));
   const columns: SatinColumn[] = [];
-  for (let i = 0; i < centers.length; i++) {
-    const siblings = coarse.filter((_, j) => j !== i);
-    const col = buildColumn(centers[i], false, oriented, grid, dt, cellMm, opts, true, false, siblings);
+  const higher: Path[] = []; // coarse centerlines of the longer strokes built so far
+  for (const i of order) {
+    const col = buildColumn(centers[i], false, oriented, grid, dt, cellMm, opts, true, false, higher.slice());
     if (col) columns.push(col);
+    higher.push(douglasPeucker(centers[i], 0.5));
   }
   return columns;
 }
