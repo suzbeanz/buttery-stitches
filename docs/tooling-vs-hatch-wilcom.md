@@ -26,41 +26,37 @@ Hatch / EmbroideryStudio). Goal: know exactly which tools we have, which are
 | Write embroidery files | Write | 5 formats via pyembroidery | ✅ |
 | Travel/trim optimization | Auto | intra-object travel, fabric-aware trims | ✅ |
 
-## Real gaps to "truly compete"
+## Recently closed
+
+- ✅ **Bean / triple run** — first-class in Properties ("Line weight: Single /
+  Triple / Bean"), engine-supported.
+- ✅ **Measure tool** — point-to-point distance + angle on the canvas (key `M`).
+- ✅ **Per-node editing (add + delete)** — Points tool now inserts a vertex by
+  clicking the outline and deletes the focused one (Del).
+- ✅ **Two-rail satin (Input B)** — "Column" tool: draw edge A then edge B for
+  true variable-width satin; the engine/model already stored columns as rails.
+- ✅ **Appliqué** — "Appliqué" tool / fill toggle: placement run → STOP → tackdown
+  → STOP → satin cover, as one object. STOP encodes cleanly in PES; DST/EXP pause
+  via color-stop (the native mechanism); VP3 fidelity is partial.
+
+## Remaining gaps
 
 Ranked by **value ÷ effort**.
 
-1. **Bean / triple run as a first-class stitch** — exists in the engine
-   (`beanRepeats`) but is buried in properties, not a one-click stitch type.
-   Pros reach for it constantly (outlines, redwork, stems). *Low effort.*
-
-2. **Measure tool** — point-to-point distance/angle readout on the canvas.
-   Wilcom has it; we only have ruler units. *Low effort.*
-
-3. **Per-node editing** — add/delete a node, and per-node corner↔curve
-   (today "Curve" is a global smooth toggle, and Points only drags existing
-   vertices). This is the biggest *finesse* gap for matching hand-digitizing.
+1. **Per-node corner↔curve handles** — paths are stored as densified polylines,
+   so true bezier handles need a control-point data model. The finesse capstone.
    *Medium effort.*
 
-4. **Two-rail satin (Input B)** — draw the two edges of a column for true
-   variable-width satin (borders, calligraphic lettering). We do centerline
-   satin only. *Medium effort.*
+2. **Motif / pattern fills & motif runs** — decorative repeating motifs along a
+   run or tiled in a fill (candlewicking, etc.). *Medium–high effort.*
 
-5. **Appliqué** — placement line → tackdown → cover stitch → stop, as one
-   object. A very common production request. *Medium–high effort.*
-
-6. **Motif / pattern fills & motif runs** — decorative repeating motifs along
-   a run or tiled in a fill (candlewicking, etc.). *Medium–high effort.*
-
-7. **Carved / stipple / spiral fills** — we have contour fill; the rest of the
+3. **Carved / stipple / spiral fills** — we have contour fill; the rest of the
    decorative fill family is missing. *Medium effort.*
 
 ## Verdict
 
-For everyday digitizing — run, satin, tatami, lettering, auto-digitize, node
-drag, shapes, clean underlay/comp/routing — **we already cover the core a
-hobbyist or small shop needs**, and the auto-digitize + freehand tools are
-genuinely competitive. To *truly* go toe-to-toe with Hatch/Wilcom for serious
-production, the priority order above is the path: start with bean run + measure
-(quick wins), then per-node editing (the finesse gap), then two-rail satin and
-appliqué (the pro production gaps).
+For everyday digitizing — run/bean, satin, two-rail satin, tatami, appliqué,
+lettering, auto-digitize, node add/delete/drag, measure, shapes, clean
+underlay/comp/routing — **we now cover the core production toolset**. The main
+remaining differentiators are per-node bezier handles (needs a model change) and
+the decorative fill/motif family.

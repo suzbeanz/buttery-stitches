@@ -21,6 +21,7 @@ export type Tool =
   | "bucket" // click an enclosed area to fill it
   | "measure" // drag to read off a distance + angle (no object created)
   | "satin2" // two-rail satin: draw edge A, then edge B (variable width)
+  | "applique" // draw a closed shape stitched as an appliqué (placement/cover)
   | "shape"; // drag to place a premade shape (rectangle, ellipse, heart, …)
 
 /** Tools that place points to draw a new object — these map 1:1 to StitchType. */
@@ -34,7 +35,7 @@ export function isDrawTool(tool: Tool): tool is StitchType {
 /** Tools that place points click-by-click (the 1:1 draw tools plus two-rail
  *  satin, which captures two click-drawn rails). Used to gate the draft flow. */
 export function isPointTool(tool: Tool): boolean {
-  return isDrawTool(tool) || tool === "satin2";
+  return isDrawTool(tool) || tool === "satin2" || tool === "applique";
 }
 
 export type RulerUnit = "mm" | "inch";

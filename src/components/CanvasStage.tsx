@@ -274,6 +274,27 @@ export default function CanvasStage() {
       clearDraft();
       return;
     }
+    // Appliqué: a closed outline stitched as placement → cover (params.applique).
+    if (tool === "applique") {
+      let ring = dedupePath(draft);
+      if (ring.length >= 4 && distance(ring[0], ring[ring.length - 1]) < JOIN_SNAP_MM) {
+        ring = ring.slice(0, -1);
+      }
+      if (ring.length < 3) {
+        clearDraft();
+        return;
+      }
+      const colorId =
+        useEditorStore.getState().activeColorId ??
+        useProjectStore.getState().project.colors[0]?.id;
+      if (colorId) {
+        const o = makeObjectFromPaths("fill", [smooth ? smoothPath(ring) : ring], colorId);
+        o.params.applique = true;
+        addObject(o);
+      }
+      clearDraft();
+      return;
+    }
     if (!isDrawTool(tool)) return;
     let cleaned = dedupePath(draft); // drop double-click / stationary dupes
     // Smart snap-join: when closing a fill polygon, if the last point lands near
@@ -1072,7 +1093,7 @@ export default function CanvasStage() {
                   <DraftPreview
                     draft={draft}
                     cursor={freehand ? null : cursorMm}
-                    closed={tool === "fill" || tool === "brush"}
+                    closed={tool === "fill" || tool === "brush" || tool === "applique"}
                     smooth={smooth || freehand}
                     px={px}
                     py={py}

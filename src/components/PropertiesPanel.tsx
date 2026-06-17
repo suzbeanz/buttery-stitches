@@ -309,7 +309,7 @@ function ObjectProperties({
         />
       )}
 
-      {object.type === "fill" && (
+      {object.type === "fill" && !p.applique && (
         <Field label="Stitch style">
           <select
             value={p.fillStyle ?? DEFAULT_PARAMS.fillStyle}
@@ -323,6 +323,18 @@ function ObjectProperties({
             <option value="contour">Contour (echo the shape)</option>
           </select>
         </Field>
+      )}
+
+      {object.type === "fill" && (
+        <label className="flex items-center gap-2 text-sm text-navy">
+          <input
+            type="checkbox"
+            checked={!!p.applique}
+            onChange={(e) => onParam({ applique: e.target.checked })}
+            className="accent-ink"
+          />
+          Appliqué (placement → stop → tackdown → stop → cover)
+        </label>
       )}
 
       {object.type === "fill" && (

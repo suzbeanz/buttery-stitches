@@ -7,7 +7,7 @@ import type {
 } from "../../types/project";
 import { resolveParams, fabricProfile } from "../../types/project";
 import { effectiveProfile } from "./profile";
-import { distance } from "../geometry";
+import { distance, railsFromCenterline } from "../geometry";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
 import { tatamiFill, splitFillRegions, autoFillAngleForRegions } from "./fill";
@@ -35,6 +35,8 @@ export interface EngineStitch {
   jump?: boolean;
   trim?: boolean;
   underlay?: boolean;
+  /** machine STOP after this point (appliqué: pause to lay/trim fabric). */
+  stop?: boolean;
 }
 
 export interface DesignOptions {
@@ -116,6 +118,8 @@ function tieStitches(anchor: Point, toward: Point): Point[] {
 export interface StitchRun {
   pts: Point[];
   underlay: boolean;
+  /** emit a machine STOP after this run (appliqué fabric placement/trim pause). */
+  stopAfter?: boolean;
 }
 
 /** Push a run if it has any penetrations. */
@@ -294,6 +298,13 @@ export function generateObjectRuns(
     return runs;
   }
 
+  // Appliqué: stitch the OUTLINE as a placement run → STOP (operator lays the
+  // appliqué fabric) → tackdown run → STOP (operator trims the excess) → satin
+  // cover that finishes the raw edge. One object, the whole production sequence.
+  if (p.applique) {
+    return appliqueRuns(object.paths, density, pullComp, stitchLength);
+  }
+
   // fill — underlay then top, per connected region. Keeping each pass a separate
   // run lets the assembler jump between them. Strokes satin along their medial
   // axis (very thin ones run as a single line); broad areas use tatami; the
@@ -368,6 +379,53 @@ export function generateObjectRuns(
         addRun(runs, dropShortStitches(sub, minStitch), false);
       }
     }
+  }
+  return runs;
+}
+
+/** Satin cover width (mm) laid over an appliqué edge to finish the raw fabric. */
+const APPLIQUE_COVER_MM = 3;
+/** Stitch length (mm) for appliqué placement + tackdown running passes. */
+const APPLIQUE_RUN_MM = 2.5;
+
+/**
+ * Appliqué sequence for a closed shape (per region, using the outer ring):
+ *   1) placement run around the edge  → STOP (lay the appliqué fabric)
+ *   2) tackdown run around the edge   → STOP (trim the excess)
+ *   3) satin cover over the edge      (finishes the raw edge)
+ * Each phase is its own run; STOPs ride on the run that precedes them.
+ */
+function appliqueRuns(
+  paths: Path[],
+  density: number,
+  pullComp: number,
+  _stitchLength: number,
+): StitchRun[] {
+  const runs: StitchRun[] = [];
+  const regions = splitFillRegions(paths);
+  // Outer ring of each region, closed into a loop for the running passes.
+  const rings = regions
+    .map((r) => r.find((ring) => ring.length >= 3))
+    .filter((r): r is Path => !!r)
+    .map((r) => [...r, r[0]]);
+  if (rings.length === 0) return runs;
+
+  const pushRun = (pts: Point[], stopAfter: boolean) => {
+    if (pts.length > 0) runs.push({ pts, underlay: false, stopAfter });
+  };
+
+  // 1) Placement run (all regions), STOP after the last.
+  rings.forEach((ring, i) => {
+    pushRun(dropShortStitches(runningStitch(ring, APPLIQUE_RUN_MM)), i === rings.length - 1);
+  });
+  // 2) Tackdown run (all regions), STOP after the last.
+  rings.forEach((ring, i) => {
+    pushRun(dropShortStitches(runningStitch(ring, APPLIQUE_RUN_MM)), i === rings.length - 1);
+  });
+  // 3) Satin cover over each edge (centered on the outline).
+  for (const ring of rings) {
+    const [left, right] = railsFromCenterline(ring, APPLIQUE_COVER_MM);
+    pushRun(dropShortStitches(satinColumn(left, right, { density, pullComp, push: 0 }), SATIN_MIN_STITCH), false);
   }
   return runs;
 }
@@ -484,7 +542,7 @@ export function generateDesign(
   // stay in their original sequence, so layering and color order are unchanged —
   // this only cuts the jump/trim distance between same-color shapes.
   const drawn = routeGroups(groups).flatMap((g) =>
-    g.runs.map((run) => ({ object: g.object, pts: run.pts, underlay: run.underlay })),
+    g.runs.map((run) => ({ object: g.object, pts: run.pts, underlay: run.underlay, stopAfter: run.stopAfter })),
   );
 
   // Coverage map: a travel can hide UNDER any fill stitched later in the order.
@@ -594,6 +652,13 @@ export function generateDesign(
       });
     });
 
+    // Appliqué STOP: pause the machine here (lay or trim the fabric) at the last
+    // penetration of this run, same thread continues afterward.
+    if (d.stopAfter && pts.length > 0) {
+      const last = pts[pts.length - 1];
+      out.push({ x: last.x, y: last.y, colorId: object.colorId, objectId: object.id, stop: true });
+    }
+
     prevPoint = pts[pts.length - 1];
     prevToward = pts.length > 1 ? pts[pts.length - 2] : pts[0];
     prevColor = object.colorId;
@@ -630,6 +695,7 @@ function collapseCoincident(design: EngineStitch[]): EngineStitch[] {
       !prev.jump &&
       !s.jump &&
       !s.trim &&
+      !s.stop && // never collapse away a machine STOP (appliqué pause)
       prev.colorId === s.colorId &&
       Math.hypot(s.x - prev.x, s.y - prev.y) < COINCIDENT_EPS
     ) {

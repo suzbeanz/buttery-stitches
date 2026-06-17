@@ -17,6 +17,7 @@ import {
   Paintbrush,
   PaintBucket,
   Ruler,
+  Scissors,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -107,6 +108,9 @@ export default function ToolRail() {
         </ToolBtn>
         <ToolBtn id="bucket" label="Bucket" tip="Paint bucket — click an enclosed area to fill it" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <PaintBucket size={20} />
+        </ToolBtn>
+        <ToolBtn id="applique" label="Appliqué" tip="Appliqué — draw a shape: placement run → stop → tackdown → stop → satin cover" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+          <Scissors size={20} />
         </ToolBtn>
         <RailBtn
           label="Curve"
