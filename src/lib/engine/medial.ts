@@ -871,11 +871,13 @@ export function residualRegions(rings: Path[], sewn: Path[], cellMm = 0.3): Path
     }
   }
 
-  // Uncovered interior, then morphological OPEN (erode→dilate) to drop the 1-cell
-  // slivers along column edges, leaving only the chunky gaps worth filling.
+  // Uncovered interior, then DILATE so a thin junction gap grows into a fillable
+  // patch and overlaps the satin edge a hair (the satin sits on top, so the
+  // overlap is invisible — but it guarantees no white nick is left). A later
+  // by-AREA filter drops the tiny inter-row specks; we deliberately don't erode,
+  // which would erase the very junction slivers we need to close.
   let mask: Uint8Array = new Uint8Array(w * h);
   for (let i = 0; i < w * h; i++) if (cells[i] && !covered[i]) mask[i] = 1;
-  mask = erode(mask, w, h);
   mask = dilateMask(mask, w, h);
   // Keep only cells still inside the region (dilation can spill onto a covered or
   // outside cell).
@@ -885,28 +887,13 @@ export function residualRegions(rings: Path[], sewn: Path[], cellMm = 0.3): Path
   for (let i = 0; i < w * h; i++) if (mask[i]) { any = true; break; }
   if (!any) return [];
 
-  const minArea = Math.max(1.5, (2 * cellMm) ** 2); // ignore specks
+  const minArea = Math.max(2.2, (3 * cellMm) ** 2); // ignore inter-row specks
   return marchingSquares(mask, w, h)
     .map((ring) => simplify(ring.map((p) => ({ x: ox + p.x * cellMm, y: oy + p.y * cellMm })), cellMm * 0.9))
     .filter((r) => r.length >= 3 && Math.abs(polygonArea(r)) >= minArea);
 }
 
-/** 4-connected erosion: clear any set cell with an unset orthogonal neighbour. */
-function erode(mask: Uint8Array, w: number, h: number): Uint8Array {
-  const out = new Uint8Array(w * h);
-  for (let j = 0; j < h; j++)
-    for (let i = 0; i < w; i++) {
-      if (!mask[j * w + i]) continue;
-      const up = j > 0 ? mask[(j - 1) * w + i] : 0;
-      const dn = j < h - 1 ? mask[(j + 1) * w + i] : 0;
-      const lt = i > 0 ? mask[j * w + i - 1] : 0;
-      const rt = i < w - 1 ? mask[j * w + i + 1] : 0;
-      if (up && dn && lt && rt) out[j * w + i] = 1;
-    }
-  return out;
-}
-
-/** 4-connected dilation (inverse of erode). */
+/** 4-connected dilation: set any empty cell with a set orthogonal neighbour. */
 function dilateMask(mask: Uint8Array, w: number, h: number): Uint8Array {
   const out = mask.slice();
   for (let j = 0; j < h; j++)
