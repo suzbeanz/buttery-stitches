@@ -283,10 +283,10 @@ export function generateObjectRuns(
     // Motif run: repeat a decorative motif along the line instead of a plain run.
     if (p.motifRun && p.motifRun !== "none") {
       const strokes = motifRunAlong(object.paths[0] ?? [], { motifId: p.motifRun, sizeMm: p.motifSizeMm });
-      for (const stroke of strokes) addRun(runs, dropShortStitches(runningStitch(stroke, stitchLength)), false);
+      for (const stroke of strokes) addRun(runs, dropShortStitches(runningStitch(stroke, stitchLength), undefined, true), false);
       return runs;
     }
-    const line = dropShortStitches(runningStitch(object.paths[0] ?? [], stitchLength));
+    const line = dropShortStitches(runningStitch(object.paths[0] ?? [], stitchLength), undefined, true);
     // Bean / triple stitch: retrace the line N times (forward/back/forward) for a
     // bold, durable outline. The repeats land in the same holes but are never
     // CONSECUTIVE (the turnarounds skip the shared vertex), so they survive the
@@ -443,11 +443,11 @@ function appliqueRuns(
 
   // 1) Placement run (all regions), STOP after the last.
   rings.forEach((ring, i) => {
-    pushRun(dropShortStitches(runningStitch(ring, APPLIQUE_RUN_MM)), i === rings.length - 1);
+    pushRun(dropShortStitches(runningStitch(ring, APPLIQUE_RUN_MM), undefined, true), i === rings.length - 1);
   });
   // 2) Tackdown run (all regions), STOP after the last.
   rings.forEach((ring, i) => {
-    pushRun(dropShortStitches(runningStitch(ring, APPLIQUE_RUN_MM)), i === rings.length - 1);
+    pushRun(dropShortStitches(runningStitch(ring, APPLIQUE_RUN_MM), undefined, true), i === rings.length - 1);
   });
   // 3) Satin cover over each edge (centered on the outline).
   for (const ring of rings) {
