@@ -490,6 +490,97 @@ function pointInRingsEO(p: Point, rings: Path[]): boolean {
   return inside;
 }
 
+/** Squared distance from point p to segment a→b. */
+function distSqToSeg(p: Point, a: Point, b: Point): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  let t = len2 > 0 ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2 : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const cx = a.x + t * dx - p.x;
+  const cy = a.y + t * dy - p.y;
+  return cx * cx + cy * cy;
+}
+
+/**
+ * Remove fill penetrations that fall within `distMm` of any carve curve — a
+ * TRUE-relief carve: the needle skips the carved lines, leaving un-penetrated
+ * grooves the surrounding stitches float over. The fill stays one continuous
+ * path (a short float spans each thin groove), so it sews safely. Carving reads
+ * best where curves cross the rows; a curve running ALONG a row leaves a longer
+ * float that the safety splitter may re-stitch (graceful, just less relief).
+ */
+export function carvePoints(points: Path, curves: Path[], distMm: number): Path {
+  if (curves.length === 0) return points;
+  const d2 = distMm * distMm;
+  // Prune curve segments to those near the fill bbox is overkill here; the curve
+  // set is already region-local (tiled motifs), so a direct test is fine.
+  const segs: [Point, Point][] = [];
+  for (const c of curves) for (let i = 1; i < c.length; i++) segs.push([c[i - 1], c[i]]);
+  return points.filter((p) => {
+    for (const [a, b] of segs) if (distSqToSeg(p, a, b) <= d2) return false;
+    return true;
+  });
+}
+
+export interface MotifRunOptions {
+  motifId: string;
+  /** motif cell width in mm. */
+  sizeMm: number;
+  /** spacing between repeats as a multiple of the cell width (default 1.05). */
+  spacingMul?: number;
+}
+
+/**
+ * Repeat a motif ALONG a path (a decorative motif run / e-stitch): walk the path
+ * by arc length and stamp the motif at each step, rotated to the local tangent.
+ * Returns one run per motif stroke; the assembler connects them.
+ */
+export function motifRunAlong(path: Path, opts: MotifRunOptions): Path[] {
+  if (path.length < 2) return [];
+  const motif: Motif = motifById(opts.motifId);
+  const scale = Math.max(0.1, opts.sizeMm) / motif.w;
+  const cellW = motif.w * scale;
+  const step = cellW * Math.max(0.5, opts.spacingMul ?? 1.05);
+
+  // Arc-length table.
+  const segs: { a: Point; b: Point; len: number; acc: number }[] = [];
+  let total = 0;
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1];
+    const b = path[i];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (len <= 0) continue;
+    segs.push({ a, b, len, acc: total });
+    total += len;
+  }
+  if (total <= 0) return [];
+
+  const at = (s: number) => {
+    let seg = segs[segs.length - 1];
+    for (const sg of segs) if (s <= sg.acc + sg.len) { seg = sg; break; }
+    const t = Math.max(0, Math.min(1, (s - seg.acc) / seg.len));
+    return {
+      pt: { x: seg.a.x + (seg.b.x - seg.a.x) * t, y: seg.a.y + (seg.b.y - seg.a.y) * t },
+      ang: (Math.atan2(seg.b.y - seg.a.y, seg.b.x - seg.a.x) * 180) / Math.PI,
+    };
+  };
+
+  const out: Path[] = [];
+  for (let s = cellW / 2; s <= total; s += step) {
+    const { pt, ang } = at(s);
+    for (const stroke of motif.strokes) {
+      out.push(
+        stroke.map((q) => {
+          const r = rotatePoint({ x: q.x * scale, y: q.y * scale }, ang, { x: 0, y: 0 });
+          return { x: r.x + pt.x, y: r.y + pt.y };
+        }),
+      );
+    }
+  }
+  return out;
+}
+
 export interface MotifFillOptions {
   /** motif id (see motifs.ts). */
   motifId: string;

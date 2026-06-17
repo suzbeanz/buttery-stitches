@@ -27,13 +27,15 @@ describe("motif fill", () => {
     const big = motifFill([sq], { motifId: "diamond", sizeMm: 8, angle: 0 }).length;
     expect(big).toBeLessThan(small);
   });
-  it("carve overlay adds pressed-in pattern stitches over a tatami fill, safely", () => {
+  it("true-relief carve skips penetrations along the motif (grooves), safely", () => {
     const plain = makeObjectFromPaths("fill", [sq], "c1");
     const carved = makeObjectFromPaths("fill", [sq], "c1");
     carved.params.carve = "diamond";
+    const pen = (d: ReturnType<typeof generateDesign>) =>
+      d.filter((s) => !s.jump && !s.trim).length;
     const dp = generateDesign({ ...createEmptyProject(), objects: [plain] }, { lockStitches: true });
     const dc = generateDesign({ ...createEmptyProject(), objects: [carved] }, { lockStitches: true });
-    expect(dc.length).toBeGreaterThan(dp.length);
+    expect(pen(dc)).toBeLessThan(pen(dp)); // carved grooves remove penetrations
     let longest = 0;
     for (let i = 1; i < dc.length; i++)
       if (!dc[i].jump && !dc[i].trim && dc[i].colorId === dc[i - 1].colorId)

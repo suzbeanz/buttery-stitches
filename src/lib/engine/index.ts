@@ -10,7 +10,7 @@ import { effectiveProfile } from "./profile";
 import { distance, railsFromCenterline } from "../geometry";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
-import { tatamiFill, motifFill, splitFillRegions, autoFillAngleForRegions } from "./fill";
+import { tatamiFill, motifFill, motifRunAlong, carvePoints, splitFillRegions, autoFillAngleForRegions } from "./fill";
 import { contourFill } from "./contour";
 import { medialColumns, satinCoverage, type SatinColumn } from "./medial";
 import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
@@ -135,6 +135,10 @@ const MIN_SATIN_COVERAGE = 0.82;
 
 /** Gradient fillStyle: the sparse edge is this multiple of the dense row spacing. */
 const GRADIENT_FILL_MUL = 2.6;
+
+/** Half-width (mm) of a carved relief groove: penetrations within this of a carve
+ *  curve are skipped. Thin, so the float across the groove stays machine-safe. */
+const CARVE_GROOVE_MM = 0.8;
 
 /**
  * Greedily order a set of independent runs so each starts near where the last
@@ -276,6 +280,12 @@ export function generateObjectRuns(
       addRun(runs, (object.paths[0] ?? []).map((q) => ({ ...q })), false);
       return runs;
     }
+    // Motif run: repeat a decorative motif along the line instead of a plain run.
+    if (p.motifRun && p.motifRun !== "none") {
+      const strokes = motifRunAlong(object.paths[0] ?? [], { motifId: p.motifRun, sizeMm: p.motifSizeMm });
+      for (const stroke of strokes) addRun(runs, dropShortStitches(runningStitch(stroke, stitchLength)), false);
+      return runs;
+    }
     const line = dropShortStitches(runningStitch(object.paths[0] ?? [], stitchLength));
     // Bean / triple stitch: retrace the line N times (forward/back/forward) for a
     // bold, durable outline. The repeats land in the same holes but are never
@@ -368,7 +378,14 @@ export function generateObjectRuns(
     } else {
       // Gradient fillStyle ramps row spacing across the shape for a shaded look.
       const gradient = p.fillStyle === "gradient" ? GRADIENT_FILL_MUL : undefined;
-      tops = [tatamiFill(region, { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp, gradient })];
+      let top = tatamiFill(region, { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp, gradient });
+      // True relief carving: skip needle penetrations along the carve motif so the
+      // surrounding fill floats over un-stitched grooves.
+      if (p.carve && p.carve !== "none") {
+        const curves = motifFill(region, { motifId: p.carve, sizeMm: p.motifSizeMm, angle: tatamiAngle });
+        top = carvePoints(top, curves, CARVE_GROOVE_MM);
+      }
+      tops = [top];
     }
 
     // Sew the fill's pieces nearest-neighbor from where the underlay left off,
@@ -387,15 +404,6 @@ export function generateObjectRuns(
       const subRuns = tops.flatMap((run) => splitLongTravels(run, travelMax));
       for (const sub of orderByNearest(subRuns, cursor)) {
         addRun(runs, dropShortStitches(sub, minStitch), false);
-      }
-    }
-
-    // Carve/emboss overlay: stitch a motif pattern ON TOP of the fill, pressing
-    // the design in (skip for satin columns and motif fills — only broad fills).
-    if (p.carve && p.carve !== "none" && !usingSatin && !motifMode) {
-      const carveStrokes = motifFill(region, { motifId: p.carve, sizeMm: p.motifSizeMm, angle: tatamiAngle });
-      for (const stroke of orderByNearest(carveStrokes, null)) {
-        addRun(runs, dropShortStitches(runningStitch(stroke, stitchLength)), false);
       }
     }
   }

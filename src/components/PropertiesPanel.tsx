@@ -287,6 +287,27 @@ function ObjectProperties({
               <option value={7}>Boldest — bean (7×)</option>
             </select>
           </Field>
+          <Field label="Motif run">
+            <select
+              value={p.motifRun ?? "none"}
+              onChange={(e) => onParam({ motifRun: e.target.value })}
+              className="input"
+            >
+              <option value="none">None (plain line)</option>
+              {MOTIFS.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          </Field>
+          {p.motifRun && p.motifRun !== "none" && (
+            <NumberField
+              label="Motif size (mm)"
+              value={p.motifSizeMm ?? DEFAULT_PARAMS.motifSizeMm}
+              step={0.5}
+              min={1}
+              onChange={(v) => onParam({ motifSizeMm: v })}
+            />
+          )}
         </>
       )}
 
