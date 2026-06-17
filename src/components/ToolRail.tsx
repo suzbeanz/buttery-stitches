@@ -68,7 +68,7 @@ export default function ToolRail() {
   const lockTip = "Switch to Edit view to use tools";
 
   return (
-    <aside className="flex w-[72px] shrink-0 flex-col gap-1 overflow-y-auto border-r-2 border-ink bg-cream py-2">
+    <aside className="flex w-28 shrink-0 flex-col gap-1 overflow-y-auto border-r-2 border-ink bg-cream py-2">
       <Group label="Edit">
         <ToolBtn id="select" label="Select" tip="Click to select; drag to move" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <MousePointer2 size={20} />
@@ -203,7 +203,8 @@ function Group({ label, children }: { label: string; children: ReactNode }) {
       <div className="mb-0.5 text-center font-label text-[9px] font-semibold uppercase tracking-[0.16em] text-ink/45">
         {label}
       </div>
-      <div className="flex flex-col gap-1">{children}</div>
+      {/* Two columns so the whole kit fits at a glance without scrolling. */}
+      <div className="grid grid-cols-2 gap-1">{children}</div>
     </div>
   );
 }
