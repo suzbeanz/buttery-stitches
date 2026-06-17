@@ -66,6 +66,8 @@ interface EditorState {
   snapEnabled: boolean;
   /** draw alignment guide lines while dragging (default on). */
   guidesEnabled: boolean;
+  /** realistic (TrueView) thread shading in stitch view. */
+  realistic: boolean;
   /** deep copies of objects held for paste (transient; not undone). */
   clipboard: EmbObject[];
   /** whether the left (layers) and right (properties) panels are open. */
@@ -104,6 +106,7 @@ interface EditorState {
   toggleSmooth: () => void;
   toggleSnap: () => void;
   toggleGuides: () => void;
+  toggleRealistic: () => void;
   setClipboard: (objects: EmbObject[]) => void;
   setLayersOpen: (open: boolean) => void;
   setPropertiesOpen: (open: boolean) => void;
@@ -135,6 +138,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   smooth: false,
   snapEnabled: true,
   guidesEnabled: true,
+  realistic: true,
   clipboard: [],
   layersOpen: true,
   propertiesOpen: true,
@@ -162,6 +166,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   toggleSmooth: () => set((s) => ({ smooth: !s.smooth })),
   toggleSnap: () => set((s) => ({ snapEnabled: !s.snapEnabled })),
   toggleGuides: () => set((s) => ({ guidesEnabled: !s.guidesEnabled })),
+  toggleRealistic: () => set((s) => ({ realistic: !s.realistic })),
   setClipboard: (clipboard) => set({ clipboard }),
   setLayersOpen: (layersOpen) => set({ layersOpen }),
   setPropertiesOpen: (propertiesOpen) => set({ propertiesOpen }),

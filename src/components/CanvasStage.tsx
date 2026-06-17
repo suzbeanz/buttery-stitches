@@ -1468,6 +1468,12 @@ function DraftPreview({
 
 // ---------------------------------------------------------------------------
 
+/** Lighten (f>1) or darken (f<1) an rgb triple to a css color, clamped. */
+function shadeRgb(rgb: number[], f: number): string {
+  const ch = (v: number) => Math.max(0, Math.min(255, Math.round(v * f)));
+  return `rgb(${ch(rgb[0])},${ch(rgb[1])},${ch(rgb[2])})`;
+}
+
 /** Read-only render of the assembled stitches, up to the simulator cursor.
  * Subscribes to `simIndex` itself so playback re-renders only this view, not the
  * whole (hidden) edit layer. */
@@ -1483,6 +1489,7 @@ function StitchView({
   py: (y: number) => number;
 }) {
   const upTo = useEditorStore((s) => s.simIndex);
+  const realistic = useEditorStore((s) => s.realistic);
   const segs = useMemo(() => designToSegments(design, upTo), [design, upTo]);
   const needle = useMemo(() => needleAt(design, upTo), [design, upTo]);
   // Render the whole preview as ONE custom canvas Shape rather than hundreds of
@@ -1516,18 +1523,47 @@ function StitchView({
           // as solid satin and solid tatami, while the sharp serpentine turns at
           // a fill's edge no longer round-join into a ragged, "spiky" fringe.
           ctx.setAttr("lineCap", "round");
+          // Realistic (TrueView): each thread is a tube — a shaded full-width body
+          // plus a lighter core offset toward an upper-left light, so dense fills
+          // read as rounded, lit thread instead of flat scanlines.
+          const od = realistic ? -threadPx * 0.16 : 0;
           for (const seg of segs) {
             if (seg.points.length < 2) continue;
             const c = colorById.get(seg.colorId);
-            ctx.beginPath();
-            for (let i = 1; i < seg.points.length; i++) {
-              ctx.moveTo(px(seg.points[i - 1].x), py(seg.points[i - 1].y));
-              ctx.lineTo(px(seg.points[i].x), py(seg.points[i].y));
+            const rgb = c ? c.rgb : [136, 136, 136];
+            const path = (dx: number, dy: number) => {
+              ctx.beginPath();
+              for (let i = 1; i < seg.points.length; i++) {
+                ctx.moveTo(px(seg.points[i - 1].x) + dx, py(seg.points[i - 1].y) + dy);
+                ctx.lineTo(px(seg.points[i].x) + dx, py(seg.points[i].y) + dy);
+              }
+            };
+            if (seg.underlay) {
+              path(0, 0);
+              ctx.setAttr("strokeStyle", shadeRgb(rgb, 1));
+              ctx.setAttr("lineWidth", 0.6);
+              ctx.setAttr("globalAlpha", 0.4);
+              ctx.stroke();
+            } else if (realistic) {
+              // body (shaded sides)
+              path(0, 0);
+              ctx.setAttr("strokeStyle", shadeRgb(rgb, 0.72));
+              ctx.setAttr("lineWidth", threadPx);
+              ctx.setAttr("globalAlpha", 1);
+              ctx.stroke();
+              // lit core, offset toward the light
+              path(od, od);
+              ctx.setAttr("strokeStyle", shadeRgb(rgb, 1.16));
+              ctx.setAttr("lineWidth", threadPx * 0.5);
+              ctx.setAttr("globalAlpha", 0.92);
+              ctx.stroke();
+            } else {
+              path(0, 0);
+              ctx.setAttr("strokeStyle", shadeRgb(rgb, 1));
+              ctx.setAttr("lineWidth", threadPx);
+              ctx.setAttr("globalAlpha", 0.95);
+              ctx.stroke();
             }
-            ctx.setAttr("strokeStyle", c ? `rgb(${c.rgb.join(",")})` : "#888");
-            ctx.setAttr("lineWidth", seg.underlay ? 0.6 : threadPx);
-            ctx.setAttr("globalAlpha", seg.underlay ? 0.4 : 0.95);
-            ctx.stroke();
           }
           ctx.setAttr("globalAlpha", 1);
         }}

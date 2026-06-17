@@ -49,7 +49,8 @@ describe("DesignPanel", () => {
   it("changes the hoop via preset", () => {
     render(<DesignPanel />);
     const select = screen.getByText("Hoop").closest("label")!.querySelector("select")!;
-    fireEvent.change(select, { target: { value: "1" } }); // 1×2.5"
-    expect(useProjectStore.getState().project.hoop.wMm).toBeCloseTo(25.4);
+    fireEvent.change(select, { target: { value: "1" } }); // 5×7" (130×180)
+    expect(useProjectStore.getState().project.hoop.wMm).toBeCloseTo(130);
+    expect(useProjectStore.getState().project.hoop.hMm).toBeCloseTo(180);
   });
 });
