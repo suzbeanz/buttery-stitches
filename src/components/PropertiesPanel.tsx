@@ -28,6 +28,7 @@ import type {
 } from "../types/project";
 import { newId } from "../lib/id";
 import { convertObjectType, satinWidthOf, setSatinWidth } from "../lib/objects";
+import { MOTIFS } from "../lib/engine/motifs";
 import { buildOutline, DEFAULT_OUTLINE_WIDTH } from "../lib/outline";
 import { generateObjectStitches } from "../lib/engine";
 import DesignPanel from "./DesignPanel";
@@ -314,7 +315,7 @@ function ObjectProperties({
           <select
             value={p.fillStyle ?? DEFAULT_PARAMS.fillStyle}
             onChange={(e) =>
-              onParam({ fillStyle: e.target.value as "tatami" | "satin" | "contour" | "gradient" })
+              onParam({ fillStyle: e.target.value as "tatami" | "satin" | "contour" | "gradient" | "motif" })
             }
             className="input"
           >
@@ -322,11 +323,50 @@ function ObjectProperties({
             <option value="satin">Satin columns</option>
             <option value="contour">Contour (echo the shape)</option>
             <option value="gradient">Gradient (shaded)</option>
+            <option value="motif">Motif (decorative)</option>
           </select>
         </Field>
       )}
 
-      {object.type === "fill" && (
+      {object.type === "fill" && p.fillStyle === "motif" && (
+        <>
+          <Field label="Motif">
+            <select
+              value={p.motif ?? DEFAULT_PARAMS.motif}
+              onChange={(e) => onParam({ motif: e.target.value })}
+              className="input"
+            >
+              {MOTIFS.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          </Field>
+          <NumberField
+            label="Motif size (mm)"
+            value={p.motifSizeMm ?? DEFAULT_PARAMS.motifSizeMm}
+            step={0.5}
+            min={1}
+            onChange={(v) => onParam({ motifSizeMm: v })}
+          />
+        </>
+      )}
+
+      {object.type === "fill" && p.fillStyle !== "motif" && (
+        <Field label="Carve pattern">
+          <select
+            value={p.carve ?? "none"}
+            onChange={(e) => onParam({ carve: e.target.value })}
+            className="input"
+          >
+            <option value="none">None</option>
+            {MOTIFS.map((m) => (
+              <option key={m.id} value={m.id}>{m.name}</option>
+            ))}
+          </select>
+        </Field>
+      )}
+
+      {object.type === "fill" && p.fillStyle !== "motif" && (
         <label className="flex items-center gap-2 text-sm text-navy">
           <input
             type="checkbox"

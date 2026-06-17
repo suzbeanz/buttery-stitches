@@ -1,6 +1,7 @@
 import type { Path, Point } from "../../types/project";
 import { rotatePoint } from "./resample";
 import { staggeredSatin } from "./satin";
+import { motifById, type Motif } from "./motifs";
 
 /** Longest single satin throw (mm) before it is split for safety. */
 const MAX_THROW_MM = 7;
@@ -472,4 +473,77 @@ export function columnSatinFill(rings: Path[], opts: FillOptions): Path {
   }
   // Split throws wider than a safe length (staggered split satin) before rotating.
   return staggeredSatin(pairs, MAX_THROW_MM).map((p) => rotatePoint(p, opts.angle, pivot));
+}
+
+/** Even-odd point-in-region over consistently-wound rings. */
+function pointInRingsEO(p: Point, rings: Path[]): boolean {
+  let inside = false;
+  for (const ring of rings) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const a = ring[i];
+      const b = ring[j];
+      if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) {
+        inside = !inside;
+      }
+    }
+  }
+  return inside;
+}
+
+export interface MotifFillOptions {
+  /** motif id (see motifs.ts). */
+  motifId: string;
+  /** width of one motif cell in mm. */
+  sizeMm: number;
+  /** fill direction in degrees (motifs tile along this grain). */
+  angle: number;
+  /** spacing between cells as a multiple of the cell size (default 1.15). */
+  spacingMul?: number;
+}
+
+/**
+ * Motif fill (Wilcom "design element"): tile a decorative motif across the
+ * region in a brick grid, clipped to the shape (a motif is placed when its
+ * center lies inside). Returns one run per placed motif stroke; the assembler
+ * connects them with travels. Decorative + open, so no underlay/tatami coverage.
+ */
+export function motifFill(rings: Path[], opts: MotifFillOptions): Path[] {
+  const oriented = orientByDepth(rings);
+  if (oriented.length === 0 || oriented[0].length < 3) return [];
+  const motif: Motif = motifById(opts.motifId);
+  const size = Math.max(1, opts.sizeMm);
+  const scale = size / motif.w;
+  const cellW = motif.w * scale;
+  const cellH = motif.h * scale;
+  const spacing = Math.max(1, opts.spacingMul ?? 1.15);
+  const stepX = cellW * spacing;
+  const stepY = cellH * spacing;
+
+  const pivot = centroid(oriented[0]);
+  const rrings = oriented.map((r) => r.map((p) => rotatePoint(p, -opts.angle, pivot)));
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const ring of rrings)
+    for (const p of ring) {
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
+    }
+
+  const out: Path[] = [];
+  let row = 0;
+  for (let y = minY + stepY / 2; y <= maxY; y += stepY, row++) {
+    const xOff = row % 2 === 1 ? stepX / 2 : 0; // brick offset
+    for (let x = minX + stepX / 2 + xOff; x <= maxX; x += stepX) {
+      if (!pointInRingsEO({ x, y }, rrings)) continue;
+      for (const stroke of motif.strokes) {
+        out.push(
+          stroke.map((p) =>
+            rotatePoint({ x: x + p.x * scale, y: y + p.y * scale }, opts.angle, pivot),
+          ),
+        );
+      }
+    }
+  }
+  return out;
 }

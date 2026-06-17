@@ -10,7 +10,7 @@ import { effectiveProfile } from "./profile";
 import { distance, railsFromCenterline } from "../geometry";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
-import { tatamiFill, splitFillRegions, autoFillAngleForRegions } from "./fill";
+import { tatamiFill, motifFill, splitFillRegions, autoFillAngleForRegions } from "./fill";
 import { contourFill } from "./contour";
 import { medialColumns, satinCoverage, type SatinColumn } from "./medial";
 import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
@@ -313,6 +313,7 @@ export function generateObjectRuns(
   // axis (very thin ones run as a single line); broad areas use tatami; the
   // medial pass falls back to tatami where satin won't cover cleanly.
   const satin = p.fillStyle === "satin";
+  const motifMode = p.fillStyle === "motif";
   const regions = splitFillRegions(object.paths);
   // ONE grain angle for the whole object so every tatami region flows the same
   // way — a word or multi-blob logo reads as a single piece, not a patchwork of
@@ -330,9 +331,10 @@ export function generateObjectRuns(
     const fillAngle = usingSatin ? p.angle : tatamiAngle;
 
     let cursor: Point | null = null;
-    if (p.underlay) {
+    if (p.underlay && !motifMode) {
       // Satin: tiered underlay per column (center / edge-walk / zig-zag by width).
-      // Tatami: inset edge run + perpendicular pass(es).
+      // Tatami: inset edge run + perpendicular pass(es). (Motif fills are open and
+      // decorative — no underlay.)
       const ulRuns = usingSatin
         ? columns.flatMap((c) => columnUnderlay(c.centerline, c.widthMm, weight))
         : fillUnderlayRuns(region, fillAngle, weight);
@@ -360,6 +362,9 @@ export function generateObjectRuns(
       tops = echo.length
         ? echo
         : [tatamiFill(region, { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp })];
+    } else if (motifMode) {
+      // Motif fill: tile a decorative motif across the region (no underlay).
+      tops = motifFill(region, { motifId: p.motif, sizeMm: p.motifSizeMm, angle: tatamiAngle });
     } else {
       // Gradient fillStyle ramps row spacing across the shape for a shaded look.
       const gradient = p.fillStyle === "gradient" ? GRADIENT_FILL_MUL : undefined;
@@ -382,6 +387,15 @@ export function generateObjectRuns(
       const subRuns = tops.flatMap((run) => splitLongTravels(run, travelMax));
       for (const sub of orderByNearest(subRuns, cursor)) {
         addRun(runs, dropShortStitches(sub, minStitch), false);
+      }
+    }
+
+    // Carve/emboss overlay: stitch a motif pattern ON TOP of the fill, pressing
+    // the design in (skip for satin columns and motif fills — only broad fills).
+    if (p.carve && p.carve !== "none" && !usingSatin && !motifMode) {
+      const carveStrokes = motifFill(region, { motifId: p.carve, sizeMm: p.motifSizeMm, angle: tatamiAngle });
+      for (const stroke of orderByNearest(carveStrokes, null)) {
+        addRun(runs, dropShortStitches(runningStitch(stroke, stitchLength)), false);
       }
     }
   }
