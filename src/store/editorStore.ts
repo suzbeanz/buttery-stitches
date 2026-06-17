@@ -20,6 +20,7 @@ export type Tool =
   | "brush" // freehand filled blob
   | "bucket" // click an enclosed area to fill it
   | "measure" // drag to read off a distance + angle (no object created)
+  | "satin2" // two-rail satin: draw edge A, then edge B (variable width)
   | "shape"; // drag to place a premade shape (rectangle, ellipse, heart, …)
 
 /** Tools that place points to draw a new object — these map 1:1 to StitchType. */
@@ -28,6 +29,12 @@ export const DRAW_TOOLS: StitchType[] = ["running", "satin", "fill"];
 /** Narrowing guard: a draw tool *is* a StitchType. */
 export function isDrawTool(tool: Tool): tool is StitchType {
   return (DRAW_TOOLS as Tool[]).includes(tool);
+}
+
+/** Tools that place points click-by-click (the 1:1 draw tools plus two-rail
+ *  satin, which captures two click-drawn rails). Used to gate the draft flow. */
+export function isPointTool(tool: Tool): boolean {
+  return isDrawTool(tool) || tool === "satin2";
 }
 
 export type RulerUnit = "mm" | "inch";
@@ -43,6 +50,8 @@ interface EditorState {
   draft: Point[];
   /** live cursor position in mm while drawing (for the rubber-band preview). */
   cursorMm: Point | null;
+  /** first rail captured by the two-rail satin tool, while the second is drawn. */
+  satinRailA: Point[] | null;
   /** color id assigned to newly drawn objects. */
   activeColorId: string | null;
   rulerUnit: RulerUnit;
@@ -87,6 +96,7 @@ interface EditorState {
   addDraftPoint: (p: Point) => void;
   setCursor: (p: Point | null) => void;
   clearDraft: () => void;
+  setSatinRailA: (rail: Point[] | null) => void;
   setActiveColorId: (id: string | null) => void;
   setRulerUnit: (unit: RulerUnit) => void;
   setSmooth: (smooth: boolean) => void;
@@ -117,6 +127,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   tool: "select",
   shapeKind: "rectangle",
   draft: [],
+  satinRailA: null,
   cursorMm: null,
   activeColorId: null,
   rulerUnit: "inch",
@@ -138,11 +149,12 @@ export const useEditorStore = create<EditorState>((set) => ({
   simPlaying: false,
   simSpeed: 400,
 
-  setTool: (tool) => set({ tool, draft: [], cursorMm: null }),
+  setTool: (tool) => set({ tool, draft: [], cursorMm: null, satinRailA: null }),
   setShapeKind: (shapeKind) => set({ shapeKind }),
   addDraftPoint: (p) => set((s) => ({ draft: [...s.draft, p] })),
   setCursor: (p) => set({ cursorMm: p }),
   clearDraft: () => set({ draft: [], cursorMm: null }),
+  setSatinRailA: (satinRailA) => set({ satinRailA }),
   setActiveColorId: (id) => set({ activeColorId: id }),
   setRulerUnit: (unit) => set({ rulerUnit: unit }),
   setSmooth: (smooth) => set({ smooth }),

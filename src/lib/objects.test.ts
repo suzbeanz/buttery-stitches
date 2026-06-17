@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   makeObject,
+  makeSatinFromRails,
   cloneObject,
   satinWidthOf,
   setSatinWidth,
@@ -14,6 +15,25 @@ const line: Path = [
   { x: 10, y: 0 },
   { x: 20, y: 0 },
 ];
+
+describe("makeSatinFromRails", () => {
+  const railA: Path = [{ x: 0, y: 0 }, { x: 10, y: 0 }];
+  it("keeps rails as-is and stores both as the column", () => {
+    const railB: Path = [{ x: 0, y: 4 }, { x: 10, y: 4 }];
+    const o = makeSatinFromRails(railA, railB, "c1");
+    expect(o.type).toBe("satin");
+    expect(o.paths).toHaveLength(2);
+    expect(o.paths[0]).toEqual(railA);
+    expect(o.paths[1][0]).toEqual({ x: 0, y: 4 }); // not flipped (same direction)
+  });
+  it("flips rail B when it runs opposite, so the column doesn't twist", () => {
+    const railBReversed: Path = [{ x: 10, y: 4 }, { x: 0, y: 4 }]; // drawn the other way
+    const o = makeSatinFromRails(railA, railBReversed, "c1");
+    // After orientation, rail B's start should pair with rail A's start (x≈0).
+    expect(o.paths[1][0].x).toBeCloseTo(0);
+    expect(o.paths[1][o.paths[1].length - 1].x).toBeCloseTo(10);
+  });
+});
 
 describe("cloneObject", () => {
   it("gives the clone a fresh id and offsets its geometry", () => {
