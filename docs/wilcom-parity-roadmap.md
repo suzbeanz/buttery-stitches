@@ -62,9 +62,11 @@ the broader Wilcom feature surface below.
 
 ### Phase 2 — decorative professionalism + thread/color + validation depth
 > **Status:** ✅ Thread management (CIELAB chart matching + agglomerative color
-> reduction, "Threads" panel); ✅ a decorative fill (gradient/ombré fillStyle);
+> reduction, "Threads" panel); ✅ decorative fills — gradient/ombré, **motif fill**
+> (wave/chevron/diamond/cross, tiled + clipped) and **carve/emboss overlay**;
 > ✅ Design Info & estimator (thread length, run-time, hoop-fit in Check).
-> Remaining decorative effects (motif/pattern/carving fills, motif runs) deferred.
+> Note: true relief carving (stitches parting around channels) needs fill-router
+> work — shipped the honest overlay version. Motif RUNS still to do.
 
 5. **Thread brand libraries**: Madeira/Isacord/etc. palettes, nearest-thread match,
    and color reduction on trace/import. *Verify: pure matching tests.*

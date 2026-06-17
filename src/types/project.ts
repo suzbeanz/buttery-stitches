@@ -51,9 +51,17 @@ export interface EmbObjectParams {
   /** draw the object's border outline in the editor (default true). */
   outline?: boolean;
   /** how a fill is stitched: tatami (broad areas), satin columns (lettering),
-   *  contour (rows that echo the shape's outline), or gradient (tatami whose row
-   *  spacing ramps across the shape for a shaded/ombré effect). */
-  fillStyle?: "tatami" | "satin" | "contour" | "gradient";
+   *  contour (rows that echo the shape's outline), gradient (tatami whose row
+   *  spacing ramps for a shaded/ombré effect), or motif (a tiled decorative
+   *  motif). */
+  fillStyle?: "tatami" | "satin" | "contour" | "gradient" | "motif";
+  /** motif id for fillStyle "motif" (and the carve pattern). Default "wave". */
+  motif?: string;
+  /** motif cell size in mm for a motif fill (default 4). */
+  motifSizeMm?: number;
+  /** carve/emboss: a motif id stitched as an overlay that presses a pattern into
+   *  a tatami/gradient fill, or "none" (default). */
+  carve?: string;
   /** appliqué: stitch the shape as placement run → STOP (lay fabric) → tackdown
    *  → STOP (trim) → satin cover, instead of a normal fill. Default false. */
   applique?: boolean;
@@ -192,6 +200,9 @@ export const DEFAULT_PARAMS: Required<EmbObjectParams> = {
   pushComp: 0.2,
   outline: true,
   fillStyle: "tatami",
+  motif: "wave",
+  motifSizeMm: 4,
+  carve: "none",
   applique: false,
 };
 
@@ -215,6 +226,9 @@ export function resolveParams(
     pushComp: params.pushComp ?? DEFAULT_PARAMS.pushComp,
     outline: params.outline ?? DEFAULT_PARAMS.outline,
     fillStyle: params.fillStyle ?? DEFAULT_PARAMS.fillStyle,
+    motif: params.motif ?? DEFAULT_PARAMS.motif,
+    motifSizeMm: params.motifSizeMm ?? DEFAULT_PARAMS.motifSizeMm,
+    carve: params.carve ?? DEFAULT_PARAMS.carve,
     applique: params.applique ?? DEFAULT_PARAMS.applique,
   };
 }
