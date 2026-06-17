@@ -259,6 +259,20 @@ describe("imageDataToObjects (real imagetracerjs)", () => {
     for (const o of objects) expect(o.paths[0].length).toBeGreaterThanOrEqual(2);
   });
 
+  it("keeps a small high-contrast feature (a pet's eye) against a dominant field", () => {
+    // A 60×60 cream field with a small dark 8×8 spot. Population-based quantizers
+    // discard the spot (it's <2% of pixels); ours feeds its palette to the tracer
+    // so the dark color survives as its own object — the difference between a
+    // portrait with eyes and a featureless blob.
+    const img = image(60, 60, (x, y) => {
+      const inSpot = x >= 26 && x < 34 && y >= 26 && y < 34;
+      return inSpot ? [30, 20, 15] : [230, 210, 175];
+    });
+    const { colors } = imageDataToObjects(img, 4, { mmPerPx: 1, removeBackground: false });
+    const hasDark = colors.some((c) => c.rgb[0] < 90 && c.rgb[1] < 90 && c.rgb[2] < 90);
+    expect(hasDark).toBe(true);
+  });
+
   it("estimates higher complexity for noisy images", () => {
     const flat = image(20, 20, () => [100, 100, 100]);
     const noisy = image(20, 20, (x, y) => [(x * 13) % 256, (y * 29) % 256, (x * y) % 256]);
