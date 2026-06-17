@@ -316,6 +316,23 @@ describe("runningStitch", () => {
     // ends on the final corner
     expect(out[out.length - 1]).toEqual({ x: 5, y: 5 });
   });
+
+  it("lands a penetration exactly on every sharp corner (crisp turns)", () => {
+    // A square outline with a 7mm edge at 3mm spacing: 7 isn't a multiple of 3,
+    // so a naive walk would cut each corner. Every corner must be a penetration.
+    const sq: Path = [
+      { x: 0, y: 0 },
+      { x: 7, y: 0 },
+      { x: 7, y: 7 },
+      { x: 0, y: 7 },
+      { x: 0, y: 0 },
+    ];
+    const out = runningStitch(sq, 3);
+    const hits = (p: { x: number; y: number }) =>
+      out.some((q) => Math.hypot(q.x - p.x, q.y - p.y) < 1e-6);
+    for (const c of [{ x: 7, y: 0 }, { x: 7, y: 7 }, { x: 0, y: 7 }]) expect(hits(c)).toBe(true);
+    expect(maxSeg(out)).toBeLessThanOrEqual(3 + 1e-6); // still no over-long stitch
+  });
 });
 
 describe("satinColumn", () => {

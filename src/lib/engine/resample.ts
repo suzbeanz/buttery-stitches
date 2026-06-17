@@ -17,13 +17,22 @@ export const MIN_STITCH_LENGTH = 0.5;
  * within `minLen` of it, while always preserving the first and last points so
  * an object still starts and ends exactly where it should.
  */
-export function dropShortStitches(path: Path, minLen = MIN_STITCH_LENGTH): Path {
+export function dropShortStitches(
+  path: Path,
+  minLen = MIN_STITCH_LENGTH,
+  preserveCorners = false,
+): Path {
   if (path.length < 2 || minLen <= 0) return path.map((p) => ({ ...p }));
 
   const out: Point[] = [{ ...path[0] }];
   const lastIdx = path.length - 1;
   for (let i = 1; i < lastIdx; i++) {
-    if (distance(out[out.length - 1], path[i]) >= minLen) out.push({ ...path[i] });
+    // Keep a point if it's far enough — or, for an OUTLINE, if it's a real corner
+    // (a crisp turn must not be merged away). Fill/satin leave this off so their
+    // dense serpentine/throw turns still merge to prevent thread buildup.
+    const corner =
+      preserveCorners && turnDeg(path[i - 1], path[i], path[i + 1]) >= CORNER_DEG;
+    if (corner || distance(out[out.length - 1], path[i]) >= minLen) out.push({ ...path[i] });
   }
 
   // Always keep the true endpoint. If it crowds the previously kept point, drop
@@ -35,11 +44,26 @@ export function dropShortStitches(path: Path, minLen = MIN_STITCH_LENGTH): Path 
   return out;
 }
 
+/** Turn angle (degrees) at b going a→b→c. 0 = straight, 180 = reversal. */
+function turnDeg(a: Point, b: Point, c: Point): number {
+  const v1x = b.x - a.x, v1y = b.y - a.y;
+  const v2x = c.x - b.x, v2y = c.y - b.y;
+  const d = Math.hypot(v1x, v1y) * Math.hypot(v2x, v2y);
+  if (d === 0) return 0;
+  const cos = Math.max(-1, Math.min(1, (v1x * v2x + v1y * v2y) / d));
+  return (Math.acos(cos) * 180) / Math.PI;
+}
+
+/** Above this turn a vertex is a real corner that must get its own penetration
+ *  (densified curve points turn far less per segment, so they stay smooth). */
+const CORNER_DEG = 28;
+
 /**
  * Walk a polyline and place a point every `spacing` mm of arc length. The first
- * vertex is always included, and the final vertex is always landed on exactly
- * (embroidery needs the needle to finish on the real endpoint, not a rounded
- * approximation of it).
+ * vertex is always included, the final vertex is always landed on exactly, AND a
+ * penetration is forced onto every sharp CORNER so the line turns crisply instead
+ * of cutting the corner with a chord (the difference between amateur and pro
+ * outlines). Spacing restarts from each corner.
  */
 export function resampleByDistance(path: Path, spacing: number): Path {
   if (path.length === 0) return [];
@@ -50,8 +74,9 @@ export function resampleByDistance(path: Path, spacing: number): Path {
   // The next penetration must land `spacing` past the last placed point, i.e.
   // `spacing - carry` into the upcoming segment.
   let carry = 0;
+  const n = path.length;
 
-  for (let i = 1; i < path.length; i++) {
+  for (let i = 1; i < n; i++) {
     const a = path[i - 1];
     const b = path[i];
     const segLen = distance(a, b);
@@ -64,8 +89,16 @@ export function resampleByDistance(path: Path, spacing: number): Path {
       out.push({ x: a.x + dx * dist, y: a.y + dy * dist });
       dist += spacing;
     }
-    // Distance from the last placed point to b carries into the next segment.
     carry = segLen - (dist - spacing);
+
+    // Land exactly on a real corner so the turn is crisp; restart spacing there.
+    // (Just add the corner — never stretch a sample onto it — so no stitch ever
+    // exceeds `spacing`. dropShortStitches preserves corners, so the penetration
+    // survives even if the run into it is short.)
+    if (i < n - 1 && turnDeg(a, b, path[i + 1]) >= CORNER_DEG) {
+      if (distance(out[out.length - 1], b) > 1e-9) out.push({ ...b });
+      carry = 0;
+    }
   }
 
   // Always finish exactly on the last vertex.
