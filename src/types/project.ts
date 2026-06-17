@@ -64,6 +64,10 @@ export interface TextSpec {
   fontId: string;
   heightMm: number;
   letterSpacingMm: number;
+  /** line spacing as a multiple of letter height (multiline). Default 1.35. */
+  lineSpacing?: number;
+  /** arc bend in degrees: + arches up, − down, 0 straight. Default 0. */
+  archDeg?: number;
 }
 
 export interface EmbObject {

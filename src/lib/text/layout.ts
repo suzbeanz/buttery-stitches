@@ -27,6 +27,12 @@ export interface TextLayoutOptions {
   heightMm: number;
   /** extra space between letters in mm (may be negative to tighten). */
   letterSpacingMm?: number;
+  /** line spacing as a multiple of the letter height (default 1.35). Multiline
+   *  text is split on "\n" and each line is centered. */
+  lineSpacing?: number;
+  /** bend the text along a circular arc: +deg arches up (∩), −deg down (∪),
+   *  0 = straight (default). The typed width subtends this sweep angle. */
+  archDeg?: number;
   /** color id for the generated fill object. */
   colorId: string;
   /** optional object name. */
@@ -169,75 +175,105 @@ function glyphsFor(font: Font, text: string) {
   }
 }
 
+/** Lay one line of glyphs flat (font units, pen from x=0). Returns its rings and
+ *  total advance width. */
+function lineRings(
+  font: Font,
+  text: string,
+  emSize: number,
+  spacingUnits: number,
+  flattenTol: number,
+): { rings: Path[]; width: number } {
+  const rings: Path[] = [];
+  let penX = 0;
+  for (const glyph of glyphsFor(font, text)) {
+    const path = glyph.getPath(penX, 0, emSize) as { commands: OtCommand[] };
+    rings.push(...commandsToRings(path.commands, flattenTol));
+    penX += (glyph.advanceWidth ?? 0) + spacingUnits;
+  }
+  return { rings, width: penX };
+}
+
+/** Bend centered rings along a circular arc: +deg ∩, −deg ∪, 0 = straight. */
+function archRings(rings: Path[], archDeg: number): Path[] {
+  if (!archDeg) return rings;
+  const b = pathsBounds(rings);
+  if (!b) return rings;
+  const W = b.maxX - b.minX;
+  if (W <= 0) return rings;
+  const R = W / (archDeg * (Math.PI / 180)); // signed radius (sweep = archDeg)
+  return rings.map((ring) =>
+    ring.map((p) => {
+      const phi = p.x / R;
+      const r = R - p.y; // y down: lower points sit nearer the (upper) center
+      return { x: r * Math.sin(phi), y: R - r * Math.cos(phi) };
+    }),
+  );
+}
+
 export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
   const {
     text,
     font,
     heightMm,
     letterSpacingMm = 0,
+    lineSpacing = 1.35,
+    archDeg = 0,
     colorId,
     name,
     flattenToleranceMm = 0.4,
   } = opts;
 
   const unitsPerEm = font.unitsPerEm || 1000;
-  // First lay out in EM units (font units), then scale to mm. We pick the em
-  // size so the curve-flattening tolerance lands near `flattenToleranceMm`
-  // after scaling; the actual height scale is recomputed from the real bbox.
-  const emSize = unitsPerEm; // 1 em == unitsPerEm font units == "1 unit" here
-
-  const rawRings: Path[] = [];
-  let penX = 0;
-  // letterSpacing is given in mm; convert to font units using a provisional
-  // scale of heightMm per em — refined below. We instead add spacing in font
-  // units proportional to em so it scales with the final size: treat
-  // letterSpacingMm as mm-at-final-size and back it out after scaling. To keep
-  // the layout pure and single-pass we accumulate advances in font units and
-  // add the spacing in font units using the *ascender-based* provisional scale.
-  const glyphs = glyphsFor(font, text);
-
-  // Provisional scale from ascender so spacing in mm is meaningful pre-bbox.
-  // Final scale (from bbox) is applied to everything uniformly afterwards, so
-  // spacing stays proportional and "increasing spacing increases width".
+  const emSize = unitsPerEm;
   const provScale = heightMm / unitsPerEm;
   const spacingUnits = provScale > 0 ? letterSpacingMm / provScale : 0;
+  const flattenTol = flattenToleranceMm / provScale;
 
-  for (const glyph of glyphs) {
-    const path = glyph.getPath(penX, 0, emSize) as { commands: OtCommand[] };
-    // opentype's y axis points up; embroidery/canvas y points down. getPath
-    // already flips y for screen coordinates, so rings come out upright.
-    const rings = commandsToRings(path.commands, flattenToleranceMm / provScale);
-    rawRings.push(...rings);
-    penX += (glyph.advanceWidth ?? 0) + spacingUnits;
-  }
+  // One row per line; each centered on x=0 and stacked downward.
+  const lines = text.split("\n");
+  const laid = lines.map((ln) => lineRings(font, ln, emSize, spacingUnits, flattenTol));
+  const lineHeightUnits = unitsPerEm * lineSpacing;
 
+  const rawRings: Path[] = [];
+  laid.forEach(({ rings, width }, i) => {
+    const dx = -width / 2; // center each line horizontally
+    const dy = i * lineHeightUnits;
+    for (const ring of rings) rawRings.push(ring.map((p) => ({ x: p.x + dx, y: p.y + dy })));
+  });
+
+  const totalWidth = Math.max(...laid.map((l) => l.width), 0);
   if (rawRings.length === 0) {
     return {
       object: makeObjectFromPaths("fill", [], colorId, name ?? "Text"),
-      widthMm: penX * provScale,
+      widthMm: totalWidth * provScale,
     };
   }
 
-  // Scale uniformly so the real bbox height equals heightMm, then center on 0.
-  const bounds = pathsBounds(rawRings);
-  if (!bounds) {
-    return {
-      object: makeObjectFromPaths("fill", [], colorId, name ?? "Text"),
-      widthMm: penX * provScale,
-    };
-  }
-  const rawHeight = bounds.maxY - bounds.minY;
-  const scale = rawHeight > 0 ? heightMm / rawHeight : provScale;
+  // Height reference = a single line's height (so multiline keeps letter size),
+  // taken from the first line that has geometry.
+  const refLine = laid.find((l) => l.rings.length > 0);
+  const refBounds = refLine ? pathsBounds(refLine.rings) : null;
+  const refHeight = refBounds ? refBounds.maxY - refBounds.minY : 0;
+  const bounds = pathsBounds(rawRings)!;
+  const scale = refHeight > 0 ? heightMm / refHeight : provScale;
 
   const cx = (bounds.minX + bounds.maxX) / 2;
   const cy = (bounds.minY + bounds.maxY) / 2;
-
-  const rings: Path[] = rawRings.map((ring) =>
-    ring.map((p) => ({
-      x: (p.x - cx) * scale,
-      y: (p.y - cy) * scale,
-    })),
+  const scaled: Path[] = rawRings.map((ring) =>
+    ring.map((p) => ({ x: (p.x - cx) * scale, y: (p.y - cy) * scale })),
   );
+
+  // Bend along an arc, then re-center so the object sits on the origin.
+  let rings = archRings(scaled, archDeg);
+  if (archDeg) {
+    const ab = pathsBounds(rings);
+    if (ab) {
+      const acx = (ab.minX + ab.maxX) / 2;
+      const acy = (ab.minY + ab.maxY) / 2;
+      rings = rings.map((r) => r.map((p) => ({ x: p.x - acx, y: p.y - acy })));
+    }
+  }
 
   const object = makeObjectFromPaths("fill", rings, colorId, name ?? "Text");
   // Lettering asks for satin: the engine lays a satin column down each stroke's
@@ -245,5 +281,5 @@ export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
   // and automatically falls back to a solid tatami fill on shapes whose skeleton
   // is poor — so text is never broken, just as crisp as the letter allows.
   object.params = { ...object.params, fillStyle: "satin" };
-  return { object, widthMm: penX * scale };
+  return { object, widthMm: totalWidth * scale };
 }
