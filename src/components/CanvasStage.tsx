@@ -24,7 +24,8 @@ import type Konva from "konva";
 import { useProjectStore } from "../store/projectStore";
 import { useEditorStore, isDrawTool, isPointTool } from "../store/editorStore";
 import type { EmbObject, Path, Point, ThreadColor } from "../types/project";
-import { makeObject, makeObjectFromPaths, makeSatinFromRails, minPointsFor } from "../lib/objects";
+import { makeObject, makeObjectFromPaths, makeNodeObject, makeSatinFromRails, minPointsFor, pathsFromNodes } from "../lib/objects";
+import { densifyRing, insertNode, moveNode, deleteNode, toggleNodeSmooth, translateNodes, type NodePath } from "../lib/nodes";
 import { shapeFromDrag, shapeRings, type ShapeKind } from "../lib/shapes";
 import { bucketFill } from "../lib/paintbucket";
 import {
@@ -316,11 +317,15 @@ export default function CanvasStage() {
       useEditorStore.getState().activeColorId ??
       useProjectStore.getState().project.colors[0]?.id;
     if (!colorId) return;
-    // In curve mode the placed points are control points: feed makeObject a
-    // densified spline polyline (for satin this is the smoothed centerline,
-    // from which makeObject derives the rail pair exactly as before).
-    const finalPath = smooth ? smoothPath(cleaned) : cleaned;
-    addObject(makeObject(tool, finalPath, colorId));
+    if (tool === "satin") {
+      // Satin keeps the centerline→rails model (no node editing); the Curve
+      // toggle densifies the centerline before the rails are derived.
+      addObject(makeObject("satin", smooth ? smoothPath(cleaned) : cleaned, colorId));
+    } else {
+      // Running / fill keep their placed points as editable control NODES, each
+      // seeded smooth (Curve on) or corner (Curve off); paths densify from them.
+      addObject(makeNodeObject(tool, cleaned, colorId, smooth));
+    }
     clearDraft();
   }
 
@@ -412,22 +417,42 @@ export default function CanvasStage() {
         measuringRef.current = false;
         useEditorStore.getState().setSatinRailA(null);
         useEditorStore.getState().setSelectedNode(null);
+      } else if ((e.key === "c" || e.key === "C") && tool === "node") {
+        // Toggle the focused node between a smooth curve and a sharp corner.
+        const node = useEditorStore.getState().selectedNode;
+        const obj = node && useProjectStore.getState().project.objects.find((o) => o.id === node.objectId);
+        if (obj && obj.nodes?.[node.ring]) {
+          e.preventDefault();
+          const nodes = obj.nodes.map((r, i) => (i === node.ring ? toggleNodeSmooth(r, node.point) : r));
+          updateObject(obj.id, { nodes, paths: pathsFromNodes(nodes, obj.type === "fill") });
+        }
       } else if (e.key === "Delete" || e.key === "Backspace") {
         const node = useEditorStore.getState().selectedNode;
         if (tool === "node" && node) {
-          // Delete the focused vertex (never below the type's minimum).
           e.preventDefault();
           const obj = useProjectStore
             .getState()
             .project.objects.find((o) => o.id === node.objectId);
           if (obj) {
-            const ring = obj.paths[node.ring];
-            const min = obj.type === "fill" ? 3 : 2;
-            if (ring && ring.length > min) {
-              const paths = obj.paths.map((p, i) =>
-                i === node.ring ? p.filter((_, j) => j !== node.point) : p,
-              );
-              useProjectStore.getState().updateObject(obj.id, { paths });
+            const closed = obj.type === "fill";
+            const min = closed ? 3 : 2;
+            if (obj.nodes?.[node.ring]) {
+              // Node-backed object: drop the control node, re-densify.
+              if (obj.nodes[node.ring].length > min) {
+                const nodes = obj.nodes.map((r, i) =>
+                  i === node.ring ? deleteNode(r, node.point) : r,
+                );
+                updateObject(obj.id, { nodes, paths: pathsFromNodes(nodes, closed) });
+              }
+            } else {
+              // Legacy polyline: drop the raw vertex.
+              const ring = obj.paths[node.ring];
+              if (ring && ring.length > min) {
+                const paths = obj.paths.map((p, i) =>
+                  i === node.ring ? p.filter((_, j) => j !== node.point) : p,
+                );
+                updateObject(obj.id, { paths });
+              }
             }
           }
           useEditorStore.getState().setSelectedNode(null);
@@ -995,6 +1020,9 @@ export default function CanvasStage() {
                         );
                       }}
                       onCommitPaths={(paths) => updateObject(o.id, { paths })}
+                      onCommitNodes={(nodes) =>
+                        updateObject(o.id, { nodes, paths: pathsFromNodes(nodes, o.type === "fill") })
+                      }
                       selectedIds={selectedIds}
                       onMoveSelected={(dx, dy) =>
                         useProjectStore.getState().moveObjects(selectedIds, dx, dy)
@@ -1561,6 +1589,7 @@ function ObjectShape({
   registerNode,
   onSelect,
   onCommitPaths,
+  onCommitNodes,
   selectedIds,
   onMoveSelected,
   onMultiDrag,
@@ -1578,6 +1607,7 @@ function ObjectShape({
   registerNode: (node: Konva.Group | null) => void;
   onSelect: (additive: boolean) => void;
   onCommitPaths: (paths: Path[]) => void;
+  onCommitNodes: (nodes: NodePath[]) => void;
   selectedIds: string[];
   onMoveSelected: (dxMm: number, dyMm: number) => void;
   /** Drag every OTHER selected object's node to this px offset (0,0 to reset). */
@@ -1607,6 +1637,9 @@ function ObjectShape({
   // a node-drag is a single undo step and the outline follows the handle).
   const [livePaths, setLivePaths] = useState<Path[] | null>(null);
   const paths = livePaths ?? object.paths;
+  // Editable control nodes (running/fill). Absent → legacy polyline editing.
+  const nodeRings = object.nodes;
+  const closedRings = object.type === "fill";
 
   // Rings oriented for nonzero-winding fill so counters cut and overlapping
   // (script) contours union — no false holes.
@@ -1701,6 +1734,9 @@ function ObjectShape({
         if (multi) {
           onMultiDrag(0, 0); // snap sibling nodes back; the store move repositions all
           onMoveSelected(dxMm, dyMm);
+        } else if (nodeRings) {
+          // Keep the editable nodes in step with the move (don't drop the curve).
+          onCommitNodes(translateNodes(nodeRings, dxMm, dyMm));
         } else {
           onCommitPaths(translatePaths(object.paths, dxMm, dyMm));
         }
@@ -1708,13 +1744,22 @@ function ObjectShape({
       onTransformEnd={(e) => {
         const node = e.target;
         const m = node.getTransform().getMatrix() as unknown as Matrix;
+        node.setAttrs({ x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 });
+        if (nodeRings) {
+          // Transform the control NODES (keep curve-editability through scale/rotate).
+          const pxNodes = nodeRings.map((r) => r.map((nd) => ({ x: px(nd.x), y: py(nd.y) })));
+          const movedNodes = applyMatrix(pxNodes, m).map((r, ri) =>
+            r.map((p, pi) => ({ ...toMm(p.x, p.y), smooth: nodeRings[ri][pi].smooth })),
+          );
+          onCommitNodes(movedNodes);
+          return;
+        }
         const pxPaths = object.paths.map((path) =>
           path.map((p) => ({ x: px(p.x), y: py(p.y) })),
         );
         const movedMm = applyMatrix(pxPaths, m).map((path) =>
           path.map((p) => toMm(p.x, p.y)),
         );
-        node.setAttrs({ x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 });
         onCommitPaths(movedMm);
       }}
     >
@@ -1786,15 +1831,67 @@ function ObjectShape({
                   e.cancelBubble = true;
                   const pos = e.target.getStage()?.getPointerPosition();
                   if (!pos) return;
-                  const ring = insertPointOnRing(object.paths[pi], toMm(pos.x, pos.y), object.type === "fill");
-                  if (ring) onCommitPaths(object.paths.map((pp, i) => (i === pi ? ring : pp)));
+                  const at = toMm(pos.x, pos.y);
+                  if (nodeRings) {
+                    const nodes = nodeRings.map((r, i) => (i === pi ? insertNode(r, at, closedRings) : r));
+                    onCommitNodes(nodes);
+                  } else {
+                    const ring = insertPointOnRing(object.paths[pi], at, object.type === "fill");
+                    if (ring) onCommitPaths(object.paths.map((pp, i) => (i === pi ? ring : pp)));
+                  }
                 }
               : undefined
           }
         />
       ))}
 
-      {editingNodes &&
+      {/* Node-backed editing: handles sit on the CONTROL nodes — a round handle is
+          smooth (curve flows through it), a square handle is a sharp corner.
+          Press C to toggle the focused one. Dragging re-densifies the curve live. */}
+      {editingNodes && nodeRings &&
+        nodeRings.map((ring, pi) =>
+          ring.map((nd, ti) => {
+            const focused =
+              nodeSel?.objectId === object.id && nodeSel.ring === pi && nodeSel.point === ti;
+            const fill = focused ? C.butterDeep : C.cream;
+            const select = () =>
+              useEditorStore.getState().setSelectedNode({ objectId: object.id, ring: pi, point: ti });
+            const liveMove = (e: Konva.KonvaEventObject<DragEvent>) => {
+              const m = toMm(e.target.x(), e.target.y());
+              const moved = nodeRings.map((r, ri) => (ri === pi ? moveNode(r, ti, m) : r));
+              setLivePaths(moved.map((r) => densifyRing(r, closedRings)));
+            };
+            const commit = (e: Konva.KonvaEventObject<DragEvent>) => {
+              const m = toMm(e.target.x(), e.target.y());
+              onCommitNodes(nodeRings.map((r, ri) => (ri === pi ? moveNode(r, ti, m) : r)));
+              setLivePaths(null);
+            };
+            const common = {
+              x: px(nd.x),
+              y: py(nd.y),
+              fill,
+              stroke: C.navy,
+              strokeWidth: 1.5,
+              draggable: true,
+              onClick: select,
+              onTap: select,
+              onDblClick: () =>
+                onCommitNodes(nodeRings.map((r, ri) => (ri === pi ? toggleNodeSmooth(r, ti) : r))),
+              onDragStart: select,
+              onDragMove: liveMove,
+              onDragEnd: commit,
+            };
+            const r = focused ? 6 : 4.5;
+            return nd.smooth ? (
+              <Circle key={`${pi}-${ti}`} {...common} radius={r} />
+            ) : (
+              <Rect key={`${pi}-${ti}`} {...common} x={px(nd.x) - r} y={py(nd.y) - r} width={r * 2} height={r * 2} />
+            );
+          }),
+        )}
+
+      {/* Legacy polyline editing (imported / shapes): handles on raw vertices. */}
+      {editingNodes && !nodeRings &&
         paths.map((path, pi) =>
           path.map((p, ti) => {
             const focused =
