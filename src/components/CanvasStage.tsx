@@ -913,6 +913,15 @@ export default function CanvasStage() {
                       onMoveSelected={(dx, dy) =>
                         useProjectStore.getState().moveObjects(selectedIds, dx, dy)
                       }
+                      onMultiDrag={(dxPx, dyPx) => {
+                        // Move every OTHER selected object's node by the live drag
+                        // offset (or back to 0 on release), so the group tracks
+                        // the cursor together.
+                        for (const id of selectedIds) {
+                          if (id === o.id) continue;
+                          nodeRefs.current.get(id)?.position({ x: dxPx, y: dyPx });
+                        }
+                      }}
                       hoopMm={{ wMm: hoop.wMm, hMm: hoop.hMm }}
                       targets={objectBounds.filter((x) => x.id !== o.id).map((x) => x.b)}
                       onGuides={setGuides}
@@ -1400,6 +1409,7 @@ function ObjectShape({
   onCommitPaths,
   selectedIds,
   onMoveSelected,
+  onMultiDrag,
   hoopMm,
   targets,
   onGuides,
@@ -1416,6 +1426,8 @@ function ObjectShape({
   onCommitPaths: (paths: Path[]) => void;
   selectedIds: string[];
   onMoveSelected: (dxMm: number, dyMm: number) => void;
+  /** Drag every OTHER selected object's node to this px offset (0,0 to reset). */
+  onMultiDrag: (dxPx: number, dyPx: number) => void;
   hoopMm: { wMm: number; hMm: number };
   targets: Bounds[];
   onGuides: (g: { x: number[]; y: number[] }) => void;
@@ -1459,7 +1471,27 @@ function ObjectShape({
     <Group
       ref={registerNode}
       draggable={movable}
-      onMouseDown={selectable ? (e) => onSelect(e.evt.shiftKey) : undefined}
+      onMouseDown={
+        selectable
+          ? (e) => {
+              // Shift-click toggles this object in/out of the selection.
+              if (e.evt.shiftKey) onSelect(true);
+              // A fresh click selects just this one (so it can then be dragged).
+              else if (!selected) onSelect(false);
+              // Already selected, no shift: KEEP the selection so a multi-object
+              // drag isn't collapsed to one. A plain click that doesn't drag
+              // narrows to this object via onClick below.
+            }
+          : undefined
+      }
+      onClick={
+        selectable
+          ? (e) => {
+              // Click (not a drag) on a member of a multi-selection → narrow to it.
+              if (!e.evt.shiftKey && selected && selectedIds.length > 1) onSelect(false);
+            }
+          : undefined
+      }
       onTap={selectable ? () => onSelect(false) : undefined}
       onDblClick={
         object.text ? () => useEditorStore.getState().setEditingTextId(object.id) : undefined
@@ -1468,7 +1500,14 @@ function ObjectShape({
         object.text ? () => useEditorStore.getState().setEditingTextId(object.id) : undefined
       }
       onDragMove={(e) => {
-        if (multi) return; // moving a group: skip per-object snapping
+        if (multi) {
+          // Moving a group: drag every other selected object's node by the same
+          // offset live (skip per-object snapping) so the whole selection tracks
+          // the cursor, not just the one under it.
+          onMultiDrag(e.target.x(), e.target.y());
+          e.target.getLayer()?.batchDraw();
+          return;
+        }
         // Snap the moving object to hoop/object guide lines and show the guides.
         const g = e.target;
         const a = toMm(0, 0);
@@ -1505,8 +1544,12 @@ function ObjectShape({
         const b = toMm(dxPx, dyPx);
         const dxMm = b.x - a.x;
         const dyMm = b.y - a.y;
-        if (multi) onMoveSelected(dxMm, dyMm);
-        else onCommitPaths(translatePaths(object.paths, dxMm, dyMm));
+        if (multi) {
+          onMultiDrag(0, 0); // snap sibling nodes back; the store move repositions all
+          onMoveSelected(dxMm, dyMm);
+        } else {
+          onCommitPaths(translatePaths(object.paths, dxMm, dyMm));
+        }
       }}
       onTransformEnd={(e) => {
         const node = e.target;
