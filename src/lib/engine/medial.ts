@@ -519,6 +519,42 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
       }
     }
 
+    // Extend TERMINAL ends out to the stroke cap. Skeleton thinning stops about
+    // half a stroke width short of a flat/round terminal, so the cap is left bare
+    // and would otherwise be patched with an ugly little tatami zig-zag. Push each
+    // free end along its tangent until it reaches the outline — but only at a TRUE
+    // terminal (the cap is close ahead); never out of a trimmed junction, where
+    // there's open glyph ahead. The perpendicular throws then cover the cap with
+    // clean satin. (Loops have no free ends.)
+    if (!loop && dense.length >= 2) {
+      const extendEnd = (atStart: boolean) => {
+        const i0 = atStart ? 0 : dense.length - 1;
+        const i1 = atStart ? 1 : dense.length - 2;
+        let ux = dense[i0].x - dense[i1].x;
+        let uy = dense[i0].y - dense[i1].y;
+        const tl = Math.hypot(ux, uy) || 1;
+        ux /= tl;
+        uy /= tl;
+        const localHalf = Math.max(cellMm, halves[i0] - OVERSHOOT_MM);
+        const ahead = rayHit(dense[i0], { x: ux, y: uy }, oriented, localHalf * 2 + cellMm);
+        if (ahead <= localHalf * 1.4 + cellMm) {
+          const ext = ahead - cellMm * 0.5;
+          if (ext > cellMm * 0.5) {
+            const p = { x: dense[i0].x + ux * ext, y: dense[i0].y + uy * ext };
+            if (atStart) {
+              dense.unshift(p);
+              halves.unshift(halves[0]);
+            } else {
+              dense.push(p);
+              halves.push(halves[halves.length - 1]);
+            }
+          }
+        }
+      };
+      extendEnd(true);
+      extendEnd(false);
+    }
+
     // Width-driven pull compensation (docs/stitch-logic.md §6): widen each rail
     // by half the auto pull-comp for the local stroke width so the sewn column
     // matches the drawn stroke. `pullScale` carries the fabric multiplier; 0
@@ -730,7 +766,7 @@ export function residualRegions(rings: Path[], sewn: Path[], cellMm = 0.3): Path
 
   // Uncovered interior, then morphological OPEN (erode→dilate) to drop the 1-cell
   // slivers along column edges, leaving only the chunky gaps worth filling.
-  let mask = new Uint8Array(w * h);
+  let mask: Uint8Array = new Uint8Array(w * h);
   for (let i = 0; i < w * h; i++) if (cells[i] && !covered[i]) mask[i] = 1;
   mask = erode(mask, w, h);
   mask = dilateMask(mask, w, h);
