@@ -325,6 +325,47 @@ function rayHit(o: Point, dir: Point, rings: Path[], maxDist: number): number {
   return best;
 }
 
+/** Distance (mm) from point `p` to the nearest segment of polyline `line`. */
+function distToPolyline(p: Point, line: Path): number {
+  let best = Infinity;
+  for (let i = 1; i < line.length; i++) {
+    const a = line[i - 1];
+    const b = line[i];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const l2 = dx * dx + dy * dy || 1e-9;
+    let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2;
+    t = Math.max(0, Math.min(1, t));
+    const d = Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+    if (d < best) best = d;
+  }
+  return best;
+}
+
+/**
+ * MITER: clip a rail half-width so the rail never crosses into a neighbouring
+ * column's territory. Where two columns meet, each owns the points nearer its own
+ * centerline; the boundary is the bisector. A throw cast `half` mm off the
+ * centerline along `dir` is pulled back to the bisector so the two columns ABUT
+ * along a clean seam instead of overlapping (thread build-up) or fanning across
+ * each other. Away from any junction the neighbours are far, so nothing is clipped.
+ */
+function clipToTerritory(c: Point, dir: Point, half: number, siblings: Path[]): number {
+  if (siblings.length === 0 || half <= 0) return half;
+  let t = half;
+  for (let iter = 0; iter < 4; iter++) {
+    const q = { x: c.x + dir.x * t, y: c.y + dir.y * t };
+    let dSib = Infinity;
+    for (const s of siblings) {
+      const d = distToPolyline(q, s);
+      if (d < dSib) dSib = d;
+    }
+    if (t <= dSib + 1e-3) break; // q is in our own territory (own dist t ≤ sibling dist)
+    t = dSib; // pull back toward the bisector and re-test
+  }
+  return Math.max(0, t);
+}
+
 /** Unit normal at point i of a centerline (average of adjacent segment normals). */
 function normalAt(line: Point[], i: number, closed: boolean): Point {
   const n = line.length;
@@ -478,23 +519,29 @@ export function columnsFromCenterlines(
   if (!grid) return [];
   const dt = distanceTransform(grid);
 
-  const columns: SatinColumn[] = [];
+  // Pass 1 — snap every seed onto the stroke's true medial. The authored seeds are
+  // eyeballed 2-point strokes; densify, recenter each sample between the glyph
+  // edges, and split off any run that strayed off the ink (grazed a counter / ran
+  // past a cap). The geometry pins the approximate coordinates to the letterform.
+  const centers: Path[] = [];
   for (const cl of centerlines) {
-    // The authored centerline is a SEED, eyeballed to the letterform. Densify it
-    // (the seeds are just 2-point strokes), then snap each sample onto the stroke's
-    // true medial (recenter it between its perpendicular edges); where the seed
-    // strays off the ink (grazes a counter, or its endpoint sits on the cap) that
-    // run is split so only the in-stroke parts are kept. This lets the authored
-    // coordinates be approximate; the geometry pins them to the real letterform.
     const seedDense = resampleByDistance(cl, Math.max(0.25, cellMm));
     for (const seg of snapToMedial(seedDense, oriented)) {
       const center = smoothPath(seg, { maxSegmentMm: 0.8 });
-      if (center.length < 2) continue;
-      // Trim junction ends (so a stroke meeting another doesn't cast a wide throw
-      // across the meeting), but DON'T drop "stubs": every authored stroke is real.
-      const col = buildColumn(center, false, oriented, grid, dt, cellMm, opts, true, false);
-      if (col) columns.push(col);
+      if (center.length >= 2) centers.push(center);
     }
+  }
+
+  // Pass 2 — build each column, MITERED against its siblings so the strokes that
+  // meet at a junction abut along a clean seam (no overlap, no fan). Trim junction
+  // ends but keep every stroke (authored strokes are all real, never stubs). The
+  // miter only needs the siblings' rough path, so coarsen them for speed.
+  const coarse = centers.map((c) => douglasPeucker(c, 0.5));
+  const columns: SatinColumn[] = [];
+  for (let i = 0; i < centers.length; i++) {
+    const siblings = coarse.filter((_, j) => j !== i);
+    const col = buildColumn(centers[i], false, oriented, grid, dt, cellMm, opts, true, false, siblings);
+    if (col) columns.push(col);
   }
   return columns;
 }
@@ -561,6 +608,7 @@ function buildColumn(
   opts: MedialOptions,
   trimJunctions: boolean,
   dropStubs: boolean,
+  siblings: Path[] = [],
 ): SatinColumn | null {
   // Densely sample the centerline, build both rails, then place throws with
   // DENSITY COMPENSATION: advance until whichever rail (the outer one on a
@@ -650,6 +698,14 @@ function buildColumn(
       ux /= tl;
       uy /= tl;
       const localHalf = Math.max(cellMm, halves[i0] - OVERSHOOT_MM);
+      // Don't extend a JUNCTION end (a neighbouring column is close) — extending
+      // there pushes the stroke into the meeting and overshoots. Only extend a
+      // free terminal, where the cap sits just ahead with no sibling nearby.
+      if (siblings.length) {
+        let dSib = Infinity;
+        for (const s of siblings) dSib = Math.min(dSib, distToPolyline(dense[i0], s));
+        if (dSib < localHalf * 2) return;
+      }
       const ahead = rayHit(dense[i0], { x: ux, y: uy }, oriented, localHalf * 2 + cellMm);
       if (ahead <= localHalf * 1.4 + cellMm) {
         const ext = ahead - cellMm * 0.5;
@@ -692,8 +748,13 @@ function buildColumn(
     const cap = Math.min(dtHalf * 1.6 + cellMm, widthCap);
     const hitL = rayHit(c, nrm, oriented, cap);
     const hitR = rayHit(c, { x: -nrm.x, y: -nrm.y }, oriented, cap);
-    const halfL = Math.min(hitL < cap ? hitL : dtHalf + OVERSHOOT_MM, widthCap) + comp;
-    const halfR = Math.min(hitR < cap ? hitR : dtHalf + OVERSHOOT_MM, widthCap) + comp;
+    let halfL = Math.min(hitL < cap ? hitL : dtHalf + OVERSHOOT_MM, widthCap) + comp;
+    let halfR = Math.min(hitR < cap ? hitR : dtHalf + OVERSHOOT_MM, widthCap) + comp;
+    // MITER: pull each rail back to the bisector with any neighbouring column so
+    // meeting strokes abut along a clean seam instead of overlapping or fanning.
+    const negNrm = { x: -nrm.x, y: -nrm.y };
+    halfL = clipToTerritory(c, nrm, halfL, siblings);
+    halfR = clipToTerritory(c, negNrm, halfR, siblings);
     leftRaw.push({ x: c.x + nrm.x * halfL, y: c.y + nrm.y * halfL });
     rightRaw.push({ x: c.x - nrm.x * halfR, y: c.y - nrm.y * halfR });
   }
