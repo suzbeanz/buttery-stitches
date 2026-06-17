@@ -3,6 +3,7 @@ import embroideryPy from "./embroidery.py?raw";
 import type { Project, ThreadColor } from "../../types/project";
 import { mmToTenths } from "../units";
 import { designFor, type EngineStitch } from "../engine";
+import { zipStore } from "../zip";
 
 /**
  * Export pipeline: turn the engine's design into embroidery file bytes via
@@ -195,6 +196,29 @@ export async function exportToBytes(
   // permanently wedge later exports.
   exportChain = run.catch(() => undefined);
   return run;
+}
+
+/**
+ * Export the plan to several formats at once and bundle them into a single .zip
+ * (STORE mode). Each file is generated through the same serialized chain as a
+ * single export, so it's just as safe — handy for sending a design to a shop in
+ * every machine format in one click.
+ */
+export async function exportBundle(
+  plan: StitchPlan,
+  formats: readonly EmbFormat[],
+  { pesVersion = 1, onStage, baseName = "buttery-stitches" }: {
+    pesVersion?: PesVersion;
+    onStage?: (stage: LoadStage) => void;
+    baseName?: string;
+  } = {},
+): Promise<Uint8Array> {
+  const entries: { name: string; data: Uint8Array }[] = [];
+  for (const format of formats) {
+    const data = await exportToBytes(plan, { format, pesVersion, onStage });
+    entries.push({ name: `${baseName}.${format}`, data });
+  }
+  return zipStore(entries);
 }
 
 /** A design read back from an embroidery file: color blocks of contiguous stitch

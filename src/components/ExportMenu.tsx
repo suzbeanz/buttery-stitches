@@ -7,6 +7,8 @@ import {
   EMB_FORMATS,
   PES_VERSIONS,
   exportAndDownload,
+  exportBundle,
+  downloadBytes,
   planFromDesign,
   type EmbFormat,
   type PesVersion,
@@ -62,6 +64,23 @@ export default function ExportMenu() {
       });
       setOpen(false);
       toast(`Exported buttery-stitches.${format} to your downloads`, "success");
+    } catch (err) {
+      setError((err as Error).message);
+      toast(`Export failed — ${(err as Error).message}`, "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doExportAll() {
+    setBusy(true);
+    setError(null);
+    try {
+      const plan = planFromDesign(design, project.colors);
+      const zip = await exportBundle(plan, EMB_FORMATS, { pesVersion, onStage: setStage });
+      downloadBytes(zip, "buttery-stitches.zip", "application/zip");
+      setOpen(false);
+      toast(`Exported all ${EMB_FORMATS.length} formats as a .zip`, "success");
     } catch (err) {
       setError((err as Error).message);
       toast(`Export failed — ${(err as Error).message}`, "error");
@@ -136,6 +155,14 @@ export default function ExportMenu() {
                   </button>
                 ))}
               </div>
+
+              <button
+                disabled={busy}
+                onClick={doExportAll}
+                className="tap-target mt-1.5 w-full rounded-sm border-2 border-ink bg-ink px-2 py-1.5 font-label text-xs font-semibold uppercase tracking-wide text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none disabled:opacity-50"
+              >
+                All formats (.zip)
+              </button>
 
               <p className="mt-2.5 px-1 font-body text-[10px] text-char/70">
                 The first export takes a few seconds to get ready, then it's instant.
