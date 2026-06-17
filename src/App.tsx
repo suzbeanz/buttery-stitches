@@ -210,6 +210,7 @@ const TOOL_KEYS: Record<string, Tool> = {
   v: "select",
   n: "node",
   h: "pan",
+  m: "measure",
   r: "running",
   s: "satin",
   f: "fill",

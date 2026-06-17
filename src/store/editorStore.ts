@@ -19,6 +19,7 @@ export type Tool =
   | "pencil" // freehand running stitch
   | "brush" // freehand filled blob
   | "bucket" // click an enclosed area to fill it
+  | "measure" // drag to read off a distance + angle (no object created)
   | "shape"; // drag to place a premade shape (rectangle, ellipse, heart, …)
 
 /** Tools that place points to draw a new object — these map 1:1 to StitchType. */
