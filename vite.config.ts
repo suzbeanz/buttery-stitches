@@ -25,12 +25,32 @@ function spaFallback(): Plugin {
   };
 }
 
+// A unique id per build, baked into the bundle and written to version.json so a
+// running tab can detect a newer deploy and refresh into it (see lib/version.ts).
+const BUILD_ID = String(Date.now());
+
+// Emit an unhashed version.json alongside the build carrying BUILD_ID.
+function emitVersion(): Plugin {
+  return {
+    name: "emit-version",
+    apply: "build",
+    generateBundle() {
+      this.emitFile({
+        type: "asset",
+        fileName: "version.json",
+        source: JSON.stringify({ id: BUILD_ID }),
+      });
+    },
+  };
+}
+
 // The app is hosted from static files (GitHub Pages, custom domain at the root).
 // `base` is absolute ("/") so deep-linked routes like "/app" load their assets
 // from the site root. Override with BASE_PATH when deploying under a sub-path.
 export default defineConfig({
   base: process.env.BASE_PATH ?? "/",
-  plugins: [react(), spaFallback()],
+  define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
+  plugins: [react(), spaFallback(), emitVersion()],
   build: {
     rollupOptions: {
       output: {
