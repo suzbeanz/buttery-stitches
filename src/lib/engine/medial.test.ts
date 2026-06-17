@@ -61,6 +61,37 @@ describe("medialSatin", () => {
     expect(span(comped)).toBeGreaterThan(span(plain) + 0.3);
   });
 
+  it("lands rails ON the stroke edge (no overshoot) without pull comp", () => {
+    // A 4mm-wide vertical stem. With pullScale 0 the rails are raycast to the true
+    // outline, so the column span hugs the 4mm stroke instead of feathering wide.
+    const stroke: Path = [
+      { x: 10, y: 10 },
+      { x: 14, y: 10 },
+      { x: 14, y: 40 },
+      { x: 10, y: 40 },
+    ];
+    const pts = medialSatin([stroke], { density: 0.4, pullScale: 0 }).flat();
+    const xs = pts.map((p) => p.x);
+    // Rails sit within a hair of the real edges (10 and 14), not bulged outside.
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(9.6);
+    expect(Math.max(...xs)).toBeLessThanOrEqual(14.4);
+  });
+
+  it("covers a branching T-junction without redundant columns", () => {
+    // A "T": a vertical stem meeting a horizontal bar. The skeleton branches; the
+    // engine must satin both strokes (high coverage) without emitting overlapping
+    // duplicate columns that pile into the junction and fan.
+    const tee: Path = [
+      { x: 0, y: 26 }, { x: 8, y: 26 }, { x: 8, y: 0 }, { x: 12, y: 0 },
+      { x: 12, y: 26 }, { x: 20, y: 26 }, { x: 20, y: 30 }, { x: 0, y: 30 },
+    ];
+    const runs = medialSatin([tee], { density: 0.4 });
+    // Stem + bar → a small handful of columns, not a pile of retraced ones.
+    expect(runs.length).toBeGreaterThanOrEqual(2);
+    expect(runs.length).toBeLessThanOrEqual(4);
+    expect(satinCoverage([tee], runs)).toBeGreaterThan(0.85);
+  });
+
   it("returns nothing for a degenerate tiny region", () => {
     const tiny: Path = [
       { x: 0, y: 0 },

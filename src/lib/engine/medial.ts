@@ -485,19 +485,32 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
     // the junction already cover that patch. (Loops are always real.)
     if (!loop && medHalfDt > 0 && polylineLength(center) < 2 * medHalfDt * 1.4) continue;
 
-    // Trim ballooning JUNCTION ends. A real stroke terminal sits at the glyph
-    // outline (small local width); a junction end runs deep into where strokes
-    // merge (large width). If we keep the junction end, the centerline kinks hard
-    // there and the throws fan. So pull each free end back to where the width
-    // returns to normal — the crossing column covers the little wedge we drop.
-    // (Loops have no free ends.)
+    // Trim JUNCTION ends. A real stroke terminal sits at the glyph outline (small
+    // local width, the centerline running straight into the edge); a junction end
+    // runs deep into where strokes merge — there the width BALLOONS and the
+    // centerline CURLS hard to follow the skeleton into the other stroke. Either
+    // one makes the throws fan, so pull each free end back to where the column is
+    // both normal width and reasonably straight. The crossing column (plus the
+    // residual fill the engine lays over any uncovered junction patch) covers the
+    // little wedge we drop. (Loops have no free ends.)
     if (!loop && medHalfDt > 0 && dense.length >= 6) {
-      const fat = medHalfDt * 1.3;
-      const minKeep = Math.max(3, Math.floor(dense.length * 0.35));
+      const fat = medHalfDt * 1.25;
+      const minKeep = Math.max(3, Math.floor(dense.length * 0.3));
+      // Turn angle (deg) of the centerline at sample i — high near a junction curl.
+      const turnAt = (i: number): number => {
+        if (i <= 0 || i >= dense.length - 1) return 0;
+        const ax = dense[i].x - dense[i - 1].x, ay = dense[i].y - dense[i - 1].y;
+        const bx = dense[i + 1].x - dense[i].x, by = dense[i + 1].y - dense[i].y;
+        const la = Math.hypot(ax, ay) || 1, lb = Math.hypot(bx, by) || 1;
+        const dot = Math.max(-1, Math.min(1, (ax * bx + ay * by) / (la * lb)));
+        return (Math.acos(dot) * 180) / Math.PI;
+      };
+      const kink = 7; // deg per ~quarter-stitch step — a hard curl into a junction
+      // (a normal bowl turns ~2°/step at this sampling; a junction curl ≳10°).
       let lo = 0;
       let hi = dense.length - 1;
-      while (hi - lo + 1 > minKeep && halves[lo] - OVERSHOOT_MM > fat) lo++;
-      while (hi - lo + 1 > minKeep && halves[hi] - OVERSHOOT_MM > fat) hi--;
+      while (hi - lo + 1 > minKeep && (halves[lo] - OVERSHOOT_MM > fat || turnAt(lo + 1) > kink)) lo++;
+      while (hi - lo + 1 > minKeep && (halves[hi] - OVERSHOOT_MM > fat || turnAt(hi - 1) > kink)) hi--;
       if (lo > 0 || hi < dense.length - 1) {
         dense = dense.slice(lo, hi + 1);
         halves = halves.slice(lo, hi + 1);
@@ -522,11 +535,15 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
       // past the DT estimate so it can reach an edge the grid rounded short, but
       // can't bolt across the glyph at a junction; if it misses (concave seam) we
       // fall back to the DT half. A hair of overshoot guarantees full coverage.
+      // When the ray HITS, the rail already sits exactly on the glyph edge, so it
+      // gets only pull compensation (the deliberate, physical past-edge allowance).
+      // Only the DT FALLBACK (concave seam where the ray missed) adds the small
+      // overshoot, because the DT estimate sits a hair inside the true edge.
       const cap = Math.min(dtHalf * 1.6 + cellMm, widthCap);
-      const hitL = Math.min(rayHit(c, nrm, oriented, cap), widthCap);
-      const hitR = Math.min(rayHit(c, { x: -nrm.x, y: -nrm.y }, oriented, cap), widthCap);
-      const halfL = Math.min(hitL < cap ? hitL : dtHalf, widthCap) + OVERSHOOT_MM + comp;
-      const halfR = Math.min(hitR < cap ? hitR : dtHalf, widthCap) + OVERSHOOT_MM + comp;
+      const hitL = rayHit(c, nrm, oriented, cap);
+      const hitR = rayHit(c, { x: -nrm.x, y: -nrm.y }, oriented, cap);
+      const halfL = Math.min(hitL < cap ? hitL : dtHalf + OVERSHOOT_MM, widthCap) + comp;
+      const halfR = Math.min(hitR < cap ? hitR : dtHalf + OVERSHOOT_MM, widthCap) + comp;
       leftRaw.push({ x: c.x + nrm.x * halfL, y: c.y + nrm.y * halfL });
       rightRaw.push({ x: c.x - nrm.x * halfR, y: c.y - nrm.y * halfR });
     }
@@ -572,7 +589,59 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
       columns.push({ centerline: center, throws: capped, widthMm });
     }
   }
-  return columns;
+  return dedupeColumns(columns, oriented, cellMm);
+}
+
+/**
+ * Drop redundant columns by COVERAGE. The skeleton tracer sometimes emits two
+ * columns over the same stroke (a bowl traced both as a full loop and as an arc);
+ * both pile into the junction and their throws fan and cross. Keeping the longest
+ * columns first and discarding any that add almost no NEW covered area leaves one
+ * clean column per stroke — while preserving COMPLEMENTARY columns (a stem and a
+ * bowl whose centerlines pass close but cover different width), which a naive
+ * centerline-distance test would wrongly merge and leave the glyph under-covered.
+ */
+function dedupeColumns(cols: SatinColumn[], oriented: Path[], cellMm: number): SatinColumn[] {
+  if (cols.length <= 1) return cols;
+  const grid = rasterize(oriented, cellMm);
+  if (!grid) return cols;
+  const { w, h, ox, oy } = grid;
+  const covered = new Uint8Array(w * h);
+  // Cells a column's throws sweep through (with a ~thread-width radius), as a set.
+  const footprint = (c: SatinColumn): number[] => {
+    const cells = new Set<number>();
+    const mark = (x: number, y: number) => {
+      const gx = Math.round((x - ox) / cellMm);
+      const gy = Math.round((y - oy) / cellMm);
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const cx = gx + dx;
+          const cy = gy + dy;
+          if (cx >= 0 && cy >= 0 && cx < w && cy < h) cells.add(cy * w + cx);
+        }
+    };
+    for (let i = 1; i < c.throws.length; i++) {
+      const a = c.throws[i - 1];
+      const b = c.throws[i];
+      const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / (cellMm * 0.75)));
+      for (let s = 0; s <= steps; s++) mark(a.x + ((b.x - a.x) * s) / steps, a.y + ((b.y - a.y) * s) / steps);
+    }
+    return [...cells];
+  };
+  const order = cols.map((_, i) => i).sort((a, b) => polylineLength(cols[b].centerline) - polylineLength(cols[a].centerline));
+  const kept: SatinColumn[] = [];
+  for (const i of order) {
+    const cells = footprint(cols[i]);
+    if (cells.length === 0) continue;
+    let fresh = 0;
+    for (const c of cells) if (!covered[c]) fresh++;
+    // Keep a column only if a real share of its footprint is new ground; otherwise
+    // it just retraces stitches already laid. (The first/biggest always passes.)
+    if (kept.length > 0 && fresh / cells.length < 0.3) continue;
+    for (const c of cells) covered[c] = 1;
+    kept.push(cols[i]);
+  }
+  return kept;
 }
 
 /**
