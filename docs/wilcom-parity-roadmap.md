@@ -61,6 +61,11 @@ the broader Wilcom feature surface below.
    (nodes, params, text specs) and a version migration path. *Verify: round-trip test.*
 
 ### Phase 2 — decorative professionalism + thread/color + validation depth
+> **Status:** ✅ Thread management (CIELAB chart matching + agglomerative color
+> reduction, "Threads" panel); ✅ a decorative fill (gradient/ombré fillStyle);
+> ✅ Design Info & estimator (thread length, run-time, hoop-fit in Check).
+> Remaining decorative effects (motif/pattern/carving fills, motif runs) deferred.
+
 5. **Thread brand libraries**: Madeira/Isacord/etc. palettes, nearest-thread match,
    and color reduction on trace/import. *Verify: pure matching tests.*
 6. **Decorative fills & motif runs** (Wilcom "design elements"): motif fill,
