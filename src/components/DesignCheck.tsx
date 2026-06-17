@@ -3,6 +3,7 @@ import { CheckCircle2, AlertTriangle, X, Wand2, Sparkles } from "lucide-react";
 import { useProjectStore } from "../store/projectStore";
 import { useEditorStore } from "../store/editorStore";
 import { designFor, countStitches, countColorChanges } from "../lib/engine";
+import { designInfo } from "../lib/engine/info";
 import { validateDesign } from "../lib/engine/validate";
 import { fixStitches } from "../lib/fix";
 import { mmToInch } from "../lib/units";
@@ -23,6 +24,15 @@ export default function DesignCheck({ onClose }: { onClose: () => void }) {
   const warnings = useMemo(() => validateDesign(design, project), [design, project]);
   const stitches = countStitches(design);
   const colorChanges = countColorChanges(design);
+  const info = useMemo(() => designInfo(design, project), [design, project]);
+  const threadLen =
+    rulerUnit === "inch"
+      ? `${(info.threadLengthMm / 25.4 / 12).toFixed(1)} ft`
+      : `${(info.threadLengthMm / 1000).toFixed(1)} m`;
+  const runtime =
+    info.runtimeMin >= 1
+      ? `${Math.round(info.runtimeMin)} min`
+      : `${Math.max(1, Math.round(info.runtimeMin * 60))} s`;
   const visible = project.objects.filter((o) => o.visible).length;
   const empty = visible === 0;
   const ready = !empty && warnings.length === 0;
@@ -116,6 +126,9 @@ export default function DesignCheck({ onClose }: { onClose: () => void }) {
             <Stat label="Stitches" value={stitches.toLocaleString()} />
             <Stat label="Colors" value={String(colorChanges + 1)} />
             <Stat label="Size" value={dims} icon />
+            <Stat label="Thread" value={threadLen} />
+            <Stat label="Est. time" value={runtime} />
+            <Stat label="Hoop" value={info.withinHoop ? "Fits" : "Too big"} />
           </div>
         )}
       </div>

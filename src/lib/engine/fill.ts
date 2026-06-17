@@ -25,6 +25,12 @@ export interface FillOptions {
    * line instead of shy of it (docs/stitch-logic.md §6). Default 0.
    */
   pullCompMm?: number;
+  /**
+   * Gradient/ombré: row spacing ramps from `density` (dense edge) to
+   * `density × gradient` (sparse edge) across the fill direction. >1 enables it;
+   * undefined/1 = uniform tatami.
+   */
+  gradient?: number;
 }
 
 /** Default tatami stitch length (mm) — the spacing of holes along a row. */
@@ -404,9 +410,16 @@ export function tatamiFill(rings: Path[], opts: FillOptions): Path {
   // span can't be pushed inside-out.
   const comp = Math.max(0, opts.pullCompMm ?? 0);
 
+  // Gradient/ombré: row spacing ramps from `density` (dense) to density×gradient
+  // (sparse) across the shape, so the fill reads light→heavy.
+  const grad = Math.max(1, opts.gradient ?? 1);
+  const spanY = maxY - minY;
+  const stepAt = (y: number) =>
+    grad === 1 || spanY <= 0 ? density : density * (1 + (grad - 1) * ((y - minY) / spanY));
+
   const rotated: Point[] = [];
   let k = 0;
-  for (let y = minY + density / 2; y <= maxY; y += density, k++) {
+  for (let y = minY + density / 2; y <= maxY; y += stepAt(y), k++) {
     const spans = rowSpans(rrings, y);
     if (spans.length === 0) continue;
     const phase = staggerOffset(k) * spacing;

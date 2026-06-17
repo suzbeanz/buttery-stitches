@@ -314,13 +314,14 @@ function ObjectProperties({
           <select
             value={p.fillStyle ?? DEFAULT_PARAMS.fillStyle}
             onChange={(e) =>
-              onParam({ fillStyle: e.target.value as "tatami" | "satin" | "contour" })
+              onParam({ fillStyle: e.target.value as "tatami" | "satin" | "contour" | "gradient" })
             }
             className="input"
           >
             <option value="tatami">Solid fill (tatami)</option>
             <option value="satin">Satin columns</option>
             <option value="contour">Contour (echo the shape)</option>
+            <option value="gradient">Gradient (shaded)</option>
           </select>
         </Field>
       )}

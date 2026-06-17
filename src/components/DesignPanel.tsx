@@ -12,6 +12,9 @@ import {
 } from "../lib/layout";
 import { designFor } from "../lib/engine";
 import { validateDesign } from "../lib/engine/validate";
+import { THREAD_CHARTS, chartById } from "../lib/thread/catalog";
+import { matchColorsToChart } from "../lib/thread/match";
+import { reduceProjectColors } from "../lib/thread/reduce";
 import {
   FABRICS,
   DEFAULT_FABRIC,
@@ -133,6 +136,8 @@ export default function DesignPanel() {
 
       <FabricPicker />
 
+      <ThreadsSection />
+
       {/* Design size */}
       {hasDesign ? (
         <>
@@ -185,6 +190,84 @@ export default function DesignPanel() {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/**
+ * Thread/color management: list the design's threads, snap them to a real thread
+ * chart (name + code to order by), and reduce the palette to fewer colors.
+ */
+function ThreadsSection() {
+  const project = useProjectStore((s) => s.project);
+  const updateProject = useProjectStore((s) => s.updateProject);
+  const colors = project.colors;
+  const [chartId, setChartId] = useState(THREAD_CHARTS[0].id);
+  const [reduceN, setReduceN] = useState(Math.max(1, colors.length));
+
+  if (colors.length === 0) return null;
+
+  const matchAll = () => {
+    const chart = chartById(chartId);
+    if (chart) updateProject({ colors: matchColorsToChart(colors, chart) });
+  };
+  const applyReduce = () => {
+    const r = reduceProjectColors(project, Math.max(1, Math.min(reduceN, colors.length)));
+    updateProject({ colors: r.colors, objects: r.objects });
+  };
+
+  return (
+    <div className="flex flex-col gap-2 border-t border-navy/15 pt-3">
+      <div className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/60">
+        Threads ({colors.length})
+      </div>
+      <ul className="flex flex-col gap-1">
+        {colors.map((c) => (
+          <li key={c.id} className="flex items-center gap-2 text-[12px] text-navy">
+            <span
+              className="h-4 w-4 shrink-0 rounded-sm border border-ink/30"
+              style={{ background: `rgb(${c.rgb.join(",")})` }}
+            />
+            <span className="truncate">
+              {c.name ?? `rgb(${c.rgb.join(",")})`}
+              {c.code && <span className="text-navy/45"> · {c.code}</span>}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      <select value={chartId} onChange={(e) => setChartId(e.target.value)} className="input">
+        {THREAD_CHARTS.map((ch) => (
+          <option key={ch.id} value={ch.id}>{ch.name}</option>
+        ))}
+      </select>
+      <button
+        onClick={matchAll}
+        className="rounded-sm border-2 border-ink bg-cream px-3 py-1.5 font-label text-xs font-semibold uppercase tracking-wide text-ink shadow-press-sm transition-transform hover:bg-ink hover:text-cream active:translate-y-[2px] active:shadow-none"
+      >
+        Match to thread chart
+      </button>
+
+      <div className="flex items-end gap-2">
+        <label className="flex-1 text-[12px] text-navy">
+          <div className="mb-1">Reduce to colors</div>
+          <input
+            type="number"
+            min={1}
+            max={colors.length}
+            value={reduceN}
+            onChange={(e) => setReduceN(Number(e.target.value) || 1)}
+            className="input"
+          />
+        </label>
+        <button
+          onClick={applyReduce}
+          disabled={reduceN >= colors.length}
+          className="rounded-sm border-2 border-ink px-3 py-1.5 font-label text-xs font-semibold uppercase tracking-wide text-ink hover:bg-butter-200 disabled:opacity-40"
+        >
+          Reduce
+        </button>
+      </div>
     </div>
   );
 }
