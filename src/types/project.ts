@@ -50,9 +50,10 @@ export interface EmbObjectParams {
   pushComp?: number;
   /** draw the object's border outline in the editor (default true). */
   outline?: boolean;
-  /** how a fill is stitched: tatami (broad areas), satin columns (lettering), or
-   *  contour (rows that echo the shape's outline — organic forms). */
-  fillStyle?: "tatami" | "satin" | "contour";
+  /** how a fill is stitched: tatami (broad areas), satin columns (lettering),
+   *  contour (rows that echo the shape's outline), or gradient (tatami whose row
+   *  spacing ramps across the shape for a shaded/ombré effect). */
+  fillStyle?: "tatami" | "satin" | "contour" | "gradient";
   /** appliqué: stitch the shape as placement run → STOP (lay fabric) → tackdown
    *  → STOP (trim) → satin cover, instead of a normal fill. Default false. */
   applique?: boolean;

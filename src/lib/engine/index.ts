@@ -133,6 +133,9 @@ function addRun(runs: StitchRun[], pts: Point[], underlay: boolean): void {
  */
 const MIN_SATIN_COVERAGE = 0.82;
 
+/** Gradient fillStyle: the sparse edge is this multiple of the dense row spacing. */
+const GRADIENT_FILL_MUL = 2.6;
+
 /**
  * Greedily order a set of independent runs so each starts near where the last
  * ended, reversing a run when its far end is the closer one. Shortens the travel
@@ -358,7 +361,9 @@ export function generateObjectRuns(
         ? echo
         : [tatamiFill(region, { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp })];
     } else {
-      tops = [tatamiFill(region, { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp })];
+      // Gradient fillStyle ramps row spacing across the shape for a shaded look.
+      const gradient = p.fillStyle === "gradient" ? GRADIENT_FILL_MUL : undefined;
+      tops = [tatamiFill(region, { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp, gradient })];
     }
 
     // Sew the fill's pieces nearest-neighbor from where the underlay left off,
