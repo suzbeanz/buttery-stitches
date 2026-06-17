@@ -87,6 +87,24 @@ describe("authored alphabet (flagship Oswald)", () => {
     }
   });
 
+  it("miters multi-way junctions so columns abut instead of stacking", () => {
+    // The multi-way solver runs the dominant stroke THROUGH a junction and abuts
+    // the rest, so the strokes shouldn't pile up: the summed per-column footprint
+    // should be close to the union (overlap factor near 1), not 1.5–2× (which is
+    // what stacking three columns over a junction core looks like).
+    const cell = 0.3;
+    for (const ch of ["K", "X", "4"]) {
+      const { object } = layoutText({ text: ch, font: oswald, heightMm: 18, colorId: "c1", fontId: "oswald" });
+      const region = splitFillRegions(object.paths)[0];
+      const seeds = (object.satinCenterlines ?? []).filter((cl) => pointInRings(seedMidpoint(cl), region));
+      const cols = columnsFromCenterlines(region, seeds, { density: 0.4, pullScale: 1, cellMm: cell });
+      const union = satinCoverage(region, cols.map((c) => c.throws), cell);
+      const summed = cols.reduce((s, c) => s + satinCoverage(region, [c.throws], cell), 0);
+      // summed/union ≈ how many times the average covered cell is stitched.
+      expect(summed / Math.max(union, 1e-6), `'${ch}' overlap factor`).toBeLessThan(1.45);
+    }
+  });
+
   it("produces a machine-safe stitch-out for an authored word", () => {
     const { object } = layoutText({ text: "MAXWELL", font: oswald, heightMm: 16, colorId: "c1", fontId: "oswald" });
     const design = generateDesign({ ...createEmptyProject(), objects: [object] }, { lockStitches: true });
