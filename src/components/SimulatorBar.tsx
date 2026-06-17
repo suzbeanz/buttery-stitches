@@ -23,6 +23,8 @@ export default function SimulatorBar() {
   const simIndex = useEditorStore((s) => s.simIndex);
   const simPlaying = useEditorStore((s) => s.simPlaying);
   const simSpeed = useEditorStore((s) => s.simSpeed);
+  const realistic = useEditorStore((s) => s.realistic);
+  const toggleRealistic = useEditorStore((s) => s.toggleRealistic);
   const setSimIndex = useEditorStore((s) => s.setSimIndex);
   const setSimPlaying = useEditorStore((s) => s.setSimPlaying);
   const setSimSpeed = useEditorStore((s) => s.setSimSpeed);
@@ -126,6 +128,18 @@ export default function SimulatorBar() {
               </option>
             ))}
           </select>
+
+          <button
+            onClick={toggleRealistic}
+            aria-pressed={realistic}
+            data-tip={realistic ? "Realistic thread on" : "Realistic thread off"}
+            data-tip-side="top"
+            className={`tap-target rounded-sm border-2 border-ink px-2 py-1 font-label text-xs font-semibold uppercase tracking-wide ${
+              realistic ? "bg-ink text-cream" : "bg-cream text-ink hover:bg-butter-200"
+            }`}
+          >
+            3D
+          </button>
         </>
       ) : (
         <span className="text-xs text-navy/70">
