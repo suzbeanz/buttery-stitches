@@ -1462,6 +1462,38 @@ function StitchView({
 
 // ---------------------------------------------------------------------------
 
+/**
+ * Insert a new vertex into a ring at the click point, projected onto the nearest
+ * segment (so the node lands ON the outline). `closed` also considers the wrap
+ * segment (last→first) for fill rings. Returns a NEW ring, or null if degenerate.
+ */
+function insertPointOnRing(ring: Path, at: Point, closed: boolean): Path | null {
+  if (ring.length < 2) return null;
+  let bestIdx = -1;
+  let bestD = Infinity;
+  let bestPt: Point = at;
+  const last = closed ? ring.length : ring.length - 1;
+  for (let i = 0; i < last; i++) {
+    const a = ring[i];
+    const b = ring[(i + 1) % ring.length];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 > 0 ? Math.max(0, Math.min(1, ((at.x - a.x) * dx + (at.y - a.y) * dy) / len2)) : 0;
+    const proj = { x: a.x + t * dx, y: a.y + t * dy };
+    const d = (proj.x - at.x) ** 2 + (proj.y - at.y) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      bestIdx = i;
+      bestPt = proj;
+    }
+  }
+  if (bestIdx < 0) return null;
+  const out = ring.map((p) => ({ ...p }));
+  out.splice(bestIdx + 1, 0, bestPt);
+  return out;
+}
+
 function ObjectShape({
   object,
   tool,
@@ -1689,7 +1721,20 @@ function ObjectShape({
           strokeWidth={selected ? 2.5 : outlineOn ? 1.5 : 0}
           closed={object.type === "fill"}
           listening={selectable}
-          hitStrokeWidth={10}
+          hitStrokeWidth={editingNodes ? 14 : 10}
+          // In node mode, clicking the outline (not a handle) inserts a new node
+          // on the nearest segment so you can add detail anywhere.
+          onClick={
+            editingNodes
+              ? (e) => {
+                  e.cancelBubble = true;
+                  const pos = e.target.getStage()?.getPointerPosition();
+                  if (!pos) return;
+                  const ring = insertPointOnRing(object.paths[pi], toMm(pos.x, pos.y), object.type === "fill");
+                  if (ring) onCommitPaths(object.paths.map((pp, i) => (i === pi ? ring : pp)));
+                }
+              : undefined
+          }
         />
       ))}
 
