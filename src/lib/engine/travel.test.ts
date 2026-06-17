@@ -13,18 +13,16 @@ function twoLines(gap: number): Project {
 }
 
 describe("travel-run routing", () => {
-  it("connects a close same-color gap with a stitched travel (no jump/trim)", () => {
-    const design = generateDesign(twoLines(6), { lockStitches: false }); // 6mm gap (<8 woven trim)
-    expect(design.some((s) => s.jump)).toBe(false);
+  it("bridges a very short exposed gap with a stitched travel (no trim)", () => {
+    const design = generateDesign(twoLines(3.5), { lockStitches: false }); // ≤ exposed max
     expect(design.some((s) => s.trim)).toBe(false);
-    // The travel adds intermediate penetrations between the two lines.
-    const between = design.filter((s) => !s.jump && s.x > 5 && s.x < 11);
+    const between = design.filter((s) => !s.jump && s.x > 5 && s.x < 9);
     expect(between.length).toBeGreaterThan(0);
   });
 
-  it("still trims a far same-color gap", () => {
-    const design = generateDesign(twoLines(40), { lockStitches: false }); // 40mm > trim threshold
-    expect(design.some((s) => s.jump && s.trim)).toBe(true);
+  it("trims a longer exposed same-color gap (clean, no slash)", () => {
+    const design = generateDesign(twoLines(10), { lockStitches: false }); // open fabric
+    expect(design.some((s) => s.trim)).toBe(true);
   });
 });
 
@@ -55,10 +53,10 @@ describe("intra-object continuity (anti-fragmentation)", () => {
   });
 
   // Real exports of dense radial designs shattered because they were many SEPARATE
-  // same-color motifs ~10-12mm apart: each cross-object hop sat just over the old
-  // 8mm woven threshold and trimmed (234 trims+jumps/1000). A stable woven now
-  // travels that far, keeping the whole color continuous like the pro files.
-  it("keeps separate same-color motifs ~11mm apart connected on woven (no trim spam)", () => {
+  // Separate same-color motifs across OPEN fabric (~12mm apart) must NOT be joined
+  // with visible thread slashes — the premium rule trims between them. They still
+  // sew safely; the connectors just aren't there.
+  it("trims cleanly between separate exposed same-color motifs (no slashes)", () => {
     const R = 35, cx = 50, cy = 50, N = 48;
     const objects = [];
     for (let i = 0; i < N; i++) {
@@ -68,8 +66,12 @@ describe("intra-object continuity (anti-fragmentation)", () => {
       objects.push(makeObject("satin", [{ x, y }, { x: x2, y: y2 }], "c1"));
     }
     const design = generateDesign({ ...createEmptyProject(), objects }, { lockStitches: false });
-    const jt = design.filter((s) => s.jump || s.trim).length;
-    expect((jt / design.length) * 1000).toBeLessThan(3); // pro range (0.2–2.9)
+    expect(design.some((s) => s.trim)).toBe(true); // exposed gaps are cut, not slashed
+    let longest = 0;
+    for (let i = 1; i < design.length; i++)
+      if (!design[i].jump && !design[i].trim && design[i].colorId === design[i - 1].colorId)
+        longest = Math.max(longest, Math.hypot(design[i].x - design[i - 1].x, design[i].y - design[i - 1].y));
+    expect(longest).toBeLessThanOrEqual(9.1); // still machine-safe
   });
 });
 

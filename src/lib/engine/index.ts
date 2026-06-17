@@ -60,11 +60,14 @@ const TRAVEL_STITCH = 2.5;
 /** Longest same-color gap (mm) we'll sew as a hidden travel UNDER later coverage
  *  rather than trim. Beyond this, a trim is cheaper than the extra thread. */
 const MAX_COVERED_TRAVEL = 40;
-/** Within ONE object (a fill's own spans/regions), bridge gaps up to this far
- *  with a jump but NEVER cut the thread — cutting fragments a single shape into
- *  dozens of trimmed pieces (the cause of "shredded" output). Only a longer gap
- *  inside one object, or any cross-object/color move, actually trims. */
-const INTRA_OBJECT_NO_TRIM = 25;
+/** Longest EXPOSED (un-hidden) same-color gap still bridged with a stitched
+ *  travel rather than trimmed. Kept small so touching elements connect but
+ *  anything that would show as a thread slash across open fabric is cut. */
+const EXPOSED_TRAVEL_MAX = 4;
+/** Longest gap (mm) bridged with a travel WITHIN one connected fill region (its
+ *  own serpentine/spans), so a concave shape connects instead of trimming each
+ *  row. Between separate regions, only a hidden or short gap travels. */
+const INTRA_REGION_TRAVEL = 25;
 
 /** Even-odd point-in-region test over a fill object's rings (outer + holes). */
 function pointInRings(p: Point, rings: Point[][]): boolean {
@@ -118,13 +121,17 @@ function tieStitches(anchor: Point, toward: Point): Point[] {
 export interface StitchRun {
   pts: Point[];
   underlay: boolean;
+  /** object-local connected-region index. Travels WITHIN a region connect (a
+   *  fill's own serpentine); moves between regions (separate letters/blobs) trim
+   *  unless hidden. Default 0 for single-region objects (running/satin). */
+  region?: number;
   /** emit a machine STOP after this run (appliqué fabric placement/trim pause). */
   stopAfter?: boolean;
 }
 
 /** Push a run if it has any penetrations. */
-function addRun(runs: StitchRun[], pts: Point[], underlay: boolean): void {
-  if (pts.length > 0) runs.push({ pts, underlay });
+function addRun(runs: StitchRun[], pts: Point[], underlay: boolean, region = 0): void {
+  if (pts.length > 0) runs.push({ pts, underlay, region });
 }
 
 /**
@@ -330,7 +337,7 @@ export function generateObjectRuns(
   // differently-angled letters (stitch-direction continuity). The user's Angle
   // field offsets it.
   const tatamiAngle = autoFillAngleForRegions(regions, p.angle);
-  for (const region of regions) {
+  regions.forEach((region, regionIdx) => {
     const columns = satin ? acceptableSatin(region, density, fabric.pullMul) : [];
     const usingSatin = columns.length > 0;
     const contour = !usingSatin && p.fillStyle === "contour";
@@ -351,7 +358,7 @@ export function generateObjectRuns(
       for (const run of ulRuns) {
         for (const sub of splitLongTravels(run, travelMax)) {
           const u = dropShortStitches(sub);
-          addRun(runs, u, true);
+          addRun(runs, u, true, regionIdx);
           if (u.length) cursor = u[u.length - 1];
         }
       }
@@ -397,16 +404,16 @@ export function generateObjectRuns(
     if (usingSatin) {
       for (const run of orderByNearest(tops, cursor)) {
         for (const sub of splitLongTravels(run, travelMax)) {
-          addRun(runs, dropShortStitches(sub, minStitch), false);
+          addRun(runs, dropShortStitches(sub, minStitch), false, regionIdx);
         }
       }
     } else {
       const subRuns = tops.flatMap((run) => splitLongTravels(run, travelMax));
       for (const sub of orderByNearest(subRuns, cursor)) {
-        addRun(runs, dropShortStitches(sub, minStitch), false);
+        addRun(runs, dropShortStitches(sub, minStitch), false, regionIdx);
       }
     }
-  }
+  });
   return runs;
 }
 
@@ -526,31 +533,14 @@ function routeGroups(groups: ObjGroup[]): ObjGroup[] {
  * This single representation drives both the on-canvas simulator and the
  * exporter, so the preview and the file can never disagree.
  */
-/** Connector length (mm) above which the thread is trimmed rather than traveled,
- *  by fabric. Measured pro PES files trim only ~0.2–2.9 times per 1000 stitches —
- *  they keep a whole color one continuous path, traveling 10–15 mm between nearby
- *  same-color motifs instead of cutting. So a stable woven travels generously
- *  (clusters of 10–12 mm connectors stay connected); only a genuinely long, open
- *  jump trims. Napped pile buries connectors in the loops where they snag, so it
- *  trims much shorter; stretchy knit trims shorter too (a dragged connector adds
- *  pull/pucker). Ordering: pile < knit < woven. */
-function fabricTrimThreshold(fabric: Project["fabric"]): number {
-  switch (fabric) {
-    case "pile":
-      return 5;
-    case "knit":
-      return 10;
-    default:
-      return 15;
-  }
-}
-
 export function generateDesign(
   project: Project,
   opts: DesignOptions = {},
 ): EngineStitch[] {
   const jumpThreshold = opts.jumpThreshold ?? 3;
-  const trimThreshold = opts.trimThreshold ?? fabricTrimThreshold(project.fabric);
+  // Longest EXPOSED (un-hidden) same-color gap still bridged rather than trimmed;
+  // `trimThreshold` overrides it (kept for tests/fabric tuning).
+  const exposedMax = opts.trimThreshold ?? EXPOSED_TRAVEL_MAX;
   const lockStitches = opts.lockStitches ?? true;
   // First pass: expand each visible object into its runs (a fill contributes one
   // run per region), keeping only runs that actually produce penetrations. Keep
@@ -569,26 +559,32 @@ export function generateDesign(
   // stay in their original sequence, so layering and color order are unchanged —
   // this only cuts the jump/trim distance between same-color shapes.
   const drawn = routeGroups(groups).flatMap((g) =>
-    g.runs.map((run) => ({ object: g.object, pts: run.pts, underlay: run.underlay, stopAfter: run.stopAfter })),
+    g.runs.map((run) => ({
+      object: g.object,
+      pts: run.pts,
+      underlay: run.underlay,
+      region: run.region ?? 0,
+      stopAfter: run.stopAfter,
+    })),
   );
 
-  // Coverage map: a travel can hide UNDER any fill stitched later in the order.
-  const firstIndex = new Map<string, number>();
-  drawn.forEach((d, i) => {
-    if (!firstIndex.has(d.object.id)) firstIndex.set(d.object.id, i);
-  });
-  const laterFills = drawn
+  // Coverage map: a travel is acceptable only if it stays HIDDEN — i.e. the whole
+  // connector lies under a fill region (its own shape's fill, or another's),
+  // regardless of stitch order. A travel across OPEN fabric (e.g. between the
+  // letters of a word) would show as a thread slash, so it is trimmed instead.
+  const fills = drawn
     .map((d) => d.object)
     .filter((o, i, arr) => o.type === "fill" && arr.findIndex((x) => x.id === o.id) === i);
-  /** True if the whole segment a→b lies under a fill stitched after index `di`. */
-  function coveredBetween(a: Point, b: Point, di: number): boolean {
-    const samples = Math.max(2, Math.ceil(distance(a, b) / 2));
+  /** True if the whole segment a→b lies under some fill region (hidden). */
+  function coveredBetween(a: Point, b: Point): boolean {
+    if (fills.length === 0) return false;
+    const samples = Math.max(2, Math.ceil(distance(a, b) / 1.5));
     for (let s = 0; s <= samples; s++) {
       const t = s / samples;
       const p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
       let covered = false;
-      for (const o of laterFills) {
-        if ((firstIndex.get(o.id) ?? -1) > di && pointInRings(p, o.paths)) {
+      for (const o of fills) {
+        if (pointInRings(p, o.paths)) {
           covered = true;
           break;
         }
@@ -605,7 +601,7 @@ export function generateDesign(
   // toward the next shape across the trim.
   let prevToward: Point | null = null;
   let prevColor: string | null = null;
-  let prevObjectId: string | null = null;
+  let prevRegionKey: string | null = null;
 
   drawn.forEach((d, di) => {
     const { object, pts } = d;
@@ -616,36 +612,30 @@ export function generateDesign(
     let trimmed = false;
     if (prevPoint) {
       const gap = distance(prevPoint, start);
-      // Real digitizers almost never cut the thread between nearby same-color
-      // shapes — they sew a short TRAVEL run so the whole color is one continuous
-      // path (the example PES files run thousands of stitches between trims).
-      // Mirror that: a same-color gap up to the trim threshold is stitched as a
-      // travel (no jump, no cut); only a longer gap or a color change trims.
-      const sameObject = prevObjectId === object.id;
-      const shortTravel = !colorChanged && gap > jumpThreshold && gap <= trimThreshold;
-      // Moves WITHIN one object (a fill's own spans/regions) are stitched as a
-      // continuous travel up to a generous distance, so the shape sews as one
-      // connected path instead of shattering into jumped/trimmed fragments.
-      const intraTravel = sameObject && gap > jumpThreshold && gap <= INTRA_OBJECT_NO_TRIM;
-      // A longer same-color gap can still be a travel IF it stays hidden under a
-      // fill stitched later — that's how the pro files connect across distance
-      // with almost no trims.
-      const coveredTravel =
+      // PREMIUM RULE: a same-color move is sewn as a stitched travel only when it
+      // won't show as a thread slash — i.e. it stays WITHIN one connected fill
+      // region (its own serpentine), OR it's hidden under some fill, OR it's a
+      // short hop between touching elements. A move across OPEN fabric (between
+      // letters or separate shapes) is trimmed; color changes always trim.
+      const regionKey = `${object.id}#${d.region}`;
+      const sameRegion = regionKey === prevRegionKey;
+      const intraTravel =
+        !colorChanged && sameRegion && gap > jumpThreshold && gap <= INTRA_REGION_TRAVEL;
+      const hiddenTravel =
         !colorChanged &&
-        gap > trimThreshold &&
+        gap > jumpThreshold &&
         gap <= MAX_COVERED_TRAVEL &&
-        coveredBetween(prevPoint, start, di);
-      if (shortTravel || intraTravel || coveredTravel) {
+        coveredBetween(prevPoint, start);
+      const shortTravel =
+        !colorChanged && gap > jumpThreshold && gap <= exposedMax;
+      if (intraTravel || hiddenTravel || shortTravel) {
         const travel = runningStitch([prevPoint, start], TRAVEL_STITCH);
         for (const pt of travel.slice(1, -1)) {
           out.push({ x: pt.x, y: pt.y, colorId: object.colorId, objectId: object.id });
         }
       } else if (colorChanged || gap > jumpThreshold) {
-        // Don't cut the thread for a move WITHIN one object unless it's really far
-        // — a fill's own spans should connect (jump), not shatter into trims.
-        trimmed =
-          colorChanged ||
-          (gap > trimThreshold && (!sameObject || gap > INTRA_OBJECT_NO_TRIM));
+        // Exposed long move or a color change → cut the thread (clean finish).
+        trimmed = true;
         // A trim ends the previous thread run — tie it off by retracing back
         // along the stitches just sewn (falling back to the next start only if
         // the finished run was a single point).
@@ -689,7 +679,7 @@ export function generateDesign(
     prevPoint = pts[pts.length - 1];
     prevToward = pts.length > 1 ? pts[pts.length - 2] : pts[0];
     prevColor = object.colorId;
-    prevObjectId = object.id;
+    prevRegionKey = `${object.id}#${d.region}`;
   });
 
   // Tie off the very end of the final thread run.
