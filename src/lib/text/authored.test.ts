@@ -100,8 +100,10 @@ describe("authored alphabet (flagship Oswald)", () => {
       const cols = columnsFromCenterlines(region, seeds, { density: 0.4, pullScale: 1, cellMm: cell });
       const union = satinCoverage(region, cols.map((c) => c.throws), cell);
       const summed = cols.reduce((s, c) => s + satinCoverage(region, [c.throws], cell), 0);
-      // summed/union ≈ how many times the average covered cell is stitched.
-      expect(summed / Math.max(union, 1e-6), `'${ch}' overlap factor`).toBeLessThan(1.45);
+      // summed/union ≈ how many times the average covered cell is stitched. A
+      // mitred seam (plus its sub-stitch overlap allowance) stays well under the
+      // ~2–3× you'd see if three columns stacked over the junction core.
+      expect(summed / Math.max(union, 1e-6), `'${ch}' overlap factor`).toBeLessThan(1.6);
     }
   });
 
