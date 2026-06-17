@@ -35,13 +35,13 @@ const OSWALD: AuthoredAlphabet = {
     [[0.28, 0.64], [0.72, 0.64]], // crossbar
   ],
   K: [
-    [[0.08, 0.0], [0.08, 1.0]], // stem
-    [[0.14, 0.52], [0.96, 0.0]], // upper arm
-    [[0.18, 0.5], [0.98, 1.0]], // lower leg
+    [[0.13, 0.04], [0.13, 0.96]], // stem
+    [[0.22, 0.46], [0.95, 0.05]], // upper arm — starts at the stem's right edge
+    [[0.24, 0.5], [0.98, 0.96]], // lower leg
   ],
   M: [
     [[0.12, 1.0], [0.12, 0.08]], // left stem
-    [[0.15, 0.12], [0.48, 0.6]], // left diagonal (down to the centre valley)
+    [[0.15, 0.12], [0.48, 0.6]], // left diagonal to the centre valley
     [[0.52, 0.6], [0.85, 0.12]], // right diagonal
     [[0.88, 0.08], [0.88, 1.0]], // right stem
   ],
@@ -94,14 +94,20 @@ const OSWALD: AuthoredAlphabet = {
     [[0.92, 0.0], [0.2, 1.0]], // long right arm + descender tail
   ],
   k: [
-    [[0.12, 0.0], [0.12, 1.0]], // stem (full ascender)
-    [[0.16, 0.66], [0.92, 0.42]], // arm
-    [[0.28, 0.56], [0.95, 1.0]], // leg
+    [[0.14, 0.04], [0.14, 0.96]], // stem (full ascender)
+    [[0.22, 0.62], [0.92, 0.4]], // arm — starts at the stem's right edge
+    [[0.24, 0.66], [0.95, 0.96]], // leg
   ],
   z: [
     [[0.07, 0.08], [0.93, 0.08]],
     [[0.93, 0.08], [0.07, 0.92]],
     [[0.07, 0.92], [0.93, 0.92]],
+  ],
+  // — Digit with a diagonal junction —
+  "4": [
+    [[0.7, 0.04], [0.7, 0.96]], // right stem
+    [[0.66, 0.07], [0.1, 0.66]], // diagonal from the stem top down to the bar's left
+    [[0.08, 0.66], [0.95, 0.66]], // crossbar
   ],
 };
 
