@@ -12,6 +12,9 @@ import { marchingSquares, simplify } from "../paintbucket";
 const MAX_THROW_MM = 7;
 /** Shortest stroke (mm) worth satining; below this it is thinning noise. */
 const MIN_BRANCH_MM = 2;
+/** Above this many skeleton branches a region is a big auto-digitized blob, not
+ *  lettering — skip the pairwise junction miter there (costly, less needed). */
+const MITER_MAX_BRANCHES = 16;
 
 /**
  * Auto-satin via the medial axis. Real embroidery lettering is satin columns that
@@ -473,7 +476,8 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
   const skel = thin(grid);
   const branches = traceSkeleton(skel, grid.w, grid.h);
 
-  const columns: SatinColumn[] = [];
+  // Pass 1 — clean centerline per skeleton branch.
+  const prepped: { center: Path; loop: boolean }[] = [];
   for (const branch of branches) {
     if (branch.length < 2) continue;
     const loop = isLoop(branch);
@@ -491,9 +495,24 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
     // Clean the centerline: drop the pixel staircase, then smooth it.
     const center = smoothPath(douglasPeucker(raw, cellMm * 1.2), { maxSegmentMm: 0.8 });
     if (center.length < 2) continue;
+    prepped.push({ center, loop });
+  }
 
-    const col = buildColumn(center, loop, oriented, grid, dt, cellMm, opts, true, true);
+  // Pass 2 — build longest-first, each MITERED against the longer strokes (the
+  // multi-way junction solver: the dominant stroke runs through, branches abut).
+  // Skipped for a huge auto-digitized region (many branches) where the pairwise
+  // miter would be costly and crisp junctions matter less than for lettering.
+  const miter = prepped.length <= MITER_MAX_BRANCHES;
+  const order = prepped
+    .map((_, i) => i)
+    .sort((a, b) => polylineLength(prepped[b].center) - polylineLength(prepped[a].center));
+  const columns: SatinColumn[] = [];
+  const higher: Path[] = [];
+  for (const i of order) {
+    const { center, loop } = prepped[i];
+    const col = buildColumn(center, loop, oriented, grid, dt, cellMm, opts, true, true, miter ? higher.slice() : []);
     if (col) columns.push(col);
+    if (miter) higher.push(douglasPeucker(center, 0.5));
   }
   return dedupeColumns(columns, oriented, cellMm);
 }
