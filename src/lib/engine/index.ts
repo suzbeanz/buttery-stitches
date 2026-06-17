@@ -7,7 +7,7 @@ import type {
 } from "../../types/project";
 import { resolveParams, fabricProfile } from "../../types/project";
 import { effectiveProfile } from "./profile";
-import { distance, railsFromCenterline } from "../geometry";
+import { distance, railsFromCenterline, pathsBounds } from "../geometry";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
 import { tatamiFill, motifFill, motifRunAlong, carvePoints, splitFillRegions, autoFillAngleForRegions } from "./fill";
@@ -218,7 +218,15 @@ const MAX_SATIN_STROKE_MM = 6;
  * shiny where it helps, crisp and solid where it doesn't, never sloppy.
  */
 function acceptableSatin(region: Path[], density: number, pullScale: number): SatinColumn[] {
-  const columns = medialColumns(region, { density, pullScale });
+  // Adaptive skeleton resolution: a fixed 0.4 mm grid is far too coarse for small
+  // lettering (a 2.5 mm stroke is barely 6 cells wide, so the skeleton staircases
+  // and the rails wobble). Scale the cell to the region so a letter is resolved
+  // finely while a big auto-digitized blob stays cheap. Clamped both ways; the
+  // medial code caps total cells and falls back to fill if a region is enormous.
+  const b = pathsBounds(region);
+  const span = b ? Math.min(b.maxX - b.minX, b.maxY - b.minY) : 12;
+  const cellMm = Math.max(0.12, Math.min(0.4, span / 60));
+  const columns = medialColumns(region, { density, pullScale, cellMm });
   if (columns.length === 0) return [];
 
   // Median stroke width across the glyph's strokes; bold/large faces fail this
