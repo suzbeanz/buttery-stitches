@@ -431,19 +431,22 @@ function routeGroups(groups: ObjGroup[]): ObjGroup[] {
  * This single representation drives both the on-canvas simulator and the
  * exporter, so the preview and the file can never disagree.
  */
-/** Connector length (mm) above which the thread is trimmed rather than jumped,
- *  by fabric. Napped fabrics (pile/fleece) bury long jumps in the loops where
- *  they snag and are hard to find, so they trim shorter; stretchy knit trims a
- *  touch shorter too (a dragged jump adds pull/pucker); stable wovens keep the
- *  longer default (fewer trims = faster, cleaner). */
+/** Connector length (mm) above which the thread is trimmed rather than traveled,
+ *  by fabric. Measured pro PES files trim only ~0.2–2.9 times per 1000 stitches —
+ *  they keep a whole color one continuous path, traveling 10–15 mm between nearby
+ *  same-color motifs instead of cutting. So a stable woven travels generously
+ *  (clusters of 10–12 mm connectors stay connected); only a genuinely long, open
+ *  jump trims. Napped pile buries connectors in the loops where they snag, so it
+ *  trims much shorter; stretchy knit trims shorter too (a dragged connector adds
+ *  pull/pucker). Ordering: pile < knit < woven. */
 function fabricTrimThreshold(fabric: Project["fabric"]): number {
   switch (fabric) {
     case "pile":
       return 5;
     case "knit":
-      return 6;
+      return 10;
     default:
-      return 8;
+      return 15;
   }
 }
 

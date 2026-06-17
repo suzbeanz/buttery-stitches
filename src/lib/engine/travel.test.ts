@@ -53,6 +53,24 @@ describe("intra-object continuity (anti-fragmentation)", () => {
     const jumpsTrims = design.filter((s) => s.jump || s.trim).length;
     expect((jumpsTrims / design.length) * 1000).toBeLessThan(10);
   });
+
+  // Real exports of dense radial designs shattered because they were many SEPARATE
+  // same-color motifs ~10-12mm apart: each cross-object hop sat just over the old
+  // 8mm woven threshold and trimmed (234 trims+jumps/1000). A stable woven now
+  // travels that far, keeping the whole color continuous like the pro files.
+  it("keeps separate same-color motifs ~11mm apart connected on woven (no trim spam)", () => {
+    const R = 35, cx = 50, cy = 50, N = 48;
+    const objects = [];
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      const x = cx + R * Math.cos(a), y = cy + R * Math.sin(a);
+      const x2 = cx + (R - 12) * Math.cos(a), y2 = cy + (R - 12) * Math.sin(a);
+      objects.push(makeObject("satin", [{ x, y }, { x: x2, y: y2 }], "c1"));
+    }
+    const design = generateDesign({ ...createEmptyProject(), objects }, { lockStitches: false });
+    const jt = design.filter((s) => s.jump || s.trim).length;
+    expect((jt / design.length) * 1000).toBeLessThan(3); // pro range (0.2–2.9)
+  });
 });
 
 describe("underpath travel under coverage", () => {
