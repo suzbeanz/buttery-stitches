@@ -109,6 +109,9 @@ def build_pattern(plan):
                 pattern.add_stitch_absolute(pe.JUMP, int(cmd[1]), int(cmd[2]))
             elif kind == "t":
                 pattern.add_command(pe.TRIM)
+            elif kind == "stop":
+                # Machine STOP — pause for the operator (appliqué: lay/trim fabric).
+                pattern.add_command(pe.STOP)
     pattern.add_command(pe.END)
     return pattern
 

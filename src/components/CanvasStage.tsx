@@ -22,9 +22,9 @@ import {
 } from "react-konva";
 import type Konva from "konva";
 import { useProjectStore } from "../store/projectStore";
-import { useEditorStore, isDrawTool } from "../store/editorStore";
+import { useEditorStore, isDrawTool, isPointTool } from "../store/editorStore";
 import type { EmbObject, Path, Point, ThreadColor } from "../types/project";
-import { makeObject, makeObjectFromPaths, minPointsFor } from "../lib/objects";
+import { makeObject, makeObjectFromPaths, makeSatinFromRails, minPointsFor } from "../lib/objects";
 import { shapeFromDrag, shapeRings, type ShapeKind } from "../lib/shapes";
 import { bucketFill } from "../lib/paintbucket";
 import {
@@ -89,6 +89,7 @@ export default function CanvasStage() {
   const shapeKind = useEditorStore((s) => s.shapeKind);
   const draft = useEditorStore((s) => s.draft);
   const cursorMm = useEditorStore((s) => s.cursorMm);
+  const satinRailA = useEditorStore((s) => s.satinRailA);
   const rulerUnit = useEditorStore((s) => s.rulerUnit);
   const fabricColor = useEditorStore((s) => s.fabricColor);
   const startDismissed = useEditorStore((s) => s.startDismissed);
@@ -251,6 +252,49 @@ export default function CanvasStage() {
 
   // --- commit / cancel the in-progress drawing ---
   function finishDraft() {
+    // Two-rail satin: first finish captures edge A, the second builds the column.
+    if (tool === "satin2") {
+      const rail = dedupePath(draft);
+      if (rail.length < 2) {
+        clearDraft();
+        return;
+      }
+      const finalRail = smooth ? smoothPath(rail) : rail;
+      const railA = useEditorStore.getState().satinRailA;
+      if (!railA) {
+        useEditorStore.getState().setSatinRailA(finalRail);
+        clearDraft();
+        return;
+      }
+      const colorId =
+        useEditorStore.getState().activeColorId ??
+        useProjectStore.getState().project.colors[0]?.id;
+      if (colorId) addObject(makeSatinFromRails(railA, finalRail, colorId));
+      useEditorStore.getState().setSatinRailA(null);
+      clearDraft();
+      return;
+    }
+    // Appliqué: a closed outline stitched as placement → cover (params.applique).
+    if (tool === "applique") {
+      let ring = dedupePath(draft);
+      if (ring.length >= 4 && distance(ring[0], ring[ring.length - 1]) < JOIN_SNAP_MM) {
+        ring = ring.slice(0, -1);
+      }
+      if (ring.length < 3) {
+        clearDraft();
+        return;
+      }
+      const colorId =
+        useEditorStore.getState().activeColorId ??
+        useProjectStore.getState().project.colors[0]?.id;
+      if (colorId) {
+        const o = makeObjectFromPaths("fill", [smooth ? smoothPath(ring) : ring], colorId);
+        o.params.applique = true;
+        addObject(o);
+      }
+      clearDraft();
+      return;
+    }
     if (!isDrawTool(tool)) return;
     let cleaned = dedupePath(draft); // drop double-click / stationary dupes
     // Smart snap-join: when closing a fill polygon, if the last point lands near
@@ -366,6 +410,7 @@ export default function CanvasStage() {
         clearDraft();
         setMeasure(null);
         measuringRef.current = false;
+        useEditorStore.getState().setSatinRailA(null);
         useEditorStore.getState().setSelectedNode(null);
       } else if (e.key === "Delete" || e.key === "Backspace") {
         const node = useEditorStore.getState().selectedNode;
@@ -465,7 +510,7 @@ export default function CanvasStage() {
       }
       return;
     }
-    if (!isDrawTool(tool)) {
+    if (!isPointTool(tool)) {
       // Press on empty canvas with the select tool begins a rubber-band marquee;
       // the actual selection (or a plain clear) is resolved on release.
       if (e.target === stage && tool === "select") {
@@ -510,7 +555,7 @@ export default function CanvasStage() {
       if (p) setMeasure((m) => (m ? { ...m, end: p } : m));
       return;
     }
-    if (!isDrawTool(tool)) return;
+    if (!isPointTool(tool)) return;
     setCursor(stagePointMm(stage));
   }
 
@@ -628,7 +673,7 @@ export default function CanvasStage() {
       if (p) setMarquee((m) => (m ? { ...m, end: p } : m));
       return;
     }
-    if (isDrawTool(tool)) setCursor(p);
+    if (isPointTool(tool)) setCursor(p);
   }
 
   function onTouchEnd() {
@@ -643,8 +688,8 @@ export default function CanvasStage() {
     }
     if (viewMode !== "stitch") {
       const ts = touchStartRef.current;
-      // A clean tap with a draw tool places a polygon point.
-      if (ts && !ts.moved && isDrawTool(tool)) addDraftPoint(ts.mm);
+      // A clean tap with a point-placing tool places a polygon/rail point.
+      if (ts && !ts.moved && isPointTool(tool)) addDraftPoint(ts.mm);
     }
     touchStartRef.current = null;
     finishMarquee();
@@ -676,7 +721,7 @@ export default function CanvasStage() {
     };
   }, []);
 
-  const drawing = viewMode === "edit" && isDrawTool(tool);
+  const drawing = viewMode === "edit" && isPointTool(tool);
   const freehand = viewMode === "edit" && (tool === "pencil" || tool === "brush");
   // Rulers run the full length of the canvas, not just the hoop, so the user
   // can measure designs that spill past the hoop edge (0 stays on the origin,
@@ -1033,11 +1078,22 @@ export default function CanvasStage() {
                   );
                 })()}
 
+                {/* Two-rail satin: show the captured first rail while you draw the second. */}
+                {tool === "satin2" && satinRailA && satinRailA.length > 1 && (
+                  <Line
+                    points={satinRailA.flatMap((p) => [px(p.x), py(p.y)])}
+                    stroke={C.salted}
+                    strokeWidth={2}
+                    dash={[6, 3]}
+                    listening={false}
+                  />
+                )}
+
                 {(drawing || freehand) && draft.length > 0 && (
                   <DraftPreview
                     draft={draft}
                     cursor={freehand ? null : cursorMm}
-                    closed={tool === "fill" || tool === "brush"}
+                    closed={tool === "fill" || tool === "brush" || tool === "applique"}
                     smooth={smooth || freehand}
                     px={px}
                     py={py}

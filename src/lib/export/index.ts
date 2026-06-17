@@ -18,8 +18,12 @@ export type EmbFormat = (typeof EMB_FORMATS)[number];
 export const PES_VERSIONS = [1, 6] as const;
 export type PesVersion = (typeof PES_VERSIONS)[number];
 
-/** One command in 1/10 mm units: stitch, jump, or trim. */
-export type PlanCmd = ["s", number, number] | ["j", number, number] | ["t"];
+/** One command in 1/10 mm units: stitch, jump, trim, or machine stop. */
+export type PlanCmd =
+  | ["s", number, number]
+  | ["j", number, number]
+  | ["t"]
+  | ["stop"];
 
 /** One thread color and its command stream. */
 export interface PlanBlock {
@@ -62,6 +66,12 @@ export function planFromDesign(
       blocks.push(current);
       currentColor = s.colorId;
     }
+    // A machine STOP (appliqué pause) rides after the point already stitched —
+    // emit the STOP command, not another penetration.
+    if (s.stop) {
+      current!.cmds.push(["stop"]);
+      return;
+    }
     // A within-color trim (the color-change trim is implied by the block
     // boundary, so skip it on the first event of a block).
     if (s.trim && !startsBlock) current!.cmds.push(["t"]);
@@ -101,8 +111,8 @@ export function splitPlanForFormat(plan: StitchPlan, format: EmbFormat): StitchP
     let py = 0;
     let have = false;
     for (const cmd of b.cmds) {
-      if (cmd[0] === "t") {
-        cmds.push(cmd);
+      if (cmd[0] === "t" || cmd[0] === "stop") {
+        cmds.push(cmd); // no coordinate to split
         continue;
       }
       const [kind, x, y] = cmd;

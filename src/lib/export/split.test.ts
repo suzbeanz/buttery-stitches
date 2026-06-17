@@ -8,7 +8,7 @@ function longestMove(cmds: PlanCmd[]): number {
   let have = false;
   let max = 0;
   for (const c of cmds) {
-    if (c[0] === "t") continue;
+    if (c[0] === "t" || c[0] === "stop") continue;
     const [, x, y] = c;
     if (have) max = Math.max(max, Math.hypot(x - px, y - py));
     px = x;

@@ -84,6 +84,26 @@ export function minPointsFor(type: StitchType): number {
 }
 
 /**
+ * Build a satin column from two user-drawn rails (Wilcom's "Input B"). railB is
+ * flipped if it runs opposite to railA, so corresponding points pair up and the
+ * column doesn't twist into a bow-tie. Rails are kept verbatim, so the width can
+ * vary freely along the column (calligraphic strokes, tapered borders).
+ */
+export function makeSatinFromRails(railA: Path, railB: Path, colorId: string): EmbObject {
+  if (railA.length < 2 || railB.length < 2) {
+    return makeObjectFromPaths("satin", [railA, railB], colorId);
+  }
+  const a0 = railA[0];
+  const aN = railA[railA.length - 1];
+  const b0 = railB[0];
+  const bN = railB[railB.length - 1];
+  const straight = distance(a0, b0) + distance(aN, bN);
+  const flipped = distance(a0, bN) + distance(aN, b0);
+  const right = flipped < straight ? [...railB].reverse() : railB;
+  return makeObjectFromPaths("satin", [railA, right], colorId);
+}
+
+/**
  * Build an EmbObject from already-formed paths (used by auto-digitize, where a
  * fill may carry holes). Unlike makeObject, the paths are taken verbatim.
  */

@@ -17,12 +17,13 @@ import {
   Paintbrush,
   PaintBucket,
   Ruler,
+  Scissors,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   useEditorStore,
-  isDrawTool,
+  isPointTool,
   type Tool,
   type RulerUnit,
 } from "../store/editorStore";
@@ -64,7 +65,7 @@ export default function ToolRail() {
   const setShapeKind = useEditorStore((s) => s.setShapeKind);
   const viewMode = useEditorStore((s) => s.viewMode);
   const locked = viewMode === "stitch"; // editing tools are inert in stitch view
-  const drawing = isDrawTool(tool) && draft.length > 0;
+  const drawing = isPointTool(tool) && draft.length > 0;
 
   const lockTip = "Switch to Edit view to use tools";
 
@@ -93,6 +94,9 @@ export default function ToolRail() {
         <ToolBtn id="satin" label="Satin" tip="Satin column — draw a centerline" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <SatinGlyph />
         </ToolBtn>
+        <ToolBtn id="satin2" label="Column" tip="Two-rail satin — draw edge A, then edge B (variable width)" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+          <Satin2Glyph />
+        </ToolBtn>
         <ToolBtn id="fill" label="Fill" tip="Fill an area with stitches — click an outline" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <FillGlyph />
         </ToolBtn>
@@ -104,6 +108,9 @@ export default function ToolRail() {
         </ToolBtn>
         <ToolBtn id="bucket" label="Bucket" tip="Paint bucket — click an enclosed area to fill it" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <PaintBucket size={20} />
+        </ToolBtn>
+        <ToolBtn id="applique" label="Appliqué" tip="Appliqué — draw a shape: placement run → stop → tackdown → stop → satin cover" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+          <Scissors size={20} />
         </ToolBtn>
         <RailBtn
           label="Curve"
@@ -312,6 +319,18 @@ function SatinGlyph() {
       <line x1="7" y1="10" x2="17" y2="10" />
       <line x1="7" y1="14" x2="17" y2="14" />
       <line x1="7" y1="18" x2="17" y2="18" />
+    </svg>
+  );
+}
+function Satin2Glyph() {
+  // Two tapering rails with the column filled between — depicts variable-width satin.
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M5 3 C 4 9, 9 15, 7 21" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M16 3 C 19 9, 14 15, 18 21" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <line x1="5.4" y1="6" x2="16.4" y2="6" stroke="currentColor" strokeWidth="1" opacity="0.8" />
+      <line x1="7.6" y1="12" x2="14" y2="12" stroke="currentColor" strokeWidth="1" opacity="0.8" />
+      <line x1="6.6" y1="18" x2="17.4" y2="18" stroke="currentColor" strokeWidth="1" opacity="0.8" />
     </svg>
   );
 }
