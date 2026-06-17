@@ -12,7 +12,7 @@ import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
 import { tatamiFill, motifFill, motifRunAlong, carvePoints, splitFillRegions, autoFillAngleForRegions } from "./fill";
 import { contourFill } from "./contour";
-import { medialColumns, satinCoverage, type SatinColumn } from "./medial";
+import { medialColumns, satinCoverage, residualRegions, type SatinColumn } from "./medial";
 import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
 import { dropShortStitches, splitLongTravels } from "./resample";
 
@@ -421,6 +421,23 @@ export function generateObjectRuns(
     // machine-safe pieces FIRST, then order those — so a concave shape's spans
     // connect with short travels instead of leaping (and trimming) across it.
     if (usingSatin) {
+      // Tatami-fill any interior the satin left bare — the small patches at stroke
+      // crossings and 3-way junctions where columns are trimmed back so they don't
+      // fan. Without this a self-crossing script loop (the 'l' in "hello") shows a
+      // hole. Laid first so the satin sits on top at the seams.
+      for (const patch of residualRegions(region, tops)) {
+        const fill = tatamiFill([patch], {
+          density,
+          angle: tatamiAngle,
+          stitchLength: p.fillStitchLength,
+          pullCompMm: pullComp,
+        });
+        for (const sub of orderByNearest(splitLongTravels(fill, travelMax), cursor)) {
+          const r = dropShortStitches(sub);
+          addRun(runs, r, false, regionIdx, true);
+          if (r.length) cursor = r[r.length - 1];
+        }
+      }
       for (const run of orderByNearest(tops, cursor)) {
         for (const sub of splitLongTravels(run, travelMax)) {
           addRun(runs, dropShortStitches(sub, minStitch), false, regionIdx, true);
@@ -651,7 +668,7 @@ export function generateDesign(
         gap <= MAX_COVERED_TRAVEL &&
         coveredBetween(prevPoint, start);
       const shortTravel =
-        !colorChanged && gap > jumpThreshold && gap <= exposedMax;
+        !colorChanged && !d.noBareTravel && gap > jumpThreshold && gap <= exposedMax;
       if (intraTravel || hiddenTravel || shortTravel) {
         const travel = runningStitch([prevPoint, start], TRAVEL_STITCH);
         for (const pt of travel.slice(1, -1)) {
