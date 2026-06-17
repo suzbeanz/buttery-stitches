@@ -130,4 +130,30 @@ describe("layoutText", () => {
     expect(object.type).toBe("fill");
     expect(object.paths.length).toBe(0);
   });
+
+  it("multiline text is taller than a single line but keeps letter height", () => {
+    const one = layoutText({ text: "AB", font, heightMm: 10, colorId: "c1" });
+    const two = layoutText({ text: "AB\nCD", font, heightMm: 10, colorId: "c1" });
+    const h1 = pathsBounds(one.object.paths)!;
+    const h2 = pathsBounds(two.object.paths)!;
+    const tall1 = h1.maxY - h1.minY;
+    const tall2 = h2.maxY - h2.minY;
+    expect(tall2).toBeGreaterThan(tall1 * 1.8); // ~2 lines + spacing
+    expect(tall2).toBeLessThan(tall1 * 3); // not wildly larger (letters same size)
+  });
+
+  it("arch bends a single line into a curve (ends drop below the middle for ∩)", () => {
+    const flat = layoutText({ text: "ARCH", font, heightMm: 10, colorId: "c1" });
+    const up = layoutText({ text: "ARCH", font, heightMm: 10, archDeg: 90, colorId: "c1" });
+    // The arched version is not a flat strip: its bbox is taller than the flat one.
+    const fb = pathsBounds(flat.object.paths)!;
+    const ub = pathsBounds(up.object.paths)!;
+    expect(ub.maxY - ub.minY).toBeGreaterThan((fb.maxY - fb.minY) * 1.2);
+    // straight (0°) is unchanged from omitting archDeg.
+    const z = layoutText({ text: "ARCH", font, heightMm: 10, archDeg: 0, colorId: "c1" });
+    expect(pathsBounds(z.object.paths)!.maxY - pathsBounds(z.object.paths)!.minY).toBeCloseTo(
+      fb.maxY - fb.minY,
+      1,
+    );
+  });
 });

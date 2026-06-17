@@ -24,6 +24,45 @@ describe("project serialization", () => {
     expect(restored).toEqual(p);
   });
 
+  it("preserves rich object data through a round-trip (nodes, text, appliqué, satin rails)", () => {
+    const p = createEmptyProject();
+    p.objects = [
+      {
+        id: "o1",
+        name: "Curve",
+        type: "fill",
+        colorId: "c1",
+        paths: [[{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 5, y: 8 }]],
+        nodes: [[{ x: 0, y: 0, smooth: true }, { x: 10, y: 0 }, { x: 5, y: 8, smooth: true }]],
+        params: { applique: true, fillStyle: "tatami" },
+        visible: true,
+      },
+      {
+        id: "o2",
+        name: "Word",
+        type: "fill",
+        colorId: "c1",
+        paths: [[{ x: 0, y: 0 }, { x: 5, y: 0 }, { x: 5, y: 5 }]],
+        params: { fillStyle: "satin" },
+        visible: true,
+        text: { content: "Hi\nyou", fontId: "f1", heightMm: 10, letterSpacingMm: 0.5, lineSpacing: 1.4, archDeg: 60 },
+      },
+      {
+        id: "o3",
+        name: "Column",
+        type: "satin",
+        colorId: "c1",
+        paths: [[{ x: 0, y: 0 }, { x: 10, y: 0 }], [{ x: 0, y: 3 }, { x: 10, y: 3 }]],
+        params: {},
+        visible: true,
+      },
+    ];
+    const restored = parseProject(JSON.parse(serializeProject(p)));
+    expect(restored.objects).toEqual(p.objects);
+    expect(restored.objects[0].nodes).toEqual(p.objects[0].nodes);
+    expect(restored.objects[1].text).toEqual(p.objects[1].text);
+  });
+
   it("rejects a non-object", () => {
     expect(() => parseProject(42)).toThrow();
     expect(() => parseProject(null)).toThrow();

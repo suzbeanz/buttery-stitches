@@ -54,6 +54,8 @@ export default function TextDialog({
   const [unit, setUnit] = useState<"in" | "mm">("in"); // default to inches
   const [heightMm, setHeightMm] = useState(initial?.heightMm ?? DEFAULT_HEIGHT_MM);
   const [letterSpacingMm, setLetterSpacingMm] = useState(initial?.letterSpacingMm ?? 0);
+  const [archDeg, setArchDeg] = useState(initial?.archDeg ?? 0);
+  const lineSpacing = initial?.lineSpacing ?? 1.35;
 
   // Color: either an existing project color id, or "__new" to add one.
   const [colorChoice, setColorChoice] = useState<string>(
@@ -87,13 +89,15 @@ export default function TextDialog({
         font,
         heightMm,
         letterSpacingMm,
+        lineSpacing,
+        archDeg,
         colorId: "preview",
-        name: text,
+        name: text.replace(/\n/g, " "),
       });
     } catch {
       return null;
     }
-  }, [font, text, heightMm, letterSpacingMm]);
+  }, [font, text, heightMm, letterSpacingMm, lineSpacing, archDeg]);
 
   // Size shown in the active unit; editing it converts back to mm.
   const sizeValue = unit === "in" ? mmToInch(heightMm) : heightMm;
@@ -139,7 +143,7 @@ export default function TextDialog({
       colorId,
       paths,
       params: editObject ? editObject.params : layout.object.params,
-      text: { content: text, fontId, heightMm, letterSpacingMm },
+      text: { content: text, fontId, heightMm, letterSpacingMm, lineSpacing, archDeg },
     };
     onAdd({ object, newColor });
     onClose();
@@ -167,13 +171,13 @@ export default function TextDialog({
         </h2>
 
         <label className="mb-3 block text-sm text-navy">
-          <div className="mb-1">Text</div>
-          <input
-            type="text"
+          <div className="mb-1">Text <span className="text-navy/50">(Enter for a new line)</span></div>
+          <textarea
             value={text}
             autoFocus
+            rows={2}
             onChange={(e) => setText(e.target.value)}
-            className="input"
+            className="input resize-y"
           />
         </label>
 
@@ -236,6 +240,32 @@ export default function TextDialog({
             />
           </label>
         </div>
+
+        <label className="mb-3 block text-sm text-navy">
+          <div className="mb-1 flex justify-between">
+            <span>Arch {archDeg > 0 ? "(up ∩)" : archDeg < 0 ? "(down ∪)" : "(straight)"}</span>
+            <span className="tabular-nums text-navy/60">{archDeg}°</span>
+          </div>
+          <input
+            type="range"
+            min={-180}
+            max={180}
+            step={5}
+            value={archDeg}
+            onChange={(e) => setArchDeg(Number(e.target.value))}
+            className="w-full cursor-pointer accent-ink"
+            aria-label="Arch curve"
+          />
+          {archDeg !== 0 && (
+            <button
+              type="button"
+              onClick={() => setArchDeg(0)}
+              className="mt-1 font-label text-[11px] uppercase tracking-wide text-ink/60 hover:text-ink"
+            >
+              Reset to straight
+            </button>
+          )}
+        </label>
 
         <div className="mb-3 text-sm text-navy">
           <div className="mb-1">Quick sizes ({unit})</div>
