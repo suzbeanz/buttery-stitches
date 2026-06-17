@@ -157,6 +157,10 @@ const MIN_SATIN_COVERAGE = 0.82;
  *  so we fall back to the auto skeleton. */
 const AUTHORED_MIN_COVERAGE = 0.65;
 
+/** A region whose larger dimension is below this is a tittle/period/accent — sewn
+ *  as one satin block across its long axis, not skeletonized into a cross. */
+const SMALL_FEATURE_MM = 3.2;
+
 /** Gradient fillStyle: the sparse edge is this multiple of the dense row spacing. */
 const GRADIENT_FILL_MUL = 2.6;
 
@@ -237,6 +241,23 @@ function acceptableSatin(
   const b = pathsBounds(region);
   const span = b ? Math.min(b.maxX - b.minX, b.maxY - b.minY) : 12;
   const cellMm = Math.max(0.12, Math.min(0.4, span / 60));
+  // Small feature (an i/j tittle, a period, an accent): its medial axis is a tiny
+  // cross that satins as a criss-cross mess. Lay ONE clean satin block across its
+  // long axis instead.
+  if (b) {
+    const w = b.maxX - b.minX;
+    const h = b.maxY - b.minY;
+    if (Math.max(w, h) <= SMALL_FEATURE_MM) {
+      const cx = (b.minX + b.maxX) / 2;
+      const cy = (b.minY + b.maxY) / 2;
+      const centerline: Point[] =
+        w >= h
+          ? [{ x: b.minX + w * 0.18, y: cy }, { x: b.maxX - w * 0.18, y: cy }]
+          : [{ x: cx, y: b.minY + h * 0.18 }, { x: cx, y: b.maxY - h * 0.18 }];
+      const cols = columnsFromCenterlines(region, [centerline], { density, pullScale, cellMm });
+      if (cols.length) return cols;
+    }
+  }
   // Authored decomposition (flagship font): lay a column down each hand-placed
   // centerline. The spec is trusted, and the engine's residual fill closes the
   // small wedges where strokes are authored short of a junction (W/M valleys), so
