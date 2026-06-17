@@ -15,6 +15,9 @@ const MIN_BRANCH_MM = 2;
 /** Above this many skeleton branches a region is a big auto-digitized blob, not
  *  lettering — skip the pairwise junction miter there (costly, less needed). */
 const MITER_MAX_BRANCHES = 16;
+/** Seam allowance (mm): meeting columns carry this far past the miter bisector so
+ *  they overlap by a sub-stitch sliver and never leave a hairline gap. */
+const SEAM_ALLOWANCE_MM = 0.3;
 
 /**
  * Auto-satin via the medial axis. Real embroidery lettering is satin columns that
@@ -366,7 +369,10 @@ function clipToTerritory(c: Point, dir: Point, half: number, siblings: Path[]): 
     if (t <= dSib + 1e-3) break; // q is in our own territory (own dist t ≤ sibling dist)
     t = dSib; // pull back toward the bisector and re-test
   }
-  return Math.max(0, t);
+  // Carry a hair PAST the bisector (a seam allowance) so meeting columns overlap
+  // by a sub-stitch sliver instead of leaving a pixel gap — a real mitred seam is
+  // never a hairline butt. Capped at the true edge so it can't bulge the stroke.
+  return Math.min(half, t + (t < half ? SEAM_ALLOWANCE_MM : 0));
 }
 
 /** Unit normal at point i of a centerline (average of adjacent segment normals). */
