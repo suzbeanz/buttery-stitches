@@ -135,13 +135,14 @@ export default function AutoDigitizeDialog({
           <p className="mb-3 flex gap-1.5 rounded bg-butter-200 px-2 py-1.5 text-[12px] text-navy">
             <AlertTriangle size={14} className="mt-0.5 shrink-0 text-stamp" aria-hidden />
             <span>
-              This looks like a photo. Buttery Stitches is built for logos and line
-              art — expect a rough result, and try fewer colors.
+              This looks photographic. Clean illustrations and logos work best — for
+              a detailed subject (like a pet portrait) add a few more colors to catch
+              the eyes and shading; very busy photos may still come out rough.
             </span>
           </p>
         )}
 
-        <label className="mb-3 block text-sm text-navy">
+        <label className="mb-1 block text-sm text-navy">
           <div className="mb-1 flex justify-between">
             <span>Colors</span>
             <span className="tabular-nums text-navy/60">{numColors}</span>
@@ -156,6 +157,10 @@ export default function AutoDigitizeDialog({
             className="w-full cursor-pointer accent-ink"
           />
         </label>
+        <p className="mb-3 text-[11px] text-navy/55">
+          More colors capture more detail (eyes, nose, shading) and add thread
+          changes; fewer keep it simple and bold. Try 6–8 for a portrait.
+        </p>
 
         <label className="mb-4 flex items-center gap-2 text-sm text-navy">
           <input

@@ -205,7 +205,7 @@ export function tracedataToObjects(
  * tracing, so each color comes out as a clean solid region.
  */
 const TRACE_OPTIONS = {
-  pathomit: 16,
+  pathomit: 8,
   ltres: 1,
   qtres: 1,
   rightangleenhance: true,
@@ -230,9 +230,15 @@ export function imageDataToObjects(
   // Detect the background from the (now palette-flat) border unless the caller
   // already supplied one.
   const backgroundRgb = opts.backgroundRgb ?? borderBackgroundColor(flat) ?? undefined;
+  // Hand ImageTracer OUR palette so it traces against our (saliency-aware k-means)
+  // colors instead of re-quantizing the image with its own population-based pass —
+  // which would drop small high-contrast features (a pet's eyes, nose, mouth) that
+  // matter far more than their pixel count. colorsampling: 0 forces it to use the
+  // fixed palette verbatim.
+  const pal = flat.palette.map(([r, g, b]) => ({ r, g, b, a: 255 }));
   const td = ImageTracer.imagedataToTracedata(
     { width: flat.width, height: flat.height, data: flat.data } as ImageData,
-    { ...TRACE_OPTIONS, numberofcolors: numberOfColors },
+    { ...TRACE_OPTIONS, pal, colorsampling: 0, numberofcolors: pal.length },
   ) as Tracedata;
   return tracedataToObjects(td, { ...opts, backgroundRgb });
 }
