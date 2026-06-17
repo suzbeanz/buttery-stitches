@@ -72,7 +72,7 @@ export default function SimulatorBar() {
             data-tip-side="top"
             aria-label={label}
             aria-pressed={viewMode === m}
-            className={`flex items-center gap-1 px-2.5 py-1 font-label font-semibold uppercase tracking-wide ${
+            className={`tap-target flex items-center gap-1 px-2.5 py-1 font-label font-semibold uppercase tracking-wide ${
               viewMode === m
                 ? "bg-ink text-cream"
                 : "bg-cream text-ink hover:bg-butter-200"
@@ -92,7 +92,7 @@ export default function SimulatorBar() {
             data-tip={simPlaying ? "Pause" : "Play"}
             data-tip-side="top"
             aria-label={simPlaying ? "Pause" : "Play"}
-            className="grid h-8 w-8 place-items-center rounded-sm border-2 border-ink bg-ink text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none disabled:opacity-40"
+            className="tap-target grid h-8 w-8 place-items-center rounded-sm border-2 border-ink bg-ink text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none disabled:opacity-40"
           >
             {simPlaying ? <Pause size={16} /> : <Play size={16} />}
           </button>

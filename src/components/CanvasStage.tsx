@@ -1040,7 +1040,7 @@ export default function CanvasStage() {
             onClick={resetView}
             aria-label="Fit to view"
             title="Fit to view"
-            className="grid h-8 w-8 place-items-center border-y border-ink/20 font-mono text-[10px] font-semibold text-ink-deep hover:bg-butter-200"
+            className="tap-target grid h-8 w-8 place-items-center border-y border-ink/20 font-mono text-[11px] font-semibold text-ink-deep hover:bg-butter-200"
           >
             {Math.round(zoom * 100)}%
           </button>
@@ -1051,7 +1051,7 @@ export default function CanvasStage() {
             onClick={resetView}
             aria-label="Reset view"
             title="Reset view"
-            className="grid h-8 w-8 place-items-center border-t border-ink/20 text-ink-deep hover:bg-butter-200"
+            className="tap-target grid h-8 w-8 place-items-center border-t border-ink/20 text-ink-deep hover:bg-butter-200"
           >
             <Maximize2 size={15} strokeWidth={2} />
           </button>
@@ -1141,7 +1141,7 @@ function ZoomButton({
       disabled={disabled}
       aria-label={label}
       title={label}
-      className="grid h-8 w-8 place-items-center text-ink-deep hover:bg-butter-200 disabled:opacity-30"
+      className="tap-target grid h-8 w-8 place-items-center text-ink-deep hover:bg-butter-200 disabled:opacity-30"
     >
       {children}
     </button>

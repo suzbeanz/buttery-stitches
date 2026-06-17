@@ -77,7 +77,7 @@ export default function ExportMenu() {
         data-tip="Export"
         aria-label="Export"
         aria-expanded={open}
-        className="grid h-9 w-9 place-items-center rounded-lg text-butter-100 hover:bg-butter-200/15"
+        className="tap-target grid h-9 w-9 shrink-0 place-items-center rounded-lg text-butter-100 hover:bg-butter-200/15"
       >
         <Download size={18} />
       </button>
@@ -130,7 +130,7 @@ export default function ExportMenu() {
                     key={f}
                     disabled={busy}
                     onClick={() => doExport(f)}
-                    className="rounded-sm border-2 border-ink bg-cream px-2 py-1.5 font-label text-xs font-semibold uppercase tracking-wide text-ink shadow-press-sm transition-transform hover:bg-ink hover:text-cream active:translate-y-[2px] active:shadow-none disabled:opacity-50"
+                    className="tap-target rounded-sm border-2 border-ink bg-cream px-2 py-1.5 font-label text-xs font-semibold uppercase tracking-wide text-ink shadow-press-sm transition-transform hover:bg-ink hover:text-cream active:translate-y-[2px] active:shadow-none disabled:opacity-50"
                   >
                     {f}
                   </button>

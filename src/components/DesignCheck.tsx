@@ -53,7 +53,7 @@ export default function DesignCheck({ onClose }: { onClose: () => void }) {
         role="dialog"
         aria-modal="true"
         aria-label="Check design"
-        className="anim-press-in w-full max-w-md rounded-sm border-[2.5px] border-ink bg-cream p-5 text-navy shadow-press"
+        className="anim-press-in max-h-[90vh] w-full max-w-md overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-5 text-navy shadow-press"
       >
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-label text-lg font-semibold uppercase tracking-[0.08em]">

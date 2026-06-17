@@ -245,7 +245,7 @@ export default function TopBar({
   }
 
   return (
-    <header className="relative z-30 flex flex-wrap items-center gap-0.5 border-b border-navy-dark bg-navy px-2 py-2 text-butter-100 shadow-press">
+    <header className="relative z-30 flex flex-wrap items-center gap-1 border-b border-navy-dark bg-navy px-2 py-2 text-butter-100 shadow-press">
       <BarButton
         label={layersOpen ? "Hide layers" : "Show layers"}
         onClick={toggleLayers}
@@ -260,7 +260,7 @@ export default function TopBar({
         data-tip="Home"
         data-tip-side="bottom"
         aria-label="Home"
-        className="mx-1.5 flex select-none items-center gap-2 rounded px-1 hover:opacity-80"
+        className="mx-1.5 flex shrink-0 select-none items-center gap-2 rounded px-1 hover:opacity-80"
       >
         {/* Butter-stick mark — high contrast on the press-blue bar. */}
         <svg width="34" height="22" viewBox="0 0 40 26" fill="none" aria-hidden className="shrink-0">
@@ -292,7 +292,7 @@ export default function TopBar({
         <Save size={18} />
       </BarButton>
 
-      <div className="mx-1.5 h-5 w-px bg-butter-200/20" />
+      <div className="mx-1.5 h-5 w-px shrink-0 bg-butter-200/20" />
 
       <div className="relative">
         <BarButton
@@ -339,7 +339,7 @@ export default function TopBar({
         <ClipboardList size={18} />
       </BarButton>
 
-      <div className="mx-1.5 h-5 w-px bg-butter-200/20" />
+      <div className="mx-1.5 h-5 w-px shrink-0 bg-butter-200/20" />
 
       <BarButton label="Undo" onClick={() => undo()} disabled={pastStates.length === 0}>
         <Undo2 size={18} />
@@ -348,9 +348,11 @@ export default function TopBar({
         <Redo2 size={18} />
       </BarButton>
 
-      <div className="flex-1" />
+      {/* Push the end controls right on wide screens; on narrow the bar wraps
+          tidily with everything left-aligned instead of stranding them. */}
+      <div className="hidden flex-1 lg:block" />
 
-      <span className="hidden px-1 text-xs text-butter-200/70 sm:inline">
+      <span className="hidden shrink-0 px-1 text-xs text-butter-200/70 sm:inline">
         {project.objects.length} object
         {project.objects.length === 1 ? "" : "s"}
       </span>
@@ -454,7 +456,7 @@ function BarButton({
       data-tip-align={align}
       aria-label={label}
       aria-pressed={active}
-      className={`grid h-9 w-9 place-items-center rounded-lg text-butter-100 transition-transform hover:bg-butter-200/15 active:translate-y-px active:bg-butter-200/25 disabled:cursor-not-allowed disabled:text-butter-200/40 disabled:hover:bg-transparent ${
+      className={`tap-target grid h-9 w-9 shrink-0 place-items-center rounded-lg text-butter-100 transition-transform hover:bg-butter-200/15 active:translate-y-px active:bg-butter-200/25 disabled:cursor-not-allowed disabled:text-butter-200/40 disabled:hover:bg-transparent ${
         active ? "bg-butter-200/15 text-butter-200" : ""
       }`}
     >

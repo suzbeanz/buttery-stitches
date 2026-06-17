@@ -105,7 +105,7 @@ export default function LayerPanel() {
                   aria-label="Move up"
                   disabled={index === 0}
                   onClick={() => moveOrder([o.id], "earlier")}
-                  className="grid h-8 w-7 place-items-center rounded text-navy/55 hover:bg-butter-300/60 hover:text-navy disabled:opacity-25 disabled:hover:bg-transparent"
+                  className="tap-target grid h-8 w-7 place-items-center rounded text-navy/55 hover:bg-butter-300/60 hover:text-navy disabled:opacity-25 disabled:hover:bg-transparent"
                 >
                   <ChevronUp size={15} />
                 </button>
@@ -114,7 +114,7 @@ export default function LayerPanel() {
                   aria-label="Move down"
                   disabled={index === objects.length - 1}
                   onClick={() => moveOrder([o.id], "later")}
-                  className="grid h-8 w-7 place-items-center rounded text-navy/55 hover:bg-butter-300/60 hover:text-navy disabled:opacity-25 disabled:hover:bg-transparent"
+                  className="tap-target grid h-8 w-7 place-items-center rounded text-navy/55 hover:bg-butter-300/60 hover:text-navy disabled:opacity-25 disabled:hover:bg-transparent"
                 >
                   <ChevronDown size={15} />
                 </button>
@@ -122,7 +122,7 @@ export default function LayerPanel() {
                   data-tip={o.visible ? "Hide" : "Show"}
                   aria-label={o.visible ? "Hide" : "Show"}
                   onClick={() => updateObject(o.id, { visible: !o.visible })}
-                  className="grid h-8 w-8 place-items-center rounded text-navy/70 hover:bg-butter-300/60 hover:text-navy"
+                  className="tap-target grid h-8 w-8 place-items-center rounded text-navy/70 hover:bg-butter-300/60 hover:text-navy"
                 >
                   {o.visible ? <Eye size={15} /> : <EyeOff size={15} />}
                 </button>
@@ -130,7 +130,7 @@ export default function LayerPanel() {
                   data-tip="Delete"
                   aria-label="Delete"
                   onClick={() => removeObjects([o.id])}
-                  className="grid h-8 w-8 place-items-center rounded text-ink/45 opacity-0 hover:bg-stamp/10 hover:text-stamp group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100"
+                  className="tap-target grid h-8 w-8 place-items-center rounded text-ink/45 opacity-0 hover:bg-stamp/10 hover:text-stamp group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100"
                 >
                   <Trash2 size={15} />
                 </button>
