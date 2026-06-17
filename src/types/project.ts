@@ -59,9 +59,11 @@ export interface EmbObjectParams {
   motif?: string;
   /** motif cell size in mm for a motif fill (default 4). */
   motifSizeMm?: number;
-  /** carve/emboss: a motif id stitched as an overlay that presses a pattern into
-   *  a tatami/gradient fill, or "none" (default). */
+  /** carve: a motif id carved into a tatami/gradient fill as un-penetrated relief
+   *  grooves, or "none" (default). */
   carve?: string;
+  /** running: repeat a motif along the line (decorative motif run), or "none". */
+  motifRun?: string;
   /** appliqué: stitch the shape as placement run → STOP (lay fabric) → tackdown
    *  → STOP (trim) → satin cover, instead of a normal fill. Default false. */
   applique?: boolean;
@@ -203,6 +205,7 @@ export const DEFAULT_PARAMS: Required<EmbObjectParams> = {
   motif: "wave",
   motifSizeMm: 4,
   carve: "none",
+  motifRun: "none",
   applique: false,
 };
 
@@ -229,6 +232,7 @@ export function resolveParams(
     motif: params.motif ?? DEFAULT_PARAMS.motif,
     motifSizeMm: params.motifSizeMm ?? DEFAULT_PARAMS.motifSizeMm,
     carve: params.carve ?? DEFAULT_PARAMS.carve,
+    motifRun: params.motifRun ?? DEFAULT_PARAMS.motifRun,
     applique: params.applique ?? DEFAULT_PARAMS.applique,
   };
 }
