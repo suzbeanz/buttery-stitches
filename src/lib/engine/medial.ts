@@ -1,10 +1,12 @@
 import type { Path, Point } from "../../types/project";
 import { orientByDepth } from "./fill";
 import { polylineLength } from "../geometry";
+import { polygonArea } from "../trace/classify";
 import { resampleByDistance } from "./resample";
 import { douglasPeucker } from "../trace/simplify";
 import { smoothPath } from "../smooth";
 import { autoPullCompMm, autoSatinDensity, staggeredSatin } from "./satin";
+import { marchingSquares, simplify } from "../paintbucket";
 
 /** Longest single satin throw (mm) before it is split for safety. */
 const MAX_THROW_MM = 7;
@@ -517,6 +519,42 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
       }
     }
 
+    // Extend TERMINAL ends out to the stroke cap. Skeleton thinning stops about
+    // half a stroke width short of a flat/round terminal, so the cap is left bare
+    // and would otherwise be patched with an ugly little tatami zig-zag. Push each
+    // free end along its tangent until it reaches the outline — but only at a TRUE
+    // terminal (the cap is close ahead); never out of a trimmed junction, where
+    // there's open glyph ahead. The perpendicular throws then cover the cap with
+    // clean satin. (Loops have no free ends.)
+    if (!loop && dense.length >= 2) {
+      const extendEnd = (atStart: boolean) => {
+        const i0 = atStart ? 0 : dense.length - 1;
+        const i1 = atStart ? 1 : dense.length - 2;
+        let ux = dense[i0].x - dense[i1].x;
+        let uy = dense[i0].y - dense[i1].y;
+        const tl = Math.hypot(ux, uy) || 1;
+        ux /= tl;
+        uy /= tl;
+        const localHalf = Math.max(cellMm, halves[i0] - OVERSHOOT_MM);
+        const ahead = rayHit(dense[i0], { x: ux, y: uy }, oriented, localHalf * 2 + cellMm);
+        if (ahead <= localHalf * 1.4 + cellMm) {
+          const ext = ahead - cellMm * 0.5;
+          if (ext > cellMm * 0.5) {
+            const p = { x: dense[i0].x + ux * ext, y: dense[i0].y + uy * ext };
+            if (atStart) {
+              dense.unshift(p);
+              halves.unshift(halves[0]);
+            } else {
+              dense.push(p);
+              halves.push(halves[halves.length - 1]);
+            }
+          }
+        }
+      };
+      extendEnd(true);
+      extendEnd(false);
+    }
+
     // Width-driven pull compensation (docs/stitch-logic.md §6): widen each rail
     // by half the auto pull-comp for the local stroke width so the sewn column
     // matches the drawn stroke. `pullScale` carries the fabric multiplier; 0
@@ -687,4 +725,91 @@ export function satinCoverage(rings: Path[], runs: Path[], cellMm = 0.5): number
   let hit = 0;
   for (let i = 0; i < cells.length; i++) if (cells[i] && covered[i]) hit++;
   return hit / total;
+}
+
+/**
+ * The parts of a region the satin DIDN'T cover, as polygons (mm) — the small
+ * patches at stroke crossings and junctions where columns are trimmed back so
+ * they don't fan. The engine tatami-fills these so a self-crossing script loop
+ * (the 'l' in "hello") or a 3-way meeting never shows a bare hole. We rasterize
+ * the region, paint the sewn satin paths with a thread-width brush, morphological-
+ * OPEN the leftover so the thin slivers between satin rows don't count, then trace
+ * what remains. Returns `[]` when satin covered everything.
+ */
+export function residualRegions(rings: Path[], sewn: Path[], cellMm = 0.3): Path[] {
+  const oriented = orientByDepth(rings);
+  const grid = rasterize(oriented, cellMm);
+  if (!grid) return [];
+  const { w, h, ox, oy, cells } = grid;
+
+  // Mark every cell the sewn satin passes through, plus a one-cell halo (≈ the
+  // thread's own width), so adjacent throws read as solid and only true gaps stay.
+  const covered = new Uint8Array(w * h);
+  const mark = (x: number, y: number) => {
+    const gx = Math.round((x - ox) / cellMm);
+    const gy = Math.round((y - oy) / cellMm);
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -1; dx <= 1; dx++) {
+        const cx = gx + dx;
+        const cy = gy + dy;
+        if (cx >= 0 && cy >= 0 && cx < w && cy < h) covered[cy * w + cx] = 1;
+      }
+  };
+  for (const run of sewn) {
+    for (let i = 1; i < run.length; i++) {
+      const a = run[i - 1];
+      const b = run[i];
+      const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / (cellMm * 0.75)));
+      for (let s = 0; s <= steps; s++) mark(a.x + ((b.x - a.x) * s) / steps, a.y + ((b.y - a.y) * s) / steps);
+    }
+  }
+
+  // Uncovered interior, then morphological OPEN (erode→dilate) to drop the 1-cell
+  // slivers along column edges, leaving only the chunky gaps worth filling.
+  let mask: Uint8Array = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) if (cells[i] && !covered[i]) mask[i] = 1;
+  mask = erode(mask, w, h);
+  mask = dilateMask(mask, w, h);
+  // Keep only cells still inside the region (dilation can spill onto a covered or
+  // outside cell).
+  for (let i = 0; i < w * h; i++) if (mask[i] && !cells[i]) mask[i] = 0;
+
+  let any = false;
+  for (let i = 0; i < w * h; i++) if (mask[i]) { any = true; break; }
+  if (!any) return [];
+
+  const minArea = Math.max(1.5, (2 * cellMm) ** 2); // ignore specks
+  return marchingSquares(mask, w, h)
+    .map((ring) => simplify(ring.map((p) => ({ x: ox + p.x * cellMm, y: oy + p.y * cellMm })), cellMm * 0.9))
+    .filter((r) => r.length >= 3 && Math.abs(polygonArea(r)) >= minArea);
+}
+
+/** 4-connected erosion: clear any set cell with an unset orthogonal neighbour. */
+function erode(mask: Uint8Array, w: number, h: number): Uint8Array {
+  const out = new Uint8Array(w * h);
+  for (let j = 0; j < h; j++)
+    for (let i = 0; i < w; i++) {
+      if (!mask[j * w + i]) continue;
+      const up = j > 0 ? mask[(j - 1) * w + i] : 0;
+      const dn = j < h - 1 ? mask[(j + 1) * w + i] : 0;
+      const lt = i > 0 ? mask[j * w + i - 1] : 0;
+      const rt = i < w - 1 ? mask[j * w + i + 1] : 0;
+      if (up && dn && lt && rt) out[j * w + i] = 1;
+    }
+  return out;
+}
+
+/** 4-connected dilation (inverse of erode). */
+function dilateMask(mask: Uint8Array, w: number, h: number): Uint8Array {
+  const out = mask.slice();
+  for (let j = 0; j < h; j++)
+    for (let i = 0; i < w; i++) {
+      if (mask[j * w + i]) continue;
+      const up = j > 0 && mask[(j - 1) * w + i];
+      const dn = j < h - 1 && mask[(j + 1) * w + i];
+      const lt = i > 0 && mask[j * w + i - 1];
+      const rt = i < w - 1 && mask[j * w + i + 1];
+      if (up || dn || lt || rt) out[j * w + i] = 1;
+    }
+  return out;
 }

@@ -40,6 +40,11 @@ describe("font registry", () => {
     expect(FONTS.some((f) => f.id === DEFAULT_FONT_ID)).toBe(true);
   });
 
+  it("makes Oswald the flagship: the default and first in the picker", () => {
+    expect(DEFAULT_FONT_ID).toBe("oswald");
+    expect(FONTS[0].id).toBe("oswald");
+  });
+
   it("every entry has a name, url, and an open-source license", () => {
     for (const f of FONTS) {
       expect(f.name.length).toBeGreaterThan(0);

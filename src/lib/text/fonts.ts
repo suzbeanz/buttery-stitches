@@ -45,10 +45,15 @@ export interface FontEntry {
  * face ships under the SIL Open Font License 1.1 (OFL-1.1).
  */
 export const FONTS: FontEntry[] = [
+  // — Flagship embroidery face —
+  // Oswald leads the list and is the default: a condensed sans with very even,
+  // medium-weight strokes and simple letterforms, so the engine lays clean satin
+  // columns the full length of every stroke and cap. It is the face that digitizes
+  // most crisply across the whole alphabet, so it is what we put first.
+  { id: "oswald", name: "Oswald (flagship · embroidery)", url: oswaldUrl, license: "OFL-1.1" },
   // — Sans —
   { id: "poppins", name: "Poppins (sans)", url: poppinsUrl, license: "OFL-1.1" },
   { id: "montserrat", name: "Montserrat (sans)", url: montserratUrl, license: "OFL-1.1" },
-  { id: "oswald", name: "Oswald (condensed)", url: oswaldUrl, license: "OFL-1.1" },
   // — Serif / slab —
   { id: "playfair", name: "Playfair Display (serif)", url: playfairUrl, license: "OFL-1.1" },
   { id: "roboto-slab", name: "Roboto Slab (slab serif)", url: robotoSlabUrl, license: "Apache-2.0" },
@@ -64,7 +69,7 @@ export const FONTS: FontEntry[] = [
   { id: "caveat", name: "Caveat (handwriting)", url: caveatUrl, license: "OFL-1.1" },
 ];
 
-export const DEFAULT_FONT_ID = "poppins";
+export const DEFAULT_FONT_ID = "oswald";
 
 /**
  * Parse a font from an ArrayBuffer. Kept separate from any fetching so it is

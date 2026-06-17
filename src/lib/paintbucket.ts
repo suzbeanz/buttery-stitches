@@ -150,7 +150,7 @@ function rasterizeSegment(
  * cells in `mask` (W×H) at the 0.5 iso-level. Returns closed rings in grid
  * coordinates (edge-midpoint resolution). Handles holes (returns a ring each).
  */
-function marchingSquares(mask: Uint8Array, W: number, H: number): Path[] {
+export function marchingSquares(mask: Uint8Array, W: number, H: number): Path[] {
   const at1 = (i: number, j: number) => (i < 0 || j < 0 || i >= W || j >= H ? 0 : mask[j * W + i]);
   const key = (x: number, y: number) => `${x.toFixed(1)},${y.toFixed(1)}`;
   // Each segment connects two edge-midpoints; build an adjacency map for chaining.
@@ -213,7 +213,7 @@ function marchingSquares(mask: Uint8Array, W: number, H: number): Path[] {
 }
 
 /** Douglas–Peucker simplification (keeps the ring's shape, drops stair-steps). */
-function simplify(points: Path, epsilon: number): Path {
+export function simplify(points: Path, epsilon: number): Path {
   if (points.length < 3) return points;
   const keep = new Uint8Array(points.length);
   keep[0] = 1;
