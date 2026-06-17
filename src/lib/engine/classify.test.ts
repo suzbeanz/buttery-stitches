@@ -70,4 +70,17 @@ describe("classifyRegion", () => {
   it("degenerate input falls back to tatami", () => {
     expect(classifyRegion([])).toBe("tatami");
   });
+
+  it("a holey blob is tatami, not a stroke (holes drag mean width into the satin band)", () => {
+    // A 50×50 mm area riddled with holes (like traced fur: lots of counters): the
+    // holes shrink the net area and inflate the total perimeter, so the mean width
+    // lands inside the satin band — yet the shape is locally fat (a big inscribed
+    // circle fits in the solid core), so it must stay a broad tatami fill.
+    const hole = (x: number, y: number): Path => [
+      { x, y }, { x: x + 20, y }, { x: x + 20, y: y + 20 }, { x, y: y + 20 },
+    ];
+    const rings: Path[] = [rect(50, 50), hole(2, 2), hole(28, 2), hole(2, 28), hole(28, 28)];
+    expect(meanStrokeWidthMm(rings)).toBeLessThan(3.5); // mean width says "stroke"…
+    expect(classifyRegion(rings, { satinMaxWidthMm: 3.5 })).toBe("tatami"); // …but it's a fill
+  });
 });
