@@ -1,5 +1,6 @@
 import type { EmbObject } from "../types/project";
 import { pathsBounds, translatePaths, type Bounds } from "./geometry";
+import { translateNodes } from "./nodes";
 
 /**
  * Document layout: design sizing and hoop fitting.
@@ -22,24 +23,30 @@ export function scaleAllPaths(
   sy: number,
   pivot: { x: number; y: number },
 ): EmbObject[] {
+  const sc = (x: number, p: number, s: number) => p + (x - p) * s;
   return objects.map((o) => ({
     ...o,
     paths: o.paths.map((path) =>
-      path.map((p) => ({
-        x: pivot.x + (p.x - pivot.x) * sx,
-        y: pivot.y + (p.y - pivot.y) * sy,
-      })),
+      path.map((p) => ({ x: sc(p.x, pivot.x, sx), y: sc(p.y, pivot.y, sy) })),
+    ),
+    // Keep the editable control nodes in step so curves survive a resize.
+    nodes: o.nodes?.map((ring) =>
+      ring.map((nd) => ({ x: sc(nd.x, pivot.x, sx), y: sc(nd.y, pivot.y, sy), smooth: nd.smooth })),
     ),
   }));
 }
 
-/** Translate all object paths. */
+/** Translate all object paths (and their editable nodes). */
 export function translateAllPaths(
   objects: EmbObject[],
   dx: number,
   dy: number,
 ): EmbObject[] {
-  return objects.map((o) => ({ ...o, paths: translatePaths(o.paths, dx, dy) }));
+  return objects.map((o) => ({
+    ...o,
+    paths: translatePaths(o.paths, dx, dy),
+    nodes: o.nodes ? translateNodes(o.nodes, dx, dy) : undefined,
+  }));
 }
 
 /** Current design width/height in mm (0 if empty). */

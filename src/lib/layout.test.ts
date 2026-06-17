@@ -1,9 +1,30 @@
 import { describe, it, expect } from "vitest";
-import { designSize, designBounds, resizeToWidth, fitToHoop } from "./layout";
-import { makeObjectFromPaths } from "./objects";
+import { designSize, designBounds, resizeToWidth, fitToHoop, scaleAllPaths } from "./layout";
+import { makeObjectFromPaths, makeNodeObject } from "./objects";
 import { generateDesign, countStitches } from "./engine";
 import { createEmptyProject } from "./project";
 import type { EmbObject } from "../types/project";
+
+describe("resize keeps the node model in sync", () => {
+  it("scales nodes together with paths (curves survive a resize)", () => {
+    const o = makeNodeObject(
+      "fill",
+      [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 10, y: 10 },
+        { x: 0, y: 10 },
+      ],
+      "c1",
+      true,
+    );
+    const before = Math.max(...o.paths[0].map((p) => p.x));
+    const [scaled] = scaleAllPaths([o], 2, 2, { x: 0, y: 0 });
+    expect(scaled.nodes![0][1]).toMatchObject({ x: 20, y: 0, smooth: true });
+    // paths scale in lock-step with the nodes (≈2×), curve overshoot included.
+    expect(Math.max(...scaled.paths[0].map((p) => p.x))).toBeCloseTo(before * 2, 1);
+  });
+});
 
 function square(x0: number, y0: number, s: number): EmbObject {
   return makeObjectFromPaths(

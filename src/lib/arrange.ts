@@ -1,5 +1,15 @@
 import type { EmbObject, Hoop } from "../types/project";
 import { pathsBounds, translatePaths, type Bounds } from "./geometry";
+import { translateNodes } from "./nodes";
+
+/** Translate an object's paths and (if present) its editable nodes together. */
+function shiftObject(o: EmbObject, dx: number, dy: number): EmbObject {
+  return {
+    ...o,
+    paths: translatePaths(o.paths, dx, dy),
+    nodes: o.nodes ? translateNodes(o.nodes, dx, dy) : undefined,
+  };
+}
 
 /**
  * Align & distribute — pure layout helpers. Each returns a NEW objects array
@@ -84,7 +94,7 @@ export function alignObjects(
   return objects.map((o) => {
     const m = move.get(o.id);
     return m && (m.dx !== 0 || m.dy !== 0)
-      ? { ...o, paths: translatePaths(o.paths, m.dx, m.dy) }
+      ? shiftObject(o, m.dx, m.dy)
       : o;
   });
 }
@@ -117,7 +127,7 @@ export function distributeObjects(
   return objects.map((o) => {
     const m = move.get(o.id);
     return m && (m.dx !== 0 || m.dy !== 0)
-      ? { ...o, paths: translatePaths(o.paths, m.dx, m.dy) }
+      ? shiftObject(o, m.dx, m.dy)
       : o;
   });
 }
