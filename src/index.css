@@ -304,6 +304,16 @@ body::after {
     @apply w-full rounded-sm border-2 border-ink/70 bg-white px-2.5 py-1.5 text-sm text-char outline-none focus:border-ink;
   }
 
+  /* Touch ergonomics: on a coarse pointer (finger), guarantee a ≥44px hit area
+     for compact icon buttons without bloating the mouse/desktop layout. The
+     visual icon stays put; only the tappable box grows. */
+  @media (pointer: coarse) {
+    .tap-target {
+      min-height: 2.75rem;
+      min-width: 2.75rem;
+    }
+  }
+
   /* The display wordmark — condensed press caps with a touch of tracking. */
   .wordmark {
     @apply font-display tracking-wide;

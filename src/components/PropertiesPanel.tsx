@@ -120,7 +120,7 @@ function ArrangeBtn({
       disabled={disabled}
       data-tip={label}
       aria-label={label}
-      className="grid h-8 flex-1 place-items-center rounded-sm border border-ink/25 bg-cream text-ink-deep hover:bg-butter-200 disabled:opacity-30 disabled:hover:bg-cream"
+      className="tap-target grid h-8 flex-1 place-items-center rounded-sm border border-ink/25 bg-cream text-ink-deep hover:bg-butter-200 disabled:opacity-30 disabled:hover:bg-cream"
     >
       {children}
     </button>
