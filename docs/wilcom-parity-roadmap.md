@@ -39,6 +39,12 @@ the broader Wilcom feature surface below.
 ## Phased plan
 
 ### Phase 1 — close the two named gaps + make our matches first-class
+> **Status:** ✅ Quick Resize node-sync (resize/align/distribute carry the node
+> model); ✅ Lettering depth (multiline + arch baselines, persisted & re-editable);
+> ✅ `.embproj` round-trip hardened (nodes/text-arch/appliqué/satin verified).
+> Fabric Assist (picker), Auto stitch-type (Clean up), Auto-branch (engine
+> routing) already shipped — naming/surfacing pass remains.
+
 1. **Quick Design Resize** (pillar 2): a "Resize design" control (target W×H or %)
    that re-runs the engine (vector objects recalc stitches automatically) AND, for
    imported raw-stitch designs, rescales with min/max stitch safeguards; surface
