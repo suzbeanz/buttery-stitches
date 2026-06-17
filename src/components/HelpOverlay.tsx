@@ -7,9 +7,12 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
     keys: [
       ["V", "Select"],
       ["N", "Points"],
+      ["H", "Hand (pan)"],
+      ["M", "Measure"],
       ["R", "Running"],
       ["S", "Satin"],
       ["F", "Fill"],
+      ["B", "Pencil"],
     ],
   },
   {

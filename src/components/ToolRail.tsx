@@ -16,6 +16,7 @@ import {
   Minus,
   Paintbrush,
   PaintBucket,
+  Ruler,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -73,11 +74,14 @@ export default function ToolRail() {
         <ToolBtn id="select" label="Select" tip="Click to select; drag to move" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <MousePointer2 size={20} />
         </ToolBtn>
-        <ToolBtn id="node" label="Points" tip="Drag a shape's points" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="node" label="Points" tip="Edit points — drag to move · click the outline to add · Del to remove" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <NodeGlyph />
         </ToolBtn>
         <ToolBtn id="pan" label="Hand" tip="Hand — drag to move the canvas (or hold middle mouse)" tool={tool} setTool={setTool} locked={false} lockTip={lockTip}>
           <Hand size={20} />
+        </ToolBtn>
+        <ToolBtn id="measure" label="Measure" tip="Measure — drag to read a distance and angle" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+          <Ruler size={20} />
         </ToolBtn>
       </Group>
 

@@ -152,6 +152,10 @@ export default function CanvasStage() {
   // In-progress shape drag (mm) for the shape tool — its bounding box sizes the
   // premade shape, committed on release.
   const [shapeDraft, setShapeDraft] = useState<{ start: Point; end: Point } | null>(null);
+  // Measure tool: a transient ruler segment (mm). Stays on screen after release
+  // until you measure again, switch tools, or press Escape — no object is made.
+  const [measure, setMeasure] = useState<{ start: Point; end: Point } | null>(null);
+  const measuringRef = useRef(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -360,6 +364,8 @@ export default function CanvasStage() {
       if (e.key === "Enter") finishDraft();
       else if (e.key === "Escape") {
         clearDraft();
+        setMeasure(null);
+        measuringRef.current = false;
         useEditorStore.getState().setSelectedNode(null);
       } else if (e.key === "Delete" || e.key === "Backspace") {
         const node = useEditorStore.getState().selectedNode;
@@ -390,6 +396,14 @@ export default function CanvasStage() {
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tool, draft, selectedIds, activeColorId, smooth]);
+
+  // Drop the ruler segment when you leave the Measure tool.
+  useEffect(() => {
+    if (tool !== "measure") {
+      setMeasure(null);
+      measuringRef.current = false;
+    }
+  }, [tool]);
 
   // --- stage pointer handlers ---
   function stagePointMm(stage: Konva.Stage): Point | null {
@@ -442,6 +456,15 @@ export default function CanvasStage() {
       if (p) doBucket(p);
       return;
     }
+    // Measure: drag a ruler segment; updates live and reads out on release.
+    if (tool === "measure") {
+      const p = stagePointMm(stage);
+      if (p) {
+        setMeasure({ start: p, end: p });
+        measuringRef.current = true;
+      }
+      return;
+    }
     if (!isDrawTool(tool)) {
       // Press on empty canvas with the select tool begins a rubber-band marquee;
       // the actual selection (or a plain clear) is resolved on release.
@@ -480,6 +503,11 @@ export default function CanvasStage() {
     if (marquee) {
       const p = stagePointMm(stage);
       if (p) setMarquee((m) => (m ? { ...m, end: p } : m));
+      return;
+    }
+    if (measuringRef.current) {
+      const p = stagePointMm(stage);
+      if (p) setMeasure((m) => (m ? { ...m, end: p } : m));
       return;
     }
     if (!isDrawTool(tool)) return;
@@ -536,6 +564,12 @@ export default function CanvasStage() {
       doBucket(p);
       return;
     }
+    // Measure: one finger drags the ruler segment.
+    if (tool === "measure" && p) {
+      setMeasure({ start: p, end: p });
+      measuringRef.current = true;
+      return;
+    }
     touchStartRef.current = p ? { mm: p, moved: false } : null;
     // Select tool on empty canvas → rubber-band; drawing taps are placed on release.
     if (!isDrawTool(tool) && tool === "select" && e.target === stage && p) {
@@ -584,6 +618,10 @@ export default function CanvasStage() {
       if (p) setShapeDraft((d) => (d ? { ...d, end: p } : d));
       return;
     }
+    if (measuringRef.current) {
+      if (p) setMeasure((m) => (m ? { ...m, end: p } : m));
+      return;
+    }
     const ts = touchStartRef.current;
     if (ts && p && Math.hypot(p.x - ts.mm.x, p.y - ts.mm.y) > 1.5) ts.moved = true;
     if (marquee) {
@@ -626,7 +664,10 @@ export default function CanvasStage() {
   const finishMarqueeRef = useRef(finishMarquee);
   finishMarqueeRef.current = finishMarquee;
   useEffect(() => {
-    const onUp = () => finishMarqueeRef.current();
+    const onUp = () => {
+      measuringRef.current = false; // stop tracking; keep the measurement shown
+      finishMarqueeRef.current();
+    };
     window.addEventListener("mouseup", onUp);
     window.addEventListener("touchend", onUp);
     return () => {
@@ -694,7 +735,7 @@ export default function CanvasStage() {
             cursor:
               tool === "pan"
                 ? "grab"
-                : drawing || freehand || tool === "shape" || tool === "bucket"
+                : drawing || freehand || tool === "shape" || tool === "bucket" || tool === "measure"
                   ? "crosshair"
                   : "default",
           }}
@@ -966,6 +1007,31 @@ export default function CanvasStage() {
                     listening={false}
                   />
                 )}
+
+                {/* Measure tool: ruler segment + a distance·angle readout. */}
+                {measure && (() => {
+                  const { start, end } = measure;
+                  const x1 = px(start.x), y1 = py(start.y);
+                  const x2 = px(end.x), y2 = py(end.y);
+                  const distMm = Math.hypot(end.x - start.x, end.y - start.y);
+                  const len = rulerUnit === "inch"
+                    ? `${mmToInch(distMm).toFixed(2)}"`
+                    : `${distMm.toFixed(1)} mm`;
+                  const ang = (Math.atan2(end.y - start.y, end.x - start.x) * 180) / Math.PI;
+                  const text = `${len}  ·  ${ang.toFixed(1)}°`;
+                  const w = text.length * 6.4 + 12;
+                  const mx = (x1 + x2) / 2;
+                  const my = (y1 + y2) / 2 - 22;
+                  return (
+                    <Group listening={false}>
+                      <Line points={[x1, y1, x2, y2]} stroke={C.salted} strokeWidth={1.5} dash={[6, 3]} />
+                      <Circle x={x1} y={y1} radius={3} fill={C.salted} />
+                      <Circle x={x2} y={y2} radius={3} fill={C.salted} />
+                      <Rect x={mx - w / 2} y={my} width={w} height={17} cornerRadius={2} fill={C.navy} opacity={0.92} />
+                      <Text x={mx - w / 2} y={my} width={w} height={17} text={text} fontSize={11} fontStyle="bold" fontFamily="monospace" fill={C.cream} align="center" verticalAlign="middle" />
+                    </Group>
+                  );
+                })()}
 
                 {(drawing || freehand) && draft.length > 0 && (
                   <DraftPreview
@@ -1396,6 +1462,38 @@ function StitchView({
 
 // ---------------------------------------------------------------------------
 
+/**
+ * Insert a new vertex into a ring at the click point, projected onto the nearest
+ * segment (so the node lands ON the outline). `closed` also considers the wrap
+ * segment (last→first) for fill rings. Returns a NEW ring, or null if degenerate.
+ */
+function insertPointOnRing(ring: Path, at: Point, closed: boolean): Path | null {
+  if (ring.length < 2) return null;
+  let bestIdx = -1;
+  let bestD = Infinity;
+  let bestPt: Point = at;
+  const last = closed ? ring.length : ring.length - 1;
+  for (let i = 0; i < last; i++) {
+    const a = ring[i];
+    const b = ring[(i + 1) % ring.length];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 > 0 ? Math.max(0, Math.min(1, ((at.x - a.x) * dx + (at.y - a.y) * dy) / len2)) : 0;
+    const proj = { x: a.x + t * dx, y: a.y + t * dy };
+    const d = (proj.x - at.x) ** 2 + (proj.y - at.y) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      bestIdx = i;
+      bestPt = proj;
+    }
+  }
+  if (bestIdx < 0) return null;
+  const out = ring.map((p) => ({ ...p }));
+  out.splice(bestIdx + 1, 0, bestPt);
+  return out;
+}
+
 function ObjectShape({
   object,
   tool,
@@ -1623,7 +1721,20 @@ function ObjectShape({
           strokeWidth={selected ? 2.5 : outlineOn ? 1.5 : 0}
           closed={object.type === "fill"}
           listening={selectable}
-          hitStrokeWidth={10}
+          hitStrokeWidth={editingNodes ? 14 : 10}
+          // In node mode, clicking the outline (not a handle) inserts a new node
+          // on the nearest segment so you can add detail anywhere.
+          onClick={
+            editingNodes
+              ? (e) => {
+                  e.cancelBubble = true;
+                  const pos = e.target.getStage()?.getPointerPosition();
+                  if (!pos) return;
+                  const ring = insertPointOnRing(object.paths[pi], toMm(pos.x, pos.y), object.type === "fill");
+                  if (ring) onCommitPaths(object.paths.map((pp, i) => (i === pi ? ring : pp)));
+                }
+              : undefined
+          }
         />
       ))}
 
