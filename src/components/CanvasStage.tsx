@@ -1019,7 +1019,9 @@ export default function CanvasStage() {
                             : [...cur, o.id],
                         );
                       }}
-                      onCommitPaths={(paths) => updateObject(o.id, { paths })}
+                      onCommitPaths={(paths, satinCenterlines) =>
+                        updateObject(o.id, { paths, satinCenterlines })
+                      }
                       onCommitNodes={(nodes) =>
                         updateObject(o.id, { nodes, paths: pathsFromNodes(nodes, o.type === "fill") })
                       }
@@ -1642,7 +1644,7 @@ function ObjectShape({
   toMm: (sx: number, sy: number) => Point;
   registerNode: (node: Konva.Group | null) => void;
   onSelect: (additive: boolean) => void;
-  onCommitPaths: (paths: Path[]) => void;
+  onCommitPaths: (paths: Path[], satinCenterlines?: Path[]) => void;
   onCommitNodes: (nodes: NodePath[]) => void;
   selectedIds: string[];
   onMoveSelected: (dxMm: number, dyMm: number) => void;
@@ -1774,7 +1776,10 @@ function ObjectShape({
           // Keep the editable nodes in step with the move (don't drop the curve).
           onCommitNodes(translateNodes(nodeRings, dxMm, dyMm));
         } else {
-          onCommitPaths(translatePaths(object.paths, dxMm, dyMm));
+          onCommitPaths(
+            translatePaths(object.paths, dxMm, dyMm),
+            object.satinCenterlines ? translatePaths(object.satinCenterlines, dxMm, dyMm) : undefined,
+          );
         }
       }}
       onTransformEnd={(e) => {
@@ -1796,7 +1801,15 @@ function ObjectShape({
         const movedMm = applyMatrix(pxPaths, m).map((path) =>
           path.map((p) => toMm(p.x, p.y)),
         );
-        onCommitPaths(movedMm);
+        // Carry authored satin centerlines through the same matrix so they stay
+        // glued to the glyphs after a free scale/rotate.
+        const movedCenters = object.satinCenterlines
+          ? applyMatrix(
+              object.satinCenterlines.map((path) => path.map((p) => ({ x: px(p.x), y: py(p.y) }))),
+              m,
+            ).map((path) => path.map((p) => toMm(p.x, p.y)))
+          : undefined;
+        onCommitPaths(movedMm, movedCenters);
       }}
     >
       {/* Fill objects get a translucent body drawn with the nonzero rule (rings

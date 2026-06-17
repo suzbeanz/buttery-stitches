@@ -93,11 +93,12 @@ export default function TextDialog({
         archDeg,
         colorId: "preview",
         name: text.replace(/\n/g, " "),
+        fontId,
       });
     } catch {
       return null;
     }
-  }, [font, text, heightMm, letterSpacingMm, lineSpacing, archDeg]);
+  }, [font, text, heightMm, letterSpacingMm, lineSpacing, archDeg, fontId]);
 
   // Size shown in the active unit; editing it converts back to mm.
   const sizeValue = unit === "in" ? mmToInch(heightMm) : heightMm;
@@ -133,15 +134,21 @@ export default function TextDialog({
     const target = editBounds
       ? { x: (editBounds.minX + editBounds.maxX) / 2, y: (editBounds.minY + editBounds.maxY) / 2 }
       : { x: hoop.wMm / 2, y: hoop.hMm / 2 };
-    const paths = pathsBounds(centered)
-      ? translatePaths(centered, target.x, target.y)
-      : centered;
+    const move = pathsBounds(centered);
+    const paths = move ? translatePaths(centered, target.x, target.y) : centered;
+    // Authored satin centerlines live in the same centered space — move them with
+    // the geometry so they stay glued to their glyphs.
+    const satinCenterlines =
+      layout.object.satinCenterlines && move
+        ? translatePaths(layout.object.satinCenterlines, target.x, target.y)
+        : layout.object.satinCenterlines;
 
     const object: EmbObject = {
       ...layout.object,
       id: editObject?.id ?? newId("obj"),
       colorId,
       paths,
+      satinCenterlines,
       params: editObject ? editObject.params : layout.object.params,
       text: { content: text, fontId, heightMm, letterSpacingMm, lineSpacing, archDeg },
     };

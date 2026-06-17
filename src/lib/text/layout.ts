@@ -16,6 +16,7 @@
 import type { EmbObject, Path, Point } from "../../types/project";
 import { makeObjectFromPaths } from "../objects";
 import { pathsBounds } from "../geometry";
+import { authoredAlphabet, type AuthoredAlphabet } from "./authored";
 // opentype is only used as a type here; parsing happens in fonts.ts. This keeps
 // layout pure (it never fetches or reads files — the caller passes the Font).
 import type { Font } from "opentype.js";
@@ -39,6 +40,11 @@ export interface TextLayoutOptions {
   name?: string;
   /** curve flattening tolerance in mm (default 0.4). */
   flattenToleranceMm?: number;
+  /** font id, used to look up the AUTHORED per-glyph satin decomposition for the
+   *  flagship face (Oswald). When the font has an authored alphabet, the laid-out
+   *  object carries `satinCenterlines` so the engine sews the diagonal-junction
+   *  glyphs from clean strokes instead of an auto skeleton. */
+  fontId?: string;
 }
 
 /** A single opentype path command (the subset fonts actually emit). */
@@ -175,29 +181,52 @@ function glyphsFor(font: Font, text: string) {
   }
 }
 
-/** Lay one line of glyphs flat (font units, pen from x=0). Returns its rings and
- *  total advance width. */
+/** Lay one line of glyphs flat (font units, pen from x=0). Returns its rings, any
+ *  authored satin centerlines (mapped into each glyph's ink box, same space as the
+ *  rings), and the total advance width. */
 function lineRings(
   font: Font,
   text: string,
   emSize: number,
   spacingUnits: number,
   flattenTol: number,
-): { rings: Path[]; width: number } {
+  authored: AuthoredAlphabet | null,
+): { rings: Path[]; strokes: Path[]; width: number } {
   const rings: Path[] = [];
+  const strokes: Path[] = [];
   let penX = 0;
-  for (const glyph of glyphsFor(font, text)) {
+  // With an authored alphabet, iterate per character so each glyph's strokes line
+  // up with the right outline (Oswald has no ligatures, so this matches the shaped
+  // advance). Otherwise keep the shaped-glyph path.
+  const glyphs = authored
+    ? Array.from(text).map((ch) => ({ ch, glyph: font.charToGlyph(ch) }))
+    : glyphsFor(font, text).map((glyph) => ({ ch: undefined as string | undefined, glyph }));
+  for (const { ch, glyph } of glyphs) {
     const path = glyph.getPath(penX, 0, emSize) as { commands: OtCommand[] };
-    rings.push(...commandsToRings(path.commands, flattenTol));
+    const glyphRings = commandsToRings(path.commands, flattenTol);
+    rings.push(...glyphRings);
+    const spec = authored && ch ? authored[ch] : undefined;
+    if (spec && glyphRings.length) {
+      const b = pathsBounds(glyphRings);
+      if (b) {
+        const w = b.maxX - b.minX;
+        const h = b.maxY - b.minY;
+        for (const stroke of spec) {
+          strokes.push(stroke.map(([nx, ny]) => ({ x: b.minX + nx * w, y: b.minY + ny * h })));
+        }
+      }
+    }
     penX += (glyph.advanceWidth ?? 0) + spacingUnits;
   }
-  return { rings, width: penX };
+  return { rings, strokes, width: penX };
 }
 
-/** Bend centered rings along a circular arc: +deg ∩, −deg ∪, 0 = straight. */
-function archRings(rings: Path[], archDeg: number): Path[] {
-  if (!archDeg) return rings;
-  const b = pathsBounds(rings);
+/** Bend centered rings along a circular arc: +deg ∩, −deg ∪, 0 = straight. The
+ *  radius is derived from `radiusFrom` (the rings, by default) so a parallel set
+ *  — authored stroke centerlines — can be bent on the SAME arc. */
+function archRings(rings: Path[], archDeg: number, radiusFrom: Path[] = rings): Path[] {
+  if (!archDeg || rings.length === 0) return rings;
+  const b = pathsBounds(radiusFrom);
   if (!b) return rings;
   const W = b.maxX - b.minX;
   if (W <= 0) return rings;
@@ -222,8 +251,10 @@ export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
     colorId,
     name,
     flattenToleranceMm = 0.4,
+    fontId,
   } = opts;
 
+  const authored = authoredAlphabet(fontId);
   const unitsPerEm = font.unitsPerEm || 1000;
   const emSize = unitsPerEm;
   const provScale = heightMm / unitsPerEm;
@@ -232,14 +263,19 @@ export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
 
   // One row per line; each centered on x=0 and stacked downward.
   const lines = text.split("\n");
-  const laid = lines.map((ln) => lineRings(font, ln, emSize, spacingUnits, flattenTol));
+  const laid = lines.map((ln) => lineRings(font, ln, emSize, spacingUnits, flattenTol, authored));
   const lineHeightUnits = unitsPerEm * lineSpacing;
 
+  // Authored satin centerlines ride through the SAME transforms as the rings so
+  // they stay glued to their glyphs (per-line offset → global scale → arch).
   const rawRings: Path[] = [];
-  laid.forEach(({ rings, width }, i) => {
+  const rawStrokes: Path[] = [];
+  laid.forEach(({ rings, strokes, width }, i) => {
     const dx = -width / 2; // center each line horizontally
     const dy = i * lineHeightUnits;
-    for (const ring of rings) rawRings.push(ring.map((p) => ({ x: p.x + dx, y: p.y + dy })));
+    const place = (p: Point) => ({ x: p.x + dx, y: p.y + dy });
+    for (const ring of rings) rawRings.push(ring.map(place));
+    for (const s of strokes) rawStrokes.push(s.map(place));
   });
 
   const totalWidth = Math.max(...laid.map((l) => l.width), 0);
@@ -260,18 +296,22 @@ export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
 
   const cx = (bounds.minX + bounds.maxX) / 2;
   const cy = (bounds.minY + bounds.maxY) / 2;
-  const scaled: Path[] = rawRings.map((ring) =>
-    ring.map((p) => ({ x: (p.x - cx) * scale, y: (p.y - cy) * scale })),
-  );
+  const center = (p: Point) => ({ x: (p.x - cx) * scale, y: (p.y - cy) * scale });
+  const scaled: Path[] = rawRings.map((ring) => ring.map(center));
+  const scaledStrokes: Path[] = rawStrokes.map((s) => s.map(center));
 
-  // Bend along an arc, then re-center so the object sits on the origin.
+  // Bend rings AND strokes along the SAME arc (one radius from the rings' width),
+  // then re-center both by the arched rings' box so the object sits on the origin.
   let rings = archRings(scaled, archDeg);
+  let strokes = archRings(scaledStrokes, archDeg, scaled);
   if (archDeg) {
     const ab = pathsBounds(rings);
     if (ab) {
       const acx = (ab.minX + ab.maxX) / 2;
       const acy = (ab.minY + ab.maxY) / 2;
-      rings = rings.map((r) => r.map((p) => ({ x: p.x - acx, y: p.y - acy })));
+      const recenter = (r: Path) => r.map((p) => ({ x: p.x - acx, y: p.y - acy }));
+      rings = rings.map(recenter);
+      strokes = strokes.map(recenter);
     }
   }
 
@@ -281,5 +321,8 @@ export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
   // and automatically falls back to a solid tatami fill on shapes whose skeleton
   // is poor — so text is never broken, just as crisp as the letter allows.
   object.params = { ...object.params, fillStyle: "satin" };
+  // Authored glyphs (flagship font): hand-decomposed satin column centerlines, in
+  // the same object space as `paths`. The engine prefers these over auto-skeleton.
+  if (strokes.length) object.satinCenterlines = strokes;
   return { object, widthMm: totalWidth * scale };
 }

@@ -12,7 +12,7 @@ import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
 import { tatamiFill, motifFill, motifRunAlong, carvePoints, splitFillRegions, autoFillAngleForRegions } from "./fill";
 import { contourFill } from "./contour";
-import { medialColumns, satinCoverage, residualRegions, type SatinColumn } from "./medial";
+import { medialColumns, columnsFromCenterlines, satinCoverage, residualRegions, type SatinColumn } from "./medial";
 import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
 import { dropShortStitches, splitLongTravels } from "./resample";
 
@@ -151,6 +151,12 @@ function addRun(
  */
 const MIN_SATIN_COVERAGE = 0.82;
 
+/** Coverage bar for an AUTHORED decomposition (lower than the auto gate): the spec
+ *  is trusted and the residual fill closes the small wedges where strokes are
+ *  authored short of a junction. Below this the spec clearly didn't fit the glyph,
+ *  so we fall back to the auto skeleton. */
+const AUTHORED_MIN_COVERAGE = 0.65;
+
 /** Gradient fillStyle: the sparse edge is this multiple of the dense row spacing. */
 const GRADIENT_FILL_MUL = 2.6;
 
@@ -217,7 +223,12 @@ const MAX_SATIN_STROKE_MM = 6;
  * the glyph. Otherwise returns `[]` so the caller lays a solid tatami fill —
  * shiny where it helps, crisp and solid where it doesn't, never sloppy.
  */
-function acceptableSatin(region: Path[], density: number, pullScale: number): SatinColumn[] {
+function acceptableSatin(
+  region: Path[],
+  density: number,
+  pullScale: number,
+  authored?: Path[],
+): SatinColumn[] {
   // Adaptive skeleton resolution: a fixed 0.4 mm grid is far too coarse for small
   // lettering (a 2.5 mm stroke is barely 6 cells wide, so the skeleton staircases
   // and the rails wobble). Scale the cell to the region so a letter is resolved
@@ -226,6 +237,18 @@ function acceptableSatin(region: Path[], density: number, pullScale: number): Sa
   const b = pathsBounds(region);
   const span = b ? Math.min(b.maxX - b.minX, b.maxY - b.minY) : 12;
   const cellMm = Math.max(0.12, Math.min(0.4, span / 60));
+  // Authored decomposition (flagship font): lay a column down each hand-placed
+  // centerline. The spec is trusted, and the engine's residual fill closes the
+  // small wedges where strokes are authored short of a junction (W/M valleys), so
+  // the bar is lower than the auto gate — but still high enough that a spec that
+  // mostly missed (matched the wrong region, bad coords) falls back to the auto
+  // skeleton rather than sewing something broken.
+  if (authored && authored.length) {
+    const cols = columnsFromCenterlines(region, authored, { density, pullScale, cellMm });
+    if (cols.length && satinCoverage(region, cols.map((c) => c.throws)) >= AUTHORED_MIN_COVERAGE) {
+      return cols;
+    }
+  }
   const columns = medialColumns(region, { density, pullScale, cellMm });
   if (columns.length === 0) return [];
 
@@ -237,6 +260,32 @@ function acceptableSatin(region: Path[], density: number, pullScale: number): Sa
 
   const coverage = satinCoverage(region, columns.map((c) => c.throws));
   return coverage >= MIN_SATIN_COVERAGE ? columns : [];
+}
+
+/** The object's authored satin centerlines whose mid-stroke point falls inside
+ *  `region` (so each glyph's hand-authored strokes are matched to its own fill
+ *  region). Uses the point at HALF the seed's arc length — not an endpoint, which
+ *  for a 2-point stroke sits at a tip/junction and can read as outside the ink. */
+function authoredForRegion(object: EmbObject, region: Path[]): Path[] {
+  const all = object.satinCenterlines;
+  if (!all || all.length === 0) return [];
+  return all.filter((cl) => cl.length >= 2 && pointInRings(seedMidpoint(cl), region));
+}
+
+/** The point halfway along a polyline by arc length. */
+function seedMidpoint(cl: Path): Point {
+  let total = 0;
+  for (let i = 1; i < cl.length; i++) total += distance(cl[i - 1], cl[i]);
+  let half = total / 2;
+  for (let i = 1; i < cl.length; i++) {
+    const seg = distance(cl[i - 1], cl[i]);
+    if (half <= seg) {
+      const t = seg > 0 ? half / seg : 0;
+      return { x: cl[i - 1].x + (cl[i].x - cl[i - 1].x) * t, y: cl[i - 1].y + (cl[i].y - cl[i - 1].y) * t };
+    }
+    half -= seg;
+  }
+  return cl[Math.floor(cl.length / 2)];
 }
 
 /**
@@ -357,7 +406,9 @@ export function generateObjectRuns(
   // field offsets it.
   const tatamiAngle = autoFillAngleForRegions(regions, p.angle);
   regions.forEach((region, regionIdx) => {
-    const columns = satin ? acceptableSatin(region, density, fabric.pullMul) : [];
+    const columns = satin
+      ? acceptableSatin(region, density, fabric.pullMul, authoredForRegion(object, region))
+      : [];
     const usingSatin = columns.length > 0;
     const contour = !usingSatin && p.fillStyle === "contour";
     const travelMax = usingSatin ? 8 : 6;

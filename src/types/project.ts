@@ -94,6 +94,12 @@ export interface EmbObject {
    *  - running: one open polyline.
    */
   paths: Path[];
+  /** Optional explicit satin-column centerlines (mm, object space) — the per-glyph
+   *  AUTHORED decomposition for the flagship font. When present on a satin fill,
+   *  the engine lays a satin column down each centerline (rails raycast to the real
+   *  outline) instead of auto-skeletonizing, so diagonal-junction glyphs (W, M, A,
+   *  K, …) sew as clean strokes. Transformed alongside `paths`. */
+  satinCenterlines?: Path[];
   /** Optional editable control nodes (one ring per `paths` ring) for corner↔curve
    *  editing. When present, `paths` is densified from these; the engine still only
    *  reads `paths`. Absent on imported/auto-digitized/satin objects. */

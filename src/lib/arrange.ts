@@ -8,6 +8,7 @@ function shiftObject(o: EmbObject, dx: number, dy: number): EmbObject {
     ...o,
     paths: translatePaths(o.paths, dx, dy),
     nodes: o.nodes ? translateNodes(o.nodes, dx, dy) : undefined,
+    satinCenterlines: o.satinCenterlines ? translatePaths(o.satinCenterlines, dx, dy) : undefined,
   };
 }
 
