@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   makeObject,
+  makeNodeObject,
   makeSatinFromRails,
   cloneObject,
   satinWidthOf,
@@ -15,6 +16,33 @@ const line: Path = [
   { x: 10, y: 0 },
   { x: 20, y: 0 },
 ];
+
+describe("makeNodeObject", () => {
+  const pts = [
+    { x: 0, y: 0 },
+    { x: 10, y: 0 },
+    { x: 5, y: 8 },
+  ];
+  it("keeps control nodes and densifies paths from them", () => {
+    const o = makeNodeObject("fill", pts, "c1", false);
+    expect(o.nodes).toBeTruthy();
+    expect(o.nodes![0]).toHaveLength(3);
+    expect(o.nodes![0].every((n) => n.smooth === false)).toBe(true);
+    // all corners → paths equal the polyline (closed ring, no densify points)
+    expect(o.paths[0]).toHaveLength(3);
+  });
+  it("smooth seeds curve flags and densifies a curvier path", () => {
+    const o = makeNodeObject("fill", pts, "c1", true);
+    expect(o.nodes![0].every((n) => n.smooth === true)).toBe(true);
+    expect(o.paths[0].length).toBeGreaterThan(3); // sampled curve
+  });
+  it("clone translates the nodes with the paths", () => {
+    const o = makeNodeObject("running", pts, "c1", false);
+    const c = cloneObject(o, 5, 0);
+    expect(c.nodes![0][0]).toMatchObject({ x: 5, y: 0 });
+    expect(o.nodes![0][0]).toMatchObject({ x: 0, y: 0 }); // original untouched
+  });
+});
 
 describe("makeSatinFromRails", () => {
   const railA: Path = [{ x: 0, y: 0 }, { x: 10, y: 0 }];

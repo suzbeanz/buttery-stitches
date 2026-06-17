@@ -16,11 +16,12 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
     ],
   },
   {
-    title: "Drawing",
+    title: "Drawing & nodes",
     keys: [
       ["Enter", "Finish shape"],
       ["Esc", "Cancel shape"],
-      ["Del", "Delete selection"],
+      ["Del", "Delete selection / node"],
+      ["C", "Node: corner ↔ curve"],
     ],
   },
   {

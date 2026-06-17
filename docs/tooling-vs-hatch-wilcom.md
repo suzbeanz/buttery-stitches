@@ -31,8 +31,12 @@ Hatch / EmbroideryStudio). Goal: know exactly which tools we have, which are
 - ✅ **Bean / triple run** — first-class in Properties ("Line weight: Single /
   Triple / Bean"), engine-supported.
 - ✅ **Measure tool** — point-to-point distance + angle on the canvas (key `M`).
-- ✅ **Per-node editing (add + delete)** — Points tool now inserts a vertex by
-  clicking the outline and deletes the focused one (Del).
+- ✅ **Per-node editing (add + delete + corner↔curve)** — Points tool inserts a
+  vertex by clicking the outline, deletes the focused one (Del), and toggles a
+  node between a sharp corner (square handle) and a smooth curve (round handle)
+  with `C` / double-click. Drawn running & fill objects keep editable control
+  nodes (a node model that densifies into the polyline the engine reads); move
+  and transform carry the nodes so curves stay editable.
 - ✅ **Two-rail satin (Input B)** — "Column" tool: draw edge A then edge B for
   true variable-width satin; the engine/model already stored columns as rails.
 - ✅ **Appliqué** — "Appliqué" tool / fill toggle: placement run → STOP → tackdown
@@ -43,20 +47,20 @@ Hatch / EmbroideryStudio). Goal: know exactly which tools we have, which are
 
 Ranked by **value ÷ effort**.
 
-1. **Per-node corner↔curve handles** — paths are stored as densified polylines,
-   so true bezier handles need a control-point data model. The finesse capstone.
-   *Medium effort.*
-
-2. **Motif / pattern fills & motif runs** — decorative repeating motifs along a
+1. **Motif / pattern fills & motif runs** — decorative repeating motifs along a
    run or tiled in a fill (candlewicking, etc.). *Medium–high effort.*
 
-3. **Carved / stipple / spiral fills** — we have contour fill; the rest of the
+2. **Carved / stipple / spiral fills** — we have contour fill; the rest of the
    decorative fill family is missing. *Medium effort.*
+
+3. **Draggable bezier tangent handles** — corner↔curve is in via smooth-node
+   tagging; explicit per-node tangent handles (drag the curve's "ears") would add
+   the last bit of fine control. *Medium effort.*
 
 ## Verdict
 
 For everyday digitizing — run/bean, satin, two-rail satin, tatami, appliqué,
-lettering, auto-digitize, node add/delete/drag, measure, shapes, clean
-underlay/comp/routing — **we now cover the core production toolset**. The main
-remaining differentiators are per-node bezier handles (needs a model change) and
-the decorative fill/motif family.
+lettering, auto-digitize, node add/delete/drag + corner↔curve, measure, shapes,
+clean underlay/comp/routing — **we now cover the core production toolset** and the
+hand-digitizing finesse. The main remaining differentiators are the decorative
+fill/motif family and draggable bezier tangent handles.

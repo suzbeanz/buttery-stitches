@@ -14,6 +14,14 @@ export type StitchType = "running" | "satin" | "fill";
 export type Point = { x: number; y: number };
 export type Path = Point[];
 
+/** A user-placed control node; `smooth` curves the path through it (vs a corner). */
+export interface NodePt {
+  x: number;
+  y: number;
+  smooth?: boolean;
+}
+export type NodePath = NodePt[];
+
 export interface EmbObjectParams {
   /** running: mm between needle penetrations (default 2.5). */
   stitchLength?: number;
@@ -71,6 +79,10 @@ export interface EmbObject {
    *  - running: one open polyline.
    */
   paths: Path[];
+  /** Optional editable control nodes (one ring per `paths` ring) for corner↔curve
+   *  editing. When present, `paths` is densified from these; the engine still only
+   *  reads `paths`. Absent on imported/auto-digitized/satin objects. */
+  nodes?: NodePath[];
   params: EmbObjectParams;
   visible: boolean;
   /** present on text objects so they can be re-edited (double-click). */

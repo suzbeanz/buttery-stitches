@@ -1,5 +1,6 @@
-import type { EmbObject, Path, StitchType } from "../types/project";
+import type { EmbObject, NodePath, Path, StitchType } from "../types/project";
 import { newId } from "./id";
+import { densifyRing, translateNodes } from "./nodes";
 import { defaultObjectName } from "./project";
 import {
   railsFromCenterline,
@@ -60,6 +61,42 @@ export function makeObject(
   };
 }
 
+/** Whether an object's rings are closed loops (fills) for densify/editing. */
+export function isClosedType(type: StitchType): boolean {
+  return type === "fill";
+}
+
+/** Densify a node model into the polyline `paths` the engine consumes. */
+export function pathsFromNodes(nodes: NodePath[], closed: boolean): Path[] {
+  return nodes.map((ring) => densifyRing(ring, closed));
+}
+
+/**
+ * Build a node-backed object (running line or fill) from the user's placed
+ * control nodes. The editable nodes are kept on the object; `paths` is densified
+ * from them so the engine/exporter stay oblivious. `smooth` seeds every node's
+ * curve flag (the Curve toggle at draw time).
+ */
+export function makeNodeObject(
+  type: "running" | "fill",
+  points: Path,
+  colorId: string,
+  smooth: boolean,
+): EmbObject {
+  const closed = isClosedType(type);
+  const nodes: NodePath[] = [points.map((p) => ({ x: p.x, y: p.y, smooth }))];
+  return {
+    id: newId("obj"),
+    name: defaultObjectName(type),
+    type,
+    colorId,
+    nodes,
+    paths: pathsFromNodes(nodes, closed),
+    params: {},
+    visible: true,
+  };
+}
+
 /**
  * Deep-copy an object with a fresh id, optionally shifted by (dx, dy) mm. Used
  * for copy/paste and duplicate so the clone is fully independent of the original.
@@ -73,6 +110,7 @@ export function cloneObject(
     ...object,
     id: newId("obj"),
     paths: translatePaths(object.paths, dxMm, dyMm),
+    nodes: object.nodes ? translateNodes(object.nodes, dxMm, dyMm) : undefined,
     params: { ...object.params },
     visible: true,
   };
