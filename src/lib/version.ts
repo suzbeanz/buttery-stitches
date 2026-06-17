@@ -28,12 +28,14 @@ async function checkOnce(): Promise<void> {
   const id = await deployedId();
   if (!id || id === BUILD_ID) return;
   // A newer bundle is live. Reload once per distinct deployed id: if a stale
-  // HTML cache survives the reload, the guard stops us looping forever.
+  // HTML cache survives the reload, the guard stops us looping forever. If we
+  // can't record the guard (sessionStorage blocked), DON'T auto-reload — a
+  // possible reload loop is worse than waiting for a manual refresh.
   try {
     if (sessionStorage.getItem(RELOAD_GUARD) === id) return;
     sessionStorage.setItem(RELOAD_GUARD, id);
   } catch {
-    // sessionStorage unavailable — skip the loop guard but still reload once.
+    return;
   }
   location.reload();
 }
