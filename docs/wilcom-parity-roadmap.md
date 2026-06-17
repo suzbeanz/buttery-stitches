@@ -78,10 +78,15 @@ the broader Wilcom feature surface below.
    hoop-fit, thread-break risk. *Verify: pure-metric tests.*
 
 ### Phase 3 — polish & scale
-8. **Realistic preview** (TrueView-style thread shading). *Visual — confirm by eye.*
-9. **Templates & hooping** (hoop library, multi-hoop, design templates).
-10. **Design organizer/library + batch export.**
-11. **Performance at scale** (large designs, virtualized rendering).
+> **Status:** ✅ Realistic TrueView preview (tube-shaded thread, "3D" toggle);
+> ✅ batch export (all formats → one .zip); ✅ expanded hoop library (8 common
+> machine sizes). Remaining: design templates, multi-hoop splitting, a design
+> organizer/library, and deeper performance work for very large designs.
+8. **Realistic preview** (TrueView-style thread shading). ✅
+9. **Templates & hooping** — hoop library ✅; multi-hoop + design templates remain.
+10. **Batch export** ✅ (.zip of all formats); design organizer/library remains.
+11. **Performance at scale** — stitch preview is a single canvas Shape already;
+    very-large-design rendering/playback virtualization remains.
 
 ## Verification reality (how we keep it honest)
 
