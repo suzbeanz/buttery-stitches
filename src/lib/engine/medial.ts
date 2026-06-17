@@ -532,16 +532,22 @@ export function columnsFromCenterlines(
     }
   }
 
-  // Pass 2 — build each column, MITERED against its siblings so the strokes that
-  // meet at a junction abut along a clean seam (no overlap, no fan). Trim junction
-  // ends but keep every stroke (authored strokes are all real, never stubs). The
-  // miter only needs the siblings' rough path, so coarsen them for speed.
-  const coarse = centers.map((c) => douglasPeucker(c, 0.5));
+  // Pass 2 — build each column MITERED against its neighbours, by PRIORITY: the
+  // longest stroke runs THROUGH a junction (covering its core), shorter strokes
+  // ABUT it. So each column is clipped only against the LONGER ones already built.
+  // This is how a junction is digitized by hand — the main stroke is continuous,
+  // the branches butt against it — and it leaves a clean star seam with no core
+  // patch (the through-stroke fills the core, so the residual fill has nothing to
+  // do there). The miter only needs each neighbour's rough path, so coarsen it.
+  const order = centers
+    .map((_, i) => i)
+    .sort((a, b) => polylineLength(centers[b]) - polylineLength(centers[a]));
   const columns: SatinColumn[] = [];
-  for (let i = 0; i < centers.length; i++) {
-    const siblings = coarse.filter((_, j) => j !== i);
-    const col = buildColumn(centers[i], false, oriented, grid, dt, cellMm, opts, true, false, siblings);
+  const higher: Path[] = []; // coarse centerlines of the longer strokes built so far
+  for (const i of order) {
+    const col = buildColumn(centers[i], false, oriented, grid, dt, cellMm, opts, true, false, higher.slice());
     if (col) columns.push(col);
+    higher.push(douglasPeucker(centers[i], 0.5));
   }
   return columns;
 }
