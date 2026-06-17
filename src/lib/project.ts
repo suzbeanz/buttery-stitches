@@ -85,27 +85,33 @@ function normalizeObject(raw: unknown, i: number): EmbObject {
   if (typeof o.colorId !== "string") {
     throw new Error(`Project object #${i + 1} has no color.`);
   }
-  const paths = Array.isArray(o.paths)
-    ? o.paths
-        .filter(Array.isArray)
-        .map((ring) =>
-          (ring as unknown[])
-            .filter(
-              (pt): pt is { x: number; y: number } =>
-                typeof pt === "object" &&
-                pt !== null &&
-                Number.isFinite((pt as { x: unknown }).x) &&
-                Number.isFinite((pt as { y: unknown }).y),
-            )
-            .map((pt) => ({ x: pt.x, y: pt.y })),
-        )
-    : [];
+  const cleanPaths = (v: unknown) =>
+    Array.isArray(v)
+      ? v
+          .filter(Array.isArray)
+          .map((ring) =>
+            (ring as unknown[])
+              .filter(
+                (pt): pt is { x: number; y: number } =>
+                  typeof pt === "object" &&
+                  pt !== null &&
+                  Number.isFinite((pt as { x: unknown }).x) &&
+                  Number.isFinite((pt as { y: unknown }).y),
+              )
+              .map((pt) => ({ x: pt.x, y: pt.y })),
+          )
+      : [];
+  const paths = cleanPaths(o.paths);
+  // Authored satin centerlines (flagship text). Recover only when present so older
+  // and non-text objects are untouched.
+  const satinCenterlines = o.satinCenterlines !== undefined ? cleanPaths(o.satinCenterlines) : undefined;
   return {
     ...(raw as EmbObject),
     id: typeof o.id === "string" ? o.id : newId("obj"),
     name: typeof o.name === "string" ? o.name : defaultObjectName(o.type as EmbObject["type"]),
     type: o.type as EmbObject["type"],
     paths,
+    satinCenterlines,
     params: typeof o.params === "object" && o.params !== null ? (o.params as EmbObject["params"]) : {},
     visible: o.visible !== false,
   };

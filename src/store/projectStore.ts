@@ -148,7 +148,13 @@ export const useProjectStore = create<ProjectState>()(
               ...s.project,
               objects: s.project.objects.map((o) =>
                 move.has(o.id)
-                  ? { ...o, paths: translatePaths(o.paths, dxMm, dyMm) }
+                  ? {
+                      ...o,
+                      paths: translatePaths(o.paths, dxMm, dyMm),
+                      satinCenterlines: o.satinCenterlines
+                        ? translatePaths(o.satinCenterlines, dxMm, dyMm)
+                        : undefined,
+                    }
                   : o,
               ),
             },

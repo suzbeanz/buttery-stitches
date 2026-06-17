@@ -111,6 +111,9 @@ export function cloneObject(
     id: newId("obj"),
     paths: translatePaths(object.paths, dxMm, dyMm),
     nodes: object.nodes ? translateNodes(object.nodes, dxMm, dyMm) : undefined,
+    satinCenterlines: object.satinCenterlines
+      ? translatePaths(object.satinCenterlines, dxMm, dyMm)
+      : undefined,
     params: { ...object.params },
     visible: true,
   };
