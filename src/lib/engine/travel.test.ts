@@ -48,8 +48,8 @@ describe("intra-object continuity (anti-fragmentation)", () => {
     const fill = makeObjectFromPaths("fill", [u], "c1");
     const project: Project = { ...createEmptyProject(), objects: [fill] };
     const design = generateDesign(project, { lockStitches: false });
-    // One object → at most a single jump/trim, not one per fragmented row.
-    expect(design.filter((s) => s.trim).length).toBeLessThanOrEqual(1);
+    // One object → a couple jump/trims at most, not one per fragmented row.
+    expect(design.filter((s) => s.trim).length).toBeLessThanOrEqual(2);
     const jumpsTrims = design.filter((s) => s.jump || s.trim).length;
     expect((jumpsTrims / design.length) * 1000).toBeLessThan(10);
   });

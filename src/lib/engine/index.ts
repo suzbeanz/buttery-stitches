@@ -350,11 +350,21 @@ export function generateObjectRuns(
       tops = [tatamiFill(region, { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp })];
     }
 
-    // Sew the strokes nearest-neighbor from where the underlay left off, for the
-    // shortest travel between them (pure reordering; geometry unchanged).
-    const ordered = usingSatin ? orderByNearest(tops, cursor) : tops;
-    for (const run of ordered) {
-      for (const sub of splitLongTravels(run, travelMax)) {
+    // Sew the fill's pieces nearest-neighbor from where the underlay left off,
+    // for the shortest travel between them (pure reordering; geometry unchanged).
+    // Satin orders whole columns (so each column's zig-zag stays one continuous
+    // throw sequence) then splits. Tatami/contour split the fill path into
+    // machine-safe pieces FIRST, then order those — so a concave shape's spans
+    // connect with short travels instead of leaping (and trimming) across it.
+    if (usingSatin) {
+      for (const run of orderByNearest(tops, cursor)) {
+        for (const sub of splitLongTravels(run, travelMax)) {
+          addRun(runs, dropShortStitches(sub, minStitch), false);
+        }
+      }
+    } else {
+      const subRuns = tops.flatMap((run) => splitLongTravels(run, travelMax));
+      for (const sub of orderByNearest(subRuns, cursor)) {
         addRun(runs, dropShortStitches(sub, minStitch), false);
       }
     }
