@@ -75,6 +75,33 @@ describe("intra-object continuity (anti-fragmentation)", () => {
   });
 });
 
+describe("satin lettering connectors (anti-slash across counters)", () => {
+  // A glyph-like shape (an "H") is ONE connected fill region with several satin
+  // columns and OPEN gaps between them (the counters). The bowls/stems must not be
+  // joined by a bare same-region travel straight across a counter — that shows as a
+  // thread slash. Satin connectors run hidden under the stitching or are trimmed.
+  const H = [
+    { x: 0, y: 0 }, { x: 4, y: 0 }, { x: 4, y: 13 }, { x: 16, y: 13 },
+    { x: 16, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 30 }, { x: 16, y: 30 },
+    { x: 16, y: 17 }, { x: 4, y: 17 }, { x: 4, y: 30 }, { x: 0, y: 30 },
+  ];
+
+  it("never slashes across an open counter (longest stitch stays machine-safe)", () => {
+    const glyph = makeObjectFromPaths("fill", [H], "c1");
+    glyph.params = { ...glyph.params, fillStyle: "satin" };
+    const design = generateDesign({ ...createEmptyProject(), objects: [glyph] }, { lockStitches: false });
+    let longest = 0;
+    for (let i = 1; i < design.length; i++) {
+      const a = design[i - 1], b = design[i];
+      if (!b.jump && !b.trim && a.colorId === b.colorId) {
+        longest = Math.max(longest, Math.hypot(b.x - a.x, b.y - a.y));
+      }
+    }
+    // The open gaps span 12mm; a bare slash would exceed the 9mm safety ceiling.
+    expect(longest).toBeLessThanOrEqual(9.1);
+  });
+});
+
 describe("underpath travel under coverage", () => {
   const trims = (d: ReturnType<typeof generateDesign>) => d.filter((s) => s.trim).length;
   // c1 dots 28mm apart (> trim threshold); a later c2 fill either covers the

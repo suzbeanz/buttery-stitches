@@ -127,11 +127,22 @@ export interface StitchRun {
   region?: number;
   /** emit a machine STOP after this run (appliqué fabric placement/trim pause). */
   stopAfter?: boolean;
+  /** disallow a BARE same-region travel into this run (one that isn't hidden under
+   *  a fill). Set for satin columns: connectors between a glyph's columns must run
+   *  hidden under the stitching or be trimmed, never slash across a counter. Tatami
+   *  rows leave this false so a fill's own spans still bridge a notch. */
+  noBareTravel?: boolean;
 }
 
 /** Push a run if it has any penetrations. */
-function addRun(runs: StitchRun[], pts: Point[], underlay: boolean, region = 0): void {
-  if (pts.length > 0) runs.push({ pts, underlay, region });
+function addRun(
+  runs: StitchRun[],
+  pts: Point[],
+  underlay: boolean,
+  region = 0,
+  noBareTravel = false,
+): void {
+  if (pts.length > 0) runs.push({ pts, underlay, region, noBareTravel });
 }
 
 /**
@@ -358,7 +369,7 @@ export function generateObjectRuns(
       for (const run of ulRuns) {
         for (const sub of splitLongTravels(run, travelMax)) {
           const u = dropShortStitches(sub);
-          addRun(runs, u, true, regionIdx);
+          addRun(runs, u, true, regionIdx, usingSatin);
           if (u.length) cursor = u[u.length - 1];
         }
       }
@@ -404,7 +415,7 @@ export function generateObjectRuns(
     if (usingSatin) {
       for (const run of orderByNearest(tops, cursor)) {
         for (const sub of splitLongTravels(run, travelMax)) {
-          addRun(runs, dropShortStitches(sub, minStitch), false, regionIdx);
+          addRun(runs, dropShortStitches(sub, minStitch), false, regionIdx, true);
         }
       }
     } else {
@@ -565,6 +576,7 @@ export function generateDesign(
       underlay: run.underlay,
       region: run.region ?? 0,
       stopAfter: run.stopAfter,
+      noBareTravel: run.noBareTravel ?? false,
     })),
   );
 
@@ -620,7 +632,11 @@ export function generateDesign(
       const regionKey = `${object.id}#${d.region}`;
       const sameRegion = regionKey === prevRegionKey;
       const intraTravel =
-        !colorChanged && sameRegion && gap > jumpThreshold && gap <= INTRA_REGION_TRAVEL;
+        !colorChanged &&
+        sameRegion &&
+        !d.noBareTravel &&
+        gap > jumpThreshold &&
+        gap <= INTRA_REGION_TRAVEL;
       const hiddenTravel =
         !colorChanged &&
         gap > jumpThreshold &&

@@ -249,7 +249,12 @@ function traceSkeleton(skel: Uint8Array, w: number, h: number): [number, number]
           bestStart = inc.atStart;
         }
       }
-      if (best < 0 || bestDot < -0.2) break; // nothing straight enough to continue
+      // Only chain through a junction when the continuation is genuinely straight
+      // (≲55° bend). A loose threshold welds a bowl onto a stem (B, R) or a bar
+      // (e, A); the centerline then kinks at the junction and the satin throws fan
+      // into a spray. Breaking there yields a clean column per stroke — the throws
+      // stay parallel and the crossing column covers the junction.
+      if (best < 0 || bestDot < 0.55) break;
       used[best] = true;
       const more = oriented(best, bestStart);
       for (let i = 1; i < more.length; i++) cells.push(more[i]);
@@ -289,6 +294,33 @@ function traceSkeleton(skel: Uint8Array, w: number, h: number): [number, number]
   }
 
   return lines.filter((l) => l.length >= 2);
+}
+
+/**
+ * Distance from `o` along unit `dir` to the first crossing of any ring edge,
+ * searching only up to `maxDist`. Returns `maxDist` when nothing is hit within
+ * range — so a throw at a junction (where the perpendicular ray would otherwise
+ * shoot clear across the glyph and out the far side) is capped instead of running
+ * away. This lets us land each rail ON the true glyph outline rather than at the
+ * distance-transform estimate, which is what makes the satin edge crisp.
+ */
+function rayHit(o: Point, dir: Point, rings: Path[], maxDist: number): number {
+  let best = maxDist;
+  for (const ring of rings) {
+    const m = ring.length;
+    for (let i = 0; i < m; i++) {
+      const a = ring[i];
+      const b = ring[(i + 1) % m];
+      const ex = b.x - a.x;
+      const ey = b.y - a.y;
+      const denom = dir.x * ey - dir.y * ex;
+      if (Math.abs(denom) < 1e-9) continue; // ray parallel to edge
+      const t = ((a.x - o.x) * ey - (a.y - o.y) * ex) / denom; // along ray
+      const u = ((a.x - o.x) * dir.y - (a.y - o.y) * dir.x) / denom; // along edge
+      if (t > 1e-4 && t < best && u >= -1e-6 && u <= 1 + 1e-6) best = t;
+    }
+  }
+  return best;
 }
 
 /** Unit normal at point i of a centerline (average of adjacent segment normals). */
@@ -424,7 +456,7 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
     // tighter — the hallmark of crisp, professional satin. Throws are cast
     // perpendicular off the centerline so they never fan at curves/junctions.
     const density = Math.max(0.1, opts.density);
-    const dense = resampleByDistance(center, Math.max(0.05, density / 4));
+    let dense = resampleByDistance(center, Math.max(0.05, density / 4));
     if (loop && dense.length > 1) {
       const a = dense[0];
       const b = dense[dense.length - 1];
@@ -432,10 +464,46 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
     }
     if (dense.length < 2) continue;
 
-    const halves = smoothWidths(
+    let halves = smoothWidths(
       dense.map((p) => halfWidthAtMm(dt, grid, p.x, p.y) + OVERSHOOT_MM),
       loop,
     );
+    // Typical stroke half-width for this column (median of the DT samples). Where
+    // strokes meet — B's bowls into the stem, e's bowl into the bar — the inscribed
+    // circle balloons, so the raw DT half spikes and the perpendicular ray bolts
+    // clear across the glyph; the throws there fan into a spray. Capping each rail
+    // a little past the typical width keeps the column the width of its own stroke;
+    // the crossing column covers the junction blob. This is what kills the fan.
+    const dtHalves = halves.map((h) => Math.max(0, h - OVERSHOOT_MM)).sort((a, b) => a - b);
+    const medHalfDt = dtHalves[dtHalves.length >> 1] ?? 0;
+    const widthCap = medHalfDt > 0 ? medHalfDt * 1.4 : Infinity;
+
+    // Drop junction-stub branches: the little segment at the very center of a Y
+    // (a meeting R's stem, bowl and leg) is short and as wide as it is long, not a
+    // real stroke. Satining it casts a spray of crossing throws. If a branch isn't
+    // elongated (length < ~1.4× its own width) skip it — the strokes that cross
+    // the junction already cover that patch. (Loops are always real.)
+    if (!loop && medHalfDt > 0 && polylineLength(center) < 2 * medHalfDt * 1.4) continue;
+
+    // Trim ballooning JUNCTION ends. A real stroke terminal sits at the glyph
+    // outline (small local width); a junction end runs deep into where strokes
+    // merge (large width). If we keep the junction end, the centerline kinks hard
+    // there and the throws fan. So pull each free end back to where the width
+    // returns to normal — the crossing column covers the little wedge we drop.
+    // (Loops have no free ends.)
+    if (!loop && medHalfDt > 0 && dense.length >= 6) {
+      const fat = medHalfDt * 1.3;
+      const minKeep = Math.max(3, Math.floor(dense.length * 0.35));
+      let lo = 0;
+      let hi = dense.length - 1;
+      while (hi - lo + 1 > minKeep && halves[lo] - OVERSHOOT_MM > fat) lo++;
+      while (hi - lo + 1 > minKeep && halves[hi] - OVERSHOOT_MM > fat) hi--;
+      if (lo > 0 || hi < dense.length - 1) {
+        dense = dense.slice(lo, hi + 1);
+        halves = halves.slice(lo, hi + 1);
+      }
+    }
+
     // Width-driven pull compensation (docs/stitch-logic.md §6): widen each rail
     // by half the auto pull-comp for the local stroke width so the sewn column
     // matches the drawn stroke. `pullScale` carries the fabric multiplier; 0
@@ -445,11 +513,22 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
     const rightRaw: Point[] = [];
     for (let i = 0; i < dense.length; i++) {
       const nrm = normalAt(dense, i, loop);
-      const trueHalf = halves[i] - OVERSHOOT_MM;
-      const comp = pullScale > 0 ? autoPullCompMm(2 * Math.max(0, trueHalf), pullScale) / 2 : 0;
-      const half = halves[i] + comp;
-      leftRaw.push({ x: dense[i].x + nrm.x * half, y: dense[i].y + nrm.y * half });
-      rightRaw.push({ x: dense[i].x - nrm.x * half, y: dense[i].y - nrm.y * half });
+      const c = dense[i];
+      const dtHalf = Math.max(0, halves[i] - OVERSHOOT_MM); // distance-transform estimate
+      const comp = pullScale > 0 ? autoPullCompMm(2 * dtHalf, pullScale) / 2 : 0;
+      // Land each rail ON the real glyph edge: cast a ray perpendicular off the
+      // centerline and stop at the outline. Each side is solved independently so
+      // asymmetric strokes (serifs, tapers) sit true. The ray is capped a little
+      // past the DT estimate so it can reach an edge the grid rounded short, but
+      // can't bolt across the glyph at a junction; if it misses (concave seam) we
+      // fall back to the DT half. A hair of overshoot guarantees full coverage.
+      const cap = Math.min(dtHalf * 1.6 + cellMm, widthCap);
+      const hitL = Math.min(rayHit(c, nrm, oriented, cap), widthCap);
+      const hitR = Math.min(rayHit(c, { x: -nrm.x, y: -nrm.y }, oriented, cap), widthCap);
+      const halfL = Math.min(hitL < cap ? hitL : dtHalf, widthCap) + OVERSHOOT_MM + comp;
+      const halfR = Math.min(hitR < cap ? hitR : dtHalf, widthCap) + OVERSHOOT_MM + comp;
+      leftRaw.push({ x: c.x + nrm.x * halfL, y: c.y + nrm.y * halfL });
+      rightRaw.push({ x: c.x - nrm.x * halfR, y: c.y - nrm.y * halfR });
     }
     // Lightly smooth each rail so the satin edge reads as a clean line instead of
     // a faintly wobbly one (the distance transform samples width on a grid). A
