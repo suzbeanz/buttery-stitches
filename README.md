@@ -68,6 +68,10 @@ reads the *shape* of each region and picks the stitch a hand digitizer would:
   **boustrophedon decomposition** — the region is split into cells and the fill
   travels *inside* the shape between them (or trims when the detour is too far),
   so the serpentine never slashes a stray thread across an open notch.
+- **Trim economy.** Like a hand digitizer, it travels *under* existing stitches
+  instead of cutting: contour rings sew as one outer→inner **spiral** (with a
+  ring-following underlay), so a band that used to cut the thread on every loop
+  now does it once or twice — closer to the ~1 trim / 1000 stitches of pro files.
 - **Mitered satin junctions, short-stitched curves, knockdown/trapping** where
   fills meet, and **travel-optimized** sewing order (2-opt) to cut jumps.
 

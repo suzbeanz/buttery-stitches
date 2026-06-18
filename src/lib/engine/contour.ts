@@ -139,21 +139,76 @@ export function contourFill(rings: Path[], opts: ContourOptions): Path[] {
   if (maxMm < density) return [];
 
   const runs: Path[] = [];
-  // Gather every contour loop with its depth level (outer loops first).
+  // Gather every contour loop with its depth level (outer loops first). Skip
+  // pinhead loops (the field's local maxima collapse to a point at the medial
+  // axis) — they add no coverage but, as their own 2–3 stitch run, force a trim.
+  const minPerim = Math.max(3, density * 4);
+  const perim = (pts: Point[]): number => {
+    let s = 0;
+    for (let i = 1; i < pts.length; i++) s += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+    return s;
+  };
   const loops: { level: number; pts: Point[] }[] = [];
   for (let level = density * 0.6; level < maxMm; level += density) {
     for (const loop of isoContours(fieldMm, w, h, level, ptAt)) {
-      if (loop.length >= 3) loops.push({ level, pts: loop });
+      if (loop.length >= 3 && perim(loop) >= minPerim) loops.push({ level, pts: loop });
     }
   }
-  loops.sort((a, b) => a.level - b.level); // edge → centre, the natural nesting
+  if (loops.length === 0) return [];
 
-  // A contour loop is a CYCLE, so it can start anywhere. Sew them outer→inner and
-  // rotate each loop to BEGIN at the point nearest where the last one ended, so
-  // consecutive rings connect with a tiny ~density step instead of a long jump
-  // across the shape — a near-spiral with minimal travel.
+  // A contour loop is a CYCLE, so it can start anywhere — and a band (an annulus,
+  // a ring of text) has TWO loops per distance level (one each side of the
+  // midline), so sorting by level alone interleaves the two sides and every loop
+  // hops across the band. Instead, chain the loops by spatial nearest-neighbour
+  // from the outermost one: that walks edge → midline → opposite edge as one
+  // near-spiral, so consecutive rings sit ~one density apart and connect with a
+  // tiny hidden step instead of a trimmed jump across the shape.
+  const cx = loops.reduce((s, l) => s + l.pts[0].x, 0) / loops.length;
+  const cy = loops.reduce((s, l) => s + l.pts[0].y, 0) / loops.length;
+  const centroidOf = (pts: Point[]): Point => {
+    let x = 0;
+    let y = 0;
+    for (const p of pts) {
+      x += p.x;
+      y += p.y;
+    }
+    return { x: x / pts.length, y: y / pts.length };
+  };
+  // Seed with the loop whose centroid is farthest from the shape's centre — the
+  // outermost ring — so the spiral runs outside-in.
+  const cents = loops.map((l) => centroidOf(l.pts));
+  const used = new Array(loops.length).fill(false);
+  let curIdx = 0;
+  let farthest = -1;
+  for (let i = 0; i < loops.length; i++) {
+    const d = (cents[i].x - cx) ** 2 + (cents[i].y - cy) ** 2;
+    if (d > farthest) {
+      farthest = d;
+      curIdx = i;
+    }
+  }
+
   let cursor: Point | null = null;
-  for (const { pts } of loops) {
+  for (let n = 0; n < loops.length; n++) {
+    if (n > 0) {
+      // Pick the nearest unused loop (by closest vertex to the cursor).
+      let best = Infinity;
+      let bestI = -1;
+      for (let i = 0; i < loops.length; i++) {
+        if (used[i]) continue;
+        for (const p of loops[i].pts) {
+          const d = (p.x - cursor!.x) ** 2 + (p.y - cursor!.y) ** 2;
+          if (d < best) {
+            best = d;
+            bestI = i;
+          }
+        }
+      }
+      curIdx = bestI;
+    }
+    used[curIdx] = true;
+    const pts = loops[curIdx].pts;
+    // Rotate the loop to BEGIN at the point nearest the cursor (tiny step in).
     let startIdx = 0;
     if (cursor) {
       let best = Infinity;

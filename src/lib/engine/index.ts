@@ -623,7 +623,12 @@ export function generateObjectRuns(
       // decorative — no underlay.)
       const ulRuns = usingSatin
         ? columns.flatMap((c) => columnUnderlay(c.centerline, c.widthMm, weight))
-        : fillUnderlayRuns(region, fillAngle, weight);
+        : contour
+          ? // A contour fill follows the shape's curve, so its underlay should too —
+            // sparse echo loops that hug the band instead of a parallel pass that
+            // would bridge (and trim across) the hole of a ring.
+            contourFill(region, { density: Math.max(1.6, density * 3.5) })
+          : fillUnderlayRuns(region, fillAngle, weight);
       for (const run of ulRuns) {
         for (const sub of splitLongTravels(run, travelMax)) {
           const u = dropShortStitches(sub);
@@ -665,6 +670,10 @@ export function generateObjectRuns(
     // flag those runs noBareTravel so the assembler trims an exposed gap instead
     // of drawing a stray thread across open fabric.
     let tatamiNoBareTravel = false;
+    // Contour loops are sewn in a deliberate outer→inner spiral; preserving that
+    // order (not re-sorting) keeps each ring one density-step from the next so they
+    // connect with a hidden travel instead of a trimmed hop across the band.
+    let contourSpiral = false;
     if (usingSatin) {
       tops = columns.map((c) =>
         c.widthMm < RUNNING_COLUMN_MM
@@ -676,7 +685,8 @@ export function generateObjectRuns(
       tops = echo.length
         ? echo
         : tatamiConcaveRuns(region, { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp });
-      if (!echo.length) tatamiNoBareTravel = true;
+      if (echo.length) contourSpiral = true;
+      else tatamiNoBareTravel = true;
     } else if (motifMode) {
       // Motif fill: tile a decorative motif across the region (no underlay).
       tops = motifFill(region, { motifId: p.motif, sizeMm: p.motifSizeMm, angle: tatamiAngle });
@@ -728,7 +738,10 @@ export function generateObjectRuns(
       }
     } else {
       const subRuns = tops.flatMap((run) => splitLongTravels(run, travelMax));
-      for (const sub of orderByNearest(subRuns, cursor)) {
+      // Contour keeps its spiral order; everything else is re-sorted for the
+      // shortest travel between pieces.
+      const ordered = contourSpiral ? subRuns : orderByNearest(subRuns, cursor);
+      for (const sub of ordered) {
         const r = dropShortStitches(sub, minStitch);
         addRun(runs, r, false, regionIdx, tatamiNoBareTravel);
         if (r.length) cursor = r[r.length - 1];
