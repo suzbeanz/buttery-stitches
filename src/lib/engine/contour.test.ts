@@ -47,6 +47,32 @@ describe("contourFill", () => {
       for (const p of run) expect(dist(p, C)).toBeGreaterThan(7); // outside the 8 mm hole
   });
 
+  it("sews a band (annulus) as a spiral: adjacent rings, no pinhead loops", () => {
+    // A wide ring: the distance field peaks at the band midline, so each level
+    // yields two loops (one per side). Naive level-order would hop across the band
+    // on every loop; the spiral chaining keeps consecutive loops adjacent.
+    const annulus: Path[] = [circle(40, 40, 35, 120), circle(40, 40, 22, 80)];
+    const runs = contourFill(annulus, { density: 0.6, stitchLength: 3 });
+    expect(runs.length).toBeGreaterThan(8);
+
+    // No pinhead loops (the medial-axis maxima that collapse to a point).
+    for (const run of runs) {
+      let per = 0;
+      for (let i = 1; i < run.length; i++) per += dist(run[i], run[i - 1]);
+      expect(per).toBeGreaterThan(3);
+    }
+
+    // Consecutive loops connect with a small step (a spiral). The level-order bug
+    // hopped across the band on nearly every loop; the spiral keeps the vast
+    // majority adjacent (a handful of larger steps where it meets the midline).
+    let smallSteps = 0;
+    for (let i = 1; i < runs.length; i++) {
+      const gap = dist(runs[i][0], runs[i - 1][runs[i - 1].length - 1]);
+      if (gap <= 6) smallSteps++;
+    }
+    expect(smallSteps).toBeGreaterThan((runs.length - 1) * 0.8);
+  });
+
   it("returns nothing for a shape too thin to seat a ring (falls back upstream)", () => {
     const sliver: Path = [
       { x: 0, y: 0 },
