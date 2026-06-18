@@ -55,6 +55,33 @@ describe("travel-run routing", () => {
     const design = generateDesign(twoLines(10), { lockStitches: false }); // open fabric
     expect(design.some((s) => s.trim)).toBe(true);
   });
+
+  it("buries a same-color travel UNDER coverage instead of trimming", () => {
+    // Two same-color fills forming an L (a vertical bar + a horizontal bar that
+    // share the corner). Sewing the first then the second, the STRAIGHT move
+    // between them cuts across the open quadrant outside the L — that would trim.
+    // But a path that hugs the L stays hidden under the fill, so a hand digitizer
+    // (and now we) run the thread there instead of cutting.
+    const vert = [{ x: 0, y: 0 }, { x: 12, y: 0 }, { x: 12, y: 50 }, { x: 0, y: 50 }];
+    const horz = [{ x: 0, y: 0 }, { x: 50, y: 0 }, { x: 50, y: 12 }, { x: 0, y: 12 }];
+    const project: Project = {
+      ...createEmptyProject(),
+      objects: [makeObjectFromPaths("fill", [vert], "c1"), makeObjectFromPaths("fill", [horz], "c1")],
+    };
+    const design = generateDesign(project, { lockStitches: false });
+    // No trim, and effectively no jump travel — the connector is sewn (buried).
+    expect(design.some((s) => s.trim)).toBe(false);
+    expect(connectorTravel(design)).toBeLessThan(3);
+    // The buried travel still respects the machine-safe stitch length (no slash
+    // straight across the open corner).
+    let longest = 0;
+    for (let i = 1; i < design.length; i++) {
+      if (!design[i].jump && !design[i].trim && design[i].colorId === design[i - 1].colorId) {
+        longest = Math.max(longest, Math.hypot(design[i].x - design[i - 1].x, design[i].y - design[i - 1].y));
+      }
+    }
+    expect(longest).toBeLessThanOrEqual(9.1);
+  });
 });
 
 describe("intra-object continuity (anti-fragmentation)", () => {
