@@ -139,13 +139,40 @@ export function contourFill(rings: Path[], opts: ContourOptions): Path[] {
   if (maxMm < density) return [];
 
   const runs: Path[] = [];
-  // Rings every `density` mm in from the edge (the first sits half a row in).
+  // Gather every contour loop with its depth level (outer loops first).
+  const loops: { level: number; pts: Point[] }[] = [];
   for (let level = density * 0.6; level < maxMm; level += density) {
     for (const loop of isoContours(fieldMm, w, h, level, ptAt)) {
-      // Close the ring, then resample to the stitch length along it.
-      const closed = [...loop, loop[0]];
-      const run = resampleByDistance(closed, stitch);
-      if (run.length >= 3) runs.push(run);
+      if (loop.length >= 3) loops.push({ level, pts: loop });
+    }
+  }
+  loops.sort((a, b) => a.level - b.level); // edge → centre, the natural nesting
+
+  // A contour loop is a CYCLE, so it can start anywhere. Sew them outer→inner and
+  // rotate each loop to BEGIN at the point nearest where the last one ended, so
+  // consecutive rings connect with a tiny ~density step instead of a long jump
+  // across the shape — a near-spiral with minimal travel.
+  let cursor: Point | null = null;
+  for (const { pts } of loops) {
+    let startIdx = 0;
+    if (cursor) {
+      let best = Infinity;
+      for (let i = 0; i < pts.length; i++) {
+        const dx = pts[i].x - cursor.x;
+        const dy = pts[i].y - cursor.y;
+        const d = dx * dx + dy * dy;
+        if (d < best) {
+          best = d;
+          startIdx = i;
+        }
+      }
+    }
+    const rotated = startIdx === 0 ? pts : [...pts.slice(startIdx), ...pts.slice(0, startIdx)];
+    const closed = [...rotated, rotated[0]];
+    const run = resampleByDistance(closed, stitch);
+    if (run.length >= 3) {
+      runs.push(run);
+      cursor = run[run.length - 1]; // ≈ the loop's start, where the needle ends up
     }
   }
   return runs;
