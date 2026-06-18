@@ -79,6 +79,10 @@ export interface TextSpec {
   lineSpacing?: number;
   /** arc bend in degrees: + arches up, − down, 0 straight. Default 0. */
   archDeg?: number;
+  /** lay the text around a circle of this baseline radius (mm). Overrides arch. */
+  circleRadiusMm?: number;
+  /** which side of the circle ("top" = upper arc, "bottom" = upright lower arc). */
+  circleSide?: "top" | "bottom";
 }
 
 export interface EmbObject {

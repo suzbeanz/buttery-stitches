@@ -156,4 +156,38 @@ describe("layoutText", () => {
       1,
     );
   });
+
+  it("wraps text around a circle centered on the origin (top arc sits above center)", () => {
+    const R = 40;
+    const top = layoutText({ text: "BADGE", font, heightMm: 8, circleRadiusMm: R, circleSide: "top", colorId: "c1" });
+    const b = pathsBounds(top.object.paths)!;
+    // Letters sit on a circle of radius ~R about the origin: every point is within
+    // a letter-height of R from the centre, and the top arc is above the centre.
+    for (const ring of top.object.paths) {
+      for (const p of ring) {
+        const d = Math.hypot(p.x, p.y);
+        expect(d).toBeGreaterThan(R - 10);
+        expect(d).toBeLessThan(R + 10);
+      }
+    }
+    expect(b.maxY).toBeLessThan(0); // entirely above the circle centre (y-down)
+  });
+
+  it("bottom-arc text sits below the centre and reads upright", () => {
+    const R = 40;
+    const bot = layoutText({ text: "EST", font, heightMm: 8, circleRadiusMm: R, circleSide: "bottom", colorId: "c1" });
+    const b = pathsBounds(bot.object.paths)!;
+    expect(b.minY).toBeGreaterThan(0); // entirely below the circle centre
+    // Upright lower legend: each letter's TOP is nearer the centre than its
+    // baseline (tops point inward). The min radius (letter tops) is < the typed
+    // baseline radius R, and the max radius (descender side) is ≥ R.
+    let minD = Infinity, maxD = 0;
+    for (const ring of bot.object.paths) for (const p of ring) {
+      const d = Math.hypot(p.x, p.y);
+      minD = Math.min(minD, d);
+      maxD = Math.max(maxD, d);
+    }
+    expect(minD).toBeLessThan(R);
+    expect(maxD).toBeGreaterThan(R - 1);
+  });
 });

@@ -34,6 +34,13 @@ export interface TextLayoutOptions {
   /** bend the text along a circular arc: +deg arches up (∩), −deg down (∪),
    *  0 = straight (default). The typed width subtends this sweep angle. */
   archDeg?: number;
+  /** lay the line around a circle of this baseline radius (mm) — each glyph is
+   *  rigidly rotated onto the circle (no shear), centered at the top or bottom.
+   *  Overrides `archDeg`. Top + bottom text on the same radius form a badge. */
+  circleRadiusMm?: number;
+  /** which side of the circle the text sits on (default "top"). "bottom" keeps
+   *  the letters upright and reading left-to-right (tops pointing inward). */
+  circleSide?: "top" | "bottom";
   /** color id for the generated fill object. */
   colorId: string;
   /** optional object name. */
@@ -240,6 +247,106 @@ function archRings(rings: Path[], archDeg: number, radiusFrom: Path[] = rings): 
   );
 }
 
+/** One glyph laid flat (font units, baseline y=0): its rings, any authored
+ *  centerlines, and its advance-center x. */
+interface FlatGlyph {
+  rings: Path[];
+  strokes: Path[];
+  cx: number;
+}
+
+/** Lay a string flat, per glyph, in font units. */
+function glyphsFlat(
+  font: Font,
+  text: string,
+  emSize: number,
+  spacingUnits: number,
+  flattenTol: number,
+  authored: AuthoredAlphabet | null,
+): { glyphs: FlatGlyph[]; width: number } {
+  const items = authored
+    ? Array.from(text).map((ch) => ({ ch, glyph: font.charToGlyph(ch) }))
+    : glyphsFor(font, text).map((glyph) => ({ ch: undefined as string | undefined, glyph }));
+  const glyphs: FlatGlyph[] = [];
+  let penX = 0;
+  for (const { ch, glyph } of items) {
+    const path = glyph.getPath(penX, 0, emSize) as { commands: OtCommand[] };
+    const rings = commandsToRings(path.commands, flattenTol);
+    const adv = glyph.advanceWidth ?? 0;
+    const strokes: Path[] = [];
+    const spec = authored && ch ? authored[ch] : undefined;
+    if (spec && rings.length) {
+      const b = pathsBounds(rings);
+      if (b) {
+        const w = b.maxX - b.minX;
+        const h = b.maxY - b.minY;
+        for (const st of spec) strokes.push(st.map(([nx, ny]) => ({ x: b.minX + nx * w, y: b.minY + ny * h })));
+      }
+    }
+    glyphs.push({ rings, strokes, cx: penX + adv / 2 });
+    penX += adv + spacingUnits;
+  }
+  return { glyphs, width: penX };
+}
+
+interface CircularOpts {
+  font: Font;
+  emSize: number;
+  spacingUnits: number;
+  flattenTol: number;
+  authored: AuthoredAlphabet | null;
+  heightMm: number;
+  provScale: number;
+  radius: number;
+  side: "top" | "bottom";
+  colorId: string;
+  name?: string;
+}
+
+/**
+ * Lay one line around a circle of baseline radius R (mm). Each glyph is RIGIDLY
+ * rotated onto the circle (no shear — embroidery letters shouldn't distort) and
+ * the string is centered at the top (12 o'clock) or bottom (6 o'clock). Bottom
+ * text stays upright and reads left-to-right (tops pointing inward), the way a
+ * badge's lower legend sits. The circle is centered on the origin so a top line
+ * and a bottom line at the same radius line up into one badge.
+ */
+function layoutCircular(text: string, o: CircularOpts): TextLayoutResult {
+  const { glyphs, width } = glyphsFlat(o.font, text, o.emSize, o.spacingUnits, o.flattenTol, o.authored);
+  const allRings = glyphs.flatMap((g) => g.rings);
+  const bb = pathsBounds(allRings);
+  if (!bb) {
+    return { object: makeObjectFromPaths("fill", [], o.colorId, o.name ?? "Text"), widthMm: 0 };
+  }
+  const scale = bb.maxY - bb.minY > 0 ? o.heightMm / (bb.maxY - bb.minY) : o.provScale;
+  const R = o.radius;
+  const Wmm = width * scale;
+  const bottom = o.side === "bottom";
+
+  const rings: Path[] = [];
+  const strokes: Path[] = [];
+  for (const g of glyphs) {
+    const cxmm = g.cx * scale;
+    const theta = (cxmm - Wmm / 2) / R; // arc-length → angle; centered at top/bottom
+    const c = Math.cos(theta);
+    const s = Math.sin(theta);
+    const place = (p: Point): Point => {
+      const lx = p.x * scale - cxmm; // offset within the glyph (mm)
+      const ly = p.y * scale; // y-down: letter body is negative (above baseline)
+      return bottom
+        ? { x: R * s + lx * c + ly * s, y: R * c - lx * s + ly * c }
+        : { x: R * s + lx * c - ly * s, y: -R * c + lx * s + ly * c };
+    };
+    for (const r of g.rings) rings.push(r.map(place));
+    for (const st of g.strokes) strokes.push(st.map(place));
+  }
+
+  const object = makeObjectFromPaths("fill", rings, o.colorId, o.name ?? "Text");
+  object.params = { ...object.params, fillStyle: "satin" };
+  if (strokes.length) object.satinCenterlines = strokes;
+  return { object, widthMm: Wmm };
+}
+
 export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
   const {
     text,
@@ -260,6 +367,15 @@ export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
   const provScale = heightMm / unitsPerEm;
   const spacingUnits = provScale > 0 ? letterSpacingMm / provScale : 0;
   const flattenTol = flattenToleranceMm / provScale;
+
+  // Circular baseline: rigid per-glyph placement on a circle (no shear), centered
+  // at top or bottom. Overrides arch/multiline.
+  if (opts.circleRadiusMm && opts.circleRadiusMm > 0) {
+    return layoutCircular(text.replace(/\n/g, " "), {
+      font, emSize, spacingUnits, flattenTol, authored, heightMm, provScale,
+      radius: opts.circleRadiusMm, side: opts.circleSide ?? "top", colorId, name,
+    });
+  }
 
   // One row per line; each centered on x=0 and stacked downward.
   const lines = text.split("\n");
