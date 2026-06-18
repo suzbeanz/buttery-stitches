@@ -1476,6 +1476,52 @@ function shadeRgb(rgb: number[], f: number): string {
   return `rgb(${ch(rgb[0])},${ch(rgb[1])},${ch(rgb[2])})`;
 }
 
+/** Deterministic fraction in [-1, 1] from an integer key — reproducible jitter,
+ *  no randomness (the preview is identical every render). */
+function jitterAt(k: number): number {
+  const s = Math.sin(k * 127.1 + 311.7) * 43758.5453;
+  return (s - Math.floor(s)) * 2 - 1;
+}
+
+/**
+ * Stroke a single "fiber" of a stitch run: the same polyline, but each vertex is
+ * nudged a little along the LOCAL normal by a deterministic per-vertex amount, so
+ * the strand visibly wanders off-center like a real twisted filament. `amp` is the
+ * wander in px, `seed` decorrelates the two strands, and `shade`/`alpha`/`width`
+ * style it (a lit strand and a shadow strand together read as fuzzy thread).
+ */
+function fiberStrand(
+  ctx: Konva.Context,
+  pts: { x: number; y: number }[],
+  px: (x: number) => number,
+  py: (y: number) => number,
+  amp: number,
+  seed: number,
+  stroke: string,
+  alpha: number,
+  width: number,
+): void {
+  if (pts.length < 2) return;
+  ctx.beginPath();
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1];
+    const b = pts[i];
+    let nx = -(b.y - a.y);
+    let ny = b.x - a.x;
+    const len = Math.hypot(nx, ny) || 1;
+    nx /= len;
+    ny /= len;
+    const j0 = amp * jitterAt(i + seed);
+    const j1 = amp * jitterAt(i + 1 + seed);
+    ctx.moveTo(px(a.x) + nx * j0, py(a.y) + ny * j0);
+    ctx.lineTo(px(b.x) + nx * j1, py(b.y) + ny * j1);
+  }
+  ctx.setAttr("strokeStyle", stroke);
+  ctx.setAttr("lineWidth", width);
+  ctx.setAttr("globalAlpha", alpha);
+  ctx.stroke();
+}
+
 /** Read-only render of the assembled stitches, up to the simulator cursor.
  * Subscribes to `simIndex` itself so playback re-renders only this view, not the
  * whole (hidden) edit layer. */
@@ -1547,6 +1593,13 @@ function StitchView({
               ctx.setAttr("globalAlpha", 0.4);
               ctx.stroke();
             } else if (realistic) {
+              // FUZZ HALO: a soft, wider, low-alpha pass gives each thread a
+              // downy, out-of-focus edge — real floss is hairy, not a hard tube.
+              path(0, 0);
+              ctx.setAttr("strokeStyle", shadeRgb(rgb, 0.82));
+              ctx.setAttr("lineWidth", threadPx * 1.42);
+              ctx.setAttr("globalAlpha", 0.22);
+              ctx.stroke();
               // body (shaded sides)
               path(0, 0);
               ctx.setAttr("strokeStyle", shadeRgb(rgb, 0.72));
@@ -1559,6 +1612,12 @@ function StitchView({
               ctx.setAttr("lineWidth", threadPx * 0.5);
               ctx.setAttr("globalAlpha", 0.92);
               ctx.stroke();
+              // FIBER STRANDS: two thin lines that wander slightly off the
+              // centerline (deterministic jitter along the local normal), one
+              // catching the light and one in shadow — the twisted, multi-filament
+              // look of real thread instead of a flat ribbon.
+              fiberStrand(ctx, seg.points, px, py, threadPx * 0.22, 11, shadeRgb(rgb, 1.34), 0.42, threadPx * 0.16);
+              fiberStrand(ctx, seg.points, px, py, threadPx * 0.2, 41, shadeRgb(rgb, 0.86), 0.42, threadPx * 0.16);
             } else {
               path(0, 0);
               ctx.setAttr("strokeStyle", shadeRgb(rgb, 1));
