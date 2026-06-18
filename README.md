@@ -23,10 +23,14 @@ posterized result (with a warning). That's on purpose.
 - **Auto-digitize an image.** Import a logo and it traces, simplifies, and turns
   it into fill/running objects — adjustable color count, background removal,
   despeckle.
-- **Add text.** Type something, pick a font (Poppins, Playfair Display, Pacifico,
-  Roboto Slab), set the size, drop it in.
+- **Add text.** Type something, pick a font (Oswald — tuned for embroidery — plus
+  Poppins, Playfair Display, Roboto Slab, Pacifico), set the size, drop it in.
+  Curve it onto a **circle** or along a **path** for badges and arches.
 - **Draw by hand.** Running, satin, and fill tools, with a **Curve** mode for
   smooth lines instead of stiff polygons.
+- **See real thread.** A "TrueView" 3D mode renders each stitch as lit, fuzzy
+  floss — soft fibers and a downy halo — so the preview reads like the real
+  stitch-out, not flat vector color.
 - **Edit like vectors.** Move, scale, rotate, drag individual nodes, reorder the
   stitch sequence, copy/paste (⌘/Ctrl + C/V), tweak density and angles.
 - **Outline a fill** with a satin border in another color, one click.
@@ -39,13 +43,39 @@ posterized result (with a warning). That's on purpose.
 
 ## Stitch quality
 
-The whole point is files that actually sew well, so the engine bakes in the
-fundamentals: low-density underlay, push/pull compensation, tie-in/tie-off lock
-stitches so threads don't pull out, minimum-stitch filtering so the needle
-doesn't jam, and split throws on wide satin. The reasoning is written up in
-[`docs/embroidery-quality.md`](docs/embroidery-quality.md), and it's all pure,
-unit-tested code — the same engine drives both the on-screen simulator and the
-exported file, so what you see is what you get.
+The whole point is files that actually sew well. It's **pure math and logic — no
+AI** — so every result is deterministic, explainable, and reproducible: the same
+input always gives the same stitches.
+
+**The fundamentals** are all baked in: low-density underlay (inset so it never
+peeks past the top), push/pull compensation, tie-in/tie-off lock stitches so
+threads don't pull out, minimum-stitch filtering so the needle doesn't jam, and
+split throws on wide satin.
+
+**Intelligent auto-digitizing** is where it tries to beat the desktop tools. It
+reads the *shape* of each region and picks the stitch a hand digitizer would:
+
+- **Smart shape recognition** snaps a wobbly trace to a clean circle, ellipse,
+  rectangle, or regular polygon when that's clearly what it is.
+- **Automatic stitch-type assignment** from the region's geometry — hairlines run
+  down their centerline, strokes and lettering become satin columns, broad areas
+  become tatami, and round shapes / thin ring-bands fill as concentric **contour**
+  rows. A broad blob with a hole punched in it (a bun around a sausage) fills as
+  flat tatami, not topographic rings.
+- **Clean edges.** Each broad fill gets a finishing **edge run** just inside the
+  outline so the silhouette and end-caps read crisp.
+- **Concavity-aware fills.** Wavy, notched, and crescent shapes are filled with a
+  **boustrophedon decomposition** — the region is split into cells and the fill
+  travels *inside* the shape between them (or trims when the detour is too far),
+  so the serpentine never slashes a stray thread across an open notch.
+- **Mitered satin junctions, short-stitched curves, knockdown/trapping** where
+  fills meet, and **travel-optimized** sewing order (2-opt) to cut jumps.
+
+The reasoning is written up in
+[`docs/embroidery-quality.md`](docs/embroidery-quality.md) and
+[`docs/stitch-logic.md`](docs/stitch-logic.md), and it's all pure, unit-tested
+code — the same engine drives both the on-screen simulator and the exported file,
+so what you see is what you get.
 
 ## How it works under the hood
 
