@@ -5,6 +5,7 @@ import { makeObjectFromPaths } from "../objects";
 import { smoothClosedRing } from "../smooth";
 import { douglasPeucker } from "./simplify";
 import { polygonArea } from "./classify";
+import { recognizeShape } from "./recognize";
 import { quantizeImage, borderBackgroundColor } from "./quantize";
 
 export * from "./simplify";
@@ -173,18 +174,21 @@ export function tracedataToObjects(
 
     layer.forEach((path) => {
       if (path.isholepath) return; // pulled in via a parent's holechildren
-      const outer = simp(pathToPolylinePx(path));
-      const area = polygonArea(outer);
+      const rawOuter = simp(pathToPolylinePx(path));
+      const area = polygonArea(rawOuter);
       if (area < minAreaMm2) return; // despeckle
       outerArea += area;
-      const holes = (path.holechildren ?? [])
+      const rawHoles = (path.holechildren ?? [])
         .map((idx) => layer[idx])
         .filter(Boolean)
         .map((h) => simp(pathToPolylinePx(h)))
         .filter((h) => polygonArea(h) >= minAreaMm2);
-      // Smooth the simplified outline into a soft curve so the fill follows the
-      // shape instead of the tracer's pixel stair-steps (the "blocky" look).
-      fillRings.push(smoothClosedRing(outer, 0.8), ...holes.map((h) => smoothClosedRing(h, 0.8)));
+      // SMART SHAPES: if a traced region is really a circle / ellipse / rectangle /
+      // regular polygon, snap it to the exact primitive (it then stitches as a true
+      // shape with a clean axis). Otherwise smooth the pixel stair-steps into a soft
+      // curve so the fill follows the form, not the tracer's blocks.
+      const clean = (r: Path) => recognizeShape(r, 1.0)?.ring ?? smoothClosedRing(r, 0.8);
+      fillRings.push(clean(rawOuter), ...rawHoles.map(clean));
     });
 
     if (fillRings.length > 0) {
