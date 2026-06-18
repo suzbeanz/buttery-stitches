@@ -438,6 +438,60 @@ export function tatamiFill(rings: Path[], opts: FillOptions): Path {
 }
 
 /**
+ * Multi-blend (ombré of two threads): lay the same tatami grid, but assign each
+ * ROW to colour A or colour B by its position across the blend axis, so the fill
+ * fades from A to B. Color B's share of the rows ramps 0→1 across the shape via
+ * 1-D error diffusion (deterministic, evenly spaced — no randomness), and the
+ * two colours together make a full-density fill. Returned as two separate
+ * penetration paths so the machine sews all of A, changes thread once, then B.
+ */
+export function multiBlendFill(rings: Path[], opts: FillOptions): { a: Path; b: Path } {
+  const oriented = orientByDepth(rings);
+  if (oriented.length === 0 || oriented[0].length < 3) return { a: [], b: [] };
+  const spacing = opts.stitchLength ?? FILL_STITCH_LENGTH;
+  const density = Math.max(MIN_FILL_DENSITY, opts.density);
+  const pivot = centroid(oriented[0]);
+  const rrings = oriented.map((r) => r.map((p) => rotatePoint(p, -opts.angle, pivot)));
+
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const ring of rrings) for (const p of ring) {
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  const spanY = maxY - minY;
+  const comp = Math.max(0, opts.pullCompMm ?? 0);
+
+  const rowsA: Point[][] = [];
+  const rowsB: Point[][] = [];
+  let acc = 0; // error-diffusion accumulator for colour B's row share
+  let k = 0;
+  for (let y = minY + density / 2; y <= maxY; y += density, k++) {
+    const spans = rowSpans(rrings, y);
+    if (spans.length === 0) continue;
+    const phase = staggerOffset(k) * spacing;
+    const rowPts: Point[] = [];
+    for (const [x0, x1] of spans) {
+      const c = Math.min(comp, (x1 - x0) / 2);
+      rowPts.push(...alongRow(x0 - c, x1 + c, y, spacing, phase));
+    }
+    const t = spanY > 0 ? (y - minY) / spanY : 0; // 0 at A end, 1 at B end
+    acc += t;
+    const toB = acc >= 1;
+    if (toB) acc -= 1;
+    (toB ? rowsB : rowsA).push(rowPts);
+  }
+
+  // Serpentine each colour's own rows (short travel between them) and rotate back.
+  const flatten = (rows: Point[][]): Path => {
+    const out: Point[] = [];
+    rows.forEach((row, i) => out.push(...(i % 2 === 1 ? [...row].reverse() : row)));
+    return out.map((p) => rotatePoint(p, opts.angle, pivot));
+  };
+  return { a: flatten(rowsA), b: flatten(rowsB) };
+}
+
+/**
  * Column (satin) fill: like tatami, but each scan row emits only the two span
  * edges as a zig-zag throw across the shape. That gives the smooth, shiny satin
  * look used for lettering. Best for narrow strokes (text); broad areas should

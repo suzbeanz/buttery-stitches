@@ -54,7 +54,10 @@ export interface EmbObjectParams {
    *  contour (rows that echo the shape's outline), gradient (tatami whose row
    *  spacing ramps for a shaded/ombré effect), or motif (a tiled decorative
    *  motif). */
-  fillStyle?: "tatami" | "satin" | "contour" | "gradient" | "motif";
+  fillStyle?: "tatami" | "satin" | "contour" | "gradient" | "motif" | "blend";
+  /** second thread color id for fillStyle "blend" (a two-thread ombré). The fill
+   *  fades from the object's colorId to this across the shape. */
+  blendColorId?: string;
   /** motif id for fillStyle "motif" (and the carve pattern). Default "wave". */
   motif?: string;
   /** motif cell size in mm for a motif fill (default 4). */
@@ -214,6 +217,7 @@ export const DEFAULT_PARAMS: Required<EmbObjectParams> = {
   pushComp: 0.2,
   outline: true,
   fillStyle: "tatami",
+  blendColorId: "",
   motif: "wave",
   motifSizeMm: 4,
   carve: "none",
@@ -241,6 +245,7 @@ export function resolveParams(
     pushComp: params.pushComp ?? DEFAULT_PARAMS.pushComp,
     outline: params.outline ?? DEFAULT_PARAMS.outline,
     fillStyle: params.fillStyle ?? DEFAULT_PARAMS.fillStyle,
+    blendColorId: params.blendColorId ?? DEFAULT_PARAMS.blendColorId,
     motif: params.motif ?? DEFAULT_PARAMS.motif,
     motifSizeMm: params.motifSizeMm ?? DEFAULT_PARAMS.motifSizeMm,
     carve: params.carve ?? DEFAULT_PARAMS.carve,
