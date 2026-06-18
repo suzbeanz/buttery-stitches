@@ -29,6 +29,14 @@ describe("fixObjectStitches", () => {
     expect(fixObjectStitches(o).params.fillStyle).toBe("satin");
   });
 
+  it("preserves a deliberate decorative fill style (gradient / blend / motif)", () => {
+    for (const fillStyle of ["gradient", "blend", "motif"] as const) {
+      const o = makeObjectFromPaths("fill", [broadFill], "c1");
+      o.params = { ...o.params, fillStyle, blendColorId: "c2" };
+      expect(fixObjectStitches(o).params.fillStyle, fillStyle).toBe(fillStyle);
+    }
+  });
+
   it("clamps a too-high fill density and turns on underlay", () => {
     const o = makeObjectFromPaths("fill", [broadFill], "c1");
     o.params = { density: 0.1 };
