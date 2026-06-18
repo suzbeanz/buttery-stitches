@@ -437,6 +437,475 @@ export function tatamiFill(rings: Path[], opts: FillOptions): Path {
   return rotated.map((p) => rotatePoint(p, opts.angle, pivot));
 }
 
+// ---------------------------------------------------------------------------
+// Boustrophedon (concavity-aware) tatami
+//
+// Simple scanline tatami snakes one serpentine across the whole region. On a
+// CONCAVE shape (a wavy tube, a U, a crescent) a scan row breaks into several
+// spans and the serpentine bridges the gap between them with a straight stitch —
+// which slashes across the notch, OUTSIDE the silhouette. The fix is the classic
+// boustrophedon cellular decomposition: split the region into cells at the rows
+// where the scanline connectivity changes (a span splits or merges), fill each
+// cell with its own clean serpentine, then connect the cells along a path that
+// stays INSIDE the region. A connector that would leave the shape is rerouted as
+// a geodesic that hugs the boundary; if that detour is too long, the run is
+// broken so the assembler trims and jumps instead of traveling forever.
+// ---------------------------------------------------------------------------
+
+/** How long (mm) an inside detour between two cells may get before we'd rather
+ *  cut the thread and jump (the run is split so the assembler trims). A connector
+ *  that stays inside travels OVER already-stitched fill, where the thread sinks in
+ *  and hides — so we keep the whole connected region on one continuous thread for
+ *  generous detours, and only cut when the inside route is truly long (a deep,
+ *  narrow notch where traveling all the way around wastes thread). */
+const DETOUR_MAX_MM = 50;
+
+interface CellRow {
+  y: number;
+  k: number; // global row index (drives the shared brick stagger)
+  x0: number;
+  x1: number;
+}
+
+const hyp = (a: Point, b: Point): number => Math.hypot(a.x - b.x, a.y - b.y);
+
+/** Nonzero-winding inside test over consistently-wound rings. */
+function windingNonzero(p: Point, rings: Path[]): boolean {
+  let w = 0;
+  for (const r of rings) {
+    const n = r.length;
+    for (let i = 0; i < n; i++) {
+      const a = r[i];
+      const b = r[(i + 1) % n];
+      const cr = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+      if (a.y <= p.y) {
+        if (b.y > p.y && cr > 0) w++;
+      } else if (b.y <= p.y && cr < 0) w--;
+    }
+  }
+  return w !== 0;
+}
+
+/** Do OPEN segments a→b and c→d cross properly (not merely touch / run collinear)? */
+function properCross(a: Point, b: Point, c: Point, d: Point): boolean {
+  const o = (p: Point, q: Point, r: Point) =>
+    Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
+  const o1 = o(a, b, c);
+  const o2 = o(a, b, d);
+  const o3 = o(c, d, a);
+  const o4 = o(c, d, b);
+  return o1 !== 0 && o2 !== 0 && o3 !== 0 && o4 !== 0 && o1 !== o2 && o3 !== o4;
+}
+
+/** Is the whole straight segment a→b inside the region (no boundary crossing and
+ *  its midpoint inside)? The visibility predicate for the geodesic router. */
+function segInsideRegion(a: Point, b: Point, rings: Path[]): boolean {
+  for (const r of rings) {
+    const n = r.length;
+    for (let i = 0; i < n; i++) {
+      if (properCross(a, b, r[i], r[(i + 1) % n])) return false;
+    }
+  }
+  return windingNonzero({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, rings);
+}
+
+/** Douglas–Peucker simplification of a ring (kept closed). Coarsens a densely
+ *  traced outline to a handful of significant vertices for routing — faithful to
+ *  within `tol` mm, including the reflex vertices that define a concavity, so a
+ *  path routed inside the simplified polygon stays inside the true one. */
+function simplifyRing(ring: Path, tol: number): Path {
+  if (ring.length <= 3) return ring.slice();
+  const keep = new Array(ring.length).fill(false);
+  keep[0] = keep[ring.length - 1] = true;
+  const stack: [number, number][] = [[0, ring.length - 1]];
+  const tol2 = tol * tol;
+  while (stack.length) {
+    const [lo, hi] = stack.pop()!;
+    const a = ring[lo];
+    const b = ring[hi];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const L2 = dx * dx + dy * dy || 1;
+    let far = -1;
+    let fd = tol2;
+    for (let i = lo + 1; i < hi; i++) {
+      const t = ((ring[i].x - a.x) * dx + (ring[i].y - a.y) * dy) / L2;
+      const cx = a.x + t * dx - ring[i].x;
+      const cy = a.y + t * dy - ring[i].y;
+      const d = cx * cx + cy * cy;
+      if (d > fd) {
+        fd = d;
+        far = i;
+      }
+    }
+    if (far >= 0) {
+      keep[far] = true;
+      stack.push([lo, far], [far, hi]);
+    }
+  }
+  return ring.filter((_, i) => keep[i]);
+}
+
+/** A reusable visibility graph over a region's (simplified) vertices, so the
+ *  geodesic router builds the expensive all-pairs structure ONCE per region and
+ *  each connector query just attaches its two endpoints. */
+interface Router {
+  rings: Path[]; // simplified rings (also the obstacle edges for visibility)
+  verts: Point[];
+  adj: { to: number; w: number }[][];
+}
+
+function buildRouter(simp: Path[]): Router {
+  const verts: Point[] = [];
+  for (const r of simp) for (const p of r) verts.push(p);
+  const N = verts.length;
+  const adj: { to: number; w: number }[][] = Array.from({ length: N }, () => []);
+  for (let i = 0; i < N; i++) {
+    for (let j = i + 1; j < N; j++) {
+      if (segInsideRegion(verts[i], verts[j], simp)) {
+        const w = hyp(verts[i], verts[j]);
+        adj[i].push({ to: j, w });
+        adj[j].push({ to: i, w });
+      }
+    }
+  }
+  return { rings: simp, verts, adj };
+}
+
+/** Shortest path a→b that stays inside the region, over the cached visibility
+ *  graph. Returns the waypoints (including a and b), or null if unreachable. */
+function routeInside(a: Point, b: Point, router: Router): Point[] | null {
+  if (segInsideRegion(a, b, router.rings)) return [a, b];
+  const { verts, adj, rings } = router;
+  const N = verts.length;
+  const A = N;
+  const B = N + 1;
+  const all = [...verts, a, b];
+  const g: { to: number; w: number }[][] = adj.map((l) => l.slice());
+  g.push([], []);
+  for (let i = 0; i < N; i++) {
+    if (segInsideRegion(a, verts[i], rings)) {
+      const w = hyp(a, verts[i]);
+      g[A].push({ to: i, w });
+      g[i].push({ to: A, w });
+    }
+    if (segInsideRegion(b, verts[i], rings)) {
+      const w = hyp(b, verts[i]);
+      g[B].push({ to: i, w });
+      g[i].push({ to: B, w });
+    }
+  }
+  const M = N + 2;
+  const dist = new Array(M).fill(Infinity);
+  const prev = new Array(M).fill(-1);
+  const done = new Array(M).fill(false);
+  dist[A] = 0;
+  for (let it = 0; it < M; it++) {
+    let u = -1;
+    let bd = Infinity;
+    for (let i = 0; i < M; i++) {
+      if (!done[i] && dist[i] < bd) {
+        bd = dist[i];
+        u = i;
+      }
+    }
+    if (u < 0 || u === B) break;
+    done[u] = true;
+    for (const { to, w } of g[u]) {
+      if (dist[u] + w < dist[to]) {
+        dist[to] = dist[u] + w;
+        prev[to] = u;
+      }
+    }
+  }
+  if (!isFinite(dist[B])) return null;
+  const path: Point[] = [];
+  for (let c = B; c !== -1; c = prev[c]) path.push(all[c]);
+  path.reverse();
+  return path;
+}
+
+/** Nudge a point to just INSIDE the region if it sits outside (a row end carries a
+ *  hair of pull-comp past the edge). Projects onto the nearest boundary edge and
+ *  steps in along the interior normal, so connector routing has a valid anchor. */
+function clampInside(p: Point, rings: Path[]): Point {
+  if (windingNonzero(p, rings)) return p;
+  let best = p;
+  let bestD = Infinity;
+  let nx = 0;
+  let ny = 0;
+  for (const r of rings) {
+    const n = r.length;
+    for (let i = 0; i < n; i++) {
+      const a = r[i];
+      const b = r[(i + 1) % n];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const L2 = dx * dx + dy * dy;
+      let t = L2 > 0 ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / L2 : 0;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const qx = a.x + t * dx;
+      const qy = a.y + t * dy;
+      const d = (qx - p.x) ** 2 + (qy - p.y) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = { x: qx, y: qy };
+        const il = Math.hypot(dx, dy) || 1;
+        nx = -dy / il;
+        ny = dx / il;
+      }
+    }
+  }
+  const eps = 0.35;
+  const inA = { x: best.x + nx * eps, y: best.y + ny * eps };
+  if (windingNonzero(inA, rings)) return inA;
+  const inB = { x: best.x - nx * eps, y: best.y - ny * eps };
+  return windingNonzero(inB, rings) ? inB : best;
+}
+
+/** Every leg of a polyline stays inside the (true) region. */
+function allLegsInside(path: Point[], rings: Path[]): boolean {
+  for (let i = 1; i < path.length; i++) {
+    if (!segInsideRegion(path[i - 1], path[i], rings)) return false;
+  }
+  return true;
+}
+
+/** Length of a polyline. */
+function pathLength(path: Point[]): number {
+  let s = 0;
+  for (let i = 1; i < path.length; i++) s += hyp(path[i - 1], path[i]);
+  return s;
+}
+
+/** Subdivide a polyline so no segment exceeds `maxLen` (keeps connectors stitched
+ *  at a safe length and below the engine's travel-split threshold). */
+function subdivide(path: Point[], maxLen: number): Point[] {
+  if (path.length < 2) return path.slice();
+  const out: Point[] = [path[0]];
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1];
+    const b = path[i];
+    const n = Math.max(1, Math.ceil(hyp(a, b) / maxLen));
+    for (let s = 1; s <= n; s++) {
+      const t = s / n;
+      out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+    }
+  }
+  return out;
+}
+
+/**
+ * Split the region's scan rows into boustrophedon cells. A cell is a stack of
+ * single spans over consecutive rows connected one-to-one; the moment a span
+ * splits into two (or two merge into one) the involved cells close and fresh
+ * cells open, so each cell is a simple, convex-in-x strip with no internal notch.
+ */
+function buildCells(rows: { y: number; k: number; spans: [number, number][] }[]): CellRow[][] {
+  const cells: CellRow[][] = [];
+  let open: { cell: number; x0: number; x1: number }[] = [];
+  for (const row of rows) {
+    const spans = row.spans;
+    const next: { cell: number; x0: number; x1: number }[] = [];
+    if (open.length === 0) {
+      for (const [x0, x1] of spans) {
+        const ci = cells.push([{ y: row.y, k: row.k, x0, x1 }]) - 1;
+        next.push({ cell: ci, x0, x1 });
+      }
+      open = next;
+      continue;
+    }
+    const O = open.length;
+    const M = spans.length;
+    // Union-find over open spans (0..O-1) and new spans (O..O+M-1) by x-overlap.
+    const par = Array.from({ length: O + M }, (_, i) => i);
+    const find = (x: number): number => {
+      while (par[x] !== x) x = par[x] = par[par[x]];
+      return x;
+    };
+    for (let i = 0; i < O; i++) {
+      for (let j = 0; j < M; j++) {
+        if (open[i].x0 <= spans[j][1] && spans[j][0] <= open[i].x1) par[find(i)] = find(O + j);
+      }
+    }
+    const comps = new Map<number, { opens: number[]; news: number[] }>();
+    const comp = (root: number) => {
+      let c = comps.get(root);
+      if (!c) comps.set(root, (c = { opens: [], news: [] }));
+      return c;
+    };
+    for (let i = 0; i < O; i++) comp(find(i)).opens.push(i);
+    for (let j = 0; j < M; j++) comp(find(O + j)).news.push(j);
+    for (const { opens, news } of comps.values()) {
+      if (news.length === 0) continue; // a cell pinches out (region ends here)
+      if (opens.length === 1 && news.length === 1) {
+        const j = news[0];
+        const ci = open[opens[0]].cell;
+        cells[ci].push({ y: row.y, k: row.k, x0: spans[j][0], x1: spans[j][1] });
+        next.push({ cell: ci, x0: spans[j][0], x1: spans[j][1] });
+      } else {
+        // Split / merge / new lobe → each new span starts a fresh cell.
+        for (const j of news) {
+          const ci = cells.push([{ y: row.y, k: row.k, x0: spans[j][0], x1: spans[j][1] }]) - 1;
+          next.push({ cell: ci, x0: spans[j][0], x1: spans[j][1] });
+        }
+      }
+    }
+    open = next;
+  }
+  return cells;
+}
+
+/** Serpentine-fill one cell (its rows are already a clean single-span stack). */
+function fillCell(cell: CellRow[], spacing: number, comp: number): Point[] {
+  const pts: Point[] = [];
+  cell.forEach((row, li) => {
+    const c = Math.min(comp, (row.x1 - row.x0) / 2);
+    const rp = alongRow(row.x0 - c, row.x1 + c, row.y, spacing, staggerOffset(row.k) * spacing);
+    if (li % 2 === 1) rp.reverse(); // serpentine within the cell
+    for (const p of rp) pts.push(p);
+  });
+  return pts;
+}
+
+/**
+ * Order the cells for short travel and stitch them into runs. Consecutive cells
+ * are joined by a connector that stays inside the region: a straight hop when
+ * that's already inside, otherwise a boundary-hugging geodesic. When even the
+ * geodesic is longer than {@link DETOUR_MAX_MM}, the run is broken (a new run
+ * begins) so the assembler trims and jumps rather than over-travel.
+ */
+function orderAndConnect(fills: Point[][], rings: Path[], spacing: number): Point[][] {
+  const live = fills.filter((f) => f.length > 0);
+  const N = live.length;
+  if (N === 0) return [];
+  const used = new Array(N).fill(false);
+  const runs: Point[][] = [];
+  let cur: Point[] | null = null;
+  let curEnd: Point | null = null;
+  // The geodesic router is expensive to build, so create it once and only if a
+  // connector actually needs routing (convex shapes never do).
+  let router: Router | null = null;
+  const getRouter = (): Router => (router ??= buildRouter(rings.map((r) => simplifyRing(r, 0.5))));
+
+  const start = (pts: Point[]) => pts[0];
+  const end = (pts: Point[]) => pts[pts.length - 1];
+
+  for (let iter = 0; iter < N; iter++) {
+    let bi = -1;
+    let brev = false;
+    if (curEnd === null) {
+      // First cell: the topmost one (smallest y endpoint), filled forward.
+      let by = Infinity;
+      for (let i = 0; i < N; i++) {
+        const y = Math.min(start(live[i]).y, end(live[i]).y);
+        if (y < by) {
+          by = y;
+          bi = i;
+        }
+      }
+    } else {
+      let bc = Infinity;
+      for (let i = 0; i < N; i++) {
+        if (used[i]) continue;
+        const ds = hyp(curEnd, start(live[i]));
+        const de = hyp(curEnd, end(live[i]));
+        if (ds < bc) {
+          bc = ds;
+          bi = i;
+          brev = false;
+        }
+        if (de < bc) {
+          bc = de;
+          bi = i;
+          brev = true;
+        }
+      }
+    }
+    if (bi < 0) break;
+    used[bi] = true;
+    const pts = brev ? live[bi].slice().reverse() : live[bi];
+
+    if (curEnd === null) {
+      cur = pts.slice();
+      runs.push(cur);
+      curEnd = end(pts);
+      continue;
+    }
+    const s = start(pts);
+    let connector: Point[] | null = null;
+    if (segInsideRegion(curEnd, s, rings)) {
+      connector = subdivide([curEnd, s], spacing);
+    } else {
+      // Route between anchors nudged inside (row ends carry a little pull-comp past
+      // the edge, which would leave the geodesic with no valid inside start/goal).
+      const rt = getRouter();
+      const a = clampInside(curEnd, rt.rings);
+      const b = clampInside(s, rt.rings);
+      const geo = routeInside(a, b, rt);
+      // The geodesic is found on the SIMPLIFIED rings (fast); verify it against the
+      // TRUE rings before trusting it. A coarse simplification can shortcut across a
+      // narrow concavity, so any leg that isn't genuinely inside means we'd rather
+      // trim than risk a slash.
+      if (geo && pathLength(geo) <= DETOUR_MAX_MM && allLegsInside(geo, rings)) {
+        connector = subdivide([curEnd, ...geo, s], spacing);
+      }
+    }
+    if (connector) {
+      for (let i = 1; i < connector.length - 1; i++) cur!.push(connector[i]); // interior waypoints
+      for (const p of pts) cur!.push(p);
+      curEnd = end(pts);
+    } else {
+      // Too far to travel cleanly inside → break the run (assembler trims/jumps).
+      cur = pts.slice();
+      runs.push(cur);
+      curEnd = end(pts);
+    }
+  }
+  return runs;
+}
+
+/**
+ * Concavity-aware tatami: same parallel rows as {@link tatamiFill}, but laid as
+ * boustrophedon cells joined by inside-staying connectors, so a wavy or notched
+ * shape fills without the serpentine ever slashing a stray thread across open
+ * fabric. Returns one or more RUNS (continuous stitch paths); the caller jumps
+ * between them. For the common convex shape this is a single run identical to
+ * `tatamiFill`. (Uniform density only — gradient/ombré uses `tatamiFill`.)
+ */
+export function tatamiConcaveRuns(rings: Path[], opts: FillOptions): Point[][] {
+  const oriented = orientByDepth(rings);
+  if (oriented.length === 0 || oriented[0].length < 3) return [];
+  const spacing = opts.stitchLength ?? FILL_STITCH_LENGTH;
+  const density = Math.max(MIN_FILL_DENSITY, opts.density);
+  const comp = Math.max(0, opts.pullCompMm ?? 0);
+
+  const pivot = centroid(oriented[0]);
+  const rr = oriented.map((r) => r.map((p) => rotatePoint(p, -opts.angle, pivot)));
+
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const r of rr) {
+    for (const p of r) {
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+  }
+  const rows: { y: number; k: number; spans: [number, number][] }[] = [];
+  let k = 0;
+  for (let y = minY + density / 2; y <= maxY; y += density, k++) {
+    const spans = rowSpans(rr, y);
+    if (spans.length) rows.push({ y, k, spans });
+  }
+  if (rows.length === 0) return [];
+
+  const cells = buildCells(rows);
+  const fills = cells.map((c) => fillCell(c, spacing, comp));
+  const runs = orderAndConnect(fills, rr, spacing);
+
+  return runs.map((run) => run.map((p) => rotatePoint(p, opts.angle, pivot)));
+}
+
 /**
  * Multi-blend (ombré of two threads): lay the same tatami grid, but assign each
  * ROW to colour A or colour B by its position across the blend axis, so the fill

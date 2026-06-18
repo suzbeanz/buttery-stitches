@@ -10,7 +10,7 @@ import { effectiveProfile } from "./profile";
 import { distance, railsFromCenterline, pathsBounds, offsetPolyline } from "../geometry";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
-import { tatamiFill, multiBlendFill, motifFill, motifRunAlong, carvePoints, splitFillRegions, autoFillAngleForRegions } from "./fill";
+import { tatamiFill, tatamiConcaveRuns, multiBlendFill, motifFill, motifRunAlong, carvePoints, splitFillRegions, autoFillAngleForRegions } from "./fill";
 import { contourFill } from "./contour";
 import { medialColumns, columnsFromCenterlines, satinCoverage, residualRegions, type SatinColumn } from "./medial";
 import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
@@ -659,6 +659,12 @@ export function generateObjectRuns(
     // satin. Contour: rings that echo the outline. Otherwise a tatami fill (also
     // the fallback when contour can't seat a ring in a too-thin shape).
     let tops: Point[][];
+    // Tatami pieces from the concavity-aware boustrophedon are pre-ordered and
+    // already connected INSIDE the region, so any move between them that the
+    // assembler would have to add is exposed-only → must trim, never slash. We
+    // flag those runs noBareTravel so the assembler trims an exposed gap instead
+    // of drawing a stray thread across open fabric.
+    let tatamiNoBareTravel = false;
     if (usingSatin) {
       tops = columns.map((c) =>
         c.widthMm < RUNNING_COLUMN_MM
@@ -669,21 +675,26 @@ export function generateObjectRuns(
       const echo = contourFill(region, { density });
       tops = echo.length
         ? echo
-        : [tatamiFill(region, { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp })];
+        : tatamiConcaveRuns(region, { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp });
+      if (!echo.length) tatamiNoBareTravel = true;
     } else if (motifMode) {
       // Motif fill: tile a decorative motif across the region (no underlay).
       tops = motifFill(region, { motifId: p.motif, sizeMm: p.motifSizeMm, angle: tatamiAngle });
-    } else {
-      // Gradient fillStyle ramps row spacing across the shape for a shaded look.
+    } else if (p.fillStyle === "gradient" || (p.carve && p.carve !== "none")) {
+      // Gradient/ombré ramps row spacing across the shape, and carve skips
+      // penetrations along a relief groove — both read across the WHOLE shape, so
+      // they use the single-serpentine tatami rather than per-cell decomposition.
       const gradient = p.fillStyle === "gradient" ? GRADIENT_FILL_MUL : undefined;
       let top = tatamiFill(region, { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp, gradient });
-      // True relief carving: skip needle penetrations along the carve motif so the
-      // surrounding fill floats over un-stitched grooves.
       if (p.carve && p.carve !== "none") {
         const curves = motifFill(region, { motifId: p.carve, sizeMm: p.motifSizeMm, angle: tatamiAngle });
         top = carvePoints(top, curves, CARVE_GROOVE_MM);
       }
       tops = [top];
+    } else {
+      // Plain broad fill: concavity-aware tatami (clean edges on wavy/notched shapes).
+      tops = tatamiConcaveRuns(region, { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp });
+      tatamiNoBareTravel = true;
     }
 
     // Sew the fill's pieces nearest-neighbor from where the underlay left off,
@@ -719,7 +730,7 @@ export function generateObjectRuns(
       const subRuns = tops.flatMap((run) => splitLongTravels(run, travelMax));
       for (const sub of orderByNearest(subRuns, cursor)) {
         const r = dropShortStitches(sub, minStitch);
-        addRun(runs, r, false, regionIdx);
+        addRun(runs, r, false, regionIdx, tatamiNoBareTravel);
         if (r.length) cursor = r[r.length - 1];
       }
       // Finishing edge run: walk the boundary just inside the edge so the fill's
