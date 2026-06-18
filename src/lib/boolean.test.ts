@@ -45,3 +45,36 @@ describe("boolean polygon ops", () => {
     expect(booleanOp(A, far, "intersect", 0.2)).toHaveLength(0);
   });
 });
+
+import { knockdown } from "./boolean";
+
+/** Signed shoelace (outer + holes have opposite winding) → NET area. */
+function netArea(rings: Path[]): number {
+  let s = 0;
+  for (const ring of rings) {
+    let a = 0;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) a += (ring[j].x + ring[i].x) * (ring[j].y - ring[i].y);
+    s += a / 2;
+  }
+  return Math.abs(s);
+}
+
+describe("knockdown (trapping)", () => {
+  const square = (x0: number, y0: number, x1: number, y1: number): Path[] => [[{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }]];
+
+  it("leaves a lower region untouched when nothing is on top", () => {
+    const lower = square(0, 0, 40, 40);
+    expect(knockdown(lower, [], 0.35, 0.2)).toBe(lower);
+    expect(knockdown(lower, [square(100, 100, 110, 110)], 0.35, 0.2)).toBe(lower);
+  });
+
+  it("knocks a hole where a higher region sits on top (minus a trap)", () => {
+    const lower = square(0, 0, 40, 40); // 1600
+    const higher = square(15, 15, 25, 25); // 10×10 = 100 centered
+    const out = knockdown(lower, [higher], 0.35, 0.2);
+    const net = netArea(out);
+    // hole ≈ higher shrunk by the trap (≈9.3²≈86), so net ≈ 1600−86.
+    expect(net).toBeGreaterThan(1490);
+    expect(net).toBeLessThan(1570);
+  });
+});
