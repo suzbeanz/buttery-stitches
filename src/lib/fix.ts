@@ -30,15 +30,38 @@ const LAYER_RANK: Record<EmbObject["type"], number> = { fill: 0, satin: 1, runni
 export const SATIN_WIDTH_THRESHOLD = 3.5;
 
 /** The fill style for a BROAD region (one the classifier called tatami): a
- *  recognized round shape, or a ring band (a fill with a hole), reads best as a
- *  concentric contour; everything else stays a straight tatami. */
+ *  recognized round shape, or a true ANNULUS (a ring nested around a hole), reads
+ *  best as a concentric contour; disjoint pieces and crescents stay tatami. */
 function broadFillStyle(rings: EmbObject["paths"]): "tatami" | "contour" {
   const usable = rings.filter((r) => r.length >= 3);
   if (usable.length === 0) return "tatami";
   const rec = recognizeShape(usable[0], 1.0);
   if (rec && (rec.kind === "circle" || rec.kind === "ellipse")) return "contour";
-  if (usable.length > 1) return "contour"; // annulus / ring band → echo it
+  if (isAnnulus(usable)) return "contour"; // a ring around a hole (frame / band)
   return "tatami";
+}
+
+/** Even-odd: is point `p` inside ring `r`? */
+function inRing(p: { x: number; y: number }, r: EmbObject["paths"][number]): boolean {
+  let inside = false;
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+    const a = r[i];
+    const b = r[j];
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+
+/** True if some ring is NESTED inside another (a hole) — i.e. a real annulus,
+ *  not just several disjoint pieces. */
+function isAnnulus(rings: EmbObject["paths"]): boolean {
+  for (let i = 0; i < rings.length; i++) {
+    const c = rings[i][0];
+    for (let k = 0; k < rings.length; k++) {
+      if (k !== i && inRing(c, rings[k])) return true;
+    }
+  }
+  return false;
 }
 
 export function fixObjectStitches(object: EmbObject): EmbObject {
@@ -114,6 +137,14 @@ function knockdownPass(objects: EmbObject[], trapMm = 0.35): EmbObject[] {
     const higher = objects.slice(i + 1).filter(causesKnockdown).map((h) => h.paths);
     if (higher.length === 0) return o;
     const trimmed = knockdown(o.paths, higher, trapMm);
-    return trimmed.length > 0 ? { ...o, paths: trimmed } : o;
+    if (trimmed.length === 0) return o;
+    // Re-evaluate the broad fill style on the NEW geometry: a circle carved into a
+    // crescent should drop from contour to tatami (contour rings travel badly on a
+    // lens), while a disc carved into an annulus keeps its clean concentric contour.
+    const params =
+      o.params.fillStyle === "contour" || o.params.fillStyle === "tatami"
+        ? { ...o.params, fillStyle: broadFillStyle(trimmed) }
+        : o.params;
+    return { ...o, paths: trimmed, params };
   });
 }

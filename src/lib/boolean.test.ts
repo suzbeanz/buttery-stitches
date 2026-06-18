@@ -78,3 +78,27 @@ describe("knockdown (trapping)", () => {
     expect(net).toBeLessThan(1570);
   });
 });
+
+describe("knockdown — no false rim where the top extends past the edge", () => {
+  const circle = (r: number, cx: number, cy: number, n = 80): Path =>
+    Array.from({ length: n }, (_, i) => ({ x: cx + r * Math.cos((i / n) * 2 * Math.PI), y: cy + r * Math.sin((i / n) * 2 * Math.PI) }));
+  const inRing = (p: { x: number; y: number }, r: Path) => {
+    let o = false;
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+      const a = r[i], b = r[j];
+      if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) o = !o;
+    }
+    return o;
+  };
+  it("an edge overlap leaves a clean crescent, not a ring-with-hole", () => {
+    const A = [circle(20, 0, 0)];
+    const B = [circle(20, 25, 0)]; // overlaps A's right edge, extends past it
+    const out = knockdown(A, [B], 0.35, 0.2);
+    // One crescent, and no ring nested inside another (no spurious annulus rim).
+    let nested = false;
+    for (let i = 0; i < out.length; i++) for (let k = 0; k < out.length; k++) if (i !== k && inRing(out[i][0], out[k])) nested = true;
+    expect(nested).toBe(false);
+    expect(netArea(out)).toBeLessThan(1100); // < full circle (1257): the overlap was removed
+    expect(netArea(out)).toBeGreaterThan(700);
+  });
+});
