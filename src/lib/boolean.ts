@@ -87,7 +87,11 @@ function erodeMask(mask: Uint8Array, W: number, H: number, iters: number): void 
 export function knockdown(lower: Path[], higher: Path[][], trapMm = 0.35, cellMm = 0.2): Path[] {
   if (higher.length === 0) return lower;
   const cell = Math.max(0.08, cellMm);
-  const bb = bounds(lower);
+  // Size the grid to cover lower AND the higher regions, so the higher mask is
+  // complete: eroding it for the trap then only shrinks at the higher's REAL
+  // edges, never at a clipped grid boundary (which would leave a false trap rim
+  // around the shared outer edge where the top color actually extends past).
+  const bb = bounds([...lower, ...higher.flat()]);
   if (!bb) return lower;
   const pad = 2;
   const W = Math.max(3, Math.ceil((bb.maxX - bb.minX) / cell) + pad * 2 + 1);
@@ -102,15 +106,22 @@ export function knockdown(lower: Path[], higher: Path[][], trapMm = 0.35, cellMm
   for (let gy = 0; gy < H; gy++) {
     const py = oy + gy * cell;
     for (let gx = 0; gx < W; gx++) {
+      const idx = gy * W + gx;
       const p = { x: ox + gx * cell, y: py };
-      if (!inside(p, lower)) continue;
-      lo[gy * W + gx] = 1;
+      // Mark the higher coverage over its FULL extent (not just inside `lower`),
+      // so eroding it for the trap shrinks only at the higher's real edges — never
+      // at the lower's boundary, which would leave a false rim under the top color.
+      let inHi = false;
       for (const h of higher) {
         if (inside(p, h)) {
-          hi[gy * W + gx] = 1;
-          overlap = true;
+          inHi = true;
           break;
         }
+      }
+      if (inHi) hi[idx] = 1;
+      if (inside(p, lower)) {
+        lo[idx] = 1;
+        if (inHi) overlap = true;
       }
     }
   }
