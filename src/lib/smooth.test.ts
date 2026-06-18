@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { smoothPath, DEFAULT_MAX_SEGMENT_MM } from "./smooth";
+import { smoothPath, smoothRingKeepingCorners, DEFAULT_MAX_SEGMENT_MM } from "./smooth";
 import { distance, polylineLength } from "./geometry";
 import type { Path, Point } from "../types/project";
 
@@ -167,5 +167,43 @@ describe("smoothPath", () => {
     const out = smoothPath(control);
     // With ~0.75 mm default spacing over 200 mm we expect many points.
     expect(out.length).toBeGreaterThan(200 / DEFAULT_MAX_SEGMENT_MM - 5);
+  });
+});
+
+describe("smoothRingKeepingCorners", () => {
+  const sharpestTurn = (ring: { x: number; y: number }[]) => {
+    const n = ring.length;
+    let max = 0;
+    for (let i = 0; i < n; i++) {
+      const a = ring[(i - 1 + n) % n], b = ring[i], c = ring[(i + 1) % n];
+      const v1x = b.x - a.x, v1y = b.y - a.y, v2x = c.x - b.x, v2y = c.y - b.y;
+      const l1 = Math.hypot(v1x, v1y) || 1, l2 = Math.hypot(v2x, v2y) || 1;
+      const dot = Math.max(-1, Math.min(1, (v1x * v2x + v1y * v2y) / (l1 * l2)));
+      max = Math.max(max, (Math.acos(dot) * 180) / Math.PI);
+    }
+    return max;
+  };
+
+  it("keeps a star's points sharp while smoothing its edges", () => {
+    const star: { x: number; y: number }[] = [];
+    for (let i = 0; i < 10; i++) {
+      const r = i % 2 === 0 ? 20 : 8;
+      const a = (i / 10) * 2 * Math.PI;
+      star.push({ x: r * Math.cos(a), y: r * Math.sin(a) });
+    }
+    const kept = smoothRingKeepingCorners(star, 0.6);
+    // A real point makes a ~108° turn; corner-aware smoothing preserves it.
+    expect(sharpestTurn(kept)).toBeGreaterThan(70);
+  });
+
+  it("fully smooths a cornerless blob (no false corners)", () => {
+    const blob: { x: number; y: number }[] = [];
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * 2 * Math.PI;
+      const r = 20 + 3 * Math.sin(a * 2);
+      blob.push({ x: r * Math.cos(a), y: r * Math.sin(a) });
+    }
+    const sm = smoothRingKeepingCorners(blob, 0.6);
+    expect(sm.length).toBeGreaterThan(blob.length); // densified/smoothed, not corner-locked
   });
 });

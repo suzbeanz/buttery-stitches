@@ -2,7 +2,7 @@ import ImageTracer from "imagetracerjs";
 import type { EmbObject, Path, Point, ThreadColor } from "../../types/project";
 import { newId } from "../id";
 import { makeObjectFromPaths } from "../objects";
-import { smoothClosedRing } from "../smooth";
+import { smoothRingKeepingCorners } from "../smooth";
 import { douglasPeucker } from "./simplify";
 import { polygonArea } from "./classify";
 import { recognizeShape } from "./recognize";
@@ -185,9 +185,10 @@ export function tracedataToObjects(
         .filter((h) => polygonArea(h) >= minAreaMm2);
       // SMART SHAPES: if a traced region is really a circle / ellipse / rectangle /
       // regular polygon, snap it to the exact primitive (it then stitches as a true
-      // shape with a clean axis). Otherwise smooth the pixel stair-steps into a soft
-      // curve so the fill follows the form, not the tracer's blocks.
-      const clean = (r: Path) => recognizeShape(r, 1.0)?.ring ?? smoothClosedRing(r, 0.8);
+      // shape with a clean axis). Otherwise smooth the curved runs while KEEPING
+      // sharp corners crisp, so a logo's angles and a star's points stay sharp
+      // instead of melting into the tracer's rounded blocks.
+      const clean = (r: Path) => recognizeShape(r, 1.0)?.ring ?? smoothRingKeepingCorners(r, 0.8);
       fillRings.push(clean(rawOuter), ...rawHoles.map(clean));
     });
 

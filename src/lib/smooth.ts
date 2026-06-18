@@ -90,6 +90,57 @@ export function smoothClosedRing(ring: Path, maxSegmentMm = 0.6): Path {
 }
 
 /**
+ * Smooth a closed outline but KEEP sharp corners crisp — the smart-digitizer
+ * way. We find vertices where the outline turns hard (≥ `cornerDeg`), treat them
+ * as fixed corners, and Catmull-Rom-smooth only the runs of curve BETWEEN them.
+ * So a star keeps its points and a logo keeps its right angles, while the curved
+ * parts lose their traced stair-steps. With no hard corners (a blob) it behaves
+ * like smoothClosedRing.
+ */
+export function smoothRingKeepingCorners(ring: Path, maxSegmentMm = 0.6, cornerDeg = 50): Path {
+  const pts =
+    ring.length > 1 && Math.hypot(ring[0].x - ring[ring.length - 1].x, ring[0].y - ring[ring.length - 1].y) < 1e-6
+      ? ring.slice(0, -1)
+      : ring.slice();
+  const n = pts.length;
+  if (n < 5) return smoothClosedRing(ring, maxSegmentMm);
+
+  const turn = (i: number): number => {
+    const a = pts[(i - 1 + n) % n];
+    const b = pts[i];
+    const c = pts[(i + 1) % n];
+    const v1x = b.x - a.x;
+    const v1y = b.y - a.y;
+    const v2x = c.x - b.x;
+    const v2y = c.y - b.y;
+    const l1 = Math.hypot(v1x, v1y) || 1;
+    const l2 = Math.hypot(v2x, v2y) || 1;
+    const dot = Math.max(-1, Math.min(1, (v1x * v2x + v1y * v2y) / (l1 * l2)));
+    return (Math.acos(dot) * 180) / Math.PI; // 0 = straight, 90 = right angle
+  };
+
+  const corners: number[] = [];
+  for (let i = 0; i < n; i++) if (turn(i) >= cornerDeg) corners.push(i);
+  if (corners.length === 0) return smoothClosedRing(ring, maxSegmentMm);
+
+  // Smooth each arc between consecutive corners (Catmull-Rom passes through the
+  // corner endpoints, so they stay exactly sharp); stitch the arcs back together.
+  const out: Path = [];
+  for (let k = 0; k < corners.length; k++) {
+    const ci = corners[k];
+    const cj = corners[(k + 1) % corners.length];
+    const arc: Path = [];
+    for (let i = ci; ; i = (i + 1) % n) {
+      arc.push(pts[i]);
+      if (i === cj) break;
+    }
+    const sm = arc.length >= 3 ? smoothPath(arc, { maxSegmentMm }) : arc;
+    for (let i = 0; i < sm.length - 1; i++) out.push(sm[i]); // drop the shared corner
+  }
+  return out.length >= 3 ? out : ring.map((p) => ({ ...p }));
+}
+
+/**
  * Centripetal Catmull-Rom interpolation of the spline through p1→p2, using p0
  * and p3 as the neighboring tangent controls. t runs 0 (at p1) to 1 (at p2).
  */
