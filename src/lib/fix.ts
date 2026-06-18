@@ -1,5 +1,6 @@
 import type { EmbObject, Project } from "../types/project";
 import { classifyRegion } from "./engine/classify";
+import { recognizeShape } from "./trace/recognize";
 
 /**
  * "Fix stitches": a smart auto-cleanup pass over a design. It walks an explicit
@@ -27,6 +28,18 @@ const LAYER_RANK: Record<EmbObject["type"], number> = { fill: 0, satin: 1, runni
 /** Width (mm) below which a fill reads as a stroke and should be satin. */
 export const SATIN_WIDTH_THRESHOLD = 3.5;
 
+/** The fill style for a BROAD region (one the classifier called tatami): a
+ *  recognized round shape, or a ring band (a fill with a hole), reads best as a
+ *  concentric contour; everything else stays a straight tatami. */
+function broadFillStyle(rings: EmbObject["paths"]): "tatami" | "contour" {
+  const usable = rings.filter((r) => r.length >= 3);
+  if (usable.length === 0) return "tatami";
+  const rec = recognizeShape(usable[0], 1.0);
+  if (rec && (rec.kind === "circle" || rec.kind === "ellipse")) return "contour";
+  if (usable.length > 1) return "contour"; // annulus / ring band → echo it
+  return "tatami";
+}
+
 export function fixObjectStitches(object: EmbObject): EmbObject {
   const params = { ...object.params };
 
@@ -40,11 +53,16 @@ export function fixObjectStitches(object: EmbObject): EmbObject {
     // fill
     params.density = clamp(params.density ?? 0.4, 0.35, 0.5);
     params.underlay = params.underlay ?? true;
-    // Smart type (holes-aware): text and strokes — including rings like "o" —
-    // become satin (the engine renders very-thin columns as running and falls
-    // back to tatami where satin won't cover); broad areas stay tatami.
+    // SMART STITCH TREATMENT (geometry-driven, like a digitizer's eye):
+    //  • thin strokes / rings / text → satin columns (shiny; the engine renders
+    //    very-thin columns as running and falls back to tatami where satin won't
+    //    cover);
+    //  • broad ROUND shapes (a recognized circle/ellipse) and ring bands → CONTOUR
+    //    (concentric rows echo the form and catch the light, with none of the
+    //    banding straight rows get across a curve);
+    //  • broad ANGULAR/irregular areas → tatami at the auto grain angle.
     const kind = classifyRegion(object.paths, { satinMaxWidthMm: SATIN_WIDTH_THRESHOLD });
-    params.fillStyle = object.text || kind !== "tatami" ? "satin" : "tatami";
+    params.fillStyle = object.text || kind !== "tatami" ? "satin" : broadFillStyle(object.paths);
   }
 
   return { ...object, params };
