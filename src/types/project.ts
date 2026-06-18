@@ -83,6 +83,8 @@ export interface TextSpec {
   circleRadiusMm?: number;
   /** which side of the circle ("top" = upper arc, "bottom" = upright lower arc). */
   circleSide?: "top" | "bottom";
+  /** lay the text along this open polyline (mm). Overrides arch and circle. */
+  pathMm?: Point[];
 }
 
 export interface EmbObject {

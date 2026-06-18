@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { EmbObject, Hoop, ThreadColor } from "../types/project";
+import type { EmbObject, Hoop, ThreadColor, Point } from "../types/project";
 import type { Font } from "opentype.js";
 import { FONTS, DEFAULT_FONT_ID, loadFont } from "../lib/text/fonts";
 import { layoutText } from "../lib/text/layout";
@@ -38,6 +38,7 @@ export default function TextDialog({
   hoop,
   colors,
   editObject,
+  followPath,
   onAdd,
   onClose,
 }: {
@@ -45,6 +46,8 @@ export default function TextDialog({
   colors: ThreadColor[];
   /** when set, the dialog edits this existing text object in place. */
   editObject?: EmbObject;
+  /** an open path (mm) the text can follow, from the current selection. */
+  followPath?: Point[];
   onAdd: (result: AddTextResult) => void;
   onClose: () => void;
 }) {
@@ -55,13 +58,21 @@ export default function TextDialog({
   const [heightMm, setHeightMm] = useState(initial?.heightMm ?? DEFAULT_HEIGHT_MM);
   const [letterSpacingMm, setLetterSpacingMm] = useState(initial?.letterSpacingMm ?? 0);
   const [archDeg, setArchDeg] = useState(initial?.archDeg ?? 0);
-  // Baseline shape: straight/arch, or wrapped on a circle (top/bottom arc).
-  const [shape, setShape] = useState<"line" | "circleTop" | "circleBottom">(
-    initial?.circleRadiusMm ? (initial.circleSide === "bottom" ? "circleBottom" : "circleTop") : "line",
-  );
+  // Baseline shape: straight/arch, on a circle (top/bottom), or following a path.
+  const initialShape: "line" | "circleTop" | "circleBottom" | "path" = initial?.pathMm
+    ? "path"
+    : initial?.circleRadiusMm
+      ? initial.circleSide === "bottom"
+        ? "circleBottom"
+        : "circleTop"
+      : "line";
+  const [shape, setShape] = useState(initialShape);
   const [circleRadiusMm, setCircleRadiusMm] = useState(initial?.circleRadiusMm ?? 40);
   const lineSpacing = initial?.lineSpacing ?? 1.35;
-  const onCircle = shape !== "line";
+  // The path to follow: a freshly-selected path wins; otherwise the stored one.
+  const pathMm = followPath ?? initial?.pathMm;
+  const onPath = shape === "path" && !!pathMm && pathMm.length >= 2;
+  const onCircle = shape === "circleTop" || shape === "circleBottom";
   const circleSide: "top" | "bottom" = shape === "circleBottom" ? "bottom" : "top";
 
   // Color: either an existing project color id, or "__new" to add one.
@@ -97,9 +108,10 @@ export default function TextDialog({
         heightMm,
         letterSpacingMm,
         lineSpacing,
-        archDeg: onCircle ? 0 : archDeg,
+        archDeg: onCircle || onPath ? 0 : archDeg,
         circleRadiusMm: onCircle ? circleRadiusMm : undefined,
         circleSide,
+        pathMm: onPath ? pathMm : undefined,
         colorId: "preview",
         name: text.replace(/\n/g, " "),
         fontId,
@@ -107,7 +119,7 @@ export default function TextDialog({
     } catch {
       return null;
     }
-  }, [font, text, heightMm, letterSpacingMm, lineSpacing, archDeg, fontId, onCircle, circleRadiusMm, circleSide]);
+  }, [font, text, heightMm, letterSpacingMm, lineSpacing, archDeg, fontId, onCircle, circleRadiusMm, circleSide, onPath, pathMm]);
 
   // Size shown in the active unit; editing it converts back to mm.
   const sizeValue = unit === "in" ? mmToInch(heightMm) : heightMm;
@@ -165,9 +177,10 @@ export default function TextDialog({
         heightMm,
         letterSpacingMm,
         lineSpacing,
-        archDeg: onCircle ? 0 : archDeg,
+        archDeg: onCircle || onPath ? 0 : archDeg,
         circleRadiusMm: onCircle ? circleRadiusMm : undefined,
         circleSide: onCircle ? circleSide : undefined,
+        pathMm: onPath ? pathMm : undefined,
       },
     };
     onAdd({ object, newColor });
@@ -276,7 +289,11 @@ export default function TextDialog({
             <option value="line">Straight / Arch</option>
             <option value="circleTop">Circle — top arc</option>
             <option value="circleBottom">Circle — bottom arc (upright)</option>
+            {(pathMm?.length ?? 0) >= 2 && <option value="path">Follow selected path</option>}
           </select>
+          {shape === "path" && !onPath && (
+            <p className="mt-1 text-[11px] text-stamp">Select an open line first, then reopen text.</p>
+          )}
         </label>
 
         {onCircle ? (
