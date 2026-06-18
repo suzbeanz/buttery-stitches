@@ -85,8 +85,14 @@ export function fixObjectStitches(object: EmbObject): EmbObject {
     //    (concentric rows echo the form and catch the light, with none of the
     //    banding straight rows get across a curve);
     //  • broad ANGULAR/irregular areas → tatami at the auto grain angle.
-    const kind = classifyRegion(object.paths, { satinMaxWidthMm: SATIN_WIDTH_THRESHOLD });
-    params.fillStyle = object.text || kind !== "tatami" ? "satin" : broadFillStyle(object.paths);
+    // Preserve a DECORATIVE style the user deliberately chose (gradient, blend,
+    // motif) — only auto-decide for the assignable defaults (tatami/satin/contour
+    // /unset), so an "auto-fix" never destroys a deliberate effect.
+    const decorative = params.fillStyle === "gradient" || params.fillStyle === "blend" || params.fillStyle === "motif";
+    if (!decorative) {
+      const kind = classifyRegion(object.paths, { satinMaxWidthMm: SATIN_WIDTH_THRESHOLD });
+      params.fillStyle = object.text || kind !== "tatami" ? "satin" : broadFillStyle(object.paths);
+    }
   }
 
   return { ...object, params };
