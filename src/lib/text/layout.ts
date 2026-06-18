@@ -41,6 +41,10 @@ export interface TextLayoutOptions {
   /** which side of the circle the text sits on (default "top"). "bottom" keeps
    *  the letters upright and reading left-to-right (tops pointing inward). */
   circleSide?: "top" | "bottom";
+  /** lay the text along an arbitrary open polyline (mm). Each glyph is rigidly
+   *  rotated to the path's tangent and stands on its left side. Overrides arch &
+   *  circle. Centered along the path by default. */
+  pathMm?: Point[];
   /** color id for the generated fill object. */
   colorId: string;
   /** optional object name. */
@@ -347,6 +351,87 @@ function layoutCircular(text: string, o: CircularOpts): TextLayoutResult {
   return { object, widthMm: Wmm };
 }
 
+/** Densify a polyline so no segment exceeds `step` mm — gives smooth tangents. */
+function densify(path: Point[], step: number): Point[] {
+  const out: Point[] = [path[0]];
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1];
+    const b = path[i];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    const n = Math.max(1, Math.ceil(len / step));
+    for (let k = 1; k <= n; k++) out.push({ x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n });
+  }
+  return out;
+}
+
+/** Point + unit tangent at arc-length `s` along a polyline (cumulative `cum`). */
+function sampleAt(path: Point[], cum: number[], s: number): { p: Point; t: Point } {
+  const total = cum[cum.length - 1];
+  const ss = Math.max(0, Math.min(total, s));
+  let i = 1;
+  while (i < cum.length - 1 && cum[i] < ss) i++;
+  const segLen = cum[i] - cum[i - 1] || 1e-9;
+  const u = (ss - cum[i - 1]) / segLen;
+  const a = path[i - 1];
+  const b = path[i];
+  return {
+    p: { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u },
+    t: { x: (b.x - a.x) / segLen, y: (b.y - a.y) / segLen },
+  };
+}
+
+interface PathLayoutOpts {
+  font: Font;
+  emSize: number;
+  spacingUnits: number;
+  flattenTol: number;
+  authored: AuthoredAlphabet | null;
+  heightMm: number;
+  provScale: number;
+  colorId: string;
+  name?: string;
+}
+
+/**
+ * Lay one line along an arbitrary open polyline (mm). Each glyph is RIGIDLY
+ * rotated to the path's tangent at its position and stands on the path's left
+ * side (tops away from the path) — no shear. The text is centered along the path.
+ * Authored satin centerlines ride the same per-glyph transform.
+ */
+function layoutOnPath(text: string, rawPath: Point[], o: PathLayoutOpts): TextLayoutResult {
+  const { glyphs, width } = glyphsFlat(o.font, text, o.emSize, o.spacingUnits, o.flattenTol, o.authored);
+  const allRings = glyphs.flatMap((g) => g.rings);
+  const bb = pathsBounds(allRings);
+  if (!bb) return { object: makeObjectFromPaths("fill", [], o.colorId, o.name ?? "Text"), widthMm: 0 };
+  const scale = bb.maxY - bb.minY > 0 ? o.heightMm / (bb.maxY - bb.minY) : o.provScale;
+
+  const path = densify(rawPath, 0.5);
+  const cum = [0];
+  for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y));
+  const total = cum[cum.length - 1];
+  const Wmm = width * scale;
+  const startS = Math.max(0, (total - Wmm) / 2); // center the run along the path
+
+  const rings: Path[] = [];
+  const strokes: Path[] = [];
+  for (const g of glyphs) {
+    const cxmm = g.cx * scale;
+    const { p, t } = sampleAt(path, cum, startS + cxmm);
+    const place = (q: Point): Point => {
+      const lx = q.x * scale - cxmm; // along the path
+      const ly = q.y * scale; // y-down: letter body negative (stands on the left side)
+      return { x: p.x + lx * t.x - ly * t.y, y: p.y + lx * t.y + ly * t.x };
+    };
+    for (const r of g.rings) rings.push(r.map(place));
+    for (const st of g.strokes) strokes.push(st.map(place));
+  }
+
+  const object = makeObjectFromPaths("fill", rings, o.colorId, o.name ?? "Text");
+  object.params = { ...object.params, fillStyle: "satin" };
+  if (strokes.length) object.satinCenterlines = strokes;
+  return { object, widthMm: Wmm };
+}
+
 export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
   const {
     text,
@@ -367,6 +452,13 @@ export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
   const provScale = heightMm / unitsPerEm;
   const spacingUnits = provScale > 0 ? letterSpacingMm / provScale : 0;
   const flattenTol = flattenToleranceMm / provScale;
+
+  // Path baseline: rigid per-glyph placement along an arbitrary polyline.
+  if (opts.pathMm && opts.pathMm.length >= 2) {
+    return layoutOnPath(text.replace(/\n/g, " "), opts.pathMm, {
+      font, emSize, spacingUnits, flattenTol, authored, heightMm, provScale, colorId, name,
+    });
+  }
 
   // Circular baseline: rigid per-glyph placement on a circle (no shear), centered
   // at top or bottom. Overrides arch/multiline.

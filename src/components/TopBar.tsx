@@ -97,6 +97,16 @@ export default function TopBar({
     ? project.objects.find((o) => o.id === editingTextId && o.text)
     : undefined;
 
+  // If exactly one open path (a running line) is selected, offer it as a baseline
+  // the new text can follow.
+  const selectedIds = useProjectStore((s) => s.selectedIds);
+  const followPath =
+    selectedIds.length === 1
+      ? project.objects.find(
+          (o) => o.id === selectedIds[0] && o.type === "running" && (o.paths[0]?.length ?? 0) >= 2,
+        )?.paths[0]
+      : undefined;
+
   // useShallow so the top bar re-renders only when these four fields actually
   // change, not on every entry pushed to the undo history.
   const { undo, redo, pastStates, futureStates } = useTemporalStore(
@@ -410,6 +420,7 @@ export default function TopBar({
           <TextDialog
             hoop={project.hoop}
             colors={project.colors}
+            followPath={followPath}
             onAdd={applyText}
             onClose={() => setShowText(false)}
           />

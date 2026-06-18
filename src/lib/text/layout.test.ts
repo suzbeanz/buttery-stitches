@@ -173,6 +173,25 @@ describe("layoutText", () => {
     expect(b.maxY).toBeLessThan(0); // entirely above the circle centre (y-down)
   });
 
+  it("lays text along an arbitrary path, following its tangent", () => {
+    // A 45°-rising straight path: the laid text should rise with it (its bbox is
+    // both wide and tall), unlike flat text (wide, short).
+    const path = [
+      { x: 0, y: 0 },
+      { x: 60, y: -60 },
+    ];
+    const onPath = layoutText({ text: "RISE", font, heightMm: 8, pathMm: path, colorId: "c1" });
+    const b = pathsBounds(onPath.object.paths)!;
+    const w = b.maxX - b.minX;
+    const h = b.maxY - b.minY;
+    // On a 45° path the run is diagonal, so width and height are comparable.
+    expect(h).toBeGreaterThan(w * 0.5);
+    // Flat "RISE" at the same height is a short wide strip.
+    const flat = layoutText({ text: "RISE", font, heightMm: 8, colorId: "c1" });
+    const fb = pathsBounds(flat.object.paths)!;
+    expect(fb.maxY - fb.minY).toBeLessThan((fb.maxX - fb.minX) * 0.6);
+  });
+
   it("bottom-arc text sits below the centre and reads upright", () => {
     const R = 40;
     const bot = layoutText({ text: "EST", font, heightMm: 8, circleRadiusMm: R, circleSide: "bottom", colorId: "c1" });
