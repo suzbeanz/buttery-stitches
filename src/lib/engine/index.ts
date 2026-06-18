@@ -209,7 +209,132 @@ function orderByNearest(runs: Point[][], from: Point | null): Point[][] {
     out.push(run);
     cursor = run[run.length - 1];
   }
-  return out;
+  return twoOptRuns(out, from);
+}
+
+/** Largest run count we 2-opt; beyond this the O(n²) passes aren't worth it. */
+const TWO_OPT_MAX_RUNS = 400;
+
+/**
+ * 2-opt refinement of an ordered set of REVERSIBLE runs (satin columns, fill
+ * rows, tatami pieces): repeatedly reverse a sub-sequence when doing so shortens
+ * the travel between pieces. Reversing a block flips both its order AND each run
+ * (so we enter each from its other end); because run-to-run distance is
+ * symmetric, only the two boundary connectors change, giving an O(1) delta per
+ * candidate move. This is the "auto-branching" travel optimizer — it cuts the
+ * jumps/trims a greedy nearest-neighbour order leaves on the table. Pure geometry.
+ */
+function twoOptRuns(runs: Point[][], from: Point | null): Point[][] {
+  const n = runs.length;
+  if (n < 3 || n > TWO_OPT_MAX_RUNS) return runs;
+  const arr = runs.slice();
+  const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
+  const head = (r: Point[]) => r[0];
+  const tail = (r: Point[]) => r[r.length - 1];
+  let improved = true;
+  let pass = 0;
+  while (improved && pass++ < 8) {
+    improved = false;
+    for (let i = 0; i < n - 1; i++) {
+      const prevEnd = i === 0 ? from : tail(arr[i - 1]);
+      for (let j = i + 1; j < n; j++) {
+        const iStart = head(arr[i]);
+        const jEnd = tail(arr[j]);
+        const nextStart = j + 1 < n ? head(arr[j + 1]) : null;
+        // Edges broken: prevEnd→iStart and jEnd→nextStart. After reversing the
+        // block [i..j] (order + each run): prevEnd→jEnd and iStart→nextStart.
+        const before =
+          (prevEnd ? dist(prevEnd, iStart) : 0) + (nextStart ? dist(jEnd, nextStart) : 0);
+        const after =
+          (prevEnd ? dist(prevEnd, jEnd) : 0) + (nextStart ? dist(iStart, nextStart) : 0);
+        if (after + 1e-6 < before) {
+          const block = arr.slice(i, j + 1).reverse().map((r) => [...r].reverse());
+          arr.splice(i, j - i + 1, ...block);
+          improved = true;
+        }
+      }
+    }
+  }
+  return arr;
+}
+
+/** Centroid of a region (mean of its outer ring) — its travel-routing anchor. */
+function regionAnchor(region: Point[][]): Point {
+  const ring = region[0] ?? [];
+  if (ring.length === 0) return { x: 0, y: 0 };
+  let sx = 0;
+  let sy = 0;
+  for (const p of ring) {
+    sx += p.x;
+    sy += p.y;
+  }
+  return { x: sx / ring.length, y: sy / ring.length };
+}
+
+/**
+ * Order a fill's regions to minimise the travel between them (auto-branching at
+ * the region level): a deterministic nearest-neighbour walk from the top-left
+ * region, then 2-opt. Returns the index permutation. Regions otherwise sew in
+ * arbitrary trace order, which strands far regions and racks up jumps/trims on
+ * scattered fills (polka dots, multi-blob logos, sparse lettering).
+ */
+function orderByTravel(pts: Point[]): number[] {
+  const n = pts.length;
+  const idx = pts.map((_, i) => i);
+  if (n <= 2 || n > TWO_OPT_MAX_RUNS) return idx;
+  const d = (a: number, b: number) => Math.hypot(pts[a].x - pts[b].x, pts[a].y - pts[b].y);
+  // Deterministic start: the top-left region.
+  let start = 0;
+  for (let i = 1; i < n; i++) {
+    if (pts[i].y < pts[start].y - 1e-9 || (Math.abs(pts[i].y - pts[start].y) < 1e-9 && pts[i].x < pts[start].x)) start = i;
+  }
+  const used = new Array(n).fill(false);
+  const order = [start];
+  used[start] = true;
+  for (let k = 1; k < n; k++) {
+    const c = order[order.length - 1];
+    let best = -1;
+    let bd = Infinity;
+    for (let i = 0; i < n; i++) {
+      if (!used[i]) {
+        const dd = d(c, i);
+        if (dd < bd) {
+          bd = dd;
+          best = i;
+        }
+      }
+    }
+    order.push(best);
+    used[best] = true;
+  }
+  let improved = true;
+  let pass = 0;
+  while (improved && pass++ < 8) {
+    improved = false;
+    for (let i = 0; i < n - 1; i++) {
+      const prev = i === 0 ? -1 : order[i - 1];
+      for (let j = i + 1; j < n; j++) {
+        const next = j + 1 < n ? order[j + 1] : -1;
+        const a = order[i];
+        const b = order[j];
+        const before = (prev >= 0 ? d(prev, a) : 0) + (next >= 0 ? d(b, next) : 0);
+        const after = (prev >= 0 ? d(prev, b) : 0) + (next >= 0 ? d(a, next) : 0);
+        if (after + 1e-6 < before) {
+          let lo = i;
+          let hi = j;
+          while (lo < hi) {
+            const t = order[lo];
+            order[lo] = order[hi];
+            order[hi] = t;
+            lo++;
+            hi--;
+          }
+          improved = true;
+        }
+      }
+    }
+  }
+  return order;
 }
 
 /**
@@ -420,7 +545,11 @@ export function generateObjectRuns(
   // medial pass falls back to tatami where satin won't cover cleanly.
   const satin = p.fillStyle === "satin";
   const motifMode = p.fillStyle === "motif";
-  const regions = splitFillRegions(object.paths);
+  const tracedRegions = splitFillRegions(object.paths);
+  // Sew the regions in travel-minimising order (auto-branching) rather than trace
+  // order, so a scattered fill doesn't strand far regions and rack up jumps.
+  const regionOrder = orderByTravel(tracedRegions.map(regionAnchor));
+  const regions = regionOrder.map((i) => tracedRegions[i]);
   // ONE grain angle for the whole object so every tatami region flows the same
   // way — a word or multi-blob logo reads as a single piece, not a patchwork of
   // differently-angled letters (stitch-direction continuity). The user's Angle
