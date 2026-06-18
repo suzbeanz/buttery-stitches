@@ -23,6 +23,25 @@ describe("fixObjectStitches", () => {
     expect(fixObjectStitches(makeObjectFromPaths("fill", [broadFill], "c1")).params.fillStyle).toBe("tatami");
   });
 
+  it("fills a thin (non-round) frame band as contour but a blob-with-a-hole as tatami", () => {
+    const sq = (h: number): Path => [
+      { x: 50 - h, y: 50 - h },
+      { x: 50 + h, y: 50 - h },
+      { x: 50 + h, y: 50 + h },
+      { x: 50 - h, y: 50 + h },
+    ];
+    // Wide-walled square frame: 100mm outer, 80mm hole → 10mm wall. Too wide to be
+    // a satin column (so the classifier calls it tatami), but still thin relative
+    // to its 113mm diameter (<30%) → CONTOUR rows follow the band. A square isn't a
+    // recognized circle/ellipse, so this exercises the band test, not shape-recognition.
+    const frame = fixObjectStitches(makeObjectFromPaths("fill", [sq(50), sq(40)], "c1"));
+    expect(frame.params.fillStyle).toBe("contour");
+    // Big square with only a small hole punched in it (a bun with the sausage
+    // showing through): the wall is wide → flat tatami, not concentric rings.
+    const blob = fixObjectStitches(makeObjectFromPaths("fill", [sq(50), sq(8)], "c1"));
+    expect(blob.params.fillStyle).toBe("tatami");
+  });
+
   it("keeps text as satin", () => {
     const o = makeObjectFromPaths("fill", [broadFill], "c1");
     o.text = { content: "Hi", fontId: "x", heightMm: 15, letterSpacingMm: 0 };

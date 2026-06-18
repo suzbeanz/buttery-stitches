@@ -2,6 +2,7 @@ import type { EmbObject, Project } from "../types/project";
 import { classifyRegion } from "./engine/classify";
 import { recognizeShape } from "./trace/recognize";
 import { knockdown } from "./boolean";
+import { polygonArea, polygonPerimeter } from "./trace/classify";
 
 /**
  * "Fix stitches": a smart auto-cleanup pass over a design. It walks an explicit
@@ -29,16 +30,51 @@ const LAYER_RANK: Record<EmbObject["type"], number> = { fill: 0, satin: 1, runni
 /** Width (mm) below which a fill reads as a stroke and should be satin. */
 export const SATIN_WIDTH_THRESHOLD = 3.5;
 
-/** The fill style for a BROAD region (one the classifier called tatami): a
- *  recognized round shape, or a true ANNULUS (a ring nested around a hole), reads
- *  best as a concentric contour; disjoint pieces and crescents stay tatami. */
+/** The fill style for a BROAD region (one the classifier called tatami):
+ *  • a recognized round shape (circle / ellipse) → CONTOUR (concentric rows echo
+ *    the curve and catch the light with none of the banding straight rows show);
+ *  • a true RING / BAND — a thin annulus whose wall is narrow relative to its
+ *    overall size (a frame, an "O", a washer) → CONTOUR (rows follow the band);
+ *  • anything else, including a big blob that merely has a hole punched in it
+ *    (a bun with the sausage showing through), → TATAMI. Concentric contour rows
+ *    on a big irregular blob read as topographic striping; flat tatami at one
+ *    grain reads as a clean solid, the way a pro digitizer fills it. */
 function broadFillStyle(rings: EmbObject["paths"]): "tatami" | "contour" {
   const usable = rings.filter((r) => r.length >= 3);
   if (usable.length === 0) return "tatami";
-  const rec = recognizeShape(usable[0], 1.0);
+  // Use the LARGEST ring as the outer boundary (traced rings aren't area-sorted).
+  const outer = usable.reduce((a, b) => (polygonArea(b) > polygonArea(a) ? b : a));
+  const rec = recognizeShape(outer, 1.0);
   if (rec && (rec.kind === "circle" || rec.kind === "ellipse")) return "contour";
-  if (isAnnulus(usable)) return "contour"; // a ring around a hole (frame / band)
+  if (isThinBand(usable, outer)) return "contour"; // a frame / ring band
   return "tatami";
+}
+
+/** A region is a thin BAND (→ contour) when it wraps a hole AND its wall is thin
+ *  relative to its size: net (wall) area over a holes-aware mean width tells us
+ *  the band width, and we call it thin when that width is under ~30% of the
+ *  outer's equivalent diameter. A blob with a small hole fails this (wide wall),
+ *  so it fills as flat tatami like a hand-digitized solid. */
+function isThinBand(rings: EmbObject["paths"], outer: EmbObject["paths"][number]): boolean {
+  const holes = rings.filter((r) => r !== outer && inRing(centroidOf(r), outer));
+  if (holes.length === 0) return false; // no hole → not a band
+  const netArea = polygonArea(outer) - holes.reduce((s, h) => s + polygonArea(h), 0);
+  if (netArea <= 0) return false;
+  const totalPer = polygonPerimeter(outer) + holes.reduce((s, h) => s + polygonPerimeter(h), 0);
+  if (totalPer <= 0) return false;
+  const bandWidth = (2 * netArea) / totalPer; // holes-aware mean wall width
+  const outerDia = 2 * Math.sqrt(polygonArea(outer) / Math.PI); // equivalent diameter
+  return outerDia > 0 && bandWidth / outerDia < 0.3;
+}
+
+/** Centroid of a ring (average of its vertices). */
+function centroidOf(r: EmbObject["paths"][number]): { x: number; y: number } {
+  let x = 0, y = 0;
+  for (const p of r) {
+    x += p.x;
+    y += p.y;
+  }
+  return { x: x / r.length, y: y / r.length };
 }
 
 /** Even-odd: is point `p` inside ring `r`? */
@@ -50,18 +86,6 @@ function inRing(p: { x: number; y: number }, r: EmbObject["paths"][number]): boo
     if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
   }
   return inside;
-}
-
-/** True if some ring is NESTED inside another (a hole) — i.e. a real annulus,
- *  not just several disjoint pieces. */
-function isAnnulus(rings: EmbObject["paths"]): boolean {
-  for (let i = 0; i < rings.length; i++) {
-    const c = rings[i][0];
-    for (let k = 0; k < rings.length; k++) {
-      if (k !== i && inRing(c, rings[k])) return true;
-    }
-  }
-  return false;
 }
 
 export function fixObjectStitches(object: EmbObject): EmbObject {
