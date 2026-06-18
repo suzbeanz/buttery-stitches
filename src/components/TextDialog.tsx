@@ -55,7 +55,14 @@ export default function TextDialog({
   const [heightMm, setHeightMm] = useState(initial?.heightMm ?? DEFAULT_HEIGHT_MM);
   const [letterSpacingMm, setLetterSpacingMm] = useState(initial?.letterSpacingMm ?? 0);
   const [archDeg, setArchDeg] = useState(initial?.archDeg ?? 0);
+  // Baseline shape: straight/arch, or wrapped on a circle (top/bottom arc).
+  const [shape, setShape] = useState<"line" | "circleTop" | "circleBottom">(
+    initial?.circleRadiusMm ? (initial.circleSide === "bottom" ? "circleBottom" : "circleTop") : "line",
+  );
+  const [circleRadiusMm, setCircleRadiusMm] = useState(initial?.circleRadiusMm ?? 40);
   const lineSpacing = initial?.lineSpacing ?? 1.35;
+  const onCircle = shape !== "line";
+  const circleSide: "top" | "bottom" = shape === "circleBottom" ? "bottom" : "top";
 
   // Color: either an existing project color id, or "__new" to add one.
   const [colorChoice, setColorChoice] = useState<string>(
@@ -90,7 +97,9 @@ export default function TextDialog({
         heightMm,
         letterSpacingMm,
         lineSpacing,
-        archDeg,
+        archDeg: onCircle ? 0 : archDeg,
+        circleRadiusMm: onCircle ? circleRadiusMm : undefined,
+        circleSide,
         colorId: "preview",
         name: text.replace(/\n/g, " "),
         fontId,
@@ -98,7 +107,7 @@ export default function TextDialog({
     } catch {
       return null;
     }
-  }, [font, text, heightMm, letterSpacingMm, lineSpacing, archDeg, fontId]);
+  }, [font, text, heightMm, letterSpacingMm, lineSpacing, archDeg, fontId, onCircle, circleRadiusMm, circleSide]);
 
   // Size shown in the active unit; editing it converts back to mm.
   const sizeValue = unit === "in" ? mmToInch(heightMm) : heightMm;
@@ -150,7 +159,16 @@ export default function TextDialog({
       paths,
       satinCenterlines,
       params: editObject ? editObject.params : layout.object.params,
-      text: { content: text, fontId, heightMm, letterSpacingMm, lineSpacing, archDeg },
+      text: {
+        content: text,
+        fontId,
+        heightMm,
+        letterSpacingMm,
+        lineSpacing,
+        archDeg: onCircle ? 0 : archDeg,
+        circleRadiusMm: onCircle ? circleRadiusMm : undefined,
+        circleSide: onCircle ? circleSide : undefined,
+      },
     };
     onAdd({ object, newColor });
     onClose();
@@ -249,30 +267,65 @@ export default function TextDialog({
         </div>
 
         <label className="mb-3 block text-sm text-navy">
-          <div className="mb-1 flex justify-between">
-            <span>Arch {archDeg > 0 ? "(up ∩)" : archDeg < 0 ? "(down ∪)" : "(straight)"}</span>
-            <span className="tabular-nums text-navy/60">{archDeg}°</span>
-          </div>
-          <input
-            type="range"
-            min={-180}
-            max={180}
-            step={5}
-            value={archDeg}
-            onChange={(e) => setArchDeg(Number(e.target.value))}
-            className="w-full cursor-pointer accent-ink"
-            aria-label="Arch curve"
-          />
-          {archDeg !== 0 && (
-            <button
-              type="button"
-              onClick={() => setArchDeg(0)}
-              className="mt-1 font-label text-[11px] uppercase tracking-wide text-ink/60 hover:text-ink"
-            >
-              Reset to straight
-            </button>
-          )}
+          <div className="mb-1">Shape</div>
+          <select
+            value={shape}
+            onChange={(e) => setShape(e.target.value as typeof shape)}
+            className="input"
+          >
+            <option value="line">Straight / Arch</option>
+            <option value="circleTop">Circle — top arc</option>
+            <option value="circleBottom">Circle — bottom arc (upright)</option>
+          </select>
         </label>
+
+        {onCircle ? (
+          <label className="mb-3 block text-sm text-navy">
+            <div className="mb-1 flex justify-between">
+              <span>Circle radius</span>
+              <span className="tabular-nums text-navy/60">{circleRadiusMm} mm</span>
+            </div>
+            <input
+              type="range"
+              min={10}
+              max={120}
+              step={1}
+              value={circleRadiusMm}
+              onChange={(e) => setCircleRadiusMm(Number(e.target.value))}
+              className="w-full cursor-pointer accent-ink"
+              aria-label="Circle radius"
+            />
+            <p className="mt-1 text-[11px] text-navy/55">
+              Top and bottom text at the same radius form a badge, centered together.
+            </p>
+          </label>
+        ) : (
+          <label className="mb-3 block text-sm text-navy">
+            <div className="mb-1 flex justify-between">
+              <span>Arch {archDeg > 0 ? "(up ∩)" : archDeg < 0 ? "(down ∪)" : "(straight)"}</span>
+              <span className="tabular-nums text-navy/60">{archDeg}°</span>
+            </div>
+            <input
+              type="range"
+              min={-180}
+              max={180}
+              step={5}
+              value={archDeg}
+              onChange={(e) => setArchDeg(Number(e.target.value))}
+              className="w-full cursor-pointer accent-ink"
+              aria-label="Arch curve"
+            />
+            {archDeg !== 0 && (
+              <button
+                type="button"
+                onClick={() => setArchDeg(0)}
+                className="mt-1 font-label text-[11px] uppercase tracking-wide text-ink/60 hover:text-ink"
+              >
+                Reset to straight
+              </button>
+            )}
+          </label>
+        )}
 
         <div className="mb-3 text-sm text-navy">
           <div className="mb-1">Quick sizes ({unit})</div>
