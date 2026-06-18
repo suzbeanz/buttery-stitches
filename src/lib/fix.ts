@@ -54,16 +54,27 @@ function broadFillStyle(rings: EmbObject["paths"]): "tatami" | "contour" {
  *  relative to its size: net (wall) area over a holes-aware mean width tells us
  *  the band width, and we call it thin when that width is under ~30% of the
  *  outer's equivalent diameter. A blob with a small hole fails this (wide wall),
- *  so it fills as flat tatami like a hand-digitized solid. */
+ *  so it fills as flat tatami like a hand-digitized solid.
+ *
+ *  The wall-width test alone is fooled by an ORGANIC outline (a traced photo, fur,
+ *  foliage): a wildly jagged boundary has huge perimeter, which deflates the mean
+ *  width and masquerades as a thin band — then contour turns it into a topographic
+ *  scribble. So a band must also be reasonably SMOOTH (a real frame/ring is); we
+ *  gate on the outer's circularity (4π·area / perimeter², 1 for a circle). */
 function isThinBand(rings: EmbObject["paths"], outer: EmbObject["paths"][number]): boolean {
   const holes = rings.filter((r) => r !== outer && inRing(centroidOf(r), outer));
   if (holes.length === 0) return false; // no hole → not a band
-  const netArea = polygonArea(outer) - holes.reduce((s, h) => s + polygonArea(h), 0);
+  const outerArea = polygonArea(outer);
+  const outerPer = polygonPerimeter(outer);
+  if (outerPer <= 0) return false;
+  const circularity = (4 * Math.PI * outerArea) / (outerPer * outerPer);
+  if (circularity < 0.4) return false; // jagged/organic outline → not a clean band
+  const netArea = outerArea - holes.reduce((s, h) => s + polygonArea(h), 0);
   if (netArea <= 0) return false;
-  const totalPer = polygonPerimeter(outer) + holes.reduce((s, h) => s + polygonPerimeter(h), 0);
+  const totalPer = outerPer + holes.reduce((s, h) => s + polygonPerimeter(h), 0);
   if (totalPer <= 0) return false;
   const bandWidth = (2 * netArea) / totalPer; // holes-aware mean wall width
-  const outerDia = 2 * Math.sqrt(polygonArea(outer) / Math.PI); // equivalent diameter
+  const outerDia = 2 * Math.sqrt(outerArea / Math.PI); // equivalent diameter
   return outerDia > 0 && bandWidth / outerDia < 0.3;
 }
 
