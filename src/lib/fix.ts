@@ -1,6 +1,7 @@
 import type { EmbObject, Project } from "../types/project";
 import { classifyRegion } from "./engine/classify";
 import { recognizeShape } from "./trace/recognize";
+import { knockdown } from "./boolean";
 
 /**
  * "Fix stitches": a smart auto-cleanup pass over a design. It walks an explicit
@@ -88,5 +89,24 @@ export function fixStitches(project: Project): Project {
     })
     .map((x) => x.o);
 
-  return { ...project, objects: grouped };
+  return { ...project, objects: knockdownPass(grouped) };
+}
+
+/**
+ * KNOCKDOWN pass: in sew order, trim each fill where LATER (on-top) fills cover
+ * it, leaving a small trap under their edges. Stops two colours stacking into a
+ * thread ridge and prevents pull-gaps where they meet. A no-op for the common
+ * tiled (abutting, non-overlapping) case, so it never hurts a clean design.
+ */
+function knockdownPass(objects: EmbObject[], trapMm = 0.35): EmbObject[] {
+  return objects.map((o, i) => {
+    if (o.type !== "fill" || o.params.applique || o.paths.length === 0) return o;
+    const higher = objects
+      .slice(i + 1)
+      .filter((h) => h.type === "fill" && !h.params.applique && h.paths.length > 0)
+      .map((h) => h.paths);
+    if (higher.length === 0) return o;
+    const trimmed = knockdown(o.paths, higher, trapMm);
+    return trimmed.length > 0 ? { ...o, paths: trimmed } : o;
+  });
 }
