@@ -7,7 +7,7 @@ import type {
 } from "../../types/project";
 import { resolveParams, fabricProfile } from "../../types/project";
 import { effectiveProfile } from "./profile";
-import { distance, railsFromCenterline, pathsBounds } from "../geometry";
+import { distance, railsFromCenterline, pathsBounds, offsetPolyline } from "../geometry";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
 import { tatamiFill, multiBlendFill, motifFill, motifRunAlong, carvePoints, splitFillRegions, autoFillAngleForRegions } from "./fill";
@@ -460,6 +460,50 @@ const SATIN_MIN_STITCH = 0.3;
 /** Densest row spacing (mm) the engine will ever stitch — denser packs/jams. */
 const MIN_SAFE_DENSITY = 0.3;
 
+/** How far inside the boundary (mm) a broad fill's finishing edge run sits — far
+ *  enough to bury the ragged tatami row-ends and any pull-comp overshoot, close
+ *  enough that the fill still reads as filled all the way to its outline. */
+const EDGE_RUN_INSET_MM = 0.4;
+/** Stitch length (mm) for the edge run — short, so it hugs curves and corners. */
+const EDGE_RUN_STITCH_MM = 2;
+
+/** Signed area (shoelace) of a ring; sign encodes winding. */
+function ringSignedArea(ring: Path): number {
+  let s = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    s += (ring[j].x + ring[i].x) * (ring[j].y - ring[i].y);
+  }
+  return s / 2;
+}
+
+/** Offset a closed ring INWARD (toward its interior) by `inset` mm — picks the
+ *  offset direction that shrinks the area, so it works regardless of winding. */
+function insetRingInward(ring: Path, inset: number): Path {
+  const closed = distance(ring[0], ring[ring.length - 1]) < 1e-9 ? ring : [...ring, ring[0]];
+  const a = offsetPolyline(closed, inset, true);
+  const b = offsetPolyline(closed, -inset, true);
+  return Math.abs(ringSignedArea(a)) <= Math.abs(ringSignedArea(b)) ? a : b;
+}
+
+/**
+ * A finishing EDGE RUN for a broad fill: a clean running outline that traces each
+ * boundary just inside the edge. Laid on TOP of the fill, it caps the slightly
+ * ragged ends of tatami rows (and hides pull-comp overshoot) so the silhouette
+ * reads crisp and rounded end-caps close — exactly the boundary pass a digitizer
+ * walks around a fill by hand. Outer contours only (capping the visible edge);
+ * holes are left to the fill's own clean scan boundary.
+ */
+function fillEdgeRuns(region: Path[], stitchLength: number): Point[][] {
+  const out: Point[][] = [];
+  for (const ring of region) {
+    if (ring.length < 3 || ringSignedArea(ring) <= 0) continue; // outer rings only
+    const inset = insetRingInward(ring, EDGE_RUN_INSET_MM);
+    if (inset.length < 3) continue;
+    out.push(runningStitch(inset, stitchLength));
+  }
+  return out;
+}
+
 /** Retrace a running line `repeats` times (alternating direction) for a bean /
  *  triple stitch. The shared turnaround vertex is dropped each pass so no two
  *  consecutive penetrations coincide (they'd otherwise collapse). */
@@ -674,7 +718,18 @@ export function generateObjectRuns(
     } else {
       const subRuns = tops.flatMap((run) => splitLongTravels(run, travelMax));
       for (const sub of orderByNearest(subRuns, cursor)) {
-        addRun(runs, dropShortStitches(sub, minStitch), false, regionIdx);
+        const r = dropShortStitches(sub, minStitch);
+        addRun(runs, r, false, regionIdx);
+        if (r.length) cursor = r[r.length - 1];
+      }
+      // Finishing edge run: walk the boundary just inside the edge so the fill's
+      // row-ends are capped and the silhouette (and its end-caps) read crisp.
+      for (const run of orderByNearest(fillEdgeRuns(region, EDGE_RUN_STITCH_MM), cursor)) {
+        for (const sub of splitLongTravels(run, travelMax)) {
+          const r = dropShortStitches(sub);
+          addRun(runs, r, false, regionIdx);
+          if (r.length) cursor = r[r.length - 1];
+        }
       }
     }
   });

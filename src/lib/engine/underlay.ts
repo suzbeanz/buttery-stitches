@@ -168,10 +168,14 @@ export function fillEdgeUnderlay(rings: Path[]): Path {
   return runningStitch(closed, UNDERLAY_STITCH);
 }
 
-/** Low-density parallel pass perpendicular to the top angle. */
+/** Low-density parallel pass perpendicular to the top angle. The region is inset
+ *  first so the underlay rows stop SHORT of the edge and stay buried under the top
+ *  fill — an underlay row-end reaching the boundary is what pokes a stray "whisker"
+ *  past the silhouette on a convex tip. */
 export function fillParallelUnderlay(rings: Path[], topAngle = 0): Path {
   if (!rings[0] || rings[0].length < 3) return [];
-  return tatamiFill(rings, {
+  const inset = [insetRing(rings[0], EDGE_INSET), ...rings.slice(1)];
+  return tatamiFill(inset, {
     density: FILL_UNDERLAY_ROW,
     angle: topAngle + 90,
     stitchLength: UNDERLAY_STITCH,

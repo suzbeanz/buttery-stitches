@@ -5,6 +5,7 @@ import {
   columnUnderlay,
   fillUnderlayRuns,
   fillEdgeUnderlay,
+  fillParallelUnderlay,
 } from "./underlay";
 
 describe("satinUnderlay", () => {
@@ -83,6 +84,18 @@ describe("fill underlay stays inside the region", () => {
     expect(edge.length).toBeGreaterThan(2);
     const xs = edge.map((p) => p.x);
     const ys = edge.map((p) => p.y);
+    expect(Math.min(...xs, ...ys)).toBeGreaterThan(0.2);
+    expect(Math.max(...xs, ...ys)).toBeLessThan(19.8);
+  });
+
+  it("the parallel pass stays inset inside the region (no row-end pokes past the edge)", () => {
+    // The parallel underlay must sit under the top fill, never reaching the
+    // boundary — an underlay row-end at the edge is what pokes a stray whisker
+    // past a convex tip. Inset means its extent is strictly inside the 0–20 box.
+    const par = fillParallelUnderlay([square], 0);
+    expect(par.length).toBeGreaterThan(2);
+    const xs = par.map((p) => p.x);
+    const ys = par.map((p) => p.y);
     expect(Math.min(...xs, ...ys)).toBeGreaterThan(0.2);
     expect(Math.max(...xs, ...ys)).toBeLessThan(19.8);
   });
