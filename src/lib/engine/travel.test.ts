@@ -4,6 +4,37 @@ import { makeObject, makeObjectFromPaths } from "../objects";
 import { createEmptyProject } from "../project";
 import type { Project } from "../../types/project";
 
+/** Total connector (jump/trim) travel in a design — what auto-branching minimizes. */
+function connectorTravel(design: ReturnType<typeof generateDesign>): number {
+  let t = 0;
+  for (let i = 1; i < design.length; i++) {
+    const a = design[i - 1];
+    const b = design[i];
+    if (b.jump || b.trim) t += Math.hypot(b.x - a.x, b.y - a.y);
+  }
+  return t;
+}
+
+/** A comb of `n` separate teeth, in the given region order. */
+function comb(order: number[]): Project {
+  const teeth = order.map((i) => {
+    const x = i * 5;
+    return [{ x, y: 0 }, { x: x + 3, y: 0 }, { x: x + 3, y: 40 }, { x, y: 40 }];
+  });
+  return { ...createEmptyProject(), objects: [makeObjectFromPaths("fill", teeth, "c1")] };
+}
+
+describe("auto-branching (travel-minimising region order)", () => {
+  it("routes a scrambled fill as tightly as one traced in order", () => {
+    const inOrder = [...Array(24).keys()];
+    const scrambled = [...inOrder.filter((i) => i % 2 === 0), ...inOrder.filter((i) => i % 2 === 1).reverse()];
+    const tidy = connectorTravel(generateDesign(comb(inOrder), { lockStitches: false }));
+    const messy = connectorTravel(generateDesign(comb(scrambled), { lockStitches: false }));
+    // The router recovers the tight order regardless of trace order (within 5%).
+    expect(messy).toBeLessThan(tidy * 1.05);
+  });
+});
+
 /** Learned from real PES files: pros connect nearby same-color shapes with a
  *  continuous travel run, not a jump/trim. */
 function twoLines(gap: number): Project {
