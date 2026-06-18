@@ -335,16 +335,45 @@ function ObjectProperties({
         <Field label="Stitch style">
           <select
             value={p.fillStyle ?? DEFAULT_PARAMS.fillStyle}
-            onChange={(e) =>
-              onParam({ fillStyle: e.target.value as "tatami" | "satin" | "contour" | "gradient" | "motif" })
-            }
+            onChange={(e) => {
+              const fillStyle = e.target.value as
+                | "tatami"
+                | "satin"
+                | "contour"
+                | "gradient"
+                | "motif"
+                | "blend";
+              // Default the second color so a blend renders the moment it's picked.
+              const blendColorId =
+                fillStyle === "blend" && !p.blendColorId
+                  ? colors.find((c) => c.id !== object.colorId)?.id ?? object.colorId
+                  : p.blendColorId;
+              onParam({ fillStyle, blendColorId });
+            }}
             className="input"
           >
             <option value="tatami">Solid fill (tatami)</option>
             <option value="satin">Satin columns</option>
             <option value="contour">Contour (echo the shape)</option>
             <option value="gradient">Gradient (shaded)</option>
+            <option value="blend">Multi-blend (two threads)</option>
             <option value="motif">Motif (decorative)</option>
+          </select>
+        </Field>
+      )}
+
+      {object.type === "fill" && p.fillStyle === "blend" && (
+        <Field label="Blend to color">
+          <select
+            value={p.blendColorId ?? colors.find((c) => c.id !== object.colorId)?.id ?? object.colorId}
+            onChange={(e) => onParam({ blendColorId: e.target.value })}
+            className="input"
+          >
+            {colors.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name ?? `rgb(${c.rgb.join(",")})`}
+              </option>
+            ))}
           </select>
         </Field>
       )}

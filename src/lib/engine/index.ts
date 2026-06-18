@@ -10,7 +10,7 @@ import { effectiveProfile } from "./profile";
 import { distance, railsFromCenterline, pathsBounds } from "../geometry";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
-import { tatamiFill, motifFill, motifRunAlong, carvePoints, splitFillRegions, autoFillAngleForRegions } from "./fill";
+import { tatamiFill, multiBlendFill, motifFill, motifRunAlong, carvePoints, splitFillRegions, autoFillAngleForRegions } from "./fill";
 import { contourFill } from "./contour";
 import { medialColumns, columnsFromCenterlines, satinCoverage, residualRegions, type SatinColumn } from "./medial";
 import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
@@ -132,6 +132,9 @@ export interface StitchRun {
    *  hidden under the stitching or be trimmed, never slash across a counter. Tatami
    *  rows leave this false so a fill's own spans still bridge a notch. */
   noBareTravel?: boolean;
+  /** override thread color for this run (multi-blend's second color); defaults to
+   *  the object's colorId. */
+  colorId?: string;
 }
 
 /** Push a run if it has any penetrations. */
@@ -141,8 +144,9 @@ function addRun(
   underlay: boolean,
   region = 0,
   noBareTravel = false,
+  colorId?: string,
 ): void {
-  if (pts.length > 0) runs.push({ pts, underlay, region, noBareTravel });
+  if (pts.length > 0) runs.push({ pts, underlay, region, noBareTravel, colorId });
 }
 
 /**
@@ -545,6 +549,7 @@ export function generateObjectRuns(
   // medial pass falls back to tatami where satin won't cover cleanly.
   const satin = p.fillStyle === "satin";
   const motifMode = p.fillStyle === "motif";
+  const blendMode = p.fillStyle === "blend" && !!p.blendColorId;
   const tracedRegions = splitFillRegions(object.paths);
   // Sew the regions in travel-minimising order (auto-branching) rather than trace
   // order, so a scattered fill doesn't strand far regions and rack up jumps.
@@ -582,6 +587,28 @@ export function generateObjectRuns(
           if (u.length) cursor = u[u.length - 1];
         }
       }
+    }
+
+    // Multi-blend (two-thread ombré): lay the tatami grid as two colour layers
+    // that fade A→B across the shape, sewn as separate colours (one thread change).
+    if (blendMode) {
+      const { a, b } = multiBlendFill(region, {
+        density,
+        angle: fillAngle,
+        stitchLength: p.fillStitchLength,
+        pullCompMm: pullComp,
+      });
+      for (const [path, colId] of [
+        [a, object.colorId] as const,
+        [b, p.blendColorId!] as const,
+      ]) {
+        for (const sub of orderByNearest(splitLongTravels(path, travelMax), cursor)) {
+          const r = dropShortStitches(sub);
+          addRun(runs, r, false, regionIdx, false, colId);
+          if (r.length) cursor = r[r.length - 1];
+        }
+      }
+      return; // this region is fully sewn as two colour layers
     }
 
     // Top layer. Satin: hairline columns become a single running line, the rest
@@ -803,6 +830,7 @@ export function generateDesign(
       region: run.region ?? 0,
       stopAfter: run.stopAfter,
       noBareTravel: run.noBareTravel ?? false,
+      colorId: run.colorId ?? g.object.colorId,
     })),
   );
 
@@ -843,7 +871,8 @@ export function generateDesign(
 
   drawn.forEach((d, di) => {
     const { object, pts } = d;
-    const colorChanged = object.colorId !== prevColor;
+    const col = d.colorId; // effective thread color (multi-blend overrides per run)
+    const colorChanged = col !== prevColor;
     const start = pts[0];
 
     // Travel from where we left off to this object's first penetration.
@@ -873,7 +902,7 @@ export function generateDesign(
       if (intraTravel || hiddenTravel || shortTravel) {
         const travel = runningStitch([prevPoint, start], TRAVEL_STITCH);
         for (const pt of travel.slice(1, -1)) {
-          out.push({ x: pt.x, y: pt.y, colorId: object.colorId, objectId: object.id });
+          out.push({ x: pt.x, y: pt.y, colorId: col, objectId: object.id });
         }
       } else if (colorChanged || gap > jumpThreshold) {
         // Exposed long move or a color change → cut the thread (clean finish).
@@ -887,7 +916,7 @@ export function generateDesign(
         out.push({
           x: start.x,
           y: start.y,
-          colorId: object.colorId,
+          colorId: col,
           objectId: object.id,
           jump: true,
           trim: trimmed,
@@ -898,14 +927,14 @@ export function generateDesign(
     // Tie in at the first penetration of every new thread run.
     const startsRun = di === 0 || trimmed;
     if (lockStitches && startsRun) {
-      pushTie(out, start, pts[1] ?? start, { id: object.id, colorId: object.colorId });
+      pushTie(out, start, pts[1] ?? start, { id: object.id, colorId: col });
     }
 
     pts.forEach((pt) => {
       out.push({
         x: pt.x,
         y: pt.y,
-        colorId: object.colorId,
+        colorId: col,
         objectId: object.id,
         underlay: d.underlay,
       });
@@ -915,12 +944,12 @@ export function generateDesign(
     // penetration of this run, same thread continues afterward.
     if (d.stopAfter && pts.length > 0) {
       const last = pts[pts.length - 1];
-      out.push({ x: last.x, y: last.y, colorId: object.colorId, objectId: object.id, stop: true });
+      out.push({ x: last.x, y: last.y, colorId: col, objectId: object.id, stop: true });
     }
 
     prevPoint = pts[pts.length - 1];
     prevToward = pts.length > 1 ? pts[pts.length - 2] : pts[0];
-    prevColor = object.colorId;
+    prevColor = col;
     prevRegionKey = `${object.id}#${d.region}`;
   });
 
@@ -967,11 +996,11 @@ function collapseCoincident(design: EngineStitch[]): EngineStitch[] {
 
 /** Identify the object whose run is ending just before index `di`. */
 function prevColorObj(
-  drawn: { object: EmbObject }[],
+  drawn: { object: EmbObject; colorId: string }[],
   di: number,
 ): { id: string; colorId: string } {
-  const prev = (drawn[di - 1] ?? drawn[di])?.object;
-  return prev ? { id: prev.id, colorId: prev.colorId } : { id: "", colorId: "" };
+  const prev = drawn[di - 1] ?? drawn[di];
+  return prev ? { id: prev.object.id, colorId: prev.colorId } : { id: "", colorId: "" };
 }
 
 /** Append a tie/lock cluster of real penetrations to `out`. */
