@@ -939,6 +939,192 @@ export function generateDesign(
     return true;
   }
 
+  // ── Travel-under-coverage router ──────────────────────────────────────────
+  // A hand digitizer almost never trims to cross a gap inside the design: they
+  // run the thread UNDER nearby stitching and come back up where the next piece
+  // begins. We do the same — before cutting a same-color move, look for a path
+  // from here to the next start that stays hidden under some fill, and if one
+  // exists (and isn't absurdly long) sew it as a buried travel instead of a trim.
+  //
+  // Coverage is rasterized once (lazily) to a coarse grid; the route is an A*
+  // over covered cells, then straightened by line-of-sight. The straight test
+  // above stays exact — this only kicks in where a straight bridge would show.
+  const COVERAGE_CELL = 1.0; // mm
+  const ROUTE_CAP = 60; // mm: longest buried detour worth sewing to dodge a trim
+  let cov: { minX: number; minY: number; w: number; h: number; g: Uint8Array } | null = null;
+  let covBuilt = false;
+  function coverage() {
+    if (covBuilt) return cov;
+    covBuilt = true;
+    if (fills.length === 0) return null;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const o of fills) {
+      for (const ring of o.paths) {
+        for (const p of ring) {
+          if (p.x < minX) minX = p.x;
+          if (p.y < minY) minY = p.y;
+          if (p.x > maxX) maxX = p.x;
+          if (p.y > maxY) maxY = p.y;
+        }
+      }
+    }
+    if (!isFinite(minX)) return null;
+    minX -= 1;
+    minY -= 1;
+    maxX += 1;
+    maxY += 1;
+    const w = Math.ceil((maxX - minX) / COVERAGE_CELL) + 1;
+    const h = Math.ceil((maxY - minY) / COVERAGE_CELL) + 1;
+    if (w * h > 4_000_000) return null; // guard against a pathological hoop size
+    const g = new Uint8Array(w * h);
+    for (let gy = 0; gy < h; gy++) {
+      for (let gx = 0; gx < w; gx++) {
+        const p = { x: minX + gx * COVERAGE_CELL, y: minY + gy * COVERAGE_CELL };
+        for (const o of fills) {
+          if (pointInRings(p, o.paths)) {
+            g[gy * w + gx] = 1;
+            break;
+          }
+        }
+      }
+    }
+    cov = { minX, minY, w, h, g };
+    return cov;
+  }
+  const cellCovered = (c: NonNullable<typeof cov>, gx: number, gy: number) =>
+    gx >= 0 && gy >= 0 && gx < c.w && gy < c.h && c.g[gy * c.w + gx] === 1;
+  /** Nearest covered cell to a world point, within a few cells (else null). */
+  function snapCell(c: NonNullable<typeof cov>, p: Point): number | null {
+    const cx = Math.round((p.x - c.minX) / COVERAGE_CELL);
+    const cy = Math.round((p.y - c.minY) / COVERAGE_CELL);
+    for (let r = 0; r <= 3; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          if (cellCovered(c, cx + dx, cy + dy)) return (cy + dy) * c.w + (cx + dx);
+        }
+      }
+    }
+    return null;
+  }
+  /** Does the straight segment p→q stay over covered cells (grid line-of-sight)? */
+  function gridClear(c: NonNullable<typeof cov>, p: Point, q: Point): boolean {
+    const steps = Math.max(1, Math.ceil(distance(p, q) / (COVERAGE_CELL * 0.5)));
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps;
+      const gx = Math.round((p.x + (q.x - p.x) * t - c.minX) / COVERAGE_CELL);
+      const gy = Math.round((p.y + (q.y - p.y) * t - c.minY) / COVERAGE_CELL);
+      if (!cellCovered(c, gx, gy)) return false;
+    }
+    return true;
+  }
+  /**
+   * A buried polyline from a to b (inclusive) that stays under coverage, or null
+   * if none is found within {@link ROUTE_CAP}. A* over covered cells, line-of-sight
+   * simplified so the travel is a few long legs rather than a staircase.
+   */
+  function routeUnderCoverage(a: Point, b: Point): Point[] | null {
+    const c = coverage();
+    if (!c) return null;
+    const startCell = snapCell(c, a);
+    const goalCell = snapCell(c, b);
+    if (startCell === null || goalCell === null) return null;
+    const { w, h } = c;
+    const gxOf = (i: number) => i % w;
+    const gyOf = (i: number) => Math.floor(i / w);
+    const ptOf = (i: number): Point => ({ x: c.minX + gxOf(i) * COVERAGE_CELL, y: c.minY + gyOf(i) * COVERAGE_CELL });
+    const goalP = ptOf(goalCell);
+    const gScore = new Float32Array(w * h).fill(Infinity);
+    const came = new Int32Array(w * h).fill(-1);
+    // Binary min-heap of cells keyed by f = g + heuristic.
+    const heap: { f: number; i: number }[] = [];
+    const push = (f: number, i: number) => {
+      heap.push({ f, i });
+      let k = heap.length - 1;
+      while (k > 0) {
+        const par = (k - 1) >> 1;
+        if (heap[par].f <= heap[k].f) break;
+        [heap[par], heap[k]] = [heap[k], heap[par]];
+        k = par;
+      }
+    };
+    const pop = () => {
+      const top = heap[0];
+      const last = heap.pop()!;
+      if (heap.length) {
+        heap[0] = last;
+        let k = 0;
+        for (;;) {
+          const l = 2 * k + 1;
+          const r = l + 1;
+          let m = k;
+          if (l < heap.length && heap[l].f < heap[m].f) m = l;
+          if (r < heap.length && heap[r].f < heap[m].f) m = r;
+          if (m === k) break;
+          [heap[m], heap[k]] = [heap[k], heap[m]];
+          k = m;
+        }
+      }
+      return top;
+    };
+    gScore[startCell] = 0;
+    push(distance(ptOf(startCell), goalP), startCell);
+    let explored = 0;
+    let found = false;
+    while (heap.length) {
+      const { i: cur } = pop();
+      if (cur === goalCell) {
+        found = true;
+        break;
+      }
+      if (++explored > 60_000) break;
+      const cgx = gxOf(cur);
+      const cgy = gyOf(cur);
+      const base = gScore[cur];
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          const ngx = cgx + dx;
+          const ngy = cgy + dy;
+          if (!cellCovered(c, ngx, ngy)) continue;
+          const ni = ngy * w + ngx;
+          const step = (dx === 0 || dy === 0 ? 1 : Math.SQRT2) * COVERAGE_CELL;
+          const ng = base + step;
+          if (ng < gScore[ni] && ng <= ROUTE_CAP) {
+            gScore[ni] = ng;
+            came[ni] = cur;
+            push(ng + distance(ptOf(ni), goalP), ni);
+          }
+        }
+      }
+    }
+    if (!found) return null;
+    // Reconstruct cell path (goal → start), then line-of-sight simplify.
+    const cells: number[] = [];
+    for (let i = goalCell; i !== -1; i = came[i]) cells.push(i);
+    cells.reverse();
+    const centers = cells.map(ptOf);
+    const way: Point[] = [a];
+    let anchor = a;
+    for (let k = 1; k < centers.length; k++) {
+      if (!gridClear(c, anchor, centers[k])) {
+        anchor = centers[k - 1];
+        way.push(anchor);
+      }
+    }
+    way.push(b);
+    // Drop waypoints that sit essentially on a or b (avoid a tiny end zigzag).
+    const cleaned = way.filter(
+      (p, idx) => idx === 0 || idx === way.length - 1 || (distance(p, a) > COVERAGE_CELL && distance(p, b) > COVERAGE_CELL),
+    );
+    let len = 0;
+    for (let k = 1; k < cleaned.length; k++) len += distance(cleaned[k - 1], cleaned[k]);
+    return len <= ROUTE_CAP ? cleaned : null;
+  }
+
   const out: EngineStitch[] = [];
   let prevPoint: Point | null = null;
   // The penetration just before prevPoint, so a tie-off can retrace BACKWARD
@@ -978,8 +1164,16 @@ export function generateDesign(
         coveredBetween(prevPoint, start);
       const shortTravel =
         !colorChanged && !d.noBareTravel && gap > jumpThreshold && gap <= exposedMax;
-      if (intraTravel || hiddenTravel || shortTravel) {
-        const travel = runningStitch([prevPoint, start], TRAVEL_STITCH);
+      // Direct (straight) travel when the move is already safe to stitch.
+      let travelPath: Point[] | null =
+        intraTravel || hiddenTravel || shortTravel ? [prevPoint, start] : null;
+      // Otherwise, before trimming a same-color move, try to route it UNDER the
+      // design's coverage and bury the travel (the pro move) instead of cutting.
+      if (!travelPath && !colorChanged && gap > jumpThreshold && gap <= ROUTE_CAP) {
+        travelPath = routeUnderCoverage(prevPoint, start);
+      }
+      if (travelPath) {
+        const travel = runningStitch(travelPath, TRAVEL_STITCH);
         for (const pt of travel.slice(1, -1)) {
           out.push({ x: pt.x, y: pt.y, colorId: col, objectId: object.id });
         }
