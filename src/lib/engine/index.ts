@@ -741,9 +741,15 @@ export function generateObjectRuns(
       // Contour keeps its spiral order; everything else is re-sorted for the
       // shortest travel between pieces.
       const ordered = contourSpiral ? subRuns : orderByNearest(subRuns, cursor);
+      // Contour rings step ~one density between loops (drawn as ordinary stitches),
+      // but a region of DISCONNECTED blobs (e.g. two eyes + a nose as one object)
+      // must not draw a bare connector across the open gap between them — so, like
+      // the boustrophedon, contour suppresses bare travels (they route under
+      // same-colour coverage or trim).
+      const noBare = tatamiNoBareTravel || contourSpiral;
       for (const sub of ordered) {
         const r = dropShortStitches(sub, minStitch);
-        addRun(runs, r, false, regionIdx, tatamiNoBareTravel);
+        addRun(runs, r, false, regionIdx, noBare);
         if (r.length) cursor = r[r.length - 1];
       }
       // Finishing edge run: walk the boundary just inside the edge so the fill's
@@ -943,25 +949,31 @@ export function generateDesign(
   // A hand digitizer almost never trims to cross a gap inside the design: they
   // run the thread UNDER nearby stitching and come back up where the next piece
   // begins. We do the same — before cutting a same-color move, look for a path
-  // from here to the next start that stays hidden under some fill, and if one
-  // exists (and isn't absurdly long) sew it as a buried travel instead of a trim.
+  // from here to the next start that stays hidden under SAME-COLOUR fill, and if
+  // one exists (and isn't absurdly long) sew it as a buried travel instead.
   //
-  // Coverage is rasterized once (lazily) to a coarse grid; the route is an A*
-  // over covered cells, then straightened by line-of-sight. The straight test
-  // above stays exact — this only kicks in where a straight bridge would show.
+  // Coverage must be same-colour: a dark travel routed under a lighter fill would
+  // sit ON TOP of it and show as a slash. So we rasterize a coverage grid PER
+  // colour (lazily, cached) and only bury a move where its own colour already
+  // covers the path. The straight test above stays exact — this only kicks in
+  // where a straight bridge would show.
   const COVERAGE_CELL = 1.0; // mm
   const ROUTE_CAP = 60; // mm: longest buried detour worth sewing to dodge a trim
-  let cov: { minX: number; minY: number; w: number; h: number; g: Uint8Array } | null = null;
-  let covBuilt = false;
-  function coverage() {
-    if (covBuilt) return cov;
-    covBuilt = true;
-    if (fills.length === 0) return null;
+  type Grid = { minX: number; minY: number; w: number; h: number; g: Uint8Array };
+  const covByColor = new Map<string, Grid | null>();
+  function coverage(colorId: string): Grid | null {
+    const cached = covByColor.get(colorId);
+    if (cached !== undefined) return cached;
+    const mine = fills.filter((o) => o.colorId === colorId);
+    if (mine.length === 0) {
+      covByColor.set(colorId, null);
+      return null;
+    }
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
     let maxY = -Infinity;
-    for (const o of fills) {
+    for (const o of mine) {
       for (const ring of o.paths) {
         for (const p of ring) {
           if (p.x < minX) minX = p.x;
@@ -971,19 +983,25 @@ export function generateDesign(
         }
       }
     }
-    if (!isFinite(minX)) return null;
+    if (!isFinite(minX)) {
+      covByColor.set(colorId, null);
+      return null;
+    }
     minX -= 1;
     minY -= 1;
     maxX += 1;
     maxY += 1;
     const w = Math.ceil((maxX - minX) / COVERAGE_CELL) + 1;
     const h = Math.ceil((maxY - minY) / COVERAGE_CELL) + 1;
-    if (w * h > 4_000_000) return null; // guard against a pathological hoop size
+    if (w * h > 4_000_000) {
+      covByColor.set(colorId, null); // guard against a pathological hoop size
+      return null;
+    }
     const g = new Uint8Array(w * h);
     for (let gy = 0; gy < h; gy++) {
       for (let gx = 0; gx < w; gx++) {
         const p = { x: minX + gx * COVERAGE_CELL, y: minY + gy * COVERAGE_CELL };
-        for (const o of fills) {
+        for (const o of mine) {
           if (pointInRings(p, o.paths)) {
             g[gy * w + gx] = 1;
             break;
@@ -991,13 +1009,14 @@ export function generateDesign(
         }
       }
     }
-    cov = { minX, minY, w, h, g };
-    return cov;
+    const grid = { minX, minY, w, h, g };
+    covByColor.set(colorId, grid);
+    return grid;
   }
-  const cellCovered = (c: NonNullable<typeof cov>, gx: number, gy: number) =>
+  const cellCovered = (c: Grid, gx: number, gy: number) =>
     gx >= 0 && gy >= 0 && gx < c.w && gy < c.h && c.g[gy * c.w + gx] === 1;
   /** Nearest covered cell to a world point, within a few cells (else null). */
-  function snapCell(c: NonNullable<typeof cov>, p: Point): number | null {
+  function snapCell(c: Grid, p: Point): number | null {
     const cx = Math.round((p.x - c.minX) / COVERAGE_CELL);
     const cy = Math.round((p.y - c.minY) / COVERAGE_CELL);
     for (let r = 0; r <= 3; r++) {
@@ -1011,7 +1030,7 @@ export function generateDesign(
     return null;
   }
   /** Does the straight segment p→q stay over covered cells (grid line-of-sight)? */
-  function gridClear(c: NonNullable<typeof cov>, p: Point, q: Point): boolean {
+  function gridClear(c: Grid, p: Point, q: Point): boolean {
     const steps = Math.max(1, Math.ceil(distance(p, q) / (COVERAGE_CELL * 0.5)));
     for (let s = 0; s <= steps; s++) {
       const t = s / steps;
@@ -1026,8 +1045,8 @@ export function generateDesign(
    * if none is found within {@link ROUTE_CAP}. A* over covered cells, line-of-sight
    * simplified so the travel is a few long legs rather than a staircase.
    */
-  function routeUnderCoverage(a: Point, b: Point): Point[] | null {
-    const c = coverage();
+  function routeUnderCoverage(a: Point, b: Point, colorId: string): Point[] | null {
+    const c = coverage(colorId);
     if (!c) return null;
     const startCell = snapCell(c, a);
     const goalCell = snapCell(c, b);
@@ -1170,7 +1189,7 @@ export function generateDesign(
       // Otherwise, before trimming a same-color move, try to route it UNDER the
       // design's coverage and bury the travel (the pro move) instead of cutting.
       if (!travelPath && !colorChanged && gap > jumpThreshold && gap <= ROUTE_CAP) {
-        travelPath = routeUnderCoverage(prevPoint, start);
+        travelPath = routeUnderCoverage(prevPoint, start, col);
       }
       if (travelPath) {
         const travel = runningStitch(travelPath, TRAVEL_STITCH);

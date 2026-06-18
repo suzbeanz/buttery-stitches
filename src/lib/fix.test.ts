@@ -42,6 +42,20 @@ describe("fixObjectStitches", () => {
     expect(blob.params.fillStyle).toBe("tatami");
   });
 
+  it("fills a jagged organic band as tatami, not contour (no topographic scribble)", () => {
+    // A traced photo/fur region: a wildly jagged outline (very low circularity)
+    // that wraps a hole. The thin-wall test alone would call it a band → contour,
+    // turning fur into topographic-map loops. The circularity gate keeps it tatami.
+    const star = (rOuter: number, rInner: number, n = 18): Path =>
+      Array.from({ length: 2 * n }, (_, i) => {
+        const a = (Math.PI * i) / n;
+        const r = i % 2 === 0 ? rOuter : rInner;
+        return { x: 50 + r * Math.cos(a), y: 50 + r * Math.sin(a) };
+      });
+    const organic = fixObjectStitches(makeObjectFromPaths("fill", [star(40, 16), star(10, 4)], "c1"));
+    expect(organic.params.fillStyle).toBe("tatami");
+  });
+
   it("keeps text as satin", () => {
     const o = makeObjectFromPaths("fill", [broadFill], "c1");
     o.text = { content: "Hi", fontId: "x", heightMm: 15, letterSpacingMm: 0 };
