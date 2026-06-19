@@ -118,8 +118,10 @@ export function fixObjectStitches(object: EmbObject): EmbObject {
     params.pullComp = clamp(params.pullComp ?? 0.2, 0, 0.6);
     params.underlay = params.underlay ?? true;
   } else {
-    // fill
-    params.density = clamp(params.density ?? 0.4, 0.35, 0.5);
+    // fill — default to a dense 0.35 mm row spacing (was 0.40) so solid areas read
+    // rich and opaque like professional output, not airy with fabric showing
+    // between rows; the floor drops to 0.30 mm so a user can push to premium-dense.
+    params.density = clamp(params.density ?? 0.35, 0.3, 0.5);
     params.underlay = params.underlay ?? true;
     // SMART STITCH TREATMENT (geometry-driven, like a digitizer's eye):
     //  • thin strokes / rings / text → satin columns (shiny; the engine renders

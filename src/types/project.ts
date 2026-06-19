@@ -212,7 +212,7 @@ export const DEFAULT_PARAMS: Required<EmbObjectParams> = {
   stitchLength: 2.5,
   beanRepeats: 0,
   raw: false,
-  density: 0.4,
+  density: 0.35,
   fillStitchLength: 4,
   angle: 0,
   underlay: true,
