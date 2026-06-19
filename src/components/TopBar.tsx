@@ -10,6 +10,8 @@ import {
   PanelLeft,
   PanelRight,
   Shapes,
+  Type,
+  Image as ImageIcon,
   Square,
   Circle,
   Triangle,
@@ -27,7 +29,7 @@ import { useEditorStore } from "../store/editorStore";
 import { downloadProject, loadProjectFromFile } from "../lib/embproj";
 import { buildWorksheet, worksheetHtml } from "../lib/worksheet";
 import { fixStitches } from "../lib/fix";
-import { makeShapeObject, type ShapeKind } from "../lib/shapes";
+import { type ShapeKind } from "../lib/shapes";
 import { cloneObject } from "../lib/objects";
 import { newId } from "../lib/id";
 import type { Project } from "../types/project";
@@ -89,6 +91,8 @@ export default function TopBar({
   const setEditingTextId = useEditorStore((s) => s.setEditingTextId);
   const pendingStart = useEditorStore((s) => s.pendingStart);
   const setPendingStart = useEditorStore((s) => s.setPendingStart);
+  const setShapeKind = useEditorStore((s) => s.setShapeKind);
+  const setTool = useEditorStore((s) => s.setTool);
   const setViewMode = useEditorStore((s) => s.setViewMode);
   // Adding or editing a design only makes sense on the working surface, so any
   // such action drops the user back into Edit view if they were in Stitch view.
@@ -227,18 +231,12 @@ export default function TopBar({
     goEdit();
   }
 
-  function insertShape(kind: ShapeKind) {
+  // Pick a shape, then drag it out on the canvas (the more flexible interaction
+  // that used to live in the tool rail — now the single home for shapes).
+  function pickShape(kind: ShapeKind) {
     goEdit();
-    const colorId = activeColorId ?? project.colors[0]?.id;
-    if (!colorId) return;
-    const center = { x: project.hoop.wMm / 2, y: project.hoop.hMm / 2 };
-    addObject(
-      makeShapeObject(
-        kind,
-        { center, width: 30, height: 30, radius: 6, points: 5, outerR: 18, innerR: 9, length: 40 },
-        colorId,
-      ),
-    );
+    setShapeKind(kind);
+    setTool("shape");
     setShowShapes(false);
   }
 
@@ -304,9 +302,16 @@ export default function TopBar({
 
       <div className="mx-1.5 h-5 w-px shrink-0 bg-butter-200/20" />
 
+      {/* Insert group — the single home for adding content (words, image, shapes). */}
+      <BarButton label="Add words" onClick={() => setPendingStart("text")}>
+        <Type size={18} />
+      </BarButton>
+      <BarButton label="Turn an image into stitches" onClick={() => setPendingStart("image")}>
+        <ImageIcon size={18} />
+      </BarButton>
       <div className="relative">
         <BarButton
-          label="Add shape"
+          label="Add a shape — pick one, then drag it out"
           onClick={() => setShowShapes((v) => !v)}
           active={showShapes}
         >
@@ -320,7 +325,7 @@ export default function TopBar({
               {SHAPES.map(({ kind, label, Icon }) => (
                 <button
                   key={kind}
-                  onClick={() => insertShape(kind)}
+                  onClick={() => pickShape(kind)}
                   className="flex flex-col items-center gap-1 rounded-sm px-1 py-2 text-[11px] hover:bg-butter-200"
                 >
                   <Icon size={18} />

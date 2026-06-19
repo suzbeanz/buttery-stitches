@@ -1248,13 +1248,19 @@ export default function CanvasStage() {
                 icon={ImageIcon}
                 label="Use an image"
                 hint="Turn a photo or logo into stitches"
-                onClick={() => useEditorStore.getState().setPendingStart("image")}
+                onClick={() => {
+                  useEditorStore.getState().setPendingStart("image");
+                  setStartDismissed(true);
+                }}
               />
               <StartButton
                 icon={Type}
                 label="Add words"
                 hint="Stitch a name or message"
-                onClick={() => useEditorStore.getState().setPendingStart("text")}
+                onClick={() => {
+                  useEditorStore.getState().setPendingStart("text");
+                  setStartDismissed(true);
+                }}
               />
               <StartButton
                 icon={Pencil}

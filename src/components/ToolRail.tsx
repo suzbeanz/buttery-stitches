@@ -4,21 +4,12 @@ import {
   X,
   Magnet,
   Grid2x2,
-  Type,
-  Image as ImageIcon,
   Hand,
   Pencil,
-  Square,
-  Circle,
-  Triangle,
-  Heart,
-  Star,
-  Minus,
   Paintbrush,
   PaintBucket,
   Ruler,
   Scissors,
-  type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import {
@@ -27,26 +18,14 @@ import {
   type Tool,
   type RulerUnit,
 } from "../store/editorStore";
-import type { ShapeKind } from "../lib/shapes";
 
 /**
- * Left vertical tool rail — the tools you pick up to draw and edit. Grouped
- * Edit (Select · Points) and Stitch (Line · Satin · Fill · Curve), each with a
- * label, and the stitch tools use custom glyphs that DEPICT the stitch they make
- * (Fill = an area filled with rows, not a paint bucket). Adding content
- * (Picture · Words · Shape) lives in the top bar's Insert group, not here, so
- * nothing is duplicated.
+ * Left vertical tool rail — the tools you pick up to draw and edit, grouped Edit
+ * (Select · Points · Hand · Measure) · Stitch · Helpers, each with a label, and
+ * the stitch tools use custom glyphs that DEPICT the stitch they make. Adding
+ * CONTENT (words · image · shapes) lives in the top bar's Insert group, not here,
+ * so nothing is duplicated.
  */
-/** The premade shapes offered in the Shapes group (icon + short label). */
-const SHAPES: { kind: ShapeKind; label: string; icon: LucideIcon }[] = [
-  { kind: "rectangle", label: "Box", icon: Square },
-  { kind: "ellipse", label: "Circle", icon: Circle },
-  { kind: "triangle", label: "Triangle", icon: Triangle },
-  { kind: "heart", label: "Heart", icon: Heart },
-  { kind: "star", label: "Star", icon: Star },
-  { kind: "line", label: "Line", icon: Minus },
-];
-
 export default function ToolRail() {
   const tool = useEditorStore((s) => s.tool);
   const setTool = useEditorStore((s) => s.setTool);
@@ -60,9 +39,6 @@ export default function ToolRail() {
   const guidesEnabled = useEditorStore((s) => s.guidesEnabled);
   const toggleSnap = useEditorStore((s) => s.toggleSnap);
   const toggleGuides = useEditorStore((s) => s.toggleGuides);
-  const setPendingStart = useEditorStore((s) => s.setPendingStart);
-  const shapeKind = useEditorStore((s) => s.shapeKind);
-  const setShapeKind = useEditorStore((s) => s.setShapeKind);
   const viewMode = useEditorStore((s) => s.viewMode);
   const locked = viewMode === "stitch"; // editing tools are inert in stitch view
   const drawing = isPointTool(tool) && draft.length > 0;
@@ -70,7 +46,10 @@ export default function ToolRail() {
   const lockTip = "Switch to Edit view to use tools";
 
   return (
-    <aside className="flex w-28 shrink-0 flex-col gap-1 overflow-y-auto border-r-2 border-ink bg-cream py-2">
+    // overflow-visible (not -auto): a vertical scroll container forces the cross
+    // axis to clip, which hid the right-side tooltips inside the rail and flashed a
+    // horizontal scrollbar. The compact two-column layout fits the kit without it.
+    <aside className="flex w-28 shrink-0 flex-col gap-0.5 overflow-visible border-r-2 border-ink bg-cream py-1.5">
       <Group label="Edit">
         <ToolBtn id="select" label="Select" tip="Click to select; drag to move" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <MousePointer2 size={20} />
@@ -88,7 +67,7 @@ export default function ToolRail() {
 
       <Rule />
       <Group label="Stitch">
-        <ToolBtn id="running" label="Line" tip="Running stitch — click points, double-click to finish" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="running" label="Run" tip="Running stitch — click points, double-click to finish" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <RunningGlyph />
         </ToolBtn>
         <ToolBtn id="satin" label="Satin" tip="Satin column — draw a centerline" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
@@ -123,25 +102,6 @@ export default function ToolRail() {
         </RailBtn>
       </Group>
 
-      <Rule />
-      <Group label="Shapes">
-        {SHAPES.map(({ kind, label, icon: Icon }) => (
-          <RailBtn
-            key={kind}
-            label={label}
-            tip={locked ? lockTip : `Drag to draw a ${label.toLowerCase()}`}
-            active={!locked && tool === "shape" && shapeKind === kind}
-            disabled={locked}
-            onClick={() => {
-              setShapeKind(kind);
-              setTool("shape");
-            }}
-          >
-            <Icon size={20} />
-          </RailBtn>
-        ))}
-      </Group>
-
       {drawing && (
         <>
           <Rule />
@@ -152,16 +112,6 @@ export default function ToolRail() {
           </Group>
         </>
       )}
-
-      <Rule />
-      <Group label="Make">
-        <RailBtn label="Words" tip="Add lettering" disabled={locked} onClick={() => setPendingStart("text")}>
-          <Type size={20} />
-        </RailBtn>
-        <RailBtn label="Image" tip="Turn an image into stitches" disabled={locked} onClick={() => setPendingStart("image")}>
-          <ImageIcon size={20} />
-        </RailBtn>
-      </Group>
 
       <Rule />
       <Group label="Helpers">
@@ -221,7 +171,7 @@ function Group({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function Rule() {
-  return <div className="mx-3 my-1 border-t border-ink/15" />;
+  return <div className="mx-3 my-0.5 border-t border-ink/15" />;
 }
 
 /** A tool selector button (icon + label) that sets the active tool. */
