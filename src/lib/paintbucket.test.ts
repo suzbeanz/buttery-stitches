@@ -48,4 +48,12 @@ describe("bucketFill", () => {
     const b = bucketFill([square], { x: 10, y: 10 }, bounds, 0.5);
     expect(a).toEqual(b);
   });
+
+  it("requireEnclosed: fills a bounded click but declines an open one", () => {
+    // Inside the square (enclosed) → still fills.
+    expect(bucketFill([square], { x: 10, y: 10 }, bounds, 0.5, true)).not.toBeNull();
+    // Outside the square, where the flood reaches the working-area edge → null,
+    // so the unified Fill tool draws an outline instead of flooding the background.
+    expect(bucketFill([square], { x: 23, y: 23 }, bounds, 0.5, true)).toBeNull();
+  });
 });

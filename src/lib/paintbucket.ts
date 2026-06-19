@@ -22,12 +22,15 @@ const MAX_CELLS = 4_000_000;
 
 /** Fill the region containing `at`, bounded by `outlines` and `bounds`. Returns
  *  the region's rings (mm), or null if the click is on a line or the region is
- *  too small to be meaningful. */
+ *  too small to be meaningful. When `requireEnclosed` is set, also returns null if
+ *  the flood reaches the `bounds` edge — i.e. the click wasn't actually enclosed
+ *  by outlines (used so a unified Fill tool only auto-fills a bounded area). */
 export function bucketFill(
   outlines: Path[],
   at: Point,
   bounds: Bounds,
   cellMm = 0.25,
+  requireEnclosed = false,
 ): Path[] | null {
   const cell = Math.max(0.1, cellMm);
   const W = Math.max(2, Math.ceil((bounds.maxX - bounds.minX) / cell) + 1);
@@ -65,11 +68,13 @@ export function bucketFill(
   const stack = [at1(si, sj)];
   fill[at1(si, sj)] = 1;
   let count = 0;
+  let touchedBorder = false;
   while (stack.length) {
     const c = stack.pop()!;
     count++;
     const i = c % W;
     const j = (c - i) / W;
+    if (i === 0 || j === 0 || i === W - 1 || j === H - 1) touchedBorder = true;
     const push = (ni: number, nj: number) => {
       if (inGrid(ni, nj)) {
         const n = at1(ni, nj);
@@ -85,6 +90,8 @@ export function bucketFill(
     push(i, j + 1);
   }
   if (count < 4) return null;
+  // The flood leaked to the working-area edge → the click wasn't enclosed.
+  if (requireEnclosed && touchedBorder) return null;
 
   // 2b. Grow the filled region just enough to reach the outline (the wall sits a
   // cell or so inside), so the fill meets the edge with a hair of overlap — what

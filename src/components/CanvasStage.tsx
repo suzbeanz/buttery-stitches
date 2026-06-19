@@ -361,14 +361,17 @@ export default function CanvasStage() {
     };
   }, []);
 
-  // Paint bucket: flood the clicked area (bounded by existing outlines and the
-  // working area) into a new fill object.
-  function doBucket(at: Point) {
+  // Paint-bucket flood for the Fill tool: if `at` sits in an area ENCLOSED by
+  // existing outlines, fill just that area into a new fill object and return true.
+  // Returns false when the click isn't enclosed (so the Fill tool falls back to
+  // drawing an outline click-by-click instead).
+  function tryFloodFill(at: Point): boolean {
     const colorId =
       useEditorStore.getState().activeColorId ??
       useProjectStore.getState().project.colors[0]?.id;
-    if (!colorId) return;
+    if (!colorId) return false;
     const outlines = project.objects.filter((o) => o.visible).flatMap((o) => o.paths);
+    if (outlines.length === 0) return false;
     const ob = pathsBounds(outlines);
     const area = {
       minX: Math.min(0, ob?.minX ?? 0) - 2,
@@ -376,8 +379,12 @@ export default function CanvasStage() {
       maxX: Math.max(hoop.wMm, ob?.maxX ?? hoop.wMm) + 2,
       maxY: Math.max(hoop.hMm, ob?.maxY ?? hoop.hMm) + 2,
     };
-    const rings = bucketFill(outlines, at, area, 0.3);
-    if (rings && rings.length) addObject(makeObjectFromPaths("fill", rings, colorId));
+    const rings = bucketFill(outlines, at, area, 0.3, true); // requireEnclosed
+    if (rings && rings.length) {
+      addObject(makeObjectFromPaths("fill", rings, colorId));
+      return true;
+    }
+    return false;
   }
 
   // Shape tool: commit the dragged bounding box as a premade shape object.
@@ -520,12 +527,6 @@ export default function CanvasStage() {
       if (p) setShapeDraft({ start: p, end: p });
       return;
     }
-    // Bucket: fill the clicked area.
-    if (tool === "bucket") {
-      const p = stagePointMm(stage);
-      if (p) doBucket(p);
-      return;
-    }
     // Measure: drag a ruler segment; updates live and reads out on release.
     if (tool === "measure") {
       const p = stagePointMm(stage);
@@ -547,7 +548,11 @@ export default function CanvasStage() {
       return;
     }
     const p = stagePointMm(stage);
-    if (p) addDraftPoint(p);
+    if (!p) return;
+    // Fill's FIRST click floods a bounded area (the old paint-bucket); if the click
+    // isn't enclosed it begins drawing an outline to fill click-by-click.
+    if (tool === "fill" && useEditorStore.getState().draft.length === 0 && tryFloodFill(p)) return;
+    addDraftPoint(p);
   }
 
   function onStageMouseMove(e: Konva.KonvaEventObject<MouseEvent>) {
@@ -629,11 +634,6 @@ export default function CanvasStage() {
       setShapeDraft({ start: p, end: p });
       return;
     }
-    // Bucket: tap to fill the touched area.
-    if (tool === "bucket" && p) {
-      doBucket(p);
-      return;
-    }
     // Measure: one finger drags the ruler segment.
     if (tool === "measure" && p) {
       setMeasure({ start: p, end: p });
@@ -713,8 +713,13 @@ export default function CanvasStage() {
     }
     if (viewMode !== "stitch") {
       const ts = touchStartRef.current;
-      // A clean tap with a point-placing tool places a polygon/rail point.
-      if (ts && !ts.moved && isPointTool(tool)) addDraftPoint(ts.mm);
+      // A clean tap with a point-placing tool places a polygon/rail point — except
+      // Fill's first tap floods a bounded area (the paint-bucket).
+      if (ts && !ts.moved && isPointTool(tool)) {
+        if (!(tool === "fill" && useEditorStore.getState().draft.length === 0 && tryFloodFill(ts.mm))) {
+          addDraftPoint(ts.mm);
+        }
+      }
     }
     touchStartRef.current = null;
     finishMarquee();
@@ -805,7 +810,7 @@ export default function CanvasStage() {
             cursor:
               tool === "pan"
                 ? "grab"
-                : drawing || freehand || tool === "shape" || tool === "bucket" || tool === "measure"
+                : drawing || freehand || tool === "shape" || tool === "fill" || tool === "measure"
                   ? "crosshair"
                   : "default",
           }}

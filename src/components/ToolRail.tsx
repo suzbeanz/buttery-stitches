@@ -7,7 +7,6 @@ import {
   Hand,
   Pencil,
   Paintbrush,
-  PaintBucket,
   Ruler,
   Scissors,
 } from "lucide-react";
@@ -76,17 +75,14 @@ export default function ToolRail() {
         <ToolBtn id="satin2" label="Column" tip="Two-rail satin — draw edge A, then edge B (variable width)" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Satin2Glyph />
         </ToolBtn>
-        <ToolBtn id="fill" label="Fill" tip="Fill an area with stitches — click an outline" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="fill" label="Fill" tip="Fill an area — click inside lines to flood it, or click an outline point-by-point to draw a shape to fill" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <FillGlyph />
         </ToolBtn>
         <ToolBtn id="pencil" label="Pencil" tip="Pencil — draw a freehand running stitch" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Pencil size={20} />
         </ToolBtn>
-        <ToolBtn id="brush" label="Brush" tip="Brush — draw a freehand filled area" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="brush" label="Brush" tip="Brush — paint a freehand filled area" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Paintbrush size={20} />
-        </ToolBtn>
-        <ToolBtn id="bucket" label="Bucket" tip="Paint bucket — click an enclosed area to fill it" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
-          <PaintBucket size={20} />
         </ToolBtn>
         <ToolBtn id="applique" label="Appliqué" tip="Appliqué — draw a shape: placement run → stop → tackdown → stop → satin cover" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Scissors size={20} />
