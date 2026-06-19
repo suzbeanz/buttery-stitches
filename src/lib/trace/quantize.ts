@@ -184,14 +184,16 @@ export function borderBackgroundColor(img: RasterImage): RGB | null {
 }
 
 /** Nearest palette color to (r,g,b) by squared Euclidean distance. */
-function nearest(palette: RGB[], r: number, g: number, b: number): RGB {
-  let best = palette[0];
+/** Index of the palette color closest (squared RGB distance) to (r,g,b). */
+function nearestIndex(palette: RGB[], r: number, g: number, b: number): number {
+  let best = 0;
   let bd = Infinity;
-  for (const c of palette) {
+  for (let i = 0; i < palette.length; i++) {
+    const c = palette[i];
     const d = (c[0] - r) ** 2 + (c[1] - g) ** 2 + (c[2] - b) ** 2;
     if (d < bd) {
       bd = d;
-      best = c;
+      best = i;
     }
   }
   return best;
@@ -219,18 +221,76 @@ export function quantizeImage(img: RasterImage, numColors: number): QuantizedIma
   // background dominates the pixel count (the common logo-on-white case).
   const palette = kmeansPalette(samples, n);
 
+  // Assign every pixel its nearest palette index (−1 = transparent).
+  const labels = new Int16Array(total);
+  for (let i = 0; i < total; i++) {
+    const o = i * 4;
+    labels[i] = data[o + 3] < ALPHA_CUTOFF ? -1 : nearestIndex(palette, data[o], data[o + 1], data[o + 2]);
+  }
+
+  // Denoise the label map before tracing. Photographic input quantizes to a haze
+  // of single-pixel speckle and pinholes along edges; each isolated fleck becomes
+  // its own region that the engine must trim to reach (a pro consolidates shapes,
+  // so its files carry almost no trims). A 3×3 majority filter erases that speckle
+  // and bridges 1-pixel gaps WITHOUT eroding genuine detail — any feature wider
+  // than ~2 px survives — so same-color regions stop fragmenting. Skip on small
+  // rasters, where a pixel can be a real feature.
+  if (width >= 64 && height >= 64) majorityFilter(labels, width, height);
+
   const out = new Uint8ClampedArray(data.length);
   for (let i = 0; i < total; i++) {
     const o = i * 4;
-    if (data[o + 3] < ALPHA_CUTOFF) {
+    const li = labels[i];
+    if (li < 0) {
       out[o + 3] = 0;
       continue;
     }
-    const [r, g, b] = nearest(palette, data[o], data[o + 1], data[o + 2]);
+    const [r, g, b] = palette[li];
     out[o] = r;
     out[o + 1] = g;
     out[o + 2] = b;
     out[o + 3] = 255;
   }
   return { width, height, data: out, palette };
+}
+
+/**
+ * In-place 3×3 majority (mode) filter over a palette-index label map. Each opaque
+ * pixel is replaced by the most common label among itself and its 8 neighbours;
+ * ties and all-transparent neighbourhoods keep the original. Reads from a snapshot
+ * so the pass is order-independent. Removes salt-and-pepper quantization speckle
+ * and seals pinholes — the chief source of same-color region fragmentation —
+ * while leaving any shape thicker than one pixel intact. Transparent pixels (−1)
+ * are never filled in, so the alpha silhouette is preserved.
+ */
+function majorityFilter(labels: Int16Array, width: number, height: number): void {
+  const src = labels.slice();
+  const count = new Map<number, number>();
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = y * width + x;
+      if (src[i] < 0) continue; // leave transparent pixels transparent
+      count.clear();
+      for (let dy = -1; dy <= 1; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= height) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx;
+          if (xx < 0 || xx >= width) continue;
+          const l = src[yy * width + xx];
+          if (l < 0) continue;
+          count.set(l, (count.get(l) ?? 0) + 1);
+        }
+      }
+      let best = src[i];
+      let bestN = count.get(best) ?? 0;
+      for (const [l, c] of count) {
+        if (c > bestN) {
+          bestN = c;
+          best = l;
+        }
+      }
+      labels[i] = best;
+    }
+  }
 }

@@ -77,6 +77,29 @@ describe("quantizeImage", () => {
     const q = quantizeImage(img, 2);
     expect(distinctColors(q).size).toBe(2);
   });
+
+  it("majority-filters single-pixel speckle out of a flat field", () => {
+    // A 64×64 red field with one lone blue pixel in the interior. The blue speck
+    // is outvoted 8:1 by its neighbours, so the cleaned output is solid red — the
+    // kind of quantization fleck that would otherwise become its own trimmed region.
+    const img = image(64, 64, (x, y) =>
+      x === 20 && y === 20 ? [20, 60, 200, 255] : [220, 20, 30, 255],
+    );
+    const q = quantizeImage(img, 2);
+    const o = (20 * 64 + 20) * 4;
+    expect([q.data[o], q.data[o + 1], q.data[o + 2]]).toEqual([220, 20, 30]);
+  });
+
+  it("preserves a solid block bigger than the filter kernel", () => {
+    // A 6×6 blue block survives the majority filter (its interior keeps a blue
+    // majority), so genuine detail is not eroded away.
+    const img = image(64, 64, (x, y) =>
+      x >= 20 && x < 26 && y >= 20 && y < 26 ? [20, 60, 200, 255] : [220, 20, 30, 255],
+    );
+    const q = quantizeImage(img, 2);
+    const o = (22 * 64 + 22) * 4; // center of the block
+    expect([q.data[o], q.data[o + 1], q.data[o + 2]]).toEqual([20, 60, 200]);
+  });
 });
 
 describe("kmeansPalette", () => {
