@@ -15,6 +15,7 @@ import {
   ChevronDown,
   Group,
   Ungroup,
+  Trash2,
 } from "lucide-react";
 import { alignObjects, distributeObjects, type AlignEdge } from "../lib/arrange";
 import { useProjectStore } from "../store/projectStore";
@@ -614,10 +615,23 @@ function OutlineControl({ fill }: { fill: EmbObject }) {
 
 function ThreadColors() {
   const colors = useProjectStore((s) => s.project.colors);
+  const objects = useProjectStore((s) => s.project.objects);
   const addColor = useProjectStore((s) => s.addColor);
   const updateColor = useProjectStore((s) => s.updateColor);
+  const removeColor = useProjectStore((s) => s.removeColor);
   const activeColorId = useEditorStore((s) => s.activeColorId);
   const setActiveColorId = useEditorStore((s) => s.setActiveColorId);
+
+  // A thread is removable only when nothing references it (so a delete never
+  // silently recolors an object) and it isn't the last thread left.
+  const usedIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const o of objects) {
+      s.add(o.colorId);
+      if (o.params?.blendColorId) s.add(o.params.blendColorId);
+    }
+    return s;
+  }, [objects]);
 
   return (
     <div className="p-3">
@@ -673,19 +687,42 @@ function ThreadColors() {
               >
                 {activeColorId === c.id ? "Active" : "Use"}
               </button>
+              {(() => {
+                const inUse = usedIds.has(c.id);
+                const last = colors.length <= 1;
+                const disabled = inUse || last;
+                return (
+                  <button
+                    onClick={() => removeColor(c.id)}
+                    disabled={disabled}
+                    aria-label={`Delete ${c.name ?? "thread"}`}
+                    title={
+                      last
+                        ? "Can't delete the last thread"
+                        : inUse
+                          ? "In use — reassign objects first"
+                          : "Delete thread"
+                    }
+                    className="grid h-6 w-6 shrink-0 place-items-center rounded-sm text-ink/45 hover:bg-stamp/10 hover:text-stamp disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-ink/45"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                );
+              })()}
             </div>
-            {/* Brand / catalog code for the thread worksheet. */}
+            {/* Brand / catalog code for the thread worksheet. Commit on blur so a
+                typed name is one undo step, not one per keystroke. */}
             <div className="flex gap-1 pl-7">
-              <input
+              <CommitInput
                 value={c.brand ?? ""}
                 placeholder="Brand"
-                onChange={(e) => updateColor(c.id, { brand: e.target.value })}
+                onCommit={(brand) => updateColor(c.id, { brand })}
                 className="min-w-0 flex-1 rounded border border-navy/25 bg-butter-50/60 px-1 py-0.5 text-[11px] text-navy outline-none placeholder:text-navy/30"
               />
-              <input
+              <CommitInput
                 value={c.code ?? ""}
                 placeholder="Code"
-                onChange={(e) => updateColor(c.id, { code: e.target.value })}
+                onCommit={(code) => updateColor(c.id, { code })}
                 className="w-16 rounded border border-navy/25 bg-butter-50/60 px-1 py-0.5 text-[11px] text-navy outline-none placeholder:text-navy/30"
               />
             </div>
@@ -763,25 +800,43 @@ function NumberField({
   value,
   step,
   min,
+  max,
   onChange,
 }: {
   label: string;
   value: number;
   step?: number;
   min?: number;
+  max?: number;
   onChange: (v: number) => void;
 }) {
+  // Keep a draft so the field can be cleared/partly-typed without snapping back,
+  // and CLAMP to [min,max] on every valid entry so a typed value can never push a
+  // param below its safe floor (e.g. density 0). Re-syncs to the live value.
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  const clamp = (v: number) => {
+    if (min != null && v < min) v = min;
+    if (max != null && v > max) v = max;
+    return v;
+  };
   return (
     <Field label={label}>
       <input
         type="number"
-        value={value}
+        value={draft}
         step={step}
         min={min}
+        max={max}
         onChange={(e) => {
+          setDraft(e.target.value);
           const v = parseFloat(e.target.value);
-          if (!Number.isNaN(v)) onChange(v);
+          if (!Number.isNaN(v)) {
+            const c = clamp(v);
+            if (c !== value) onChange(c);
+          }
         }}
+        onBlur={() => setDraft(String(value))}
         className="input"
       />
     </Field>
