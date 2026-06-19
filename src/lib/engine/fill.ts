@@ -269,6 +269,11 @@ const ELONGATION_THRESHOLD = 1.3;
 /** Fill angle (°) for roundish shapes — off-axis so rows don't band on edges. */
 const ROUND_FILL_ANGLE = 45;
 
+/** Candidate scan angles tried by the fewest-fragments search (Wilcom uses 16). */
+const ANGLE_STEPS = 16;
+/** Row spacing (mm) for the fragment search — coarse; only relative counts matter. */
+const FRAG_ROW_MM = 2.0;
+
 /** Turn a base grain (angle + elongation) into a fill angle with the user offset. */
 function grainToFillAngle(
   angleDeg: number,
@@ -279,26 +284,98 @@ function grainToFillAngle(
 }
 
 /**
- * ONE coherent fill angle for an entire multi-region object, so every region
- * shares the same grain and the design reads as a single piece instead of a
- * patchwork of differently-angled letters/blobs (stitch-direction continuity).
- * Combines each region's central area moments (about its own centroid), so the
- * dominant SHAPE orientation wins regardless of how the regions are scattered.
+ * ONE coherent fill angle for an entire multi-region object. Two criteria, in
+ * order: (1) Wilcom's "fewest fragments" rule — of the candidate scan angles, the
+ * one whose rows BREAK the least across concavities wins, because every break is a
+ * start/stop/travel; (2) for the many angles that tie (every convex shape splits
+ * zero rows at every angle), the shape's dominant GRAIN decides — elongated shapes
+ * flow along their long axis, round/square shapes take an off-axis 45° so rows
+ * never align with a straight edge and band. All regions share the one angle so the
+ * object reads as a single piece, not a patchwork of differently-angled blobs.
  */
 export function autoFillAngleForRegions(regions: Path[][], offsetDeg = 0): number {
+  // Orient each region once (containment-correct winding), and accumulate area
+  // moments for the grain tiebreak.
+  const oriented: Path[][] = [];
   const total: AreaMoments = { area: 0, mxx: 0, myy: 0, mxy: 0 };
   for (const region of regions) {
-    const outer = region.find((r) => r.length >= 3);
-    if (!outer) continue;
-    const m = areaMoments(outer);
+    const o = orientByDepth(region);
+    if (o.length === 0 || o[0].length < 3) continue;
+    oriented.push(o);
+    const m = areaMoments(o[0]);
     total.area += m.area;
     total.mxx += m.mxx;
     total.myy += m.myy;
     total.mxy += m.mxy;
   }
-  if (total.area < 1e-9) return offsetDeg;
+  if (oriented.length === 0 || total.area < 1e-9) return offsetDeg;
   const { angleDeg, elongation } = principalFromMoments(total);
-  return grainToFillAngle(angleDeg, elongation, offsetDeg);
+  // The grain (legacy criterion): elongated shapes flow along their major axis,
+  // round shapes take 45°. Kept EXACT so convex/organic shapes are unchanged.
+  const grain = grainToFillAngle(angleDeg, elongation, 0);
+
+  // Candidate scan angles: 16 even steps (Wilcom uses 16) plus the exact grain.
+  const candidates = [grain];
+  for (let k = 0; k < ANGLE_STEPS; k++) candidates.push((k * 180) / ANGLE_STEPS);
+  const scored = candidates.map((a) => ({ a, splits: fillSplitsAt(oriented, a) }));
+  const minSplits = Math.min(...scored.map((x) => x.splits));
+
+  // The grain is the aesthetic choice (stitches flow along the form), so KEEP it
+  // unless it fragments a lot worse than the best angle — only then is dodging the
+  // breaks (a U's notch, an E's prongs) worth turning the grain. This leaves convex
+  // and gently-organic shapes (a wavy tube) on their grain, and rescues the shapes
+  // a single grain angle would shred.
+  const grainSplits = fillSplitsAt(oriented, grain);
+  if (grainSplits <= minSplits * 1.5 + 2) return grain + offsetDeg;
+
+  // Override warranted: among the angles within reach of the fewest splits, take
+  // the one nearest the grain (least visual departure for the same break savings).
+  const tol = Math.max(1, Math.round(minSplits * 0.1));
+  let best = grain;
+  let bestDist = Infinity;
+  for (const { a, splits } of scored) {
+    if (splits > minSplits + tol) continue;
+    const d = angularDistMod180(a, grain);
+    if (d < bestDist) {
+      bestDist = d;
+      best = a;
+    }
+  }
+  return best + offsetDeg;
+}
+
+/** Smallest angle between two fill directions (a line, so mod 180°). */
+function angularDistMod180(a: number, b: number): number {
+  const d = (((a - b) % 180) + 180) % 180;
+  return Math.min(d, 180 - d);
+}
+
+/**
+ * Concavity SPLITS when the (pre-oriented) regions are scanned at `angleDeg`:
+ * Σ over rows of (spans − 1). Zero for any convex shape at every angle; positive
+ * where rows break across a notch/hole. Minimizing this is Wilcom's fewest-fragments
+ * criterion — fewer breaks ⇒ fewer starts, stops, and travels. Rows are sampled
+ * coarsely (relative counts are all that matter) to keep the 17-angle search cheap.
+ */
+function fillSplitsAt(orientedRegions: Path[][], angleDeg: number): number {
+  let splits = 0;
+  for (const region of orientedRegions) {
+    const pivot = centroid(region[0]);
+    const rr = region.map((r) => r.map((p) => rotatePoint(p, -angleDeg, pivot)));
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const r of rr) {
+      for (const p of r) {
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+      }
+    }
+    for (let y = minY + FRAG_ROW_MM / 2; y <= maxY; y += FRAG_ROW_MM) {
+      const n = rowSpans(rr, y).length;
+      if (n > 1) splits += n - 1;
+    }
+  }
+  return splits;
 }
 
 /**
@@ -308,10 +385,7 @@ export function autoFillAngleForRegions(regions: Path[][], offsetDeg = 0): numbe
  * straight edge and band. `offsetDeg` (the user's Angle field) nudges either.
  */
 export function autoFillAngle(rings: Path[], offsetDeg = 0): number {
-  const outer = rings.find((r) => r.length >= 3);
-  if (!outer) return offsetDeg;
-  const { angleDeg, elongation } = principalAxis(outer);
-  return grainToFillAngle(angleDeg, elongation, offsetDeg);
+  return autoFillAngleForRegions([rings], offsetDeg);
 }
 
 /**
