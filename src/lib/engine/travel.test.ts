@@ -184,3 +184,35 @@ describe("underpath travel under coverage", () => {
     );
   });
 });
+
+describe("line-art strokes (running lines, not satin)", () => {
+  // A thin elongated bar (a stroke). As plain satin it sews a dense zig-zag; as
+  // line-art it should sew a single running line down the centerline — much longer
+  // median stitch, far fewer penetrations.
+  const bar = [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 1.6 }, { x: 0, y: 1.6 }];
+  function design(lineArt: boolean) {
+    const o = makeObjectFromPaths("fill", [bar], "c1");
+    o.params = { fillStyle: "satin", lineArt, underlay: false };
+    const p: Project = { ...createEmptyProject(), objects: [o] };
+    return generateDesign(p, { lockStitches: false });
+  }
+  const drawnCount = (d: ReturnType<typeof generateDesign>) =>
+    d.filter((s) => !s.jump && !s.trim).length;
+  const medSeg = (d: ReturnType<typeof generateDesign>) => {
+    const s: number[] = [];
+    for (let i = 1; i < d.length; i++) {
+      if (d[i].jump || d[i].trim) continue;
+      s.push(Math.hypot(d[i].x - d[i - 1].x, d[i].y - d[i - 1].y));
+    }
+    s.sort((a, b) => a - b);
+    return s[s.length >> 1] ?? 0;
+  };
+
+  it("sews a thin stroke as a running line, not a satin zig-zag", () => {
+    const la = design(true);
+    const satin = design(false);
+    // Far fewer penetrations and a longer median stitch (a clean run, not a zig-zag).
+    expect(drawnCount(la)).toBeLessThan(drawnCount(satin) / 2);
+    expect(medSeg(la)).toBeGreaterThan(medSeg(satin) * 1.5);
+  });
+});

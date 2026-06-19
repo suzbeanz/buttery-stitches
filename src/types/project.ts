@@ -55,6 +55,10 @@ export interface EmbObjectParams {
    *  spacing ramps for a shaded/ombré effect), or motif (a tiled decorative
    *  motif). */
   fillStyle?: "tatami" | "satin" | "contour" | "gradient" | "motif" | "blend";
+  /** LINE-ART: render this (satin) object's medial columns as clean RUNNING lines
+   *  down their centerline rather than filled satin — for outlines and fine detail
+   *  strokes (auto-set by the tracer on thin regions). */
+  lineArt?: boolean;
   /** second thread color id for fillStyle "blend" (a two-thread ombré). The fill
    *  fades from the object's colorId to this across the shape. */
   blendColorId?: string;
@@ -217,6 +221,7 @@ export const DEFAULT_PARAMS: Required<EmbObjectParams> = {
   pushComp: 0.2,
   outline: true,
   fillStyle: "tatami",
+  lineArt: false,
   blendColorId: "",
   motif: "wave",
   motifSizeMm: 4,
@@ -245,6 +250,7 @@ export function resolveParams(
     pushComp: params.pushComp ?? DEFAULT_PARAMS.pushComp,
     outline: params.outline ?? DEFAULT_PARAMS.outline,
     fillStyle: params.fillStyle ?? DEFAULT_PARAMS.fillStyle,
+    lineArt: params.lineArt ?? DEFAULT_PARAMS.lineArt,
     blendColorId: params.blendColorId ?? DEFAULT_PARAMS.blendColorId,
     motif: params.motif ?? DEFAULT_PARAMS.motif,
     motifSizeMm: params.motifSizeMm ?? DEFAULT_PARAMS.motifSizeMm,

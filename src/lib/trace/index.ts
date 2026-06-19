@@ -189,8 +189,13 @@ export function tracedataToObjects(
         .map((h) => simp(pathToPolylinePx(h)))
         .filter((h) => polygonArea(h) >= minAreaMm2);
       const rings = [clean(rawOuter), ...rawHoles.map(clean)];
-      // Thin AND long enough → line-art stroke; short thin shapes are fringe noise.
-      if (meanWidth < STROKE_MAX_WIDTH_MM && perim / 2 >= STROKE_MIN_LENGTH_MM) {
+      // Line-art stroke = thin AND long AND genuinely ELONGATED (length ≫ width).
+      // The elongation test is what separates a true stroke (an outline, a fur
+      // line) from a jagged shading blob that merely has a low mean width — the
+      // blob stays a solid fill instead of fragmenting into a mess of medial stubs.
+      const length = perim / 2;
+      const elongation = meanWidth > 0 ? length / meanWidth : 0;
+      if (meanWidth < STROKE_MAX_WIDTH_MM && length >= STROKE_MIN_LENGTH_MM && elongation >= STROKE_MIN_ELONGATION) {
         strokeRings.push(...rings);
         strokeArea += area;
       } else {
@@ -211,7 +216,7 @@ export function tracedataToObjects(
       // left to re-classification, because a scattered BAG of strokes can fool the
       // whole-object width heuristic.
       const strokeObj = makeObjectFromPaths("fill", strokeRings, colorId);
-      strokeObj.params = { fillStyle: "satin" };
+      strokeObj.params = { fillStyle: "satin", lineArt: true, underlay: false };
       built.push({ object: strokeObj, area: strokeArea, stroke: true });
       used = true;
     }
@@ -229,6 +234,9 @@ export function tracedataToObjects(
 const STROKE_MAX_WIDTH_MM = 2.2;
 /** Thin regions shorter than this (mm) are anti-aliasing fringe, not strokes. */
 const STROKE_MIN_LENGTH_MM = 5;
+/** A stroke must be this many times longer than it is wide — a true line, not a
+ *  jagged shading blob that merely has a low mean width. */
+const STROKE_MIN_ELONGATION = 3.5;
 
 /**
  * imagetracerjs trace options. Because we hand it a pre-quantized FLAT image

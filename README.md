@@ -62,11 +62,13 @@ reads the *shape* of each region and picks the stitch a hand digitizer would:
   become tatami, and round shapes / thin ring-bands fill as concentric **contour**
   rows. A broad blob with a hole punched in it (a bun around a sausage) fills as
   flat tatami, not topographic rings.
-- **Line-art over fills.** Auto-digitize separates each colour's *thin* regions —
-  bold outlines, fur/detail strokes — from its solid blobs, sewing the strokes as
-  running/satin lines laid ON TOP of the fills (the way a digitizer outlines a
-  shape) instead of filling them into fragmented slivers. Small solid features (an
-  eye, a nose) fill solid rather than spiralling as tiny contour rings.
+- **Line-art over fills.** Auto-digitize separates each colour's *thin, elongated*
+  regions — bold outlines, fur/detail strokes — from its solid blobs, sewing the
+  strokes as clean **running lines down their centerline** (the line follows the
+  stroke's own direction) laid ON TOP of the fills, the way a digitizer outlines a
+  shape, instead of filling them into fragmented slivers or a heavy satin zig-zag.
+  Solid features (an eye, a nose) fill solid rather than spiralling as tiny contour
+  rings.
 - **Fewest-fragments fill angle** (the method in Wilcom's auto-digitize patent):
   the tatami angle is the one whose rows break the least across concavities, so a
   U fills as unbroken columns and an E's rows run across its prongs — fewer starts,
