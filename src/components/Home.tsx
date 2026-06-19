@@ -150,12 +150,13 @@ export default function Home({ onStart }: { onStart: () => void }) {
       <Tape unit="Tbsp" />
 
       {/* 05 — THE FREEDOM */}
-      <Row no="05 / The Freedom" title="Why It's Free" sub="Open source, for everyone">
+      <Row no="05 / The Freedom" title="Why I Made it Free" sub="Open source, for everyone">
         <p className="max-w-2xl font-body text-[17px] leading-relaxed text-char">
           Professional digitizing software runs{" "}
-          <b className="text-ink">hundreds — even thousands</b> of dollars,
-          putting embroidery pattern design out of reach for most people.
-          Buttery Stitches is free, so it isn&apos;t.
+          <b className="text-ink">hundreds or even thousands</b> of dollars,
+          making the barrier to entry out of reach for most people
+        
+          I made Buttery Stitches to help anyone make embroidery patterns easily and freely.
         </p>
         <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <Feature title="Free Forever">
