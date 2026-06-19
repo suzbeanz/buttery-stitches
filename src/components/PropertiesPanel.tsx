@@ -16,6 +16,7 @@ import {
   Group,
   Ungroup,
   Trash2,
+  Check,
 } from "lucide-react";
 import { alignObjects, distributeObjects, type AlignEdge } from "../lib/arrange";
 import { useProjectStore } from "../store/projectStore";
@@ -621,6 +622,9 @@ function ThreadColors() {
   const removeColor = useProjectStore((s) => s.removeColor);
   const activeColorId = useEditorStore((s) => s.activeColorId);
   const setActiveColorId = useEditorStore((s) => s.setActiveColorId);
+  // Deleting the ACTIVE draw colour needs a confirming second click (it's not
+  // referenced by an object, so the in-use guard wouldn't catch it).
+  const [confirmId, setConfirmId] = useState<string | null>(null);
 
   // A thread is removable only when nothing references it (so a delete never
   // silently recolors an object) and it isn't the last thread left.
@@ -691,21 +695,42 @@ function ThreadColors() {
                 const inUse = usedIds.has(c.id);
                 const last = colors.length <= 1;
                 const disabled = inUse || last;
+                const isActive = c.id === activeColorId;
+                const pending = confirmId === c.id;
                 return (
                   <button
-                    onClick={() => removeColor(c.id)}
+                    onClick={() => {
+                      // First click on the active thread arms a confirm; everything
+                      // else (and the second click) deletes immediately.
+                      if (isActive && !pending) {
+                        setConfirmId(c.id);
+                        return;
+                      }
+                      removeColor(c.id);
+                      setConfirmId(null);
+                    }}
                     disabled={disabled}
-                    aria-label={`Delete ${c.name ?? "thread"}`}
+                    aria-label={
+                      pending ? `Confirm delete ${c.name ?? "thread"}` : `Delete ${c.name ?? "thread"}`
+                    }
                     title={
                       last
                         ? "Can't delete the last thread"
                         : inUse
                           ? "In use — reassign objects first"
-                          : "Delete thread"
+                          : pending
+                            ? "Deleting your active thread — click again to confirm"
+                            : isActive
+                              ? "Delete your active thread"
+                              : "Delete thread"
                     }
-                    className="grid h-6 w-6 shrink-0 place-items-center rounded-sm text-ink/45 hover:bg-stamp/10 hover:text-stamp disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-ink/45"
+                    className={`grid h-6 w-6 shrink-0 place-items-center rounded-sm disabled:opacity-25 disabled:hover:bg-transparent ${
+                      pending
+                        ? "bg-stamp/15 text-stamp"
+                        : "text-ink/45 hover:bg-stamp/10 hover:text-stamp disabled:hover:text-ink/45"
+                    }`}
                   >
-                    <Trash2 size={13} />
+                    {pending ? <Check size={13} /> : <Trash2 size={13} />}
                   </button>
                 );
               })()}

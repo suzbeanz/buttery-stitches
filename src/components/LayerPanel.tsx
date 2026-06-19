@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type MouseEvent } from "react";
 import {
   GripVertical,
   Eye,
@@ -37,10 +37,33 @@ export default function LayerPanel() {
   const moveOrder = useProjectStore((s) => s.moveOrder);
 
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  // Anchor for Shift-range selection (the last plainly/⌘-clicked row).
+  const [anchor, setAnchor] = useState<number | null>(null);
   const colorById = useMemo(
     () => new Map<string, ThreadColor>(colors.map((c) => [c.id, c])),
     [colors],
   );
+
+  // Standard list selection: click = just this row, ⌘/Ctrl-click = toggle this
+  // row in/out, Shift-click = the contiguous range from the anchor.
+  const onRowClick = (e: MouseEvent, id: string, index: number) => {
+    if (e.shiftKey && anchor !== null) {
+      const lo = Math.min(anchor, index);
+      const hi = Math.max(anchor, index);
+      setSelection(objects.slice(lo, hi + 1).map((o) => o.id));
+      return;
+    }
+    if (e.metaKey || e.ctrlKey) {
+      const next = selectedIds.includes(id)
+        ? selectedIds.filter((x) => x !== id)
+        : [...selectedIds, id];
+      setSelection(next);
+      setAnchor(index);
+      return;
+    }
+    setSelection([id]);
+    setAnchor(index);
+  };
 
   return (
     <aside className="flex h-full w-60 shrink-0 flex-col border-r border-navy/25 bg-butter-100">
@@ -85,7 +108,7 @@ export default function LayerPanel() {
                   aria-hidden
                 />
                 <button
-                  onClick={() => setSelection([o.id])}
+                  onClick={(e) => onRowClick(e, o.id, index)}
                   title={o.type}
                   className="flex min-w-0 flex-1 items-center gap-2 text-left"
                 >

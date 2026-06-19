@@ -51,4 +51,23 @@ describe("LayerPanel", () => {
     fireEvent.click(screen.getAllByLabelText("Hide")[0]);
     expect(useProjectStore.getState().project.objects[0].visible).toBe(false);
   });
+
+  it("⌘/Ctrl-click toggles a row in and out of the selection", () => {
+    render(<LayerPanel />);
+    fireEvent.click(screen.getByText("Alpha")); // select just Alpha
+    expect(useProjectStore.getState().selectedIds).toHaveLength(1);
+    fireEvent.click(screen.getByText("Beta"), { metaKey: true }); // add Beta
+    expect(useProjectStore.getState().selectedIds).toHaveLength(2);
+    fireEvent.click(screen.getByText("Beta"), { metaKey: true }); // remove Beta
+    expect(useProjectStore.getState().selectedIds).toEqual([
+      useProjectStore.getState().project.objects[0].id,
+    ]);
+  });
+
+  it("Shift-click selects the contiguous range from the anchor", () => {
+    render(<LayerPanel />);
+    fireEvent.click(screen.getByText("Alpha")); // anchor
+    fireEvent.click(screen.getByText("Beta"), { shiftKey: true }); // range Alpha..Beta
+    expect(useProjectStore.getState().selectedIds).toHaveLength(2);
+  });
 });
