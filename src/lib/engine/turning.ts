@@ -261,8 +261,8 @@ export function turningFill(rings: Path[], opts: FillOptions): Path[] | null {
     // Pull-comp: nudge the row ends past the edge so the sewn boundary lands on
     // the line (capped at half the row so a thin station can't invert).
     const c = Math.min(comp, L / 2);
-    let A = { x: span.A.x - ux * c, y: span.A.y - uy * c };
-    let B = { x: span.B.x + ux * c, y: span.B.y + uy * c };
+    const A = { x: span.A.x - ux * c, y: span.A.y - uy * c };
+    const B = { x: span.B.x + ux * c, y: span.B.y + uy * c };
     let row = alongRow(A, B, stitch);
     // Serpentine by NEAREST end (robust to the perpendicular flipping side): start
     // each row at whichever end is closer to where the last one finished.
