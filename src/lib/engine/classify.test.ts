@@ -83,4 +83,17 @@ describe("classifyRegion", () => {
     expect(meanStrokeWidthMm(rings)).toBeLessThan(3.5); // mean width says "stroke"…
     expect(classifyRegion(rings, { satinMaxWidthMm: 3.5 })).toBe("tatami"); // …but it's a fill
   });
+
+  it("a thin stroke with one chunky junction is still satin (a mast meeting its boom)", () => {
+    // A 2 mm-wide vertical bar with a single 4×4 mm bulge at its middle — the kind
+    // of branched thin shape a mast+boom traces as. The bulge is locally fat, but
+    // it is a tiny fraction of the body, so the region must satin (down its spine),
+    // not fall back to a tatami fill that fills it as wobbly strips.
+    const bar: Path = [
+      { x: 9, y: 0 }, { x: 11, y: 0 }, { x: 11, y: 18 }, { x: 12, y: 18 },
+      { x: 12, y: 22 }, { x: 11, y: 22 }, { x: 11, y: 40 }, { x: 9, y: 40 },
+      { x: 9, y: 22 }, { x: 8, y: 22 }, { x: 8, y: 18 }, { x: 9, y: 18 },
+    ];
+    expect(classifyRegion([bar], { satinMaxWidthMm: 3.5 })).toBe("satin");
+  });
 });

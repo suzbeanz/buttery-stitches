@@ -74,12 +74,15 @@ function distSqToSeg(p: Point, a: Point, b: Point): number {
 }
 
 /**
- * True if the region holds an inscribed circle of radius > `radiusMm` anywhere —
- * i.e. it is locally thicker than `2·radiusMm`. Samples a grid finer than the
- * threshold so even a thin band gets interior samples, and bails the instant a
- * fat point is found (a broad blob exits almost immediately).
+ * True if the region is BROADLY thick — a large fraction of its interior holds an
+ * inscribed circle bigger than `2·radiusMm` — i.e. a fat blob, not a stroke. We
+ * measure the FRACTION of interior area that is fat rather than bailing on the
+ * first fat point: a thin branched stroke (a mast meeting its boom, the bar of a
+ * "t") has one chunky junction but is thin nearly everywhere, so it stays a stroke
+ * and is satined, while a frilly-edged blob — fat almost everywhere despite a tiny
+ * perimeter-derived mean width — is correctly caught as tatami.
  */
-function isLocallyThicker(rings: Path[], radiusMm: number): boolean {
+function isBroadlyThick(rings: Path[], radiusMm: number): boolean {
   const outer = rings.find((r) => r.length >= 3);
   if (!outer) return false;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -92,22 +95,29 @@ function isLocallyThicker(rings: Path[], radiusMm: number): boolean {
   const usable = rings.filter((r) => r.length >= 3);
   const step = Math.max(0.4, radiusMm * 0.7); // sample finer than the threshold
   const r2 = radiusMm * radiusMm;
+  let inside = 0;
+  let fat = 0;
   for (let y = minY + step / 2; y <= maxY; y += step) {
     for (let x = minX + step / 2; x <= maxX; x += step) {
       const p = { x, y };
       if (!pointInRings(p, usable)) continue;
+      inside++;
       let near = Infinity;
       for (const ring of usable) {
         for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
           const d = distSqToSeg(p, ring[i], ring[j]);
           if (d < near) near = d;
         }
-        if (near <= r2) break; // this point is close to an edge; not fat here
+        if (near <= r2) break; // close to an edge; not fat here
       }
-      if (near > r2) return true; // an inscribed circle bigger than radiusMm fits
+      if (near > r2) fat++;
     }
   }
-  return false;
+  // A stroke is thin nearly everywhere — even a branched one is only fat at a
+  // junction (a few % of its area); a holey/frilly blob is fat across a big chunk
+  // of its body. Measured fat fractions: a mast+boom ~0.03, a fur-like holey blob
+  // ~0.23, a solid disc ~0.68 — so ~0.15 separates strokes from fills with margin.
+  return inside > 0 && fat / inside >= 0.15;
 }
 
 export function classifyRegion(rings: Path[], opts: ClassifyOptions = {}): StitchKind {
@@ -118,7 +128,7 @@ export function classifyRegion(rings: Path[], opts: ClassifyOptions = {}): Stitc
   // A frilly-edged blob has a tiny mean width but is fat inside — a broad fill,
   // not a stroke. If it holds an inscribed circle wider than the satin cap, it's
   // tatami regardless of what the perimeter-derived width claims.
-  if (isLocallyThicker(rings, satinMax / 2)) return "tatami";
+  if (isBroadlyThick(rings, satinMax / 2)) return "tatami";
   if (width < runningMax) return "running";
   if (width <= satinMax) return "satin";
   return "tatami";
