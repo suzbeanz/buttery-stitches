@@ -36,6 +36,7 @@ export type Tool =
   | "pan" // hand tool — drag to move the canvas
   | "pencil" // freehand running stitch
   | "brush" // freehand filled blob
+  | "cut" // click a running line to split it into two objects
   | "measure" // drag to read off a distance + angle (no object created)
   | "satin2" // two-rail satin: draw edge A, then edge B (variable width)
   | "applique" // draw a closed shape stitched as an appliqué (placement/cover)

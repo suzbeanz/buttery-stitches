@@ -9,6 +9,7 @@ import {
   Paintbrush,
   Ruler,
   Scissors,
+  Slice,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import {
@@ -61,6 +62,9 @@ export default function ToolRail() {
         </ToolBtn>
         <ToolBtn id="measure" label="Measure" tip="Measure — drag to read a distance and angle" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Ruler size={20} />
+        </ToolBtn>
+        <ToolBtn id="cut" label="Cut" tip="Cut — click a running line to split it into two pieces" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+          <Slice size={20} />
         </ToolBtn>
       </Group>
 

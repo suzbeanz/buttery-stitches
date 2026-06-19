@@ -5,12 +5,13 @@ import { useStore } from "zustand";
 import type {
   EmbObject,
   EmbObjectParams,
+  Point,
   Project,
   ThreadColor,
 } from "../types/project";
 import { createEmptyProject } from "../lib/project";
 import { translatePaths } from "../lib/geometry";
-import { expandGroups } from "../lib/objects";
+import { expandGroups, pathsFromNodes, isClosedType } from "../lib/objects";
 import { newId } from "../lib/id";
 
 /**
@@ -34,6 +35,9 @@ export interface ProjectState {
   addObjects: (objects: EmbObject[]) => void;
   /** Insert objects immediately after `afterId` in ONE step (atomic undo). */
   insertObjectsAfter: (afterId: string, objects: EmbObject[]) => void;
+  /** Split an open (running) node-line into two objects at `point`, inserted on
+   *  segment `segIndex` of its node ring. No-op for closed/non-node objects. */
+  splitObject: (id: string, segIndex: number, point: Point) => void;
   removeObjects: (ids: string[]) => void;
   updateObject: (id: string, patch: Partial<EmbObject>) => void;
   updateObjectParams: (id: string, patch: Partial<EmbObjectParams>) => void;
@@ -101,6 +105,31 @@ export const useProjectStore = create<ProjectState>()(
             project: { ...s.project, objects: next },
             selectedIds: objects.map((o) => o.id),
           };
+        }),
+
+      splitObject: (id, segIndex, point) =>
+        set((s) => {
+          const idx = s.project.objects.findIndex((o) => o.id === id);
+          if (idx < 0) return s;
+          const o = s.project.objects[idx];
+          const ring = o.nodes?.[0];
+          // Only open node-backed lines (running) split cleanly here.
+          if (!ring || isClosedType(o.type) || segIndex < 0 || segIndex >= ring.length - 1) return s;
+          const cut = { x: point.x, y: point.y, smooth: false };
+          const aNodes = [...ring.slice(0, segIndex + 1), cut];
+          const bNodes = [cut, ...ring.slice(segIndex + 1)];
+          if (aNodes.length < 2 || bNodes.length < 2) return s;
+          const mk = (nodes: typeof ring): EmbObject => ({
+            ...o,
+            id: newId("obj"),
+            nodes: [nodes],
+            paths: pathsFromNodes([nodes], false),
+          });
+          const a = mk(aNodes);
+          const b = mk(bNodes);
+          const objects = [...s.project.objects];
+          objects.splice(idx, 1, a, b);
+          return { project: { ...s.project, objects }, selectedIds: [a.id, b.id] };
         }),
 
       removeObjects: (ids) =>

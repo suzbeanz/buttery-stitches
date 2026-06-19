@@ -24,7 +24,7 @@ import type Konva from "konva";
 import { useProjectStore } from "../store/projectStore";
 import { useEditorStore, isDrawTool, isPointTool } from "../store/editorStore";
 import type { EmbObject, Path, Point, ThreadColor } from "../types/project";
-import { makeObject, makeObjectFromPaths, makeNodeObject, makeSatinFromRails, minPointsFor, pathsFromNodes } from "../lib/objects";
+import { makeObject, makeObjectFromPaths, makeNodeObject, makeSatinFromRails, minPointsFor, pathsFromNodes, isClosedType } from "../lib/objects";
 import { densifyRing, insertNode, moveNode, deleteNode, toggleNodeSmooth, translateNodes, type NodePath } from "../lib/nodes";
 import { shapeFromDrag, shapeRings, type ShapeKind } from "../lib/shapes";
 import { bucketFill } from "../lib/paintbucket";
@@ -79,12 +79,24 @@ const C = {
   salted: "#B23A2E", // stamp red accent
 };
 
+/** Closest point on segment a→b to p, and the distance to it. */
+function projectOnSegment(p: Point, a: Point, b: Point): { point: Point; dist: number } {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const L2 = dx * dx + dy * dy;
+  let t = L2 > 0 ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / L2 : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const point = { x: a.x + t * dx, y: a.y + t * dy };
+  return { point, dist: Math.hypot(point.x - p.x, point.y - p.y) };
+}
+
 export default function CanvasStage() {
   const project = useProjectStore((s) => s.project);
   const selectedIds = useProjectStore((s) => s.selectedIds);
   const setSelection = useProjectStore((s) => s.setSelection);
   const updateObject = useProjectStore((s) => s.updateObject);
   const addObject = useProjectStore((s) => s.addObject);
+  const splitObject = useProjectStore((s) => s.splitObject);
 
   const tool = useEditorStore((s) => s.tool);
   const shapeKind = useEditorStore((s) => s.shapeKind);
@@ -387,6 +399,22 @@ export default function CanvasStage() {
     return false;
   }
 
+  // Cut tool: split the running line nearest the click into two objects at that
+  // point. Closed/satin objects aren't split (ambiguous), so they're skipped.
+  function cutAt(at: Point) {
+    const tolMm = 6 / scale; // ~6px hit tolerance in mm
+    let best: { id: string; segIndex: number; point: Point; dist: number } | null = null;
+    for (const o of project.objects) {
+      if (!o.visible || isClosedType(o.type) || !o.nodes?.[0]) continue;
+      const ring = o.nodes[0];
+      for (let i = 0; i < ring.length - 1; i++) {
+        const pr = projectOnSegment(at, ring[i], ring[i + 1]);
+        if (!best || pr.dist < best.dist) best = { id: o.id, segIndex: i, point: pr.point, dist: pr.dist };
+      }
+    }
+    if (best && best.dist <= Math.max(2, tolMm)) splitObject(best.id, best.segIndex, best.point);
+  }
+
   // Shape tool: commit the dragged bounding box as a premade shape object.
   function finishShape() {
     const d = shapeDraftRef.current;
@@ -527,6 +555,12 @@ export default function CanvasStage() {
       if (p) setShapeDraft({ start: p, end: p });
       return;
     }
+    // Cut: click a running line to split it into two objects.
+    if (tool === "cut") {
+      const p = stagePointMm(stage);
+      if (p) cutAt(p);
+      return;
+    }
     // Measure: drag a ruler segment; updates live and reads out on release.
     if (tool === "measure") {
       const p = stagePointMm(stage);
@@ -632,6 +666,11 @@ export default function CanvasStage() {
     // Shape: one finger drags the shape's bounding box.
     if (tool === "shape" && p) {
       setShapeDraft({ start: p, end: p });
+      return;
+    }
+    // Cut: tap a running line to split it.
+    if (tool === "cut" && p) {
+      cutAt(p);
       return;
     }
     // Measure: one finger drags the ruler segment.
@@ -810,7 +849,7 @@ export default function CanvasStage() {
             cursor:
               tool === "pan"
                 ? "grab"
-                : drawing || freehand || tool === "shape" || tool === "fill" || tool === "measure"
+                : drawing || freehand || tool === "shape" || tool === "fill" || tool === "cut" || tool === "measure"
                   ? "crosshair"
                   : "default",
           }}
