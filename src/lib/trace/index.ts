@@ -94,6 +94,17 @@ function toMm(pts: Point[], mmPerPx: number, ox: number, oy: number): Path {
   return pts.map((p) => ({ x: p.x * mmPerPx + ox, y: p.y * mmPerPx + oy }));
 }
 
+/** Does a px polyline reach the image border? The actual background does (it runs
+ *  to the edges); a foreground island of the same colour (a white ball on a white
+ *  page) sits in the interior and does not — so this distinguishes the two. */
+function touchesBorder(pts: Point[], w: number, h: number): boolean {
+  const m = Math.max(2, Math.min(w, h) * 0.015);
+  for (const p of pts) {
+    if (p.x <= m || p.y <= m || p.x >= w - m || p.y >= h - m) return true;
+  }
+  return false;
+}
+
 /**
  * Convert imagetracerjs tracedata into stitch objects (Section 5, steps 3–5).
  * Pure — feed it a tracedata object and it returns colors + classified
@@ -151,7 +162,11 @@ export function tracedataToObjects(
   const built: { object: EmbObject; area: number; stroke: boolean }[] = [];
 
   td.layers.forEach((layer, ci) => {
-    if (ci === bgIndex) return;
+    // The background COLOUR is kept as a layer (don't skip it wholesale) so that a
+    // foreground object the SAME colour as the background — a white ball on a white
+    // page — survives; only the actual background region (the one touching the
+    // image border) is dropped below, per region.
+    const isBackground = ci === bgIndex;
     const pal = td.palette[ci];
     if (!pal || pal.a === 0) return;
 
@@ -178,7 +193,10 @@ export function tracedataToObjects(
 
     layer.forEach((path) => {
       if (path.isholepath) return; // pulled in via a parent's holechildren
-      const rawOuter = simp(pathToPolylinePx(path));
+      const pxOuter = pathToPolylinePx(path);
+      // Drop the real background (border-touching) but keep same-colour islands.
+      if (isBackground && touchesBorder(pxOuter, td.width, td.height)) return;
+      const rawOuter = simp(pxOuter);
       const area = polygonArea(rawOuter);
       if (area < minAreaMm2) return; // despeckle
       const perim = polygonPerimeter(rawOuter);
