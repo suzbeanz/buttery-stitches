@@ -62,6 +62,10 @@ reads the *shape* of each region and picks the stitch a hand digitizer would:
   become tatami, and round shapes / thin ring-bands fill as concentric **contour**
   rows. A broad blob with a hole punched in it (a bun around a sausage) fills as
   flat tatami, not topographic rings.
+- **Fewest-fragments fill angle** (the method in Wilcom's auto-digitize patent):
+  the tatami angle is the one whose rows break the least across concavities, so a
+  U fills as unbroken columns and an E's rows run across its prongs — fewer starts,
+  stops, and travels. Convex and gently-organic shapes keep their natural grain.
 - **Clean edges.** Each broad fill gets a finishing **edge run** just inside the
   outline so the silhouette and end-caps read crisp.
 - **Concavity-aware fills.** Wavy, notched, and crescent shapes are filled with a

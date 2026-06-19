@@ -585,6 +585,26 @@ describe("principalAxis & autoFillAngle (smart tatami angle)", () => {
   it("two roundish regions stay off-axis 45°", () => {
     expect(autoFillAngleForRegions([[rotRect(18, 18, 0)], [rotRect(20, 20, 0)]])).toBeCloseTo(45, 5);
   });
+
+  // Wilcom's "fewest fragments" rule: of the candidate scan angles, pick the one
+  // whose rows break the LEAST across concavities — overriding the naive grain
+  // when a single grain angle would shred the shape into many starts/stops.
+  it("turns the grain to avoid fragmenting a concave shape (U fills as columns)", () => {
+    // A cup: wider than tall (grain ~horizontal), but horizontal rows split across
+    // the two arms. Vertical rows (columns) fill each arm unbroken → chosen.
+    const u: Path = [
+      { x: 0, y: 0 }, { x: 44, y: 0 }, { x: 44, y: 40 }, { x: 30, y: 40 },
+      { x: 30, y: 12 }, { x: 14, y: 12 }, { x: 14, y: 40 }, { x: 0, y: 40 },
+    ];
+    expect(axisMod(autoFillAngleForRegions([[u]]))).toBeCloseTo(90, 0);
+  });
+
+  it("keeps a convex shape on its grain (fewest-fragments doesn't override)", () => {
+    // Every convex shape splits zero rows at every angle, so the grain still wins:
+    // a long bar stays along its length, a square stays at 45°.
+    expect(axisMod(autoFillAngleForRegions([[rotRect(40, 8, 0)]]))).toBeCloseTo(0, 0);
+    expect(autoFillAngleForRegions([[rotRect(20, 20, 0)]])).toBeCloseTo(45, 5);
+  });
 });
 
 describe("fillUnderlay", () => {
