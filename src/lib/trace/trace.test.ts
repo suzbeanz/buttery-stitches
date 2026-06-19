@@ -122,6 +122,32 @@ describe("tracedataToObjects", () => {
     expect(colors[0].rgb).toEqual([200, 20, 30]);
   });
 
+  it("keeps a foreground island the SAME color as the background (white ball on white)", () => {
+    const td = {
+      width: 100,
+      height: 100,
+      palette: [
+        { r: 255, g: 255, b: 255, a: 255 }, // white: the page background AND a ball
+        { r: 80, g: 160, b: 60, a: 255 }, // a green field
+      ],
+      layers: [
+        // border-touching background + an interior white island (the "ball")
+        [sq(0, 0, 100, 100), sq(44, 44, 58, 52)],
+        [sq(20, 20, 80, 80)],
+      ],
+    } as unknown as Tracedata;
+
+    const { colors, objects } = tracedataToObjects(td, { mmPerPx: 1 });
+    // White survives because of its interior island; only the border-touching
+    // background region is dropped (not the whole white colour).
+    const white = colors.find((c) => c.rgb[0] === 255);
+    expect(white, "white kept for the island").toBeDefined();
+    const ball = objects.find((o) => o.colorId === white!.id);
+    expect(ball, "the white ball is an object").toBeDefined();
+    // It's the small island, not the full-page background.
+    expect(polygonArea(ball!.paths[0])).toBeLessThan(500);
+  });
+
   it("attaches holes to a fill object (even-odd)", () => {
     const td = {
       width: 100,
