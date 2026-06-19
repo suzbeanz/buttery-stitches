@@ -113,4 +113,41 @@ describe("concavity-aware tatami (boustrophedon)", () => {
     // No leg of any run leaves the shape.
     expect(crossingSegments(runs, wave).count).toBe(0);
   });
+
+  it("fills a heavily-fragmented region (many holes) quickly and validly", () => {
+    // A region riddled with holes (a traced fur fill) blows up the inside-routing
+    // visibility graph; past the vertex cap the router is skipped (connectors
+    // break instead) so generation stays fast. Output must still be valid: real
+    // runs, finite coordinates, no crash.
+    const outer: Path = [
+      { x: 0, y: 0 },
+      { x: 60, y: 0 },
+      { x: 60, y: 60 },
+      { x: 0, y: 60 },
+    ];
+    const rings: Path[] = [outer];
+    for (let gx = 0; gx < 7; gx++) {
+      for (let gy = 0; gy < 7; gy++) {
+        const cx = 5 + gx * 8;
+        const cy = 5 + gy * 8;
+        // CW holes (reverse winding) so they punch out under nonzero fill.
+        rings.push([
+          { x: cx, y: cy },
+          { x: cx, y: cy + 3 },
+          { x: cx + 3, y: cy + 3 },
+          { x: cx + 3, y: cy },
+        ]);
+      }
+    }
+    const t0 = Date.now();
+    const runs = tatamiConcaveRuns(rings, opts);
+    const ms = Date.now() - t0;
+    expect(runs.length).toBeGreaterThan(0);
+    expect(ms).toBeLessThan(800); // capped router keeps it interactive
+    for (const run of runs) {
+      for (const p of run) {
+        expect(Number.isFinite(p.x) && Number.isFinite(p.y)).toBe(true);
+      }
+    }
+  });
 });

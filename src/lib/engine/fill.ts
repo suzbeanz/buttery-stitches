@@ -534,6 +534,11 @@ export function tatamiFill(rings: Path[], opts: FillOptions): Path {
  *  narrow notch where traveling all the way around wastes thread). */
 const DETOUR_MAX_MM = 50;
 
+/** Max simplified boundary vertices before the inside-routing visibility graph is
+ *  skipped (its build is O(V²)); a region this fragmented routes via break/trim
+ *  instead, keeping generation interactive. */
+const ROUTER_MAX_VERTS = 160;
+
 interface CellRow {
   y: number;
   k: number; // global row index (drives the shared brick stagger)
@@ -857,10 +862,22 @@ function orderAndConnect(fills: Point[][], rings: Path[], spacing: number): Poin
   const runs: Point[][] = [];
   let cur: Point[] | null = null;
   let curEnd: Point | null = null;
-  // The geodesic router is expensive to build, so create it once and only if a
-  // connector actually needs routing (convex shapes never do).
+  // The geodesic router is expensive to build (O(V²) visibility), so create it
+  // once and only if a connector actually needs routing (convex shapes never do).
+  // On a heavily fragmented region (many holes — e.g. a traced fur fill riddled
+  // with detail-stroke counters) the vertex count explodes, so we cap it: past the
+  // limit, skip inside-routing and let those connectors break (the assembler's
+  // coverage router still buries any that stay hidden). Keeps generation fast.
   let router: Router | null = null;
-  const getRouter = (): Router => (router ??= buildRouter(rings.map((r) => simplifyRing(r, 0.5))));
+  let routerTried = false;
+  const getRouter = (): Router | null => {
+    if (routerTried) return router;
+    routerTried = true;
+    const simp = rings.map((r) => simplifyRing(r, 0.5));
+    const verts = simp.reduce((n, r) => n + r.length, 0);
+    if (verts <= ROUTER_MAX_VERTS) router = buildRouter(simp);
+    return router;
+  };
 
   const start = (pts: Point[]) => pts[0];
   const end = (pts: Point[]) => pts[pts.length - 1];
@@ -914,15 +931,17 @@ function orderAndConnect(fills: Point[][], rings: Path[], spacing: number): Poin
       // Route between anchors nudged inside (row ends carry a little pull-comp past
       // the edge, which would leave the geodesic with no valid inside start/goal).
       const rt = getRouter();
-      const a = clampInside(curEnd, rt.rings);
-      const b = clampInside(s, rt.rings);
-      const geo = routeInside(a, b, rt);
-      // The geodesic is found on the SIMPLIFIED rings (fast); verify it against the
-      // TRUE rings before trusting it. A coarse simplification can shortcut across a
-      // narrow concavity, so any leg that isn't genuinely inside means we'd rather
-      // trim than risk a slash.
-      if (geo && pathLength(geo) <= DETOUR_MAX_MM && allLegsInside(geo, rings)) {
-        connector = subdivide([curEnd, ...geo, s], spacing);
+      if (rt) {
+        const a = clampInside(curEnd, rt.rings);
+        const b = clampInside(s, rt.rings);
+        const geo = routeInside(a, b, rt);
+        // The geodesic is found on the SIMPLIFIED rings (fast); verify it against the
+        // TRUE rings before trusting it. A coarse simplification can shortcut across a
+        // narrow concavity, so any leg that isn't genuinely inside means we'd rather
+        // trim than risk a slash.
+        if (geo && pathLength(geo) <= DETOUR_MAX_MM && allLegsInside(geo, rings)) {
+          connector = subdivide([curEnd, ...geo, s], spacing);
+        }
       }
     }
     if (connector) {
