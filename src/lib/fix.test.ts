@@ -74,7 +74,9 @@ describe("fixObjectStitches", () => {
     const o = makeObjectFromPaths("fill", [broadFill], "c1");
     o.params = { density: 0.1 };
     const fixed = fixObjectStitches(o);
-    expect(fixed.params.density).toBeGreaterThanOrEqual(0.35);
+    // Clamped up to the dense floor (0.30 mm) — never finer (needle/thread safety).
+    expect(fixed.params.density).toBeGreaterThanOrEqual(0.3);
+    expect(fixed.params.density).toBeLessThanOrEqual(0.5);
     expect(fixed.params.underlay).toBe(true);
   });
 
