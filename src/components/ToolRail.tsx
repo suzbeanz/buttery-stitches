@@ -70,7 +70,10 @@ export default function ToolRail() {
   const lockTip = "Switch to Edit view to use tools";
 
   return (
-    <aside className="flex w-28 shrink-0 flex-col gap-1 overflow-y-auto border-r-2 border-ink bg-cream py-2">
+    // overflow-visible (not -auto): a vertical scroll container forces the cross
+    // axis to clip, which hid the right-side tooltips inside the rail and flashed a
+    // horizontal scrollbar. The compact two-column layout fits the kit without it.
+    <aside className="flex w-28 shrink-0 flex-col gap-0.5 overflow-visible border-r-2 border-ink bg-cream py-1.5">
       <Group label="Edit">
         <ToolBtn id="select" label="Select" tip="Click to select; drag to move" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <MousePointer2 size={20} />
@@ -221,7 +224,7 @@ function Group({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function Rule() {
-  return <div className="mx-3 my-1 border-t border-ink/15" />;
+  return <div className="mx-3 my-0.5 border-t border-ink/15" />;
 }
 
 /** A tool selector button (icon + label) that sets the active tool. */

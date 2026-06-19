@@ -2,6 +2,24 @@ import { create } from "zustand";
 import type { EmbObject, Point, StitchType } from "../types/project";
 import type { ShapeKind } from "../lib/shapes";
 
+/** Whether the welcome panel has been dismissed before (persisted so it stays
+ *  gone across reloads). Guarded for SSR / privacy-mode where storage may throw. */
+const WELCOME_KEY = "bs:welcomeDismissed";
+function readWelcomeDismissed(): boolean {
+  try {
+    return localStorage.getItem(WELCOME_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function writeWelcomeDismissed(): void {
+  try {
+    localStorage.setItem(WELCOME_KEY, "1");
+  } catch {
+    /* ignore (private mode) */
+  }
+}
+
 /**
  * Transient editor UI state — current tool, in-progress drawing, ruler units,
  * and the color new objects are drawn with. Deliberately separate from the
@@ -144,7 +162,9 @@ export const useEditorStore = create<EditorState>((set) => ({
   propertiesOpen: true,
   editingTextId: null,
   pendingStart: null,
-  startDismissed: false,
+  // The welcome ("Let's make something") is shown until dismissed, then stays
+  // gone — persisted so it doesn't reappear on reload or after the canvas empties.
+  startDismissed: readWelcomeDismissed(),
   fabricColor: "#ECE8DE",
   selectedNode: null,
 
@@ -174,7 +194,10 @@ export const useEditorStore = create<EditorState>((set) => ({
   toggleProperties: () => set((s) => ({ propertiesOpen: !s.propertiesOpen })),
   setEditingTextId: (editingTextId) => set({ editingTextId }),
   setPendingStart: (pendingStart) => set({ pendingStart }),
-  setStartDismissed: (startDismissed) => set({ startDismissed }),
+  setStartDismissed: (startDismissed) => {
+    if (startDismissed) writeWelcomeDismissed();
+    set({ startDismissed });
+  },
   setFabricColor: (fabricColor) => set({ fabricColor }),
   setSelectedNode: (selectedNode) => set({ selectedNode }),
 
