@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useProjectStore } from "./projectStore";
 import { createEmptyProject } from "../lib/project";
-import { makeObject, cloneObject } from "../lib/objects";
+import { makeObject, makeNodeObject, cloneObject } from "../lib/objects";
 
 const line = [
   { x: 0, y: 0 },
@@ -154,5 +154,30 @@ describe("projectStore — QA fixes", () => {
     }
     useProjectStore.getState().removeColor(only);
     expect(useProjectStore.getState().project.colors.length).toBe(1);
+  });
+
+  it("splitObject cuts a running line into two pieces at a point", () => {
+    const cId = useProjectStore.getState().project.colors[0].id;
+    const o = makeNodeObject("running", [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 20, y: 0 }], cId, false);
+    useProjectStore.getState().addObject(o);
+    useProjectStore.getState().splitObject(o.id, 1, { x: 15, y: 0 }); // on segment 1 (10→20)
+
+    const objs = useProjectStore.getState().project.objects;
+    expect(objs).toHaveLength(2);
+    expect(objs.find((x) => x.id === o.id)).toBeUndefined(); // original replaced
+    for (const x of objs) {
+      expect(x.type).toBe("running");
+      expect((x.nodes?.[0].length ?? 0)).toBeGreaterThanOrEqual(2);
+    }
+    // both new pieces are selected
+    expect(useProjectStore.getState().selectedIds).toHaveLength(2);
+  });
+
+  it("splitObject is a no-op on a closed (fill) object", () => {
+    const cId = useProjectStore.getState().project.colors[0].id;
+    const f = makeNodeObject("fill", [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }], cId, false);
+    useProjectStore.getState().addObject(f);
+    useProjectStore.getState().splitObject(f.id, 1, { x: 5, y: 5 });
+    expect(useProjectStore.getState().project.objects).toHaveLength(1); // unchanged
   });
 });
