@@ -1295,7 +1295,43 @@ export function generateDesign(
     pushTie(out, prevPoint, toward, { id: lastObj.id, colorId: lastObj.colorId });
   }
 
-  return collapseCoincident(out);
+  return capStitchLength(collapseCoincident(out));
+}
+
+/** Longest a single drawn stitch may be (mm). Professional output keeps every
+ *  stitch short (~≤5 mm) so nothing floats loose or snags; we split anything
+ *  longer into equal sub-stitches along the same line. */
+const MAX_STITCH_MM = 5;
+
+/** Split any drawn run longer than {@link MAX_STITCH_MM} into equal sub-stitches.
+ *  Jumps, trims, stops, and colour changes are boundaries — never split across
+ *  them. The inserted points lie ON the original line, so coverage is unchanged. */
+function capStitchLength(design: EngineStitch[]): EngineStitch[] {
+  const out: EngineStitch[] = [];
+  for (const s of design) {
+    const prev = out[out.length - 1];
+    if (
+      prev &&
+      !prev.jump &&
+      !prev.trim &&
+      !prev.stop &&
+      !s.jump &&
+      !s.trim &&
+      !s.stop &&
+      prev.colorId === s.colorId
+    ) {
+      const L = Math.hypot(s.x - prev.x, s.y - prev.y);
+      if (L > MAX_STITCH_MM) {
+        const n = Math.ceil(L / MAX_STITCH_MM);
+        for (let k = 1; k < n; k++) {
+          const t = k / n;
+          out.push({ ...s, x: prev.x + (s.x - prev.x) * t, y: prev.y + (s.y - prev.y) * t });
+        }
+      }
+    }
+    out.push(s);
+  }
+  return out;
 }
 
 /** Two penetrations closer than this (mm) would punch the same hole. */
