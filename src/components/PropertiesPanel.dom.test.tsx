@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import PropertiesPanel from "./PropertiesPanel";
 import { useProjectStore } from "../store/projectStore";
+import { useEditorStore } from "../store/editorStore";
 import { resetStores } from "../test/setup";
 import { makeObject, satinWidthOf } from "../lib/objects";
 import { createEmptyProject } from "../lib/project";
@@ -155,6 +156,23 @@ describe("PropertiesPanel", () => {
     expect(disabled).toHaveLength(1); // the in-use fill color can't be deleted
     const before = useProjectStore.getState().project.colors.length;
     fireEvent.click(enabled[0]);
+    expect(useProjectStore.getState().project.colors.length).toBe(before - 1);
+  });
+
+  it("needs a confirming second click to delete the ACTIVE draw thread", () => {
+    const project = createEmptyProject();
+    const activeId = newId("color");
+    project.colors.push({ id: activeId, rgb: [0, 200, 0], name: "Active" });
+    resetStores(project); // no object uses 'Active' → unused & deletable
+    useEditorStore.setState({ activeColorId: activeId });
+    render(<PropertiesPanel />);
+
+    const before = useProjectStore.getState().project.colors.length;
+    // First click arms the confirm — nothing deleted yet.
+    fireEvent.click(screen.getByLabelText("Delete Active"));
+    expect(useProjectStore.getState().project.colors.length).toBe(before);
+    // Second click (now relabeled) commits the delete.
+    fireEvent.click(screen.getByLabelText("Confirm delete Active"));
     expect(useProjectStore.getState().project.colors.length).toBe(before - 1);
   });
 });
