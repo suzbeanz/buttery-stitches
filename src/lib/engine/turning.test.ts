@@ -28,7 +28,7 @@ describe("turningFill", () => {
     expect(runs).not.toBeNull();
     let pts = 0;
     let outside = 0;
-    let dirs: number[] = [];
+    const dirs: number[] = [];
     for (const run of runs!) {
       for (let i = 0; i < run.length; i++) {
         pts++;
