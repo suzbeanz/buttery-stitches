@@ -49,6 +49,7 @@ export interface ProjectState {
 
   addColor: (color: ThreadColor) => void;
   updateColor: (id: string, patch: Partial<ThreadColor>) => void;
+  removeColor: (id: string) => void;
 
   // ---- transient UI state (NOT tracked) ----
   setSelection: (ids: string[]) => void;
@@ -251,6 +252,23 @@ export const useProjectStore = create<ProjectState>()(
             ),
           },
         })),
+
+      // Remove a thread (never the last one). Defensively reassign anything still
+      // pointing at it — an object's colorId or a fill's blend target — to the
+      // first remaining thread, so a delete can never orphan a reference.
+      removeColor: (id) =>
+        set((s) => {
+          if (s.project.colors.length <= 1) return s;
+          const colors = s.project.colors.filter((c) => c.id !== id);
+          const fallback = colors[0].id;
+          const objects = s.project.objects.map((o) => {
+            const colorId = o.colorId === id ? fallback : o.colorId;
+            const blend = o.params?.blendColorId;
+            const params = blend === id ? { ...o.params, blendColorId: fallback } : o.params;
+            return colorId === o.colorId && params === o.params ? o : { ...o, colorId, params };
+          });
+          return { project: { ...s.project, colors, objects } };
+        }),
 
       setSelection: (ids) =>
         set((s) => ({ selectedIds: expandGroups(s.project.objects, ids) })),

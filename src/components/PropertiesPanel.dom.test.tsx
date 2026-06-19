@@ -132,4 +132,29 @@ describe("PropertiesPanel", () => {
     fireEvent.click(screen.getByText("+ Add"));
     expect(useProjectStore.getState().project.colors.length).toBe(before + 1);
   });
+
+  it("clamps a numeric param to its minimum (no zero/negative density)", () => {
+    const { fillId } = seedSelectedFill();
+    render(<PropertiesPanel />);
+    const input = screen.getByText(/Density/i).closest("label")!.querySelector("input")!;
+    fireEvent.change(input, { target: { value: "0" } });
+    const d = useProjectStore.getState().project.objects.find((o) => o.id === fillId)!.params.density;
+    expect(d).toBeGreaterThanOrEqual(0.1);
+    fireEvent.change(input, { target: { value: "-5" } });
+    const d2 = useProjectStore.getState().project.objects.find((o) => o.id === fillId)!.params.density;
+    expect(d2).toBeGreaterThanOrEqual(0.1);
+  });
+
+  it("deletes an unused thread but disables deleting one in use", () => {
+    seedSelectedFill(); // colors: the fill's color (in use) + "Red" (unused)
+    render(<PropertiesPanel />);
+    const dels = screen.getAllByLabelText(/^Delete /) as HTMLButtonElement[];
+    const enabled = dels.filter((b) => !b.disabled);
+    const disabled = dels.filter((b) => b.disabled);
+    expect(enabled).toHaveLength(1); // only the unused "Red"
+    expect(disabled).toHaveLength(1); // the in-use fill color can't be deleted
+    const before = useProjectStore.getState().project.colors.length;
+    fireEvent.click(enabled[0]);
+    expect(useProjectStore.getState().project.colors.length).toBe(before - 1);
+  });
 });

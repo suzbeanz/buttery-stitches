@@ -72,6 +72,9 @@ export default function LayerPanel() {
                   }
                   setDragIndex(null);
                 }}
+                // Reset even when the drop lands outside any row, so the dragged
+                // row doesn't stay dimmed.
+                onDragEnd={() => setDragIndex(null)}
                 className={`group flex items-center gap-2 px-2 py-1.5 text-sm transition-colors duration-150 ${
                   selected ? "bg-butter-300" : "hover:bg-butter-200/70"
                 } ${dragIndex === index ? "opacity-50" : ""}`}
@@ -130,7 +133,7 @@ export default function LayerPanel() {
                   data-tip="Delete"
                   aria-label="Delete"
                   onClick={() => removeObjects([o.id])}
-                  className="tap-target grid h-8 w-8 place-items-center rounded text-ink/45 opacity-0 hover:bg-stamp/10 hover:text-stamp group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100"
+                  className="tap-target grid h-8 w-8 place-items-center rounded text-ink/45 opacity-0 hover:bg-stamp/10 hover:text-stamp group-hover:opacity-100 focus-visible:opacity-100 [@media(pointer:coarse)]:opacity-100"
                 >
                   <Trash2 size={15} />
                 </button>

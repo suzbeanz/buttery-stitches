@@ -129,4 +129,30 @@ describe("projectStore — QA fixes", () => {
     useProjectStore.getState().updateObject(a.id, { visible: true });
     expect(useProjectStore.getState().selectedIds).toEqual([]);
   });
+
+  it("removeColor never orphans a reference (reassigns to a remaining thread)", () => {
+    const st = useProjectStore.getState();
+    const c0 = st.project.colors[0].id;
+    st.addColor({ id: "c_extra", rgb: [1, 2, 3], name: "Extra" });
+    const o = makeObject("fill", line, "c_extra");
+    st.addObject(o);
+
+    useProjectStore.getState().removeColor("c_extra");
+    const after = useProjectStore.getState().project;
+    expect(after.colors.find((c) => c.id === "c_extra")).toBeUndefined();
+    // the object that referenced it is reassigned, not orphaned
+    expect(after.objects.find((x) => x.id === o.id)!.colorId).toBe(c0);
+  });
+
+  it("removeColor refuses to delete the last remaining thread", () => {
+    const st = useProjectStore.getState();
+    const only = st.project.colors[0].id;
+    // collapse to a single color first
+    while (useProjectStore.getState().project.colors.length > 1) {
+      const extra = useProjectStore.getState().project.colors.find((c) => c.id !== only)!;
+      useProjectStore.getState().removeColor(extra.id);
+    }
+    useProjectStore.getState().removeColor(only);
+    expect(useProjectStore.getState().project.colors.length).toBe(1);
+  });
 });
