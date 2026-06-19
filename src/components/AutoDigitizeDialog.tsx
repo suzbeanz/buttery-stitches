@@ -29,7 +29,8 @@ export default function AutoDigitizeDialog({
   onClose: () => void;
 }) {
   const [imageData, setImageData] = useState<ImageData | null>(null);
-  const [numColors, setNumColors] = useState(6);
+  const [numColors, setNumColors] = useState(4);
+  const [userSetColors, setUserSetColors] = useState(false);
   const [removeBackground, setRemoveBackground] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +55,16 @@ export default function AutoDigitizeDialog({
     [imageData],
   );
   const looksLikePhoto = complexity > PHOTO_COMPLEXITY;
+
+  // Adaptive default color count. Flat, limited-palette artwork (a logo, an
+  // illustration — what this tool is FOR) wants few colors: more just posterizes
+  // smooth shading into bands whose jagged boundaries shatter into hundreds of
+  // tiny regions. Photos need more to read. The user can override; once they do,
+  // we stop steering.
+  useEffect(() => {
+    if (!imageData || userSetColors) return;
+    setNumColors(looksLikePhoto ? 8 : 4);
+  }, [imageData, looksLikePhoto, userSetColors]);
 
   function digitize() {
     if (!imageData) return;
@@ -153,13 +164,17 @@ export default function AutoDigitizeDialog({
             min={2}
             max={12}
             value={numColors}
-            onChange={(e) => setNumColors(Number(e.target.value))}
+            onChange={(e) => {
+              setUserSetColors(true);
+              setNumColors(Number(e.target.value));
+            }}
             className="w-full cursor-pointer accent-ink"
           />
         </label>
         <p className="mb-3 text-[11px] text-navy/55">
           More colors capture more detail (eyes, nose, shading) and add thread
-          changes; fewer keep it simple and bold. Try 6–8 for a portrait.
+          changes; fewer keep it simple and bold. Clean logos and illustrations
+          look best at 3–5; try 6–8 for a busy photo.
         </p>
 
         <label className="mb-4 flex items-center gap-2 text-sm text-navy">
