@@ -44,11 +44,20 @@ function broadFillStyle(rings: EmbObject["paths"]): "tatami" | "contour" {
   if (usable.length === 0) return "tatami";
   // Use the LARGEST ring as the outer boundary (traced rings aren't area-sorted).
   const outer = usable.reduce((a, b) => (polygonArea(b) > polygonArea(a) ? b : a));
+  // Contour rows only read as smooth concentric rings on a BIG shape. On a small
+  // feature (an eye, a nose, a dot) the handful of rings spiral into the centre
+  // and look like a scribbled swirl — so anything below this size fills solid.
+  const outerDia = 2 * Math.sqrt(polygonArea(outer) / Math.PI); // equivalent diameter
+  if (outerDia < CONTOUR_MIN_DIAMETER_MM) return "tatami";
   const rec = recognizeShape(outer, 1.0);
   if (rec && (rec.kind === "circle" || rec.kind === "ellipse")) return "contour";
   if (isThinBand(usable, outer)) return "contour"; // a frame / ring band
   return "tatami";
 }
+
+/** Below this equivalent diameter (mm) a round shape fills solid (tatami), not
+ *  contour — too few rings to read as concentric instead of a spiral scribble. */
+const CONTOUR_MIN_DIAMETER_MM = 14;
 
 /** A region is a thin BAND (→ contour) when it wraps a hole AND its wall is thin
  *  relative to its size: net (wall) area over a holes-aware mean width tells us

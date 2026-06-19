@@ -180,7 +180,12 @@ export function recognizeShape(ring: Path, tolMm = 0.6): Recognized | null {
     if (crSd / mr < 0.08) {
       const rot0 = Math.atan2(corners[0].y - c.y, corners[0].x - c.x);
       const ringP = makeRegular(c, mr, corners.length, rot0);
-      if (fitsWithin(samples, ringP, tolMm * 2.2)) {
+      // Fit tolerance RELATIVE to size: a real polygon's edges sit on its samples
+      // (≈0 residual), but a small round blob approximated by an inscribed polygon
+      // bows out by ~0.19·radius — a fixed mm tolerance is far too loose on a tiny
+      // feature (an eye), so it gets mis-snapped to a pentagon. Capping at a small
+      // fraction of the radius rejects the blob while still accepting true polygons.
+      if (fitsWithin(samples, ringP, Math.min(tolMm * 2.2, mr * 0.06))) {
         return { kind: "polygon", ring: ringP, angleDeg: (rot0 * 180) / Math.PI };
       }
     }

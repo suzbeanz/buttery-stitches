@@ -920,21 +920,33 @@ export function generateDesign(
   );
 
   // Coverage map: a travel is acceptable only if it stays HIDDEN — i.e. the whole
-  // connector lies under a fill region (its own shape's fill, or another's),
-  // regardless of stitch order. A travel across OPEN fabric (e.g. between the
-  // letters of a word) would show as a thread slash, so it is trimmed instead.
+  // connector lies under a SAME-COLOUR fill region (so the travel thread is truly
+  // buried, not sitting on top of a different colour as a slash). A move across
+  // open fabric — or over only other colours — is trimmed instead.
   const fills = drawn
     .map((d) => d.object)
     .filter((o, i, arr) => o.type === "fill" && arr.findIndex((x) => x.id === o.id) === i);
-  /** True if the whole segment a→b lies under some fill region (hidden). */
-  function coveredBetween(a: Point, b: Point): boolean {
-    if (fills.length === 0) return false;
+  // Sew order: the index at which each object's stitching first appears. A fill
+  // hides a travel only if it ends up ON TOP of it — i.e. it's the SAME colour
+  // (invisible either way) or it's sewn LATER (laid over the travel). A different
+  // colour sewn EARLIER sits under the travel, so the travel would show on it.
+  const drawOrder = new Map<string, number>();
+  drawn.forEach((d, i) => {
+    if (!drawOrder.has(d.object.id)) drawOrder.set(d.object.id, i);
+  });
+  /** True if a `colorId` travel from a→b stays hidden: every point lies under a
+   *  fill that is the same colour or sewn after `afterOrder` (so it's on top). */
+  function coveredBetween(a: Point, b: Point, colorId: string, afterOrder: number): boolean {
+    const cover = fills.filter(
+      (o) => o.colorId === colorId || (drawOrder.get(o.id) ?? -1) > afterOrder,
+    );
+    if (cover.length === 0) return false;
     const samples = Math.max(2, Math.ceil(distance(a, b) / 1.5));
     for (let s = 0; s <= samples; s++) {
       const t = s / samples;
       const p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
       let covered = false;
-      for (const o of fills) {
+      for (const o of cover) {
         if (pointInRings(p, o.paths)) {
           covered = true;
           break;
@@ -1180,7 +1192,7 @@ export function generateDesign(
         !colorChanged &&
         gap > jumpThreshold &&
         gap <= MAX_COVERED_TRAVEL &&
-        coveredBetween(prevPoint, start);
+        coveredBetween(prevPoint, start, col, drawOrder.get(object.id) ?? di);
       const shortTravel =
         !colorChanged && !d.noBareTravel && gap > jumpThreshold && gap <= exposedMax;
       // Direct (straight) travel when the move is already safe to stitch.
