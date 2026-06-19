@@ -13,6 +13,7 @@ import { satinColumn } from "./satin";
 import { tatamiFill, tatamiConcaveRuns, multiBlendFill, motifFill, motifRunAlong, carvePoints, splitFillRegions, autoFillAngleForRegions } from "./fill";
 import { contourFill } from "./contour";
 import { medialColumns, columnsFromCenterlines, satinCoverage, residualRegions, type SatinColumn } from "./medial";
+import { turningFill } from "./turning";
 import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
 import { dropShortStitches, splitLongTravels } from "./resample";
 
@@ -728,8 +729,11 @@ export function generateObjectRuns(
       }
       tops = [top];
     } else {
-      // Plain broad fill: concavity-aware tatami (clean edges on wavy/notched shapes).
-      tops = tatamiConcaveRuns(region, { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp });
+      // Plain broad fill. A curved, elongated shape gets a TURNING fill whose rows
+      // follow the form (banner, leaf, crescent); everything else uses the
+      // concavity-aware tatami. turningFill returns null when it isn't a good fit.
+      const fillOpts = { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp };
+      tops = turningFill(region, fillOpts) ?? tatamiConcaveRuns(region, fillOpts);
       tatamiNoBareTravel = true;
     }
 
