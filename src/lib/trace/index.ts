@@ -4,7 +4,7 @@ import { newId } from "../id";
 import { makeObjectFromPaths } from "../objects";
 import { smoothRingKeepingCorners } from "../smooth";
 import { douglasPeucker } from "./simplify";
-import { polygonArea } from "./classify";
+import { polygonArea, polygonPerimeter } from "./classify";
 import { recognizeShape } from "./recognize";
 import { quantizeImage, borderBackgroundColor } from "./quantize";
 
@@ -148,7 +148,7 @@ export function tracedataToObjects(
   }
 
   const colors: ThreadColor[] = [];
-  const built: { object: EmbObject; area: number }[] = [];
+  const built: { object: EmbObject; area: number; stroke: boolean }[] = [];
 
   td.layers.forEach((layer, ci) => {
     if (ci === bgIndex) return;
@@ -162,46 +162,73 @@ export function tracedataToObjects(
       name: `Color ${ci + 1}`,
     };
 
-    // Build ONE solid fill object per color from all its regions (the nonzero
-    // fill engine handles disjoint blobs + their holes in a single object). We
-    // deliberately produce SOLID fills rather than per-region running outlines:
-    // that's what makes an auto-digitized logo look like real embroidery and
-    // keeps it to a clean object-per-color instead of dozens of slivers. Tiny
-    // specks are despeckled by area. The user can convert any region to satin in
-    // the editor for crisp strokes.
+    // Separate each colour's regions into SOLID blobs and thin LINE-ART. Bold
+    // outlines and fur/detail strokes trace as long, thin regions; filling them
+    // shatters them into slivers (and carves holes into the colour beneath). So
+    // thin regions are pulled into their own object that the engine renders as a
+    // running/satin line laid OVER the fills — the way a hand digitizer outlines
+    // a shape — while broad regions stay solid fills. Tiny specks (area) and short
+    // thin fringe (length) are despeckled. The nonzero fill engine handles each
+    // object's disjoint blobs + holes together.
+    const clean = (r: Path) => recognizeShape(r, 1.0)?.ring ?? smoothRingKeepingCorners(r, 0.8);
     const fillRings: Path[] = [];
-    let outerArea = 0;
+    const strokeRings: Path[] = [];
+    let fillArea = 0;
+    let strokeArea = 0;
 
     layer.forEach((path) => {
       if (path.isholepath) return; // pulled in via a parent's holechildren
       const rawOuter = simp(pathToPolylinePx(path));
       const area = polygonArea(rawOuter);
       if (area < minAreaMm2) return; // despeckle
-      outerArea += area;
+      const perim = polygonPerimeter(rawOuter);
+      const meanWidth = perim > 0 ? (2 * area) / perim : 0; // ≈ stroke width for a thin shape
       const rawHoles = (path.holechildren ?? [])
         .map((idx) => layer[idx])
         .filter(Boolean)
         .map((h) => simp(pathToPolylinePx(h)))
         .filter((h) => polygonArea(h) >= minAreaMm2);
-      // SMART SHAPES: if a traced region is really a circle / ellipse / rectangle /
-      // regular polygon, snap it to the exact primitive (it then stitches as a true
-      // shape with a clean axis). Otherwise smooth the curved runs while KEEPING
-      // sharp corners crisp, so a logo's angles and a star's points stay sharp
-      // instead of melting into the tracer's rounded blocks.
-      const clean = (r: Path) => recognizeShape(r, 1.0)?.ring ?? smoothRingKeepingCorners(r, 0.8);
-      fillRings.push(clean(rawOuter), ...rawHoles.map(clean));
+      const rings = [clean(rawOuter), ...rawHoles.map(clean)];
+      // Thin AND long enough → line-art stroke; short thin shapes are fringe noise.
+      if (meanWidth < STROKE_MAX_WIDTH_MM && perim / 2 >= STROKE_MIN_LENGTH_MM) {
+        strokeRings.push(...rings);
+        strokeArea += area;
+      } else {
+        fillRings.push(...rings);
+        fillArea += area;
+      }
     });
 
+    let used = false;
     if (fillRings.length > 0) {
-      built.push({ object: makeObjectFromPaths("fill", fillRings, colorId), area: outerArea });
-      colors.push(color);
+      built.push({ object: makeObjectFromPaths("fill", fillRings, colorId), area: fillArea, stroke: false });
+      used = true;
     }
+    if (strokeRings.length > 0) {
+      // These regions are thin by construction → declare satin so the engine medial-
+      // axes each into a column and renders the very-thin ones as running lines (it
+      // falls back to tatami per-region where satin can't cover). Declared here, not
+      // left to re-classification, because a scattered BAG of strokes can fool the
+      // whole-object width heuristic.
+      const strokeObj = makeObjectFromPaths("fill", strokeRings, colorId);
+      strokeObj.params = { fillStyle: "satin" };
+      built.push({ object: strokeObj, area: strokeArea, stroke: true });
+      used = true;
+    }
+    if (used) colors.push(color);
   });
 
-  // Stitch the largest fills first so smaller details land on top, not buried.
-  built.sort((a, b) => b.area - a.area);
+  // Sew solid fills first (largest → smallest), then all line-art strokes, so the
+  // outlines and detail land crisply ON TOP of the fills instead of being buried.
+  built.sort((a, b) => Number(a.stroke) - Number(b.stroke) || b.area - a.area);
   return { colors, objects: built.map((b) => b.object) };
 }
+
+/** A traced region thinner than this (mean width, mm) is line-art (a stroke), not
+ *  a fill — rendered as a running/satin line over the fills rather than filled. */
+const STROKE_MAX_WIDTH_MM = 2.2;
+/** Thin regions shorter than this (mm) are anti-aliasing fringe, not strokes. */
+const STROKE_MIN_LENGTH_MM = 5;
 
 /**
  * imagetracerjs trace options. Because we hand it a pre-quantized FLAT image

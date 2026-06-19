@@ -164,7 +164,7 @@ describe("tracedataToObjects", () => {
     expect(objects[0].paths).toHaveLength(2); // both blobs as even-odd rings
   });
 
-  it("builds one solid fill per color, merging all its regions", () => {
+  it("separates thin line-art (strokes) from solid blobs within a color", () => {
     const td = {
       width: 100,
       height: 100,
@@ -174,15 +174,22 @@ describe("tracedataToObjects", () => {
       ],
       layers: [
         [sq(0, 0, 100, 100)],
-        // a solid blob plus a thin sliver — both belong to the one fill object.
+        // a solid blob (30×30) plus a thin sliver (40×2 ≈ 2mm wide line-art).
         [sq(10, 10, 40, 40), sq(50, 10, 90, 12)],
       ],
     } as unknown as Tracedata;
 
-    const { objects } = tracedataToObjects(td, { mmPerPx: 1 });
-    expect(objects).toHaveLength(1);
-    expect(objects[0].type).toBe("fill");
-    expect(objects[0].paths).toHaveLength(2);
+    const { objects, colors } = tracedataToObjects(td, { mmPerPx: 1 });
+    // One colour → a solid fill + a separate stroke object (declared satin so the
+    // engine renders it as a line laid over the fill). Strokes sew last (on top).
+    expect(colors).toHaveLength(1);
+    expect(objects).toHaveLength(2);
+    expect(objects.every((o) => o.colorId === objects[0].colorId)).toBe(true);
+    const stroke = objects.find((o) => o.params.fillStyle === "satin");
+    const fill = objects.find((o) => o.params.fillStyle !== "satin");
+    expect(stroke, "thin sliver becomes a stroke").toBeDefined();
+    expect(fill, "solid blob stays a fill").toBeDefined();
+    expect(objects[objects.length - 1]).toBe(stroke); // stroke last → on top
   });
 
   it("orders objects largest-area first (details on top)", () => {

@@ -132,8 +132,13 @@ export function fixObjectStitches(object: EmbObject): EmbObject {
     // Preserve a DECORATIVE style the user deliberately chose (gradient, blend,
     // motif) — only auto-decide for the assignable defaults (tatami/satin/contour
     // /unset), so an "auto-fix" never destroys a deliberate effect.
-    const decorative = params.fillStyle === "gradient" || params.fillStyle === "blend" || params.fillStyle === "motif";
-    if (!decorative) {
+    // Auto-decide the fill style ONLY when it's unset or the plain default. Any
+    // style the object already declares — a decorative effect (gradient/blend/
+    // motif), or a satin/contour the digitizer (or auto-trace) deliberately chose
+    // for line-art — is respected; the engine still falls back safely (satin →
+    // tatami) where the geometry won't take it.
+    const explicit = !!params.fillStyle && params.fillStyle !== "tatami";
+    if (!explicit) {
       const kind = classifyRegion(object.paths, { satinMaxWidthMm: SATIN_WIDTH_THRESHOLD });
       params.fillStyle = object.text || kind !== "tatami" ? "satin" : broadFillStyle(object.paths);
     }
