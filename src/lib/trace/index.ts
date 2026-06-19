@@ -201,19 +201,28 @@ export function tracedataToObjects(
       if (area < minAreaMm2) return; // despeckle
       const perim = polygonPerimeter(rawOuter);
       const meanWidth = perim > 0 ? (2 * area) / perim : 0; // ≈ stroke width for a thin shape
-      const rawHoles = (path.holechildren ?? [])
-        .map((idx) => layer[idx])
-        .filter(Boolean)
-        .map((h) => simp(pathToPolylinePx(h)))
-        .filter((h) => polygonArea(h) >= minAreaMm2);
-      const rings = [clean(rawOuter), ...rawHoles.map(clean)];
       // Line-art stroke = thin AND long AND genuinely ELONGATED (length ≫ width).
       // The elongation test is what separates a true stroke (an outline, a fur
       // line) from a jagged shading blob that merely has a low mean width — the
       // blob stays a solid fill instead of fragmenting into a mess of medial stubs.
       const length = perim / 2;
       const elongation = meanWidth > 0 ? length / meanWidth : 0;
-      if (meanWidth < STROKE_MAX_WIDTH_MM && length >= STROKE_MIN_LENGTH_MM && elongation >= STROKE_MIN_ELONGATION) {
+      const isStroke =
+        meanWidth < STROKE_MAX_WIDTH_MM && length >= STROKE_MIN_LENGTH_MM && elongation >= STROKE_MIN_ELONGATION;
+      // An INTERIOR island of the background color that is a thin sliver is the
+      // background showing THROUGH a gap between two foreground shapes (between sail
+      // panels, between letters) — not a feature. Stitching it would lay a line of
+      // background-colored thread where there should be bare fabric, so drop it. A
+      // genuine same-as-background feature (a white ball on a white page) is blobby,
+      // not a sliver, so it fails this test and survives.
+      if (isBackground && isStroke) return;
+      const rawHoles = (path.holechildren ?? [])
+        .map((idx) => layer[idx])
+        .filter(Boolean)
+        .map((h) => simp(pathToPolylinePx(h)))
+        .filter((h) => polygonArea(h) >= minAreaMm2);
+      const rings = [clean(rawOuter), ...rawHoles.map(clean)];
+      if (isStroke) {
         strokeRings.push(...rings);
         strokeArea += area;
       } else {

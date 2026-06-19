@@ -311,4 +311,34 @@ describe("imageDataToObjects (real imagetracerjs)", () => {
     const noisy = image(20, 20, (x, y) => [(x * 13) % 256, (y * 29) % 256, (x * y) % 256]);
     expect(estimateColorComplexity(noisy)).toBeGreaterThan(estimateColorComplexity(flat));
   });
+
+  it("drops a thin background-color sliver trapped between shapes", () => {
+    // Cream field (the background) with a solid blue square in the middle, split by
+    // a thin cream bar through its center — the background showing through a gap.
+    // With background removal on, the cream field (border) AND the interior cream
+    // sliver are dropped, so no cream thread is laid where there should be fabric.
+    const img = image(80, 80, (x, y) => {
+      const inSquare = x >= 20 && x < 60 && y >= 20 && y < 60;
+      const inSliver = x >= 24 && x < 56 && y >= 38 && y < 41;
+      return inSquare && !inSliver ? [30, 70, 200] : [235, 225, 200];
+    });
+    // mmPerPx 0.5 makes the 3-px-tall bar ~1.5 mm wide — a thin sliver, not a fill.
+    const { colors } = imageDataToObjects(img, 2, { mmPerPx: 0.5, removeBackground: true });
+    // No surviving color is the cream background tint.
+    const hasCream = colors.some((c) => c.rgb[0] > 200 && c.rgb[1] > 190 && c.rgb[2] > 160);
+    expect(hasCream).toBe(false);
+  });
+
+  it("keeps a blobby background-color island (a white ball on a white page)", () => {
+    // Cream field with a dark square frame; inside the frame is a solid cream disc.
+    // That interior cream blob is a real foreground feature (not a sliver), so it
+    // survives background removal even though it matches the background color.
+    const img = image(80, 80, (x, y) => {
+      const onFrame = x >= 20 && x < 60 && y >= 20 && y < 60 && (x < 26 || x >= 54 || y < 26 || y >= 54);
+      return onFrame ? [30, 25, 20] : [235, 225, 200];
+    });
+    const { colors } = imageDataToObjects(img, 2, { mmPerPx: 1, removeBackground: true });
+    const hasCream = colors.some((c) => c.rgb[0] > 200 && c.rgb[1] > 190 && c.rgb[2] > 160);
+    expect(hasCream).toBe(true);
+  });
 });
