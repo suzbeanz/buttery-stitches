@@ -446,6 +446,22 @@ function seedMidpoint(cl: Path): Point {
  */
 const RUNNING_COLUMN_MM = 0.6;
 
+/** Line-art columns up to this width (mm) render as a single running line. Line-art
+ *  sits OVER the fills (which supply the body), so even a moderately wide detail
+ *  stroke reads best as a clean centerline; only a genuinely thick brushstroke
+ *  beyond this stays a filled satin column. */
+const LINE_ART_RUN_MAX_MM = 6;
+/** Shortest line-art stroke (centerline mm) worth sewing — below this it's a
+ *  medial spur/speck that just adds a trim. */
+const LINE_ART_MIN_LEN_MM = 2.5;
+
+/** Arc length of a polyline (mm). */
+function polylineLength(line: Point[]): number {
+  let s = 0;
+  for (let i = 1; i < line.length; i++) s += distance(line[i - 1], line[i]);
+  return s;
+}
+
 /**
  * Min-stitch for SATIN runs. Satin is intentionally dense — its row spacing
  * (≈0.3–0.5 mm) is the gap between consecutive same-rail penetrations, below the
@@ -675,8 +691,18 @@ export function generateObjectRuns(
     // connect with a hidden travel instead of a trimmed hop across the band.
     let contourSpiral = false;
     if (usingSatin) {
-      tops = columns.map((c) =>
-        c.widthMm < RUNNING_COLUMN_MM
+      // Line-art (outlines, fine detail strokes) renders as clean RUNNING lines
+      // down each column's centerline — the line follows the stroke's direction —
+      // instead of a heavy satin zig-zag. Bold columns still satin; only genuinely
+      // wide line-art (a thick brushstroke) falls back to a filled column.
+      const runMax = p.lineArt ? LINE_ART_RUN_MAX_MM : RUNNING_COLUMN_MM;
+      // Line-art: drop medial-axis SPURS (tiny centerline stubs off a blobby
+      // region) — they sew as 1-stitch specks that only add trims and clutter.
+      const keep = p.lineArt
+        ? columns.filter((c) => polylineLength(c.centerline) >= LINE_ART_MIN_LEN_MM)
+        : columns;
+      tops = keep.map((c) =>
+        c.widthMm < runMax
           ? runningStitch(c.centerline, stitchLength)
           : c.throws,
       );
