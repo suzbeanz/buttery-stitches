@@ -37,10 +37,11 @@ describe("ToolRail", () => {
     expect(curve.getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("opens the Add-words flow from the Make group", () => {
+  it("does not host content-adders (Words/Image/Shapes live in the top bar)", () => {
     render(<ToolRail />);
-    fireEvent.click(screen.getByRole("button", { name: "Words" }));
-    expect(useEditorStore.getState().pendingStart).toBe("text");
+    expect(screen.queryByRole("button", { name: "Words" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Image" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Box" })).toBeNull();
   });
 
   it("toggles snap and guides", () => {
