@@ -100,6 +100,39 @@ describe("quantizeImage", () => {
     const o = (22 * 64 + 22) * 4; // center of the block
     expect([q.data[o], q.data[o + 1], q.data[o + 2]]).toEqual([20, 60, 200]);
   });
+
+  it("consolidates a small similar-color island but keeps a high-contrast feature", () => {
+    // A light-tan field with two small blobs: a soft-brown one (a shading fleck,
+    // close in color) and a near-black one (a feature, like an eye). After cleanup
+    // the soft-brown fleck has melted into the tan around it, while the dark blob
+    // stays its own color — exactly how consolidation must behave on a face.
+    const tan: RGB = [210, 180, 140];
+    const soft: RGB = [150, 120, 90]; // ~100 from tan → merges
+    const dark: RGB = [30, 25, 20]; // ~250 from tan → preserved
+    const inBlob = (x: number, y: number, cx: number, cy: number) =>
+      x >= cx && x < cx + 6 && y >= cy && y < cy + 6;
+    const img = image(100, 100, (x, y) => {
+      if (inBlob(x, y, 20, 20)) return [...soft, 255];
+      if (inBlob(x, y, 70, 70)) return [...dark, 255];
+      return [...tan, 255];
+    });
+    const q = quantizeImage(img, 3);
+    const at = (x: number, y: number) => {
+      const o = (y * 100 + x) * 4;
+      return [q.data[o], q.data[o + 1], q.data[o + 2]];
+    };
+    const field = at(0, 0); // the consolidated tan
+    expect(at(22, 22)).toEqual(field); // soft-brown fleck merged into the field
+    expect(at(72, 72)).not.toEqual(field); // dark feature preserved
+  });
+
+  it("leaves a clean flat-color design untouched", () => {
+    // Two large halves: nothing to consolidate, so both colors survive intact —
+    // a logo/flat-art import is not altered by the cleanup.
+    const img = image(80, 80, (x) => (x < 40 ? [200, 30, 40, 255] : [30, 70, 200, 255]));
+    const q = quantizeImage(img, 2);
+    expect(distinctColors(q).size).toBe(2);
+  });
 });
 
 describe("kmeansPalette", () => {

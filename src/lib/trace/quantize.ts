@@ -235,7 +235,17 @@ export function quantizeImage(img: RasterImage, numColors: number): QuantizedIma
   // and bridges 1-pixel gaps WITHOUT eroding genuine detail — any feature wider
   // than ~2 px survives — so same-color regions stop fragmenting. Skip on small
   // rasters, where a pixel can be a real feature.
-  if (width >= 64 && height >= 64) majorityFilter(labels, width, height);
+  if (width >= 64 && height >= 64) {
+    majorityFilter(labels, width, height);
+    // Then consolidate fragments into clean shapes. A professional digitizer draws
+    // a subject as a few contiguous color areas, so their files carry almost no
+    // trims; an auto-trace of a photo shatters each color into dozens of little
+    // islands separated by shading, and the engine must trim to hop between them.
+    // Dissolve every small same-color island into the color that surrounds it —
+    // merging the fragments (coverage stays solid) instead of leaving holes — so
+    // the trace lands as a handful of broad regions, the way a pro would build it.
+    consolidateRegions(labels, width, height, palette);
+  }
 
   const out = new Uint8ClampedArray(data.length);
   for (let i = 0; i < total; i++) {
@@ -292,5 +302,105 @@ function majorityFilter(labels: Int16Array, width: number, height: number): void
       }
       labels[i] = best;
     }
+  }
+}
+
+/** Same-color islands smaller than this fraction of the opaque area are dissolved
+ *  into the color around them. ~0.4% turns a shattered photo into a handful of
+ *  broad regions (pro-style) while keeping anything a viewer would read as a
+ *  distinct feature — an eye, a nose, a logo mark on a large design. */
+const CONSOLIDATE_AREA_FRACTION = 0.004;
+/** Never dissolve an island bigger than this many pixels, however large the image
+ *  (so on a huge raster a genuine mid-size shape is always kept). */
+const CONSOLIDATE_AREA_CAP_PX = 20000;
+/** Only dissolve an island into a surrounding color this close (squared RGB
+ *  distance). Shading variants of one area (tan↔light-tan↔soft-brown fur) merge;
+ *  a high-contrast feature against its surround (a dark eye or nose on a light
+ *  face, a logo mark) stays put no matter how small — so consolidation cleans up
+ *  fragmentation without erasing the details a viewer actually reads. */
+const CONSOLIDATE_MERGE_DIST2 = 150 * 150;
+
+/**
+ * Merge small same-color islands into their surrounding color, in place. Labels
+ * the 4-connected components of the label map, then — smallest first — reassigns
+ * every component below the area threshold to the label that borders it most
+ * (its surrounding color), growing the neighbour over it. Dissolving small first
+ * lets a fleck melt into a mid region that may itself later melt into the big one,
+ * so a shattered area collapses to a few broad shapes. Transparent pixels are
+ * never touched, so the silhouette and any hole punched by the background survive.
+ */
+function consolidateRegions(labels: Int16Array, width: number, height: number, palette: RGB[]): void {
+  const total = width * height;
+  let opaque = 0;
+  for (let i = 0; i < total; i++) if (labels[i] >= 0) opaque++;
+  const minArea = Math.min(
+    CONSOLIDATE_AREA_CAP_PX,
+    Math.max(8, Math.floor(opaque * CONSOLIDATE_AREA_FRACTION)),
+  );
+
+  // Label 4-connected components of equal value (comp id per pixel, −1 = transparent).
+  const comp = new Int32Array(total).fill(-1);
+  const compPixels: number[][] = [];
+  const stack: number[] = [];
+  for (let start = 0; start < total; start++) {
+    if (labels[start] < 0 || comp[start] !== -1) continue;
+    const id = compPixels.length;
+    const val = labels[start];
+    const pixels: number[] = [];
+    comp[start] = id;
+    stack.length = 0;
+    stack.push(start);
+    while (stack.length) {
+      const k = stack.pop()!;
+      pixels.push(k);
+      const kx = k % width;
+      const ky = (k / width) | 0;
+      if (kx > 0 && comp[k - 1] === -1 && labels[k - 1] === val) { comp[k - 1] = id; stack.push(k - 1); }
+      if (kx < width - 1 && comp[k + 1] === -1 && labels[k + 1] === val) { comp[k + 1] = id; stack.push(k + 1); }
+      if (ky > 0 && comp[k - width] === -1 && labels[k - width] === val) { comp[k - width] = id; stack.push(k - width); }
+      if (ky < height - 1 && comp[k + width] === -1 && labels[k + width] === val) { comp[k + width] = id; stack.push(k + width); }
+    }
+    compPixels.push(pixels);
+  }
+
+  // Smallest components first: a fleck dissolves into a mid region, which can then
+  // dissolve into the big one — so a shattered area cascades down to a few shapes.
+  const order = compPixels.map((_, i) => i).sort((a, b) => compPixels[a].length - compPixels[b].length);
+  const count = new Map<number, number>();
+  for (const id of order) {
+    const pixels = compPixels[id];
+    if (pixels.length >= minArea) break; // all remaining are large enough to keep
+    // Tally the labels bordering this island (its current surrounding colors).
+    count.clear();
+    for (const k of pixels) {
+      const kx = k % width;
+      const ky = (k / width) | 0;
+      const nb = [
+        kx > 0 ? k - 1 : -1,
+        kx < width - 1 ? k + 1 : -1,
+        ky > 0 ? k - width : -1,
+        ky < height - 1 ? k + width : -1,
+      ];
+      for (const ni of nb) {
+        if (ni < 0) continue;
+        const nl = labels[ni];
+        if (nl < 0 || nl === labels[k]) continue; // skip outside + same-island
+        count.set(nl, (count.get(nl) ?? 0) + 1);
+      }
+    }
+    if (count.size === 0) continue; // island fills the whole opaque area — leave it
+    // Pick the most-bordering neighbour whose COLOR is close to this island's —
+    // a high-contrast island (dark eye on light fur) has no near neighbour, so it
+    // is kept; a shading fleck melts into the similar color hugging it.
+    const mine = palette[labels[pixels[0]]];
+    let best = -1;
+    let bestN = -1;
+    for (const [l, c] of count) {
+      const o = palette[l];
+      const d2 = (o[0] - mine[0]) ** 2 + (o[1] - mine[1]) ** 2 + (o[2] - mine[2]) ** 2;
+      if (d2 <= CONSOLIDATE_MERGE_DIST2 && c > bestN) { bestN = c; best = l; }
+    }
+    if (best < 0) continue; // no similar-enough surround → keep this feature
+    for (const k of pixels) labels[k] = best; // grow the surrounding color over it
   }
 }
