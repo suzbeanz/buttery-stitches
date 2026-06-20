@@ -21,6 +21,7 @@ import {
   Wand2,
   Import as ImportIcon,
   BadgeCheck,
+  Check,
   type LucideIcon,
 } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
@@ -33,6 +34,7 @@ import { type ShapeKind } from "../lib/shapes";
 import { cloneObject } from "../lib/objects";
 import { newId } from "../lib/id";
 import type { Project } from "../types/project";
+import type { SaveStatus } from "../App";
 import { toast } from "../store/toastStore";
 import { importDesignBytes, EMB_FORMATS, type EmbFormat } from "../lib/export";
 import { buildImportedObjects } from "../lib/embImport";
@@ -63,9 +65,11 @@ import type { AddTextResult } from "./TextDialog";
 export default function TopBar({
   onHelp,
   onHome,
+  saveStatus = "idle",
 }: {
   onHelp: () => void;
   onHome?: () => void;
+  saveStatus?: SaveStatus;
 }) {
   const project = useProjectStore((s) => s.project);
   const newProject = useProjectStore((s) => s.newProject);
@@ -291,7 +295,7 @@ export default function TopBar({
         <ImportIcon size={18} />
       </BarButton>
       <BarButton
-        label="Save"
+        label="Save a copy to your downloads (.embproj). Your work also auto-saves to this browser."
         onClick={() => {
           downloadProject(project);
           toast("Project saved to your downloads", "success");
@@ -299,6 +303,27 @@ export default function TopBar({
       >
         <Save size={18} />
       </BarButton>
+
+      {/* Quiet autosave reassurance — appears only while saving / just-saved. */}
+      {saveStatus !== "idle" && (
+        <span
+          className="flex shrink-0 items-center gap-1 pl-0.5 pr-1 text-[11px] text-navy/55"
+          aria-live="polite"
+          title="Your work auto-saves to this browser"
+        >
+          {saveStatus === "saving" ? (
+            <>
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-navy/40" />
+              Saving…
+            </>
+          ) : (
+            <>
+              <Check size={12} className="text-ink-deep" />
+              Saved
+            </>
+          )}
+        </span>
+      )}
 
       <div className="mx-1.5 h-5 w-px shrink-0 bg-butter-200/20" />
 
