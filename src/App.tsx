@@ -13,6 +13,7 @@ import { useEditorStore, type Tool } from "./store/editorStore";
 import { cloneObject } from "./lib/objects";
 import { downloadProject } from "./lib/embproj";
 import { loadAutosave, saveAutosave } from "./lib/autosave";
+import { toast } from "./store/toastStore";
 
 /** How far (mm) a pasted or duplicated object is offset so it doesn't hide the original. */
 const PASTE_OFFSET_MM = 3;
@@ -44,7 +45,11 @@ function isAppRoute(): boolean {
  * work is never lost — and so a stale-deploy chunk error can self-heal by
  * reloading to the fresh build without losing anything.
  */
-function useAutosave(): void {
+/** Quiet save-state shown in the top bar so the user trusts autosave is working. */
+export type SaveStatus = "idle" | "saving" | "saved";
+
+function useAutosave(): SaveStatus {
+  const [status, setStatus] = useState<SaveStatus>("idle");
   useEffect(() => {
     // Restore once at startup (before any edits), then keep saving on change.
     const saved = loadAutosave();
@@ -53,13 +58,23 @@ function useAutosave(): void {
       useProjectStore.temporal.getState().clear(); // a restore isn't an undo step
     }
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let clear: ReturnType<typeof setTimeout> | undefined;
     const unsub = useProjectStore.subscribe((s, prev) => {
       if (s.project === prev.project) return;
+      // An edit landed → "saving"; after the debounce write, "saved" briefly, then
+      // fade. Gives the quiet reassurance that work is protected, without nagging.
+      setStatus("saving");
       clearTimeout(timer);
-      timer = setTimeout(() => saveAutosave(useProjectStore.getState().project), 800);
+      timer = setTimeout(() => {
+        saveAutosave(useProjectStore.getState().project);
+        setStatus("saved");
+        clearTimeout(clear);
+        clear = setTimeout(() => setStatus("idle"), 1600);
+      }, 800);
     });
     return () => {
       clearTimeout(timer);
+      clearTimeout(clear);
       unsub();
     };
   }, []);
@@ -84,10 +99,12 @@ function useAutosave(): void {
     window.addEventListener("vite:preloadError", onPreloadError);
     return () => window.removeEventListener("vite:preloadError", onPreloadError);
   }, []);
+
+  return status;
 }
 
 export default function App() {
-  useAutosave();
+  const saveStatus = useAutosave();
   const [onApp, setOnApp] = useState<boolean>(isAppRoute);
 
   // Keep React in sync with browser back/forward navigation.
@@ -108,13 +125,13 @@ export default function App() {
 
   return (
     <>
-      {onApp ? <Studio onHome={() => go(false)} /> : <Home onStart={() => go(true)} />}
+      {onApp ? <Studio onHome={() => go(false)} saveStatus={saveStatus} /> : <Home onStart={() => go(true)} />}
       <Toaster />
     </>
   );
 }
 
-function Studio({ onHome }: { onHome: () => void }) {
+function Studio({ onHome, saveStatus }: { onHome: () => void; saveStatus: SaveStatus }) {
   // Keep the "active draw color" pointed at a real color in the project.
   const colors = useProjectStore((s) => s.project.colors);
   const activeColorId = useEditorStore((s) => s.activeColorId);
@@ -147,7 +164,7 @@ function Studio({ onHome }: { onHome: () => void }) {
 
   return (
     <div className="flex h-full flex-col bg-paper text-navy">
-      <TopBar onHelp={() => setShowHelp((v) => !v)} onHome={onHome} />
+      <TopBar onHelp={() => setShowHelp((v) => !v)} onHome={onHome} saveStatus={saveStatus} />
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         {layersOpen && (
           <div className={isNarrow ? `${overlay} anim-drawer-l left-0` : "contents"}>
@@ -285,6 +302,7 @@ function useGlobalShortcuts(setShowHelp: (fn: (v: boolean) => boolean) => void) 
           ps.addObjects(
             sel.map((o) => cloneObject(o, PASTE_OFFSET_MM, PASTE_OFFSET_MM)),
           );
+          toast(`Duplicated ${sel.length} object${sel.length > 1 ? "s" : ""}`, "success");
         }
         return;
       }
@@ -292,8 +310,13 @@ function useGlobalShortcuts(setShowHelp: (fn: (v: boolean) => boolean) => void) 
       if (mod && e.key.toLowerCase() === "g") {
         e.preventDefault();
         const ps = useProjectStore.getState();
-        if (e.shiftKey) ps.ungroupObjects(ps.selectedIds);
-        else ps.groupObjects(ps.selectedIds);
+        if (e.shiftKey) {
+          ps.ungroupObjects(ps.selectedIds);
+          toast("Ungrouped", "info");
+        } else if (ps.selectedIds.length > 1) {
+          ps.groupObjects(ps.selectedIds);
+          toast(`Grouped ${ps.selectedIds.length} objects`, "success");
+        }
         return;
       }
       // Select every object.

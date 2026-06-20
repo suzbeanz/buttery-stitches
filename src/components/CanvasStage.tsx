@@ -38,6 +38,7 @@ import {
   type Bounds,
 } from "../lib/geometry";
 import { snap } from "../lib/snap";
+import { toast } from "../store/toastStore";
 import { rectFromPoints, rectSpanMm, marqueeSelect } from "../lib/marquee";
 import { smoothPath } from "../lib/smooth";
 import { computeTicksRange } from "../lib/ruler";
@@ -425,7 +426,13 @@ export default function CanvasStage() {
         if (!best || pr.dist < best.dist) best = { id: o.id, segIndex: i, point: pr.point, dist: pr.dist };
       }
     }
-    if (best && best.dist <= Math.max(2, tolMm)) splitObject(best.id, best.segIndex, best.point);
+    if (best && best.dist <= Math.max(2, tolMm)) {
+      splitObject(best.id, best.segIndex, best.point);
+      toast("Line split in two", "success");
+    } else {
+      // Silent misses make the tool feel broken — say what to aim at.
+      toast("Click directly on a running line to split it", "info");
+    }
   }
 
   // Shape tool: commit the dragged bounding box as a premade shape object.
