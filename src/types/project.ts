@@ -38,6 +38,11 @@ export interface EmbObjectParams {
   fillStitchLength?: number;
   /** fill direction in degrees (default 0). */
   angle?: number;
+  /** ABSOLUTE stitch grain (deg) painted by the user with the Direction tool. When
+   *  set it overrides the auto grain and the turning/flow fills — the rows run
+   *  straight at this angle. `null`/absent = auto direction (principal axis +
+   *  `angle`). */
+  directionDeg?: number | null;
   /** add a stabilizing underlay pass (default true for fill/satin). */
   underlay?: boolean;
   /** how heavy the underlay is. "auto" follows the fabric; the rest override it
@@ -215,6 +220,7 @@ export const DEFAULT_PARAMS: Required<EmbObjectParams> = {
   density: 0.35,
   fillStitchLength: 4,
   angle: 0,
+  directionDeg: null,
   underlay: true,
   underlayWeight: "auto",
   pullComp: 0.2,
@@ -242,6 +248,7 @@ export function resolveParams(
     density: params.density ?? DEFAULT_PARAMS.density,
     fillStitchLength: params.fillStitchLength ?? DEFAULT_PARAMS.fillStitchLength,
     angle: params.angle ?? DEFAULT_PARAMS.angle,
+    directionDeg: params.directionDeg ?? DEFAULT_PARAMS.directionDeg,
     // running stitch never has underlay regardless of stored value
     underlay:
       type === "running" ? false : (params.underlay ?? DEFAULT_PARAMS.underlay),

@@ -10,6 +10,7 @@ import {
   Ruler,
   Scissors,
   Slice,
+  Compass,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import {
@@ -65,6 +66,9 @@ export default function ToolRail() {
         </ToolBtn>
         <ToolBtn id="cut" label="Cut" tip="Cut — click a running line to split it into two pieces" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Slice size={20} />
+        </ToolBtn>
+        <ToolBtn id="direction" label="Direction" tip="Direction — select a fill, then drag to set which way its stitches run" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+          <Compass size={20} />
         </ToolBtn>
       </Group>
 

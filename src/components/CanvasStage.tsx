@@ -171,6 +171,10 @@ export default function CanvasStage() {
   // until you measure again, switch tools, or press Escape — no object is made.
   const [measure, setMeasure] = useState<{ start: Point; end: Point } | null>(null);
   const measuringRef = useRef(false);
+  // Direction tool: drag a line across a selected fill to paint its stitch grain.
+  // On release the line's angle is written to each selected fill's directionDeg.
+  const [dirDrag, setDirDrag] = useState<{ start: Point; end: Point } | null>(null);
+  const dirDraggingRef = useRef(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -470,6 +474,8 @@ export default function CanvasStage() {
         clearDraft();
         setMeasure(null);
         measuringRef.current = false;
+        setDirDrag(null);
+        dirDraggingRef.current = false;
         useEditorStore.getState().setSatinRailA(null);
         useEditorStore.getState().setSelectedNode(null);
       } else if ((e.key === "c" || e.key === "C") && tool === "node") {
@@ -527,6 +533,10 @@ export default function CanvasStage() {
     if (tool !== "measure") {
       setMeasure(null);
       measuringRef.current = false;
+    }
+    if (tool !== "direction") {
+      setDirDrag(null);
+      dirDraggingRef.current = false;
     }
   }, [tool]);
 
@@ -590,6 +600,15 @@ export default function CanvasStage() {
       }
       return;
     }
+    // Direction: drag across a selected fill to paint its stitch grain.
+    if (tool === "direction") {
+      const p = stagePointMm(stage);
+      if (p) {
+        setDirDrag({ start: p, end: p });
+        dirDraggingRef.current = true;
+      }
+      return;
+    }
     if (!isPointTool(tool)) {
       // Press on empty canvas with the select tool begins a rubber-band marquee;
       // the actual selection (or a plain clear) is resolved on release.
@@ -637,6 +656,11 @@ export default function CanvasStage() {
     if (measuringRef.current) {
       const p = stagePointMm(stage);
       if (p) setMeasure((m) => (m ? { ...m, end: p } : m));
+      return;
+    }
+    if (dirDraggingRef.current) {
+      const p = stagePointMm(stage);
+      if (p) setDirDrag((d) => (d ? { ...d, end: p } : d));
       return;
     }
     if (!isPointTool(tool)) return;
@@ -699,6 +723,12 @@ export default function CanvasStage() {
       measuringRef.current = true;
       return;
     }
+    // Direction: one finger drags to paint the selected fill's grain.
+    if (tool === "direction" && p) {
+      setDirDrag({ start: p, end: p });
+      dirDraggingRef.current = true;
+      return;
+    }
     touchStartRef.current = p ? { mm: p, moved: false } : null;
     // Select tool on empty canvas → rubber-band; drawing taps are placed on release.
     if (!isDrawTool(tool) && tool === "select" && e.target === stage && p) {
@@ -751,6 +781,10 @@ export default function CanvasStage() {
       if (p) setMeasure((m) => (m ? { ...m, end: p } : m));
       return;
     }
+    if (dirDraggingRef.current) {
+      if (p) setDirDrag((d) => (d ? { ...d, end: p } : d));
+      return;
+    }
     const ts = touchStartRef.current;
     if (ts && p && Math.hypot(p.x - ts.mm.x, p.y - ts.mm.y) > 1.5) ts.moved = true;
     if (marquee) {
@@ -792,14 +826,41 @@ export default function CanvasStage() {
     setSelection(rectSpanMm(rect) < 1 ? [] : marqueeSelect(rect, objectBounds));
     setMarquee(null);
   }
+  // Paint direction: on release, write the drag line's angle to every selected
+  // fill. A too-short drag is ignored (a stray click shouldn't wipe the grain).
+  function finishDirection() {
+    if (!dirDraggingRef.current) return;
+    dirDraggingRef.current = false;
+    const d = dirDrag;
+    if (!d) return;
+    const len = Math.hypot(d.end.x - d.start.x, d.end.y - d.start.y);
+    if (len < 1.5) return; // a tap, not a drag
+    let deg = (Math.atan2(d.end.y - d.start.y, d.end.x - d.start.x) * 180) / Math.PI;
+    deg = ((deg % 180) + 180) % 180; // grain is an orientation, not a heading
+    const fills = useProjectStore
+      .getState()
+      .project.objects.filter((o) => selectedIds.includes(o.id) && o.type === "fill");
+    if (fills.length === 0) {
+      toast("Select a fill first, then drag to set its stitch direction", "info");
+      return;
+    }
+    for (const o of fills) {
+      updateObject(o.id, { params: { ...o.params, directionDeg: Math.round(deg) } });
+    }
+    toast(`Stitch direction set to ${Math.round(deg)}°`, "success");
+  }
+
   // Resolve the marquee on any mouse release — even outside the canvas — so the
   // rubber-band never gets stuck on screen. The ref always holds the latest
   // closure (fresh marquee + object bounds) without re-subscribing each frame.
   const finishMarqueeRef = useRef(finishMarquee);
   finishMarqueeRef.current = finishMarquee;
+  const finishDirectionRef = useRef(finishDirection);
+  finishDirectionRef.current = finishDirection;
   useEffect(() => {
     const onUp = () => {
       measuringRef.current = false; // stop tracking; keep the measurement shown
+      finishDirectionRef.current();
       finishMarqueeRef.current();
     };
     window.addEventListener("mouseup", onUp);
@@ -869,7 +930,7 @@ export default function CanvasStage() {
             cursor:
               tool === "pan"
                 ? "grab"
-                : drawing || freehand || tool === "shape" || tool === "fill" || tool === "cut" || tool === "measure"
+                : drawing || freehand || tool === "shape" || tool === "fill" || tool === "cut" || tool === "measure" || tool === "direction"
                   ? "crosshair"
                   : "default",
           }}
@@ -1171,6 +1232,52 @@ export default function CanvasStage() {
                     </Group>
                   );
                 })()}
+
+                {/* Direction tool: live drag arrow + angle readout. */}
+                {dirDrag && (() => {
+                  const { start, end } = dirDrag;
+                  const x1 = px(start.x), y1 = py(start.y), x2 = px(end.x), y2 = py(end.y);
+                  const ang = Math.atan2(y2 - y1, x2 - x1);
+                  const ah = 9;
+                  let deg = (Math.atan2(end.y - start.y, end.x - start.x) * 180) / Math.PI;
+                  deg = Math.round(((deg % 180) + 180) % 180);
+                  return (
+                    <Group listening={false}>
+                      <Line points={[x1, y1, x2, y2]} stroke={C.navy} strokeWidth={2} />
+                      <Line points={[x2, y2, x2 + ah * Math.cos(ang + 2.6), y2 + ah * Math.sin(ang + 2.6)]} stroke={C.navy} strokeWidth={2} />
+                      <Line points={[x2, y2, x2 + ah * Math.cos(ang - 2.6), y2 + ah * Math.sin(ang - 2.6)]} stroke={C.navy} strokeWidth={2} />
+                      <Rect x={x2 + 8} y={y2 - 8} width={36} height={16} cornerRadius={2} fill={C.navy} opacity={0.92} />
+                      <Text x={x2 + 8} y={y2 - 8} width={36} height={16} text={`${deg}°`} fontSize={11} fontStyle="bold" fontFamily="monospace" fill={C.cream} align="center" verticalAlign="middle" />
+                    </Group>
+                  );
+                })()}
+
+                {/* Persistent grain arrow on each selected fill that has a painted
+                    direction, so the current manual grain is always visible. */}
+                {tool === "direction" && !dirDrag &&
+                  project.objects
+                    .filter((o) => selectedIds.includes(o.id) && o.type === "fill" && o.params.directionDeg != null)
+                    .map((o) => {
+                      const b = pathsBounds(o.paths);
+                      if (!b) return null;
+                      const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
+                      const half = Math.max(4, Math.min(b.maxX - b.minX, b.maxY - b.minY) * 0.35);
+                      const rad = (o.params.directionDeg! * Math.PI) / 180;
+                      const ux = Math.cos(rad), uy = Math.sin(rad);
+                      const ax = px(cx - ux * half), ay = py(cy - uy * half);
+                      const bx = px(cx + ux * half), by = py(cy + uy * half);
+                      const ang = Math.atan2(by - ay, bx - ax);
+                      const ah = 8;
+                      return (
+                        <Group key={`grain-${o.id}`} listening={false}>
+                          <Line points={[ax, ay, bx, by]} stroke={C.salted} strokeWidth={2} />
+                          <Line points={[bx, by, bx + ah * Math.cos(ang + 2.6), by + ah * Math.sin(ang + 2.6)]} stroke={C.salted} strokeWidth={2} />
+                          <Line points={[bx, by, bx + ah * Math.cos(ang - 2.6), by + ah * Math.sin(ang - 2.6)]} stroke={C.salted} strokeWidth={2} />
+                          <Line points={[ax, ay, ax - ah * Math.cos(ang + 2.6), ay - ah * Math.sin(ang + 2.6)]} stroke={C.salted} strokeWidth={2} />
+                          <Line points={[ax, ay, ax - ah * Math.cos(ang - 2.6), ay - ah * Math.sin(ang - 2.6)]} stroke={C.salted} strokeWidth={2} />
+                        </Group>
+                      );
+                    })}
 
                 {/* Two-rail satin: show the captured first rail while you draw the second. */}
                 {tool === "satin2" && satinRailA && satinRailA.length > 1 && (

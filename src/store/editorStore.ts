@@ -38,6 +38,7 @@ export type Tool =
   | "brush" // freehand filled blob
   | "cut" // click a running line to split it into two objects
   | "measure" // drag to read off a distance + angle (no object created)
+  | "direction" // drag across a selected fill to paint its stitch grain
   | "satin2" // two-rail satin: draw edge A, then edge B (variable width)
   | "applique" // draw a closed shape stitched as an appliqué (placement/cover)
   | "shape"; // drag to place a premade shape (rectangle, ellipse, heart, …)
