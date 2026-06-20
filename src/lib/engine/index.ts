@@ -13,7 +13,7 @@ import { satinColumn } from "./satin";
 import { tatamiFill, tatamiConcaveRuns, multiBlendFill, motifFill, motifRunAlong, carvePoints, splitFillRegions, autoFillAngleForRegions } from "./fill";
 import { contourFill } from "./contour";
 import { medialColumns, columnsFromCenterlines, satinCoverage, residualRegions, type SatinColumn } from "./medial";
-import { turningFill } from "./turning";
+import { turningFill, flowFill } from "./turning";
 import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
 import { dropShortStitches, splitLongTravels } from "./resample";
 
@@ -737,7 +737,10 @@ export function generateObjectRuns(
       // patchwork (and can fan an odd diagonal across a letter), so those fill with
       // the object's one shared tatami grain instead.
       const fillOpts = { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp };
-      const turned = regions.length === 1 ? turningFill(region, fillOpts) : null;
+      // A clean single-spine band turns (turningFill); a branchy/organic limbed shape
+      // flows along every limb (flowFill); everything else stays on the concavity-
+      // aware tatami grain. Both decline (→ null) and self-validate to never slash.
+      const turned = regions.length === 1 ? (turningFill(region, fillOpts) ?? flowFill(region, fillOpts)) : null;
       tops = turned ?? tatamiConcaveRuns(region, fillOpts);
       tatamiNoBareTravel = true;
     }

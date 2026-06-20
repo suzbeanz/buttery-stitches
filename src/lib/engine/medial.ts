@@ -524,6 +524,33 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
 }
 
 /**
+ * The cleaned medial-axis branch centerlines (mm) — the raw skeleton LIMBS, before
+ * the junction mitering `medialColumns` applies to make satin strokes. A Y, a
+ * starfish, a cross each yield one polyline per limb. Used by `flowFill` to flow
+ * fill rows perpendicular to every limb (where `medialColumns` would collapse them
+ * into one dominant stroke). Stubs shorter than `MIN_BRANCH_MM` are pruned.
+ */
+export function skeletonBranches(rings: Path[], opts: { cellMm?: number } = {}): Path[] {
+  const cellMm = opts.cellMm ?? 0.4;
+  const oriented = orientByDepth(rings);
+  const grid = rasterize(oriented, cellMm);
+  if (!grid) return [];
+  const branches = traceSkeleton(thin(grid), grid.w, grid.h);
+  const out: Path[] = [];
+  for (const branch of branches) {
+    if (branch.length < 2) continue;
+    const raw: Point[] = branch.map(([gx, gy]) => ({
+      x: grid.ox + gx * cellMm,
+      y: grid.oy + gy * cellMm,
+    }));
+    if (polylineLength(raw) < MIN_BRANCH_MM) continue;
+    const center = smoothPath(douglasPeucker(raw, cellMm * 1.2), { maxSegmentMm: 0.8 });
+    if (center.length >= 2) out.push(center);
+  }
+  return out;
+}
+
+/**
  * Build satin columns from EXPLICIT centerlines instead of an auto-traced
  * skeleton — the per-glyph authored decomposition for the flagship font. The
  * caller hands one open polyline per stroke (already in mm, in the region's

@@ -1,5 +1,5 @@
 import type { Path, Point } from "../../types/project";
-import { medialColumns } from "./medial";
+import { medialColumns, satinCoverage, skeletonBranches } from "./medial";
 import { orientByDepth, MIN_FILL_DENSITY, FILL_STITCH_LENGTH, type FillOptions } from "./fill";
 import { resampleByDistance } from "./resample";
 import { distance, polylineLength } from "../geometry";
@@ -204,9 +204,32 @@ export function turningFill(rings: Path[], opts: FillOptions): Path[] | null {
   const comp = Math.max(0, opts.pullCompMm ?? 0);
   const half = bboxDiag(oriented);
 
+  const { runs, breaks } = marchSpine(spine, oriented, density, stitch, comp, half);
+  if (runs.length === 0 || breaks > TURN_MAX_BREAKS) return null;
+  // Safety net: if any row connector left the region (a notch the rows jumped),
+  // this shape isn't a clean band — bail so the caller uses the concavity-aware
+  // tatami instead. Turning fill must never introduce a slash.
+  if (hasExposedSegment(runs, oriented)) return null;
+  return runs;
+}
+
+/**
+ * Lay serpentine rows perpendicular to `spine`, marching along it at the row
+ * spacing and clipping each row across the shape (`clipAcross`). Returns the runs
+ * plus how many connectors had to break (a cap or notch). Shared by `turningFill`
+ * (one dominant spine) and `flowFill` (one call per skeleton branch).
+ */
+function marchSpine(
+  spine: Path,
+  oriented: Path[],
+  density: number,
+  stitch: number,
+  comp: number,
+  half: number,
+): { runs: Path[]; breaks: number } {
   // Row stations marched along the spine at the row spacing.
   const stations = resampleByDistance(spine, density);
-  if (stations.length < 2) return null;
+  if (stations.length < 2) return { runs: [], breaks: 0 };
 
   // Pass 1: compute each station's perpendicular row span across the shape.
   type Span = { A: Point; B: Point; L: number } | null;
@@ -280,10 +303,61 @@ export function turningFill(rings: Path[], opts: FillOptions): Path[] | null {
     prevDir = dir;
   }
   flush();
-  if (runs.length === 0 || breaks > TURN_MAX_BREAKS) return null;
-  // Safety net: if any row connector left the region (a notch the rows jumped),
-  // this shape isn't a clean band — bail so the caller uses the concavity-aware
-  // tatami instead. Turning fill must never introduce a slash.
+  return { runs, breaks };
+}
+
+/** Shortest skeleton branch (mm) worth filling as its own flowing limb. */
+const FLOW_MIN_BRANCH_MM = 6;
+/** Below this bbox diagonal the shape is a small feature, not a flowing fill. */
+const FLOW_MIN_EXTENT_MM = 16;
+/** At/above this outer compactness the shape is a near-perfect disc — no limbs to
+ *  flow along, so skip the skeleton entirely and let tatami fill it. */
+const FLOW_MAX_COMPACTNESS = 0.85;
+/** Coverage a flow fill must reach (raster) or it bails to tatami. */
+const FLOW_MIN_COVERAGE = 0.85;
+
+/**
+ * Directional fill for a BRANCHY or organic shape — a Y, a cross, a multi-lobe
+ * blob — that `turningFill` declines because it has no single dominant spine. We
+ * take EVERY medial branch (already junction-mitred by `medialColumns`) and flow
+ * rows perpendicular to each limb, so the stitches turn to follow the whole form
+ * instead of cutting straight across it. Returns serpentine runs, or NULL when the
+ * shape isn't a good fit (too small/round, one spine, or the result wouldn't cover
+ * cleanly) so the caller falls back to the concavity-aware tatami.
+ */
+export function flowFill(rings: Path[], opts: FillOptions): Path[] | null {
+  const oriented = orientByDepth(rings);
+  if (oriented.length === 0 || oriented[0].length < 3) return null;
+  if (oriented.length > TURN_MAX_RINGS) return null;
+  if (bboxDiag(oriented) < FLOW_MIN_EXTENT_MM) return null;
+  const outer = oriented.reduce((a, b) => (polygonArea(b) > polygonArea(a) ? b : a));
+  const per = polygonPerimeter(outer);
+  const compactness = per > 0 ? (4 * Math.PI * polygonArea(outer)) / (per * per) : 1;
+  // Only skip a NEARLY-round shape outright (a disc) — a starfish reads as fairly
+  // compact yet has clear limbs, so the real test below is the branch count.
+  if (compactness >= FLOW_MAX_COMPACTNESS) return null;
+
+  const density = Math.max(MIN_FILL_DENSITY, opts.density);
+  // RAW skeleton limbs (not mitred into one stroke). Two or more long limbs means a
+  // branchy/organic shape that one flow can't represent — exactly turningFill's
+  // blind spot. One limb is a single spine (turningFill ran first); decline.
+  const branches = skeletonBranches(oriented)
+    .filter((c) => polylineLength(c) >= FLOW_MIN_BRANCH_MM)
+    .sort((a, b) => polylineLength(b) - polylineLength(a));
+  if (branches.length < 2) return null;
+
+  const stitch = opts.stitchLength ?? FILL_STITCH_LENGTH;
+  const comp = Math.max(0, opts.pullCompMm ?? 0);
+  const half = bboxDiag(oriented);
+
+  const runs: Path[] = [];
+  for (const spine of branches) {
+    const { runs: r } = marchSpine(spine, oriented, density, stitch, comp, half);
+    for (const run of r) runs.push(run);
+  }
+  if (runs.length === 0) return null;
+  // Must never slash, and must actually cover the shape — else tatami is safer.
   if (hasExposedSegment(runs, oriented)) return null;
+  if (satinCoverage(oriented, runs) < FLOW_MIN_COVERAGE) return null;
   return runs;
 }
