@@ -10,7 +10,7 @@ import { signedArea } from "../trace/classify";
 import { runningStitch } from "./running";
 import { resampleByCount } from "./resample";
 import { staggeredSatin } from "./satin";
-import { tatamiFill } from "./fill";
+import { tatamiFill, tatamiConcaveRuns } from "./fill";
 
 /** Longest safe underlay zig-zag throw (mm); wider columns split the throw. */
 const UNDERLAY_MAX_THROW = 6;
@@ -145,10 +145,23 @@ export function fillUnderlayRuns(
   if (!outer || outer.length < 3) return [];
   const runs: Path[] = [fillEdgeUnderlay(rings)];
   if (weight !== "light") {
-    runs.push(fillParallelUnderlay(rings, topAngle));
-    if (weight === "heavy") runs.push(fillParallelUnderlay(rings, topAngle + 45));
+    runs.push(...parallelUnderlayRuns(rings, topAngle));
+    if (weight === "heavy") runs.push(...parallelUnderlayRuns(rings, topAngle + 45));
   }
   return runs.filter((r) => r.length >= 2);
+}
+
+/** Concavity-aware parallel underlay: per-cell serpentine runs (no straight
+ *  connector slashing across a notch). The region is inset first so rows stop
+ *  short of the edge and stay buried under the top fill. */
+function parallelUnderlayRuns(rings: Path[], topAngle = 0): Path[] {
+  if (!rings[0] || rings[0].length < 3) return [];
+  const inset = [insetRing(rings[0], EDGE_INSET), ...rings.slice(1)];
+  return tatamiConcaveRuns(inset, {
+    density: FILL_UNDERLAY_ROW,
+    angle: topAngle + 90,
+    stitchLength: UNDERLAY_STITCH,
+  });
 }
 
 /** Legacy combined fill underlay (edge + one parallel) as a single path. */
