@@ -3,6 +3,9 @@ import { AlertTriangle } from "lucide-react";
 import type { Hoop, Project } from "../types/project";
 import { loadImageData } from "../lib/image";
 import { imageDataToObjects, estimateColorComplexity } from "../lib/trace";
+import { ocrWords } from "../lib/trace/ocr";
+import { recognizeTextObjects, applyTextRecognition } from "../lib/trace/textRecognize";
+import { loadFont, DEFAULT_FONT_ID } from "../lib/text/fonts";
 import { fixStitches } from "../lib/fix";
 import { useEscapeToClose, useDialogFocus } from "./useEscapeToClose";
 
@@ -32,7 +35,9 @@ export default function AutoDigitizeDialog({
   const [numColors, setNumColors] = useState(4);
   const [userSetColors, setUserSetColors] = useState(false);
   const [removeBackground, setRemoveBackground] = useState(true);
+  const [recognizeText, setRecognizeText] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState<"trace" | "text">("trace");
   const [error, setError] = useState<string | null>(null);
   useEscapeToClose(onClose);
   const dialogRef = useDialogFocus<HTMLDivElement>();
@@ -66,50 +71,79 @@ export default function AutoDigitizeDialog({
     setNumColors(looksLikePhoto ? 8 : 4);
   }, [imageData, looksLikePhoto, userSetColors]);
 
-  function digitize() {
+  async function digitize() {
     if (!imageData) return;
     setBusy(true);
+    setPhase("trace");
     setError(null);
-    // Let the spinner paint before the synchronous trace runs.
-    setTimeout(() => {
-      try {
-        const fit = 0.92;
-        const mmPerPx =
-          Math.min(hoop.wMm / imageData.width, hoop.hMm / imageData.height) * fit;
-        const designW = imageData.width * mmPerPx;
-        const designH = imageData.height * mmPerPx;
+    // Yield once so the spinner paints before the synchronous trace runs.
+    await new Promise((r) => setTimeout(r, 30));
+    try {
+      const fit = 0.92;
+      const mmPerPx =
+        Math.min(hoop.wMm / imageData.width, hoop.hMm / imageData.height) * fit;
+      const designW = imageData.width * mmPerPx;
+      const designH = imageData.height * mmPerPx;
+      const offsetX = (hoop.wMm - designW) / 2;
+      const offsetY = (hoop.hMm - designH) / 2;
 
-        const { colors, objects } = imageDataToObjects(imageData, numColors, {
-          mmPerPx,
-          offsetX: (hoop.wMm - designW) / 2,
-          offsetY: (hoop.hMm - designH) / 2,
-          removeBackground,
-        });
+      const { colors, objects } = imageDataToObjects(imageData, numColors, {
+        mmPerPx,
+        offsetX,
+        offsetY,
+        removeBackground,
+      });
 
-        if (objects.length === 0) {
-          setError("No shapes found. Try more colors or turn off background removal.");
-          setBusy(false);
-          return;
-        }
-
-        // Run the smart cleanup so the import lands with sensible stitch types
-        // (satin for thin strokes, tatami for broad areas), safe densities, and
-        // color-grouped order — no manual tuning needed to get a good result.
-        onApply(
-          fixStitches({
-            version: 1,
-            widthMm: hoop.wMm,
-            heightMm: hoop.hMm,
-            hoop: { ...hoop },
-            colors,
-            objects,
-          }),
-        );
-      } catch (e) {
-        setError((e as Error).message);
+      if (objects.length === 0) {
+        setError("No shapes found. Try more colors or turn off background removal.");
         setBusy(false);
+        return;
       }
-    }, 30);
+
+      // Optional: recognize words and re-set them as crisp satin FONT lettering,
+      // replacing the rough traced glyphs. Degrades to the plain trace if OCR finds
+      // nothing or its engine can't load — the design is never worse than before.
+      let finalObjects = objects;
+      if (recognizeText) {
+        setPhase("text");
+        try {
+          const [words, font] = await Promise.all([
+            ocrWords(imageData),
+            loadFont(DEFAULT_FONT_ID),
+          ]);
+          const rec = recognizeTextObjects({
+            words,
+            mmPerPx,
+            offsetXMm: offsetX,
+            offsetYMm: offsetY,
+            objects,
+            colors,
+            font,
+            fontId: DEFAULT_FONT_ID,
+          });
+          finalObjects = applyTextRecognition(objects, rec);
+        } catch {
+          /* OCR failed → keep the plain trace */
+        }
+      }
+
+      // Run the smart cleanup so the import lands with sensible stitch types
+      // (satin for thin strokes, tatami for broad areas), safe densities, and
+      // color-grouped order — no manual tuning needed to get a good result.
+      onApply(
+        fixStitches({
+          version: 1,
+          widthMm: hoop.wMm,
+          heightMm: hoop.hMm,
+          hoop: { ...hoop },
+          colors,
+          objects: finalObjects,
+        }),
+      );
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
   }
 
   return (
@@ -177,7 +211,7 @@ export default function AutoDigitizeDialog({
           look best at 3–5; try 6–8 for a busy photo.
         </p>
 
-        <label className="mb-4 flex items-center gap-2 text-sm text-navy">
+        <label className="mb-2 flex items-center gap-2 text-sm text-navy">
           <input
             type="checkbox"
             checked={removeBackground}
@@ -187,6 +221,20 @@ export default function AutoDigitizeDialog({
           Remove background
         </label>
 
+        <label className="mb-1 flex items-center gap-2 text-sm text-navy">
+          <input
+            type="checkbox"
+            checked={recognizeText}
+            onChange={(e) => setRecognizeText(e.target.checked)}
+            className="accent-ink"
+          />
+          Recognize text as lettering
+        </label>
+        <p className="mb-4 ml-6 text-[11px] text-navy/55">
+          Re-sets words in a clean satin font instead of tracing their pixels. Best
+          on clear, horizontal logo text; loads a recognizer the first time.
+        </p>
+
         {hasExistingWork && (
           <p className="mb-3 text-[12px] text-navy/60">
             This replaces your current design (you can undo it with ⌘/Ctrl+Z).
@@ -195,7 +243,9 @@ export default function AutoDigitizeDialog({
 
         {busy && (
           <div className="mb-3">
-            <p className="font-mono text-[11px] text-ink">Tracing your image…</p>
+            <p className="font-mono text-[11px] text-ink">
+              {phase === "text" ? "Recognizing text…" : "Tracing your image…"}
+            </p>
             <div className="mt-1 h-[3px] w-full overflow-hidden rounded-full bg-ink/10">
               <div className="anim-indeterminate h-full w-1/3 rounded-full bg-stamp" />
             </div>
@@ -212,7 +262,7 @@ export default function AutoDigitizeDialog({
             Cancel
           </button>
           <button
-            onClick={digitize}
+            onClick={() => void digitize()}
             disabled={!imageData || busy}
             className="rounded-sm border-2 border-ink bg-ink px-4 py-2 font-label text-xs font-semibold uppercase tracking-wide text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none disabled:opacity-50"
           >
