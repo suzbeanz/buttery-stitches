@@ -42,6 +42,25 @@ describe("fixObjectStitches", () => {
     expect(blob.params.fillStyle).toBe("tatami");
   });
 
+  it("fills a MULTI-region object (a word of letters) as tatami, not ringy contour", () => {
+    // Two separate frame bands in one object — stand-ins for two letters with
+    // counters. Each alone would contour, but echoed per region a word comes out
+    // ringy/boxy, so a multi-shape object fills solid tatami instead.
+    const sq = (cx: number, h: number): Path => [
+      { x: cx - h, y: 50 - h },
+      { x: cx + h, y: 50 - h },
+      { x: cx + h, y: 50 + h },
+      { x: cx - h, y: 50 + h },
+    ];
+    const word = fixObjectStitches(
+      makeObjectFromPaths("fill", [sq(30, 16), sq(30, 11), sq(80, 16), sq(80, 11)], "c1"),
+    );
+    expect(word.params.fillStyle).toBe("tatami");
+    // A single band of the same proportions still contours (a lone badge ring).
+    const one = fixObjectStitches(makeObjectFromPaths("fill", [sq(50, 16), sq(50, 11)], "c1"));
+    expect(one.params.fillStyle).toBe("contour");
+  });
+
   it("fills a jagged organic band as tatami, not contour (no topographic scribble)", () => {
     // A traced photo/fur region: a wildly jagged outline (very low circularity)
     // that wraps a hole. The thin-wall test alone would call it a band → contour,
