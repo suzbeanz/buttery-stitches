@@ -306,8 +306,9 @@ function marchSpine(
   return { runs, breaks };
 }
 
-/** Shortest skeleton branch (mm) worth filling as its own flowing limb. */
-const FLOW_MIN_BRANCH_MM = 6;
+/** Shortest skeleton branch (mm) counted as a real flowing limb — above the
+ *  thinning spurs and short surface spikes a frilly outline throws off. */
+const FLOW_MIN_BRANCH_MM = 12;
 /** Below this bbox diagonal the shape is a small feature, not a flowing fill. */
 const FLOW_MIN_EXTENT_MM = 16;
 /** At/above this outer compactness the shape is a near-perfect disc — no limbs to
@@ -315,6 +316,13 @@ const FLOW_MIN_EXTENT_MM = 16;
 const FLOW_MAX_COMPACTNESS = 0.85;
 /** Coverage a flow fill must reach (raster) or it bails to tatami. */
 const FLOW_MIN_COVERAGE = 0.85;
+/** Most limbs a flow shape may have. A clean limbed form (a Y, a boomerang) has a
+ *  few; a textured thicket (a tree-line, a frilly blob) has many short spikes whose
+ *  per-limb flow reads as chaotic crosshatch — those belong on plain tatami. */
+const FLOW_MAX_BRANCHES = 3;
+/** The longest limb must span at least this fraction of the shape's diagonal —
+ *  proof the "limbs" are real arms that carry the form, not short surface spikes. */
+const FLOW_MIN_SPAN_FRAC = 0.35;
 
 /**
  * Directional fill for a BRANCHY or organic shape — a Y, a cross, a multi-lobe
@@ -344,7 +352,10 @@ export function flowFill(rings: Path[], opts: FillOptions): Path[] | null {
   const branches = skeletonBranches(oriented)
     .filter((c) => polylineLength(c) >= FLOW_MIN_BRANCH_MM)
     .sort((a, b) => polylineLength(b) - polylineLength(a));
-  if (branches.length < 2) return null;
+  // A few LONG limbs, not a thicket of short spikes: the latter (a tree-line, a
+  // frilly green) flows into a chaotic crosshatch that's worse than clean tatami.
+  if (branches.length < 2 || branches.length > FLOW_MAX_BRANCHES) return null;
+  if (polylineLength(branches[0]) < FLOW_MIN_SPAN_FRAC * bboxDiag(oriented)) return null;
 
   const stitch = opts.stitchLength ?? FILL_STITCH_LENGTH;
   const comp = Math.max(0, opts.pullCompMm ?? 0);
