@@ -241,7 +241,9 @@ describe("validateDesign", () => {
     const o = makeObjectFromPaths("satin", [left, right], p.colors[0].id, "Wide bar");
     p.objects = [o];
     const warnings = validateDesign(generateDesign(p), p);
-    expect(warnings.some((w) => /sews loose|wider than/i.test(w.message))).toBe(true);
+    const w = warnings.find((w) => /sews loose|wider than/i.test(w.message));
+    expect(w).toBeTruthy();
+    expect(w!.objectId).toBe(o.id); // clickable: points at the offending object
   });
 
   it("flags a large fill with underlay turned off", () => {
@@ -260,7 +262,9 @@ describe("validateDesign", () => {
     o.params = { underlay: false };
     p.objects = [o];
     const warnings = validateDesign(generateDesign(p), p);
-    expect(warnings.some((w) => /underlay off/i.test(w.message))).toBe(true);
+    const w = warnings.find((w) => /underlay off/i.test(w.message));
+    expect(w).toBeTruthy();
+    expect(w!.objectId).toBe(o.id); // clickable: points at the offending object
   });
 
   it("does not flag a large fill when underlay is on", () => {

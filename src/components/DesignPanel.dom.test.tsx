@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import DesignPanel from "./DesignPanel";
 import { useProjectStore } from "../store/projectStore";
+import { useEditorStore } from "../store/editorStore";
 import { resetStores } from "../test/setup";
 import { makeObjectFromPaths } from "../lib/objects";
 import { createEmptyProject } from "../lib/project";
@@ -52,5 +53,26 @@ describe("DesignPanel", () => {
     fireEvent.change(select, { target: { value: "1" } }); // 5×7" (130×180)
     expect(useProjectStore.getState().project.hoop.wMm).toBeCloseTo(130);
     expect(useProjectStore.getState().project.hoop.hMm).toBeCloseTo(180);
+  });
+
+  it("clicking an object-specific warning selects it and drops into edit view", () => {
+    // A satin column 9 mm apart is wider than the safe max → a warning that names
+    // the object, so it renders as a button.
+    const p = createEmptyProject();
+    const wide = makeObjectFromPaths(
+      "satin",
+      [[{ x: 10, y: 10 }, { x: 40, y: 10 }], [{ x: 10, y: 19 }, { x: 40, y: 19 }]],
+      p.colors[0].id,
+      "Wide bar",
+    );
+    p.objects = [wide];
+    resetStores(p);
+    useEditorStore.getState().setViewMode("stitch");
+
+    render(<DesignPanel />);
+    fireEvent.click(screen.getByTitle("Select this object to fix it"));
+
+    expect(useProjectStore.getState().selectedIds).toEqual([wide.id]);
+    expect(useEditorStore.getState().viewMode).toBe("edit");
   });
 });

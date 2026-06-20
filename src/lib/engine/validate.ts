@@ -22,6 +22,9 @@ export const LIMITS = {
 export interface Warning {
   level: "warn";
   message: string;
+  /** The object at fault, when one can be pinpointed — lets the UI select it on
+   *  click. Omitted for design-wide warnings (e.g. total stitch count). */
+  objectId?: string;
 }
 
 /** Mean rail-to-rail width (mm) of a satin object's two rails. */
@@ -44,36 +47,47 @@ function meanSatinWidthMm(paths: Path[]): number {
 export function validateDesign(design: EngineStitch[], project: Project): Warning[] {
   const warnings: Warning[] = [];
 
-  // Stitch lengths between consecutive penetrations of the same object.
+  // Stitch lengths between consecutive penetrations of the same object. Track the
+  // first offender of each kind so the warning can jump straight to it.
   let tooShort = 0;
   let tooLong = 0;
+  let shortId: string | undefined;
+  let longId: string | undefined;
   for (let i = 1; i < design.length; i++) {
     const a = design[i - 1];
     const b = design[i];
     if (b.jump || a.objectId !== b.objectId) continue;
     const d = distance(a, b);
-    if (d > 0 && d < LIMITS.minStitch) tooShort++;
-    else if (d > LIMITS.maxStitch) tooLong++;
+    if (d > 0 && d < LIMITS.minStitch) {
+      tooShort++;
+      shortId ??= b.objectId;
+    } else if (d > LIMITS.maxStitch) {
+      tooLong++;
+      longId ??= b.objectId;
+    }
   }
   if (tooShort > 0)
     warnings.push({
       level: "warn",
+      objectId: shortId,
       message: `${tooShort} stitch${tooShort === 1 ? "" : "es"} shorter than ${LIMITS.minStitch} mm (machine may skip).`,
     });
   if (tooLong > 0)
     warnings.push({
       level: "warn",
+      objectId: longId,
       message: `${tooLong} stitch${tooLong === 1 ? "" : "es"} longer than ${LIMITS.maxStitch} mm (may snag).`,
     });
 
   // Penetrations outside the hoop.
-  const outside = design.filter(
+  const outsideStitches = design.filter(
     (s) => !s.jump && (s.x < 0 || s.y < 0 || s.x > project.hoop.wMm || s.y > project.hoop.hMm),
-  ).length;
-  if (outside > 0)
+  );
+  if (outsideStitches.length > 0)
     warnings.push({
       level: "warn",
-      message: `${outside} stitch${outside === 1 ? "" : "es"} fall outside the ${project.hoop.name} hoop.`,
+      objectId: outsideStitches[0].objectId,
+      message: `${outsideStitches.length} stitch${outsideStitches.length === 1 ? "" : "es"} fall outside the ${project.hoop.name} hoop.`,
     });
 
   // Per-object density that risks puckering.
@@ -83,6 +97,7 @@ export function validateDesign(design: EngineStitch[], project: Project): Warnin
     if (density < LIMITS.minDensity) {
       warnings.push({
         level: "warn",
+        objectId: o.id,
         message: `"${o.name}" density ${density.toFixed(2)} mm is very high — puckering risk.`,
       });
     }
@@ -96,6 +111,7 @@ export function validateDesign(design: EngineStitch[], project: Project): Warnin
     if (width > LIMITS.maxSatinWidth) {
       warnings.push({
         level: "warn",
+        objectId: o.id,
         message: `"${o.name}" satin column is ${width.toFixed(1)} mm wide — wider than ${LIMITS.maxSatinWidth} mm sews loose; consider a fill.`,
       });
     }
@@ -111,6 +127,7 @@ export function validateDesign(design: EngineStitch[], project: Project): Warnin
     if (area > LIMITS.largeFillAreaMm2) {
       warnings.push({
         level: "warn",
+        objectId: o.id,
         message: `"${o.name}" is a large fill with underlay off — may pucker and sit flat. Turn underlay on.`,
       });
     }

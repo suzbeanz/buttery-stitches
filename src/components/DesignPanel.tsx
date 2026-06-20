@@ -51,6 +51,12 @@ export default function DesignPanel() {
     [project],
   );
 
+  // Jump to the object a warning points at: select it and drop into edit view.
+  const selectOffender = (id: string) => {
+    useProjectStore.getState().setSelection([id]);
+    useEditorStore.getState().setViewMode("edit");
+  };
+
   // Which preset (if any) the current hoop matches.
   const presetIndex = HOOP_PRESETS.findIndex(
     (h) => h.wMm === hoop.wMm && h.hMm === hoop.hMm,
@@ -179,15 +185,34 @@ export default function DesignPanel() {
         <p className="text-xs text-navy/70">Add a design to set its size.</p>
       )}
 
-      {/* Warnings */}
+      {/* Warnings — clickable when we can point at the object at fault, so the user
+          jumps straight to fixing it instead of hunting for "Fill 3". */}
       {warnings.length > 0 && (
         <ul className="flex flex-col gap-1 rounded-sm border border-stamp/30 bg-stamp/5 p-2 text-[11px] text-char/80">
-          {warnings.map((w, i) => (
-            <li key={i} className="flex gap-1.5">
-              <AlertTriangle size={13} className="mt-0.5 shrink-0 text-stamp" />
-              <span>{w.message}</span>
-            </li>
-          ))}
+          {warnings.map((w, i) => {
+            const content = (
+              <>
+                <AlertTriangle size={13} className="mt-0.5 shrink-0 text-stamp" />
+                <span>{w.message}</span>
+              </>
+            );
+            return w.objectId ? (
+              <li key={i}>
+                <button
+                  type="button"
+                  onClick={() => selectOffender(w.objectId!)}
+                  className="flex w-full gap-1.5 rounded-sm text-left hover:bg-stamp/10"
+                  title="Select this object to fix it"
+                >
+                  {content}
+                </button>
+              </li>
+            ) : (
+              <li key={i} className="flex gap-1.5">
+                {content}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
