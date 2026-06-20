@@ -151,6 +151,19 @@ describe("PropertiesPanel", () => {
     expect(d2).toBeGreaterThanOrEqual(0.1);
   });
 
+  it("tucks the carve/appliqué controls behind the Advanced fill disclosure", () => {
+    seedSelectedFill();
+    render(<PropertiesPanel />);
+    // Collapsed by default — the everyday controls show, the extras don't.
+    expect(screen.getByText(/Density/i)).toBeTruthy();
+    expect(screen.queryByText(/Carve pattern/i)).toBeNull();
+    expect(screen.queryByText(/Appliqué/i)).toBeNull();
+    // Expanding reveals them.
+    fireEvent.click(screen.getByText(/Advanced fill/i));
+    expect(screen.getByText(/Carve pattern/i)).toBeTruthy();
+    expect(screen.getByText(/Appliqué/i)).toBeTruthy();
+  });
+
   it("deletes an unused thread but disables deleting one in use", () => {
     seedSelectedFill(); // colors: the fill's color (in use) + "Red" (unused)
     render(<PropertiesPanel />);

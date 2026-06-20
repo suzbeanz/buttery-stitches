@@ -404,30 +404,29 @@ function ObjectProperties({
       )}
 
       {object.type === "fill" && p.fillStyle !== "motif" && (
-        <Field label="Carve pattern">
-          <select
-            value={p.carve ?? "none"}
-            onChange={(e) => onParam({ carve: e.target.value })}
-            className="input"
-          >
-            <option value="none">None</option>
-            {MOTIFS.map((m) => (
-              <option key={m.id} value={m.id}>{m.name}</option>
-            ))}
-          </select>
-        </Field>
-      )}
-
-      {object.type === "fill" && p.fillStyle !== "motif" && (
-        <label className="flex items-center gap-2 text-sm text-navy">
-          <input
-            type="checkbox"
-            checked={!!p.applique}
-            onChange={(e) => onParam({ applique: e.target.checked })}
-            className="accent-ink"
-          />
-          Appliqué (placement → stop → tackdown → stop → cover)
-        </label>
+        <Disclosure title="Advanced fill">
+          <Field label="Carve pattern">
+            <select
+              value={p.carve ?? "none"}
+              onChange={(e) => onParam({ carve: e.target.value })}
+              className="input"
+            >
+              <option value="none">None</option>
+              {MOTIFS.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          </Field>
+          <label className="flex items-center gap-2 text-sm text-navy">
+            <input
+              type="checkbox"
+              checked={!!p.applique}
+              onChange={(e) => onParam({ applique: e.target.checked })}
+              className="accent-ink"
+            />
+            Appliqué (placement → stop → tackdown → stop → cover)
+          </label>
+        </Disclosure>
       )}
 
       {object.type === "fill" && (
@@ -782,6 +781,28 @@ function Field({
       <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/60">{label}</span>
       {children}
     </label>
+  );
+}
+
+/**
+ * A collapsible group for secondary controls — keeps the panel calm by tucking the
+ * rarely-used extras behind one click. Collapsed by default.
+ */
+function Disclosure({ title, children }: { title: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="flex flex-col gap-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex items-center gap-1 font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/60 hover:text-ink"
+      >
+        <ChevronDown size={13} className={`transition-transform ${open ? "" : "-rotate-90"}`} />
+        {title}
+      </button>
+      {open && <div className="flex flex-col gap-2 pl-1">{children}</div>}
+    </div>
   );
 }
 
