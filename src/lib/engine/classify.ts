@@ -120,6 +120,39 @@ function isBroadlyThick(rings: Path[], radiusMm: number): boolean {
   return inside > 0 && fat / inside >= 0.15;
 }
 
+/** Largest a small round feature (a dot, an eye, a golf ball) may be and still
+ *  sew SMOOTH as a single satin block — tatami at this size is short, jagged rows. */
+export const ROUND_DOT_MAX_MM = 8;
+
+/**
+ * Is this region a small, compact, roundish blob — a golf ball, an eye, a polka
+ * dot — that reads far smoother as one satin block than as rough little tatami
+ * rows? It must be a SINGLE simple ring (no holes/islands), no bigger than
+ * {@link ROUND_DOT_MAX_MM}, roughly as wide as it is tall, and genuinely filled
+ * (not a thin frame or sliver). Used by `fix` to pick satin and by the engine to
+ * lay the block.
+ */
+export function isSmallRoundFill(rings: Path[]): boolean {
+  const usable = rings.filter((r) => r.length >= 3);
+  if (usable.length !== 1) return false;
+  const ring = usable[0];
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of ring) {
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+  const w = maxX - minX;
+  const h = maxY - minY;
+  const maxDim = Math.max(w, h);
+  const minDim = Math.min(w, h);
+  if (maxDim > ROUND_DOT_MAX_MM || minDim < 2) return false; // too big, or a sliver
+  if (minDim / maxDim < 0.6) return false; // elongated → satin its medial, not a block
+  // Compact: it fills its bounding box like a disc/blob, not a thin ring or cross.
+  return Math.abs(polygonArea(ring)) / (w * h) >= 0.5;
+}
+
 export function classifyRegion(rings: Path[], opts: ClassifyOptions = {}): StitchKind {
   const runningMax = opts.runningMaxWidthMm ?? 1.2;
   const satinMax = opts.satinMaxWidthMm ?? 7;

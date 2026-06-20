@@ -1,5 +1,5 @@
 import type { EmbObject, Project } from "../types/project";
-import { classifyRegion } from "./engine/classify";
+import { classifyRegion, isSmallRoundFill } from "./engine/classify";
 import { recognizeShape } from "./trace/recognize";
 import { knockdown } from "./boolean";
 import { polygonArea, polygonPerimeter } from "./trace/classify";
@@ -152,7 +152,12 @@ export function fixObjectStitches(object: EmbObject): EmbObject {
     const explicit = !!params.fillStyle && params.fillStyle !== "tatami";
     if (!explicit) {
       const kind = classifyRegion(object.paths, { satinMaxWidthMm: SATIN_WIDTH_THRESHOLD });
-      params.fillStyle = object.text || kind !== "tatami" ? "satin" : broadFillStyle(object.paths);
+      // A small round dot (a golf ball, an eye) sews smooth as a satin block, where
+      // tatami leaves rough little rows — so prefer satin for it too.
+      params.fillStyle =
+        object.text || kind !== "tatami" || isSmallRoundFill(object.paths)
+          ? "satin"
+          : broadFillStyle(object.paths);
     }
   }
 
