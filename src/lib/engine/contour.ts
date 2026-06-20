@@ -120,7 +120,22 @@ function chainSegments(segs: [Point, Point][], q: number): Path[] {
 export function contourFill(rings: Path[], opts: ContourOptions): Path[] {
   const oriented = orientByDepth(rings);
   if (oriented.length === 0 || oriented[0].length < 3) return [];
-  const cellMm = opts.cellMm ?? DEFAULT_CELL_MM;
+  // Adaptive grid: a fixed 0.3 mm cell makes a big (100 mm+) region a 400×400+
+  // grid that's rasterized AND distance-transformed AND marched per level — slow,
+  // and twice over (the underlay contours too). Coarsen the cell with the region's
+  // size so a large band stays interactive while small lettering keeps fine cells.
+  let cellMm = opts.cellMm;
+  if (cellMm === undefined) {
+    let mnX = Infinity, mnY = Infinity, mxX = -Infinity, mxY = -Infinity;
+    for (const p of oriented[0]) {
+      if (p.x < mnX) mnX = p.x;
+      if (p.y < mnY) mnY = p.y;
+      if (p.x > mxX) mxX = p.x;
+      if (p.y > mxY) mxY = p.y;
+    }
+    const maxDim = Math.max(mxX - mnX, mxY - mnY);
+    cellMm = Math.max(DEFAULT_CELL_MM, Math.min(0.6, maxDim / 220));
+  }
   const density = Math.max(MIN_FILL_DENSITY, opts.density);
   const stitch = opts.stitchLength ?? DEFAULT_STITCH_MM;
 
