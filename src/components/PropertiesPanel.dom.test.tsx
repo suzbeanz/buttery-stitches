@@ -74,7 +74,9 @@ describe("PropertiesPanel", () => {
     render(<PropertiesPanel />);
     const label = screen.getByText(/Column width/i).closest("label")!;
     const input = label.querySelector("input")!;
+    // Number fields commit on blur (not every keystroke).
     fireEvent.change(input, { target: { value: "9" } });
+    fireEvent.blur(input);
     const o = useProjectStore.getState().project.objects.find((x) => x.id === id)!;
     expect(satinWidthOf(o.paths)).toBeCloseTo(9, 1);
   });
@@ -138,10 +140,13 @@ describe("PropertiesPanel", () => {
     const { fillId } = seedSelectedFill();
     render(<PropertiesPanel />);
     const input = screen.getByText(/Density/i).closest("label")!.querySelector("input")!;
+    // Commit on blur: a typed value is clamped to the safe floor when it lands.
     fireEvent.change(input, { target: { value: "0" } });
+    fireEvent.blur(input);
     const d = useProjectStore.getState().project.objects.find((o) => o.id === fillId)!.params.density;
     expect(d).toBeGreaterThanOrEqual(0.1);
     fireEvent.change(input, { target: { value: "-5" } });
+    fireEvent.blur(input);
     const d2 = useProjectStore.getState().project.objects.find((o) => o.id === fillId)!.params.density;
     expect(d2).toBeGreaterThanOrEqual(0.1);
   });

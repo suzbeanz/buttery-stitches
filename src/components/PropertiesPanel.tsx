@@ -835,15 +835,27 @@ function NumberField({
   max?: number;
   onChange: (v: number) => void;
 }) {
-  // Keep a draft so the field can be cleared/partly-typed without snapping back,
-  // and CLAMP to [min,max] on every valid entry so a typed value can never push a
-  // param below its safe floor (e.g. density 0). Re-syncs to the live value.
+  // Keep a draft while typing and COMMIT only on blur / Enter (not every
+  // keystroke) — so the canvas doesn't jitter through "0.5 → 0.05 → 0.005" and the
+  // edit is one undo step. The committed value is CLAMPed to [min,max] so a typed
+  // number can never push a param below its safe floor (e.g. density 0). Re-syncs
+  // to the live value when it changes elsewhere.
   const [draft, setDraft] = useState(String(value));
   useEffect(() => setDraft(String(value)), [value]);
   const clamp = (v: number) => {
     if (min != null && v < min) v = min;
     if (max != null && v > max) v = max;
     return v;
+  };
+  const commit = () => {
+    const v = parseFloat(draft);
+    if (Number.isNaN(v)) {
+      setDraft(String(value)); // invalid → revert
+      return;
+    }
+    const c = clamp(v);
+    if (c !== value) onChange(c);
+    setDraft(String(c)); // show the clamped value
   };
   return (
     <Field label={label}>
@@ -853,15 +865,11 @@ function NumberField({
         step={step}
         min={min}
         max={max}
-        onChange={(e) => {
-          setDraft(e.target.value);
-          const v = parseFloat(e.target.value);
-          if (!Number.isNaN(v)) {
-            const c = clamp(v);
-            if (c !== value) onChange(c);
-          }
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
         }}
-        onBlur={() => setDraft(String(value))}
         className="input"
       />
     </Field>
