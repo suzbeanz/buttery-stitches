@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { CheckCircle2, AlertTriangle, X, Wand2, Sparkles } from "lucide-react";
+import { CheckCircle2, AlertTriangle, X, Wand2, Sparkles, Download } from "lucide-react";
 import { useProjectStore } from "../store/projectStore";
 import { useEditorStore } from "../store/editorStore";
 import { designFor, countStitches, countColorChanges } from "../lib/engine";
@@ -15,7 +15,13 @@ import { toast } from "../store/toastStore";
  * confidence-giving verdict before export: a green all-clear, or a friendly list
  * of what to fix (with a one-click auto clean-up).
  */
-export default function DesignCheck({ onClose }: { onClose: () => void }) {
+export default function DesignCheck({
+  onClose,
+  onExport,
+}: {
+  onClose: () => void;
+  onExport?: () => void;
+}) {
   const project = useProjectStore((s) => s.project);
   const setProject = useProjectStore((s) => s.setProject);
   const rulerUnit = useEditorStore((s) => s.rulerUnit);
@@ -91,6 +97,14 @@ export default function DesignCheck({ onClose }: { onClose: () => void }) {
             <p className="font-body text-sm text-navy/70">
               Every stitch is mapped within safe limits. You&apos;re good to export.
             </p>
+            {onExport && (
+              <button
+                onClick={onExport}
+                className="mt-2 flex items-center justify-center gap-2 rounded-sm border-2 border-ink bg-ink px-5 py-2 font-label text-sm font-semibold uppercase tracking-[0.1em] text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none"
+              >
+                <Download size={15} /> Export now
+              </button>
+            )}
           </div>
         ) : (
           <div className="flex flex-col gap-2">

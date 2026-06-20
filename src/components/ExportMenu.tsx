@@ -30,9 +30,22 @@ const STAGE_LABEL: Record<LoadStage, string> = {
   error: "Couldn't start the export engine",
 };
 
-export default function ExportMenu() {
+export default function ExportMenu({
+  open: controlledOpen,
+  onOpenChange,
+}: {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+} = {}) {
   const project = useProjectStore((s) => s.project);
-  const [open, setOpen] = useState(false);
+  // Optionally controlled: TopBar can drive `open` (so "Export now" in the design
+  // check can pop this menu); otherwise it manages its own state.
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
+  const setOpen = (v: boolean) => {
+    setUncontrolledOpen(v);
+    onOpenChange?.(v);
+  };
   const [pesVersion, setPesVersion] = useState<PesVersion>(1);
   const [stage, setStage] = useState<LoadStage>("idle");
   const [busy, setBusy] = useState(false);
@@ -92,7 +105,7 @@ export default function ExportMenu() {
   return (
     <div className="relative">
       <button
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpen(!open)}
         data-tip="Export"
         aria-label="Export"
         aria-expanded={open}

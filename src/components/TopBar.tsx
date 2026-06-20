@@ -84,6 +84,7 @@ export default function TopBar({
   const [showText, setShowText] = useState(false);
   const [showShapes, setShowShapes] = useState(false);
   const [showCheck, setShowCheck] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const activeColorId = useEditorStore((s) => s.activeColorId);
 
   const updateObject = useProjectStore((s) => s.updateObject);
@@ -362,7 +363,7 @@ export default function TopBar({
         )}
       </div>
 
-      <ExportMenu />
+      <ExportMenu open={exportOpen} onOpenChange={setExportOpen} />
       <BarButton label="Check design — is it ready to stitch?" onClick={() => setShowCheck(true)}>
         <BadgeCheck size={18} />
       </BarButton>
@@ -431,7 +432,15 @@ export default function TopBar({
         onChange={onPickImage}
       />
 
-      {showCheck && <DesignCheck onClose={() => setShowCheck(false)} />}
+      {showCheck && (
+        <DesignCheck
+          onClose={() => setShowCheck(false)}
+          onExport={() => {
+            setShowCheck(false);
+            setExportOpen(true);
+          }}
+        />
+      )}
 
       {imageFile && (
         <Suspense fallback={null}>
