@@ -95,6 +95,23 @@ describe("concavity-aware tatami (boustrophedon)", () => {
     expect(next.count).toBe(0);
   });
 
+  it("does NOT slash across the notch of an L (abrupt one-sided width jump)", () => {
+    // An L: a narrow stem whose span widens abruptly into the foot. A single-cell
+    // serpentine would connect the narrow stem row straight across to the far end
+    // of the wide foot row — a diagonal slash over the notch (top-right). The cell
+    // must split where the span end jumps, so the two join inside the shape.
+    const l: Path = [
+      { x: 0, y: 0 },
+      { x: 8, y: 0 },
+      { x: 8, y: 34 },
+      { x: 34, y: 34 },
+      { x: 34, y: 42 },
+      { x: 0, y: 42 },
+    ];
+    const next = crossingSegments(tatamiConcaveRuns([l], opts), l);
+    expect(next.count).toBe(0);
+  });
+
   it("keeps every drawn stitch inside the region for a wavy (multi-notch) strip", () => {
     // A zig-zag-edged bar: several concave dips along the top.
     const wave: Path = [

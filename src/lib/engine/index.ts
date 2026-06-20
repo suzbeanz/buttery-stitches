@@ -732,8 +732,13 @@ export function generateObjectRuns(
       // Plain broad fill. A curved, elongated shape gets a TURNING fill whose rows
       // follow the form (banner, leaf, crescent); everything else uses the
       // concavity-aware tatami. turningFill returns null when it isn't a good fit.
+      // Only an ISOLATED shape turns, though: across a multi-region object — a word
+      // of letters, a scattered mark — a per-letter turning direction reads as a
+      // patchwork (and can fan an odd diagonal across a letter), so those fill with
+      // the object's one shared tatami grain instead.
       const fillOpts = { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp };
-      tops = turningFill(region, fillOpts) ?? tatamiConcaveRuns(region, fillOpts);
+      const turned = regions.length === 1 ? turningFill(region, fillOpts) : null;
+      tops = turned ?? tatamiConcaveRuns(region, fillOpts);
       tatamiNoBareTravel = true;
     }
 

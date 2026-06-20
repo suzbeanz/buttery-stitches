@@ -42,6 +42,16 @@ export const SATIN_WIDTH_THRESHOLD = 3.5;
 function broadFillStyle(rings: EmbObject["paths"]): "tatami" | "contour" {
   const usable = rings.filter((r) => r.length >= 3);
   if (usable.length === 0) return "tatami";
+  // Concentric contour only reads well on ONE clean ring/curved band (a badge
+  // border, a single 'O'). A multi-region object — a word's worth of letters, a
+  // multi-blob mark — echoed per region comes out ringy and boxy (nested rectangles
+  // down each stem), so a word of bold type looks far cleaner as a solid tatami
+  // fill. Count the disjoint OUTER rings (not nested in another); more than one
+  // means a multi-shape object → tatami.
+  const outers = usable.filter(
+    (r) => !usable.some((o) => o !== r && polygonArea(o) > polygonArea(r) && inRing(centroidOf(r), o)),
+  );
+  if (outers.length >= 2) return "tatami";
   // Use the LARGEST ring as the outer boundary (traced rings aren't area-sorted).
   const outer = usable.reduce((a, b) => (polygonArea(b) > polygonArea(a) ? b : a));
   // Contour rows only read as smooth concentric rings on a BIG shape. On a small

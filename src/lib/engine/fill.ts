@@ -539,6 +539,12 @@ const DETOUR_MAX_MM = 50;
  *  instead, keeping generation interactive. */
 const ROUTER_MAX_VERTS = 160;
 
+/** How far (mm) a scan span's end may shift between adjacent rows before the cell
+ *  is split. A smooth or steep edge nudges the end a fraction of a millimetre per
+ *  row; only a near-horizontal turn (an L's foot, a T's arms) jumps further, and
+ *  that is exactly where a single-cell serpentine would slash across the notch. */
+const CELL_SPLIT_JUMP_MM = 3;
+
 interface CellRow {
   y: number;
   k: number; // global row index (drives the shared brick stagger)
@@ -819,8 +825,21 @@ function buildCells(rows: { y: number; k: number; spans: [number, number][] }[])
       if (news.length === 0) continue; // a cell pinches out (region ends here)
       if (opens.length === 1 && news.length === 1) {
         const j = news[0];
-        const ci = open[opens[0]].cell;
-        cells[ci].push({ y: row.y, k: row.k, x0: spans[j][0], x1: spans[j][1] });
+        const op = open[opens[0]];
+        // Continue the same cell only if the span lines up with the row above.
+        // If an end JUMPS — the boundary turns nearly horizontal, as at an L's
+        // notch or a T's arms — the cell's serpentine would slash a stray thread
+        // from the narrow row straight across to the far end of the wide one. Start
+        // a fresh cell there instead, so the two are joined by an inside-routed
+        // connector (or trimmed) rather than a bare diagonal.
+        const jump = Math.max(Math.abs(spans[j][0] - op.x0), Math.abs(spans[j][1] - op.x1));
+        if (jump <= CELL_SPLIT_JUMP_MM) {
+          const ci = op.cell;
+          cells[ci].push({ y: row.y, k: row.k, x0: spans[j][0], x1: spans[j][1] });
+          next.push({ cell: ci, x0: spans[j][0], x1: spans[j][1] });
+          continue;
+        }
+        const ci = cells.push([{ y: row.y, k: row.k, x0: spans[j][0], x1: spans[j][1] }]) - 1;
         next.push({ cell: ci, x0: spans[j][0], x1: spans[j][1] });
       } else {
         // Split / merge / new lobe → each new span starts a fresh cell.
