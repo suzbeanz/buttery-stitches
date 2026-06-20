@@ -14,6 +14,7 @@ import { tatamiFill, tatamiConcaveRuns, multiBlendFill, motifFill, motifRunAlong
 import { contourFill } from "./contour";
 import { medialColumns, columnsFromCenterlines, satinCoverage, residualRegions, type SatinColumn } from "./medial";
 import { turningFill, flowFill } from "./turning";
+import { isSmallRoundFill } from "./classify";
 import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
 import { dropShortStitches, splitLongTravels } from "./resample";
 
@@ -371,13 +372,14 @@ function acceptableSatin(
   const b = pathsBounds(region);
   const span = b ? Math.min(b.maxX - b.minX, b.maxY - b.minY) : 12;
   const cellMm = Math.max(0.12, Math.min(0.4, span / 60));
-  // Small feature (an i/j tittle, a period, an accent): its medial axis is a tiny
-  // cross that satins as a criss-cross mess. Lay ONE clean satin block across its
+  // Small feature (an i/j tittle, a period, an accent) OR a small round dot (a golf
+  // ball, an eye): its medial axis is a tiny cross that satins as a criss-cross
+  // mess, and tatami leaves rough little rows. Lay ONE clean satin block across its
   // long axis instead.
   if (b) {
     const w = b.maxX - b.minX;
     const h = b.maxY - b.minY;
-    if (Math.max(w, h) <= SMALL_FEATURE_MM) {
+    if (Math.max(w, h) <= SMALL_FEATURE_MM || isSmallRoundFill(region)) {
       const cx = (b.minX + b.maxX) / 2;
       const cy = (b.minY + b.maxY) / 2;
       const centerline: Point[] =

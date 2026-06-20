@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Path } from "../../types/project";
-import { classifyRegion, meanStrokeWidthMm } from "./classify";
+import { classifyRegion, meanStrokeWidthMm, isSmallRoundFill } from "./classify";
 
 /** A closed rectangle ring `w`×`h` mm at the origin. */
 function rect(w: number, h: number): Path {
@@ -95,5 +95,26 @@ describe("classifyRegion", () => {
       { x: 9, y: 22 }, { x: 8, y: 22 }, { x: 8, y: 18 }, { x: 9, y: 18 },
     ];
     expect(classifyRegion([bar], { satinMaxWidthMm: 3.5 })).toBe("satin");
+  });
+});
+
+describe("isSmallRoundFill (smooth satin dots)", () => {
+  function disc(cx: number, cy: number, r: number, n = 40): Path {
+    return Array.from({ length: n }, (_, i) => {
+      const a = (i / n) * 2 * Math.PI;
+      return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
+    });
+  }
+  it("a small round dot (a golf ball, an eye) is a satin block", () => {
+    expect(isSmallRoundFill([disc(10, 10, 3.5)])).toBe(true); // 7mm ball
+    expect(isSmallRoundFill([rect(6, 6)])).toBe(true); // a small square pip
+  });
+  it("a big disc, a sliver, and an elongated pill are NOT (tatami / medial)", () => {
+    expect(isSmallRoundFill([disc(20, 20, 12)])).toBe(false); // 24mm — too big
+    expect(isSmallRoundFill([rect(20, 1.5)])).toBe(false); // a thin sliver
+    expect(isSmallRoundFill([rect(8, 2.5)])).toBe(false); // elongated → medial satin
+  });
+  it("a ring/frame is NOT a dot (it has a hole — medial handles it)", () => {
+    expect(isSmallRoundFill([disc(10, 10, 4), disc(10, 10, 2.5)])).toBe(false);
   });
 });
