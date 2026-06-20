@@ -621,8 +621,12 @@ export function generateObjectRuns(
   // ONE grain angle for the whole object so every tatami region flows the same
   // way — a word or multi-blob logo reads as a single piece, not a patchwork of
   // differently-angled letters (stitch-direction continuity). The user's Angle
-  // field offsets it.
-  const tatamiAngle = autoFillAngleForRegions(regions, p.angle);
+  // field offsets it. A painted Direction (directionDeg) is an ABSOLUTE override:
+  // the user has told us which way the stitches run, so skip the auto grain.
+  const manualDirection = p.directionDeg != null;
+  const tatamiAngle = manualDirection
+    ? p.directionDeg!
+    : autoFillAngleForRegions(regions, p.angle);
   regions.forEach((region, regionIdx) => {
     const columns = satin
       ? acceptableSatin(region, density, fabric.pullMul, authoredForRegion(object, region))
@@ -742,7 +746,12 @@ export function generateObjectRuns(
       // A clean single-spine band turns (turningFill); a branchy/organic limbed shape
       // flows along every limb (flowFill); everything else stays on the concavity-
       // aware tatami grain. Both decline (→ null) and self-validate to never slash.
-      const turned = regions.length === 1 ? (turningFill(region, fillOpts) ?? flowFill(region, fillOpts)) : null;
+      // A painted Direction means "run straight THIS way" — skip turning/flow so they
+      // don't re-impose their own spine over the user's choice.
+      const turned =
+        !manualDirection && regions.length === 1
+          ? (turningFill(region, fillOpts) ?? flowFill(region, fillOpts))
+          : null;
       tops = turned ?? tatamiConcaveRuns(region, fillOpts);
       tatamiNoBareTravel = true;
     }

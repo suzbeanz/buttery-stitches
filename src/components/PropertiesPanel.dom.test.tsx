@@ -164,6 +164,23 @@ describe("PropertiesPanel", () => {
     expect(screen.getByText(/Appliqué/i)).toBeTruthy();
   });
 
+  it("shows the Angle field when no direction is painted", () => {
+    seedSelectedFill();
+    render(<PropertiesPanel />);
+    expect(screen.getByText(/Angle \(° from auto\)/i)).toBeTruthy();
+  });
+
+  it("shows the manual Direction readout with an Auto reset that clears it", () => {
+    const { fillId } = seedSelectedFill();
+    useProjectStore.getState().updateObjectParams(fillId, { directionDeg: 30 });
+    render(<PropertiesPanel />);
+    expect(screen.getByText(/Manual — 30/)).toBeTruthy();
+    expect(screen.queryByText(/Angle \(° from auto\)/i)).toBeNull(); // auto field hidden
+    fireEvent.click(screen.getByText(/^Auto$/));
+    const dd = useProjectStore.getState().project.objects.find((o) => o.id === fillId)!.params.directionDeg;
+    expect(dd == null).toBe(true);
+  });
+
   it("deletes an unused thread but disables deleting one in use", () => {
     seedSelectedFill(); // colors: the fill's color (in use) + "Red" (unused)
     render(<PropertiesPanel />);

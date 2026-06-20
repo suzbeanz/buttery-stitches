@@ -329,3 +329,45 @@ describe("validateDesign", () => {
     expect(coincident).toBe(0);
   });
 });
+
+describe("painted fill direction (directionDeg)", () => {
+  function dominantRowAngle(o: ReturnType<typeof makeObjectFromPaths>): number {
+    const bins = new Array(180).fill(0);
+    for (const r of generateObjectRuns(o)) {
+      if (r.underlay) continue;
+      for (let i = 1; i < r.pts.length; i++) {
+        const a = r.pts[i - 1], b = r.pts[i];
+        const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
+        if (len < 2) continue; // long row segments only, not the short turns
+        let deg = (Math.atan2(dy, dx) * 180) / Math.PI;
+        deg = ((deg % 180) + 180) % 180;
+        bins[Math.round(deg) % 180] += len;
+      }
+    }
+    return bins.indexOf(Math.max(...bins));
+  }
+  const square = () => [[{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 40 }, { x: 0, y: 40 }]];
+
+  it("runs the rows at the painted absolute angle", () => {
+    for (const dir of [0, 30, 90, 120]) {
+      const o = makeObjectFromPaths("fill", square(), "c1", "sq");
+      o.params = { density: 0.4, directionDeg: dir };
+      expect(Math.abs(dominantRowAngle(o) - dir)).toBeLessThanOrEqual(3);
+    }
+  });
+
+  it("a curved band runs STRAIGHT at the painted angle (turning fill is bypassed)", () => {
+    // A crescent normally turns (rows fan to follow the curve); a painted direction
+    // overrides that with a single straight grain.
+    const arc = (r: number, a0: number, a1: number, n: number) =>
+      Array.from({ length: n + 1 }, (_, i) => {
+        const a = a0 + ((a1 - a0) * i) / n;
+        return { x: 50 + r * Math.cos(a), y: 55 + r * Math.sin(a) };
+      });
+    const D = Math.PI / 180;
+    const crescent = [...arc(42, 200 * D, 340 * D, 60), ...arc(28, 340 * D, 200 * D, 60)];
+    const o = makeObjectFromPaths("fill", [crescent], "c1", "band");
+    o.params = { density: 0.5, directionDeg: 0 };
+    expect(dominantRowAngle(o)).toBeLessThanOrEqual(3); // ~0°, i.e. straight horizontal
+  });
+});

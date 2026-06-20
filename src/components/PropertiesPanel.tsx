@@ -429,14 +429,32 @@ function ObjectProperties({
         </Disclosure>
       )}
 
-      {object.type === "fill" && (
-        <NumberField
-          label="Angle (° from auto)"
-          value={p.angle ?? DEFAULT_PARAMS.angle}
-          step={5}
-          onChange={(v) => onParam({ angle: v })}
-        />
-      )}
+      {object.type === "fill" &&
+        (p.directionDeg != null ? (
+          // A painted grain (Direction tool) overrides the auto angle — show it with
+          // a one-click reset back to the automatic direction.
+          <Field label="Direction">
+            <div className="flex items-center justify-between gap-2 text-sm text-navy">
+              <span>
+                Manual — {Math.round(p.directionDeg)}°
+              </span>
+              <button
+                type="button"
+                onClick={() => onParam({ directionDeg: null })}
+                className="rounded-sm border border-ink/20 px-2 py-0.5 font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-navy/70 hover:bg-butter-200/60 hover:text-ink"
+              >
+                Auto
+              </button>
+            </div>
+          </Field>
+        ) : (
+          <NumberField
+            label="Angle (° from auto)"
+            value={p.angle ?? DEFAULT_PARAMS.angle}
+            step={5}
+            onChange={(v) => onParam({ angle: v })}
+          />
+        ))}
 
       {object.type === "satin" && (
         <>
