@@ -23,9 +23,9 @@ import { validateDesign } from "../lib/engine/validate";
 
 const STAGE_LABEL: Record<LoadStage, string> = {
   idle: "",
-  "loading-runtime": "Warming up the export engine…",
-  "loading-micropip": "Warming up the export engine…",
-  "installing-pyembroidery": "Almost ready…",
+  "loading-runtime": "Loading the stitch engine…",
+  "loading-micropip": "Loading the stitch engine…",
+  "installing-pyembroidery": "Installing the export library…",
   ready: "Ready",
   error: "Couldn't start the export engine",
 };
