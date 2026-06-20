@@ -16,6 +16,18 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
     ],
   },
   {
+    title: "Edit & arrange",
+    keys: [
+      ["⌘/Ctrl A", "Select all"],
+      ["⌘/Ctrl C / V", "Copy / paste"],
+      ["⌘/Ctrl D", "Duplicate"],
+      ["⌘/Ctrl G", "Group"],
+      ["⌘/Ctrl ⇧ G", "Ungroup"],
+      ["Arrows", "Nudge (⇧ = 5 mm)"],
+      ["[ / ]", "Sew earlier / later"],
+    ],
+  },
+  {
     title: "Drawing & nodes",
     keys: [
       ["Enter", "Finish shape"],
@@ -33,8 +45,10 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
     ],
   },
   {
-    title: "Preview",
+    title: "View & preview",
     keys: [
+      ["⌘/Ctrl + / −", "Zoom in / out"],
+      ["⌘/Ctrl 0", "Fit to view"],
       ["P", "Toggle stitch view"],
       ["Space", "Play / pause"],
       ["?", "This help"],

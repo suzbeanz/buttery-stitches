@@ -296,7 +296,38 @@ function useGlobalShortcuts(setShowHelp: (fn: (v: boolean) => boolean) => void) 
         else ps.groupObjects(ps.selectedIds);
         return;
       }
+      // Select every object.
+      if (mod && e.key.toLowerCase() === "a") {
+        const ps = useProjectStore.getState();
+        if (ps.project.objects.length) {
+          e.preventDefault();
+          ps.setSelection(ps.project.objects.map((o) => o.id));
+        }
+        return;
+      }
+      // Zoom (⌘/Ctrl +/−/0). The viewport lives in CanvasStage; signal it via a
+      // window event so the keys work no matter where focus is.
+      if (mod && (e.key === "=" || e.key === "+" || e.key === "-" || e.key === "0")) {
+        e.preventDefault();
+        const detail = e.key === "0" ? "fit" : e.key === "-" ? "out" : "in";
+        window.dispatchEvent(new CustomEvent("bs:zoom", { detail }));
+        return;
+      }
       if (mod) return; // leave other Ctrl/Cmd combos to the browser
+
+      // Nudge the selection (arrow = 1 mm, ⇧+arrow = 5 mm) — precise placement
+      // without dragging; one undo step via moveObjects.
+      if (e.key.startsWith("Arrow") && editor.viewMode === "edit") {
+        const ps = useProjectStore.getState();
+        if (ps.selectedIds.length) {
+          e.preventDefault();
+          const step = e.shiftKey ? 5 : 1;
+          const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+          const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+          if (dx || dy) ps.moveObjects(ps.selectedIds, dx, dy);
+        }
+        return;
+      }
 
       // Re-order the selection in the stitch sequence ( [ = earlier, ] = later ).
       if (e.key === "[" || e.key === "]") {

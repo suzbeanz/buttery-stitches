@@ -244,6 +244,19 @@ export default function CanvasStage() {
     setPan({ x: 0, y: 0 });
   };
 
+  // Keyboard zoom (⌘/Ctrl +/−/0) is dispatched from the global shortcut handler in
+  // App as a window event, since the viewport transform lives here in the stage.
+  useEffect(() => {
+    const onZoom = (e: Event) => {
+      const cmd = (e as CustomEvent<"in" | "out" | "fit">).detail;
+      if (cmd === "in") zoomIn();
+      else if (cmd === "out") zoomOut();
+      else resetView();
+    };
+    window.addEventListener("bs:zoom", onZoom);
+    return () => window.removeEventListener("bs:zoom", onZoom);
+  });
+
   const colorById = useMemo(
     () => new Map<string, ThreadColor>(project.colors.map((c) => [c.id, c])),
     [project.colors],
