@@ -18,6 +18,7 @@ import {
   Combine,
   Split,
   Spline,
+  Magnet,
   Trash2,
   Check,
 } from "lucide-react";
@@ -204,6 +205,7 @@ function ArrangeSection() {
   const ungroupObjects = useProjectStore((s) => s.ungroupObjects);
   const mergeObjects = useProjectStore((s) => s.mergeObjects);
   const splitRegion = useProjectStore((s) => s.splitRegion);
+  const weldObject = useProjectStore((s) => s.weldObject);
   const n = selectedIds.length;
   const selectedSet = new Set(selectedIds);
   const anyGrouped = objects.some((o) => selectedSet.has(o.id) && o.groupId);
@@ -226,6 +228,9 @@ function ArrangeSection() {
     () => !!splitTarget && splitRegionComponents(splitTarget.paths).length > 1,
     [splitTarget],
   );
+  // Weld needs a lone fill plus at least one other fill to butt against.
+  const canWeld =
+    !!splitTarget && objects.some((o) => o.id !== splitTarget.id && o.type === "fill");
   if (n === 0) return null;
 
   const align = (edge: AlignEdge) =>
@@ -310,6 +315,17 @@ function ArrangeSection() {
           }}
         >
           <Split size={15} />
+        </ArrangeBtn>
+        <ArrangeBtn
+          label="Weld edge to neighbors (seamless seam)"
+          disabled={!canWeld}
+          onClick={() => {
+            if (!splitTarget) return;
+            weldObject(splitTarget.id);
+            toast("Welded edge to neighbors", "success");
+          }}
+        >
+          <Magnet size={15} />
         </ArrangeBtn>
       </div>
     </div>

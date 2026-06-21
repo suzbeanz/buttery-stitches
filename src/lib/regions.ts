@@ -1,5 +1,5 @@
 import type { Path } from "../types/project";
-import { booleanOp } from "./boolean";
+import { booleanOp, seamTrap, knockdown } from "./boolean";
 import { pointInRing } from "./geometry";
 import { polygonArea } from "./trace/classify";
 
@@ -19,6 +19,19 @@ import { polygonArea } from "./trace/classify";
  * pass through as multiple outers — still one ring set, which split can later
  * separate again. Returns `[]` for empty input.
  */
+/**
+ * Weld a fill's edge to its neighbours for a seamless seam. Grows the target a
+ * `trapMm` sliver into any adjacent neighbour (closing a hairline gap), then
+ * trims it back to exactly `trapMm` inside the neighbour's edge — so the target
+ * tucks cleanly UNDER its neighbours with no fabric-showing gap. Returns the
+ * target unchanged when nothing is adjacent. Reuses the trapping geometry.
+ */
+export function weldToNeighbors(target: Path[], others: Path[][], trapMm = 0.4): Path[] {
+  const neighbors = others.filter((p) => p.length > 0);
+  if (neighbors.length === 0 || target.length === 0) return target;
+  return knockdown(seamTrap(target, neighbors, trapMm), neighbors, trapMm);
+}
+
 export function mergeRegionPaths(pathSets: Path[][]): Path[] {
   const sets = pathSets.filter((p) => p.length > 0);
   if (sets.length === 0) return [];

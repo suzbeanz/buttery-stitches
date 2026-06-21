@@ -329,4 +329,33 @@ describe("PropertiesPanel", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Arrange" }));
     expect(screen.getByLabelText(/^Split into/)).toHaveProperty("disabled", true);
   });
+
+  it("welds a fill's edge to an abutting neighbor from the Arrange tab", () => {
+    const project = createEmptyProject();
+    const colorId = project.colors[0].id;
+    const sq = (x: number) => [
+      { x, y: 0 },
+      { x: x + 10, y: 0 },
+      { x: x + 10, y: 10 },
+      { x, y: 10 },
+    ];
+    const left = makeObject("fill", sq(0), colorId);
+    const right = makeObject("fill", sq(10), colorId);
+    project.objects = [left, right];
+    resetStores(project);
+    useProjectStore.setState({ selectedIds: [left.id] });
+
+    render(<PropertiesPanel />);
+    fireEvent.click(screen.getByRole("tab", { name: "Arrange" }));
+    const weld = screen.getByLabelText(/^Weld edge/) as HTMLButtonElement;
+    expect(weld.disabled).toBe(false);
+    const beforeMaxX = Math.max(
+      ...useProjectStore.getState().project.objects[0].paths.flat().map((p) => p.x),
+    );
+    fireEvent.click(weld);
+    const afterMaxX = Math.max(
+      ...useProjectStore.getState().project.objects[0].paths.flat().map((p) => p.x),
+    );
+    expect(afterMaxX).toBeGreaterThan(beforeMaxX);
+  });
 });

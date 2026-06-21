@@ -14,7 +14,7 @@ import { translatePaths } from "../lib/geometry";
 import { expandGroups, pathsFromNodes, isClosedType } from "../lib/objects";
 import { densifyRing } from "../lib/nodes";
 import { smoothPath, smoothRingKeepingCorners } from "../lib/smooth";
-import { mergeRegionPaths, splitRegionComponents } from "../lib/regions";
+import { mergeRegionPaths, splitRegionComponents, weldToNeighbors } from "../lib/regions";
 import { newId } from "../lib/id";
 
 /**
@@ -82,6 +82,9 @@ export interface ProjectState {
   /** Separate a fill's disconnected pieces into one object each. No-op unless the
    *  object is a fill with 2+ components. */
   splitRegion: (id: string) => void;
+  /** Weld a fill's edge to its neighbouring fills (seamless trapped seam). No-op
+   *  unless it's a fill with an adjacent fill. */
+  weldObject: (id: string) => void;
 
   addColor: (color: ThreadColor) => void;
   updateColor: (id: string, patch: Partial<ThreadColor>) => void;
@@ -361,6 +364,23 @@ export const useProjectStore = create<ProjectState>()(
           return {
             project: { ...s.project, objects },
             selectedIds: parts.map((p) => p.id),
+          };
+        }),
+
+      weldObject: (id) =>
+        set((s) => {
+          const o = s.project.objects.find((x) => x.id === id);
+          if (!o || o.type !== "fill") return s;
+          const others = s.project.objects
+            .filter((x) => x.id !== id && x.type === "fill" && x.visible !== false)
+            .map((x) => x.paths);
+          const welded = weldToNeighbors(o.paths, others);
+          if (welded === o.paths) return s; // nothing adjacent → no change
+          return {
+            project: {
+              ...s.project,
+              objects: s.project.objects.map((x) => (x.id === id ? { ...x, paths: welded } : x)),
+            },
           };
         }),
 
