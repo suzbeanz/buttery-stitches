@@ -51,53 +51,58 @@ export default function ToolRail() {
     // axis to clip, which hid the right-side tooltips inside the rail and flashed a
     // horizontal scrollbar. The compact two-column layout fits the kit without it.
     <aside className="flex w-28 shrink-0 flex-col gap-0.5 overflow-visible border-r-2 border-ink bg-cream py-1.5">
+      {locked && (
+        <div className="mx-1.5 mb-1 rounded-sm bg-butter-200 px-1 py-1 text-center font-label text-[9px] font-semibold uppercase leading-tight tracking-wide text-ink/70">
+          Stitch view — tools paused
+        </div>
+      )}
       <Group label="Edit">
-        <ToolBtn id="select" label="Select" tip="Click to select; drag to move" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="select" label="Select" shortcut="V" tip="Select & move — pick a shape to edit; drag to reposition." tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <MousePointer2 size={20} />
         </ToolBtn>
-        <ToolBtn id="node" label="Points" tip="Edit points — drag to move · click outline to add · Del to remove · C = corner/curve · double-click to toggle" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="node" label="Points" shortcut="N" tip="Edit points — reshape a path: drag points · click the outline to add · Del removes · C toggles corner/curve." tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <NodeGlyph />
         </ToolBtn>
-        <ToolBtn id="pan" label="Hand" tip="Hand — drag to move the canvas (or hold middle mouse)" tool={tool} setTool={setTool} locked={false} lockTip={lockTip}>
+        <ToolBtn id="pan" label="Hand" shortcut="H" tip="Hand — pan the canvas (or hold middle mouse)." tool={tool} setTool={setTool} locked={false} lockTip={lockTip}>
           <Hand size={20} />
         </ToolBtn>
-        <ToolBtn id="measure" label="Measure" tip="Measure — drag to read a distance and angle" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="measure" label="Measure" shortcut="M" tip="Measure — check a distance or angle before you stitch." tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Ruler size={20} />
         </ToolBtn>
-        <ToolBtn id="cut" label="Cut" tip="Cut — click a running line to split it into two pieces" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="cut" label="Cut" tip="Cut — split a running line into two at the point you click." tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Slice size={20} />
         </ToolBtn>
-        <ToolBtn id="direction" label="Direction" tip="Direction — select a fill, then drag to set which way its stitches run" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="direction" label="Direction" tip="Direction — set which way a fill's stitches run: select a fill, then drag." tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Compass size={20} />
         </ToolBtn>
       </Group>
 
       <Rule />
       <Group label="Stitch">
-        <ToolBtn id="running" label="Run" tip="Running stitch — click points, double-click to finish" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="running" label="Run" shortcut="R" tip="Running stitch — thin outlines & travel lines. Click points, double-click to finish." tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <RunningGlyph />
         </ToolBtn>
-        <ToolBtn id="satin" label="Satin" tip="Satin column — draw a centerline" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="satin" label="Satin" shortcut="S" tip="Satin column — smooth, shiny borders & lettering. Draw a centerline." tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <SatinGlyph />
         </ToolBtn>
-        <ToolBtn id="satin2" label="Column" tip="Two-rail satin — draw edge A, then edge B (variable width)" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="satin2" label="Column" tip="Two-rail satin — borders of varying width. Draw edge A, then edge B." tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Satin2Glyph />
         </ToolBtn>
-        <ToolBtn id="fill" label="Fill" tip="Fill an area — click inside lines to flood it, or click an outline point-by-point to draw a shape to fill" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="fill" label="Fill" shortcut="F" tip="Fill — solid areas. Click inside an outline to flood it, or click points to draw the shape." tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <FillGlyph />
         </ToolBtn>
-        <ToolBtn id="pencil" label="Pencil" tip="Pencil — draw a freehand running stitch" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="pencil" label="Pencil" shortcut="B" tip="Pencil — sketch a freehand running line." tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Pencil size={20} />
         </ToolBtn>
-        <ToolBtn id="brush" label="Brush" tip="Brush — paint a freehand filled area" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="brush" label="Brush" tip="Brush — paint a freehand filled area." tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Paintbrush size={20} />
         </ToolBtn>
-        <ToolBtn id="applique" label="Appliqué" tip="Appliqué — draw a shape: placement run → stop → tackdown → stop → satin cover" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="applique" label="Appliqué" tip="Appliqué — fabric patch: placement run → stop → tackdown → stop → satin cover." tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Scissors size={20} />
         </ToolBtn>
         <RailBtn
           label="Curve"
-          tip={locked ? lockTip : "Smooth points into a curve (Line / Satin / Fill)"}
+          tip={locked ? lockTip : "Curved drawing — when on, the next line / satin / fill you draw bends smoothly through its points (toggle)."}
           active={smooth && !locked}
           disabled={locked}
           onClick={() => toggleSmooth()}
@@ -183,6 +188,7 @@ function ToolBtn({
   id,
   label,
   tip,
+  shortcut,
   tool,
   setTool,
   locked,
@@ -192,6 +198,7 @@ function ToolBtn({
   id: Tool;
   label: string;
   tip: string;
+  shortcut?: string;
   tool: Tool;
   setTool: (t: Tool) => void;
   locked: boolean;
@@ -199,8 +206,10 @@ function ToolBtn({
   children: ReactNode;
 }) {
   const on = tool === id && !locked;
+  // Surface the shortcut in the tooltip too, so it's discoverable on hover.
+  const fullTip = locked ? lockTip : shortcut ? `${tip}  ·  shortcut: ${shortcut}` : tip;
   return (
-    <RailBtn label={label} tip={locked ? lockTip : tip} active={on} disabled={locked} onClick={() => setTool(id)}>
+    <RailBtn label={label} tip={fullTip} shortcut={locked ? undefined : shortcut} active={on} disabled={locked} onClick={() => setTool(id)}>
       {children}
     </RailBtn>
   );
@@ -210,6 +219,7 @@ function ToolBtn({
 function RailBtn({
   label,
   tip,
+  shortcut,
   active = false,
   disabled = false,
   onClick,
@@ -217,6 +227,7 @@ function RailBtn({
 }: {
   label: string;
   tip: string;
+  shortcut?: string;
   active?: boolean;
   disabled?: boolean;
   onClick: () => void;
@@ -229,13 +240,19 @@ function RailBtn({
       data-tip={tip}
       data-tip-side="right"
       aria-label={label}
+      aria-keyshortcuts={shortcut}
       aria-pressed={active}
-      className={`tap-target flex w-full flex-col items-center gap-0.5 rounded-sm border-2 px-1 py-1.5 transition-[color,background-color,border-color,transform] active:translate-y-px disabled:opacity-40 ${
+      className={`tap-target relative flex w-full flex-col items-center gap-0.5 rounded-sm border-2 px-1 py-1.5 transition-[color,background-color,border-color,transform] active:translate-y-px disabled:opacity-40 ${
         active
           ? "border-ink bg-ink text-cream"
           : "border-transparent text-ink hover:border-ink/30 hover:bg-butter-200/60"
       }`}
     >
+      {shortcut && (
+        <kbd className="pointer-events-none absolute right-0.5 top-0.5 font-label text-[8px] font-semibold leading-none opacity-50">
+          {shortcut}
+        </kbd>
+      )}
       {children}
       <span className="font-label text-[9px] font-semibold uppercase tracking-wide">
         {label}

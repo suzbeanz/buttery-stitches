@@ -44,6 +44,24 @@ describe("ToolRail", () => {
     expect(screen.queryByRole("button", { name: "Box" })).toBeNull();
   });
 
+  it("gives tools purpose-first tooltips and shows shortcut keys", () => {
+    render(<ToolRail />);
+    const select = screen.getByRole("button", { name: "Select" });
+    // Tooltip explains WHEN/why, not just how, and advertises the shortcut.
+    expect(select.getAttribute("data-tip")).toMatch(/Select & move/);
+    expect(select.getAttribute("data-tip")).toMatch(/shortcut: V/);
+    expect(select.getAttribute("aria-keyshortcuts")).toBe("V");
+    // Fill explains its purpose (solid areas).
+    expect(screen.getByRole("button", { name: "Fill" }).getAttribute("data-tip")).toMatch(/solid areas/i);
+  });
+
+  it("shows a paused hint and disables edit tools in stitch view", () => {
+    useEditorStore.setState({ viewMode: "stitch" });
+    render(<ToolRail />);
+    expect(screen.getByText(/tools paused/i)).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Select" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it("toggles snap and guides", () => {
     useEditorStore.setState({ snapEnabled: true, guidesEnabled: true });
     render(<ToolRail />);
