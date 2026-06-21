@@ -4,6 +4,7 @@ import type { Font } from "opentype.js";
 import { FONTS, DEFAULT_FONT_ID, loadFont } from "../lib/text/fonts";
 import { layoutText } from "../lib/text/layout";
 import { translatePaths, pathsBounds } from "../lib/geometry";
+import { ringsToSvgPath } from "../lib/svgPath";
 import { useEscapeToClose, useDialogFocus } from "./useEscapeToClose";
 import { mmToInch, inchToMm } from "../lib/units";
 import { newId } from "../lib/id";
@@ -466,17 +467,6 @@ function TextPreview({
       )}
     </div>
   );
-}
-
-function ringsToSvgPath(rings: { x: number; y: number }[][]): string {
-  return rings
-    .map(
-      (r) =>
-        "M" +
-        r.map((p) => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join("L") +
-        "Z",
-    )
-    .join(" ");
 }
 
 function previewHex(
