@@ -44,6 +44,7 @@ import { rectFromPoints, rectSpanMm, marqueeSelect } from "../lib/marquee";
 import { smoothPath } from "../lib/smooth";
 import { computeTicksRange } from "../lib/ruler";
 import { mmToInch } from "../lib/units";
+import ContextMenu from "./ContextMenu";
 import { designFor, orientByDepth } from "../lib/engine";
 import { designToSegments, needleAt } from "../lib/engine/render";
 
@@ -273,6 +274,25 @@ export default function CanvasStage() {
   // --- selection / transform plumbing ---
   const nodeRefs = useRef(new Map<string, Konva.Group>());
   const trRef = useRef<Konva.Transformer>(null);
+  // Right-click context menu: screen position, or null when closed.
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+
+  // Map a right-clicked Konva node to its object id by walking up to the
+  // per-object Group registered in nodeRefs.
+  function objectIdAt(target: Konva.Node | null): string | null {
+    for (let node: Konva.Node | null = target; node; node = node.getParent()) {
+      for (const [id, n] of nodeRefs.current) if (n === node) return id;
+    }
+    return null;
+  }
+  function onStageContextMenu(e: Konva.KonvaEventObject<MouseEvent>) {
+    e.evt.preventDefault(); // never show the browser's menu over the canvas
+    if (viewMode === "stitch") return; // editing is disabled in stitch view
+    const id = objectIdAt(e.target);
+    if (!id) return setMenu(null); // empty space → just dismiss
+    if (!useProjectStore.getState().selectedIds.includes(id)) setSelection([id]);
+    setMenu({ x: e.evt.clientX, y: e.evt.clientY });
+  }
   useEffect(() => {
     const tr = trRef.current;
     if (!tr) return;
@@ -966,6 +986,7 @@ export default function CanvasStage() {
           height={size.height}
           onMouseDown={onStageMouseDown}
           onMouseMove={onStageMouseMove}
+          onContextMenu={onStageContextMenu}
           onDblClick={finishDraft}
           onDblTap={finishDraft}
           onTouchStart={onTouchStart}
@@ -1524,6 +1545,8 @@ export default function CanvasStage() {
           ? `${mmToInch(project.widthMm).toFixed(2)} × ${mmToInch(project.heightMm).toFixed(2)} in`
           : `${project.widthMm.toFixed(0)} × ${project.heightMm.toFixed(0)} mm`}
       </div>
+
+      {menu && <ContextMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
     </main>
   );
 }
