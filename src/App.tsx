@@ -4,6 +4,7 @@ import LayerPanel from "./components/LayerPanel";
 import ToolRail from "./components/ToolRail";
 import CanvasStage from "./components/CanvasStage";
 import SimulatorBar from "./components/SimulatorBar";
+import ReviewBar from "./components/ReviewBar";
 import PropertiesPanel from "./components/PropertiesPanel";
 import HelpOverlay from "./components/HelpOverlay";
 import Home from "./components/Home";
@@ -175,7 +176,10 @@ function Studio({ onHome, saveStatus }: { onHome: () => void; saveStatus: SaveSt
         <ToolRail />
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <CanvasStage />
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            <CanvasStage />
+            <ReviewBar />
+          </div>
           <SimulatorBar />
         </div>
 
