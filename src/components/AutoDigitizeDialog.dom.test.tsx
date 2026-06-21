@@ -32,6 +32,7 @@ vi.mock("../lib/trace", () => ({
 vi.mock("../lib/fix", () => ({ fixStitches: vi.fn((p: Project) => p) }));
 
 import AutoDigitizeDialog from "./AutoDigitizeDialog";
+import { imageDataToObjects } from "../lib/trace";
 
 const HOOP = { wMm: 100, hMm: 100, name: "4×4" };
 
@@ -41,7 +42,13 @@ function renderDialog(onApply = vi.fn()) {
   return onApply;
 }
 
-describe("AutoDigitizeDialog color picking", () => {
+// The first trace runs after the image loads + the debounce; wait for the swatches.
+async function waitForColors() {
+  await screen.findByRole("button", { name: /Red/ }, { timeout: 2000 });
+  await waitFor(() => expect(document.querySelectorAll("svg[data-preview] path")).toHaveLength(3));
+}
+
+describe("AutoDigitizeDialog (live preview)", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -50,31 +57,40 @@ describe("AutoDigitizeDialog color picking", () => {
     URL.revokeObjectURL = vi.fn();
   });
 
-  async function digitizeToReview() {
-    fireEvent.click(await screen.findByRole("button", { name: "Digitize" }));
-    // Wait for the review step (the 30ms yield + trace).
-    await screen.findByRole("button", { name: /Add to design/ });
-  }
-
-  it("shows a swatch per detected color with region counts and a preview", async () => {
+  it("auto-traces and shows a swatch per color with region counts and a live preview", async () => {
     renderDialog();
-    await digitizeToReview();
+    await waitForColors();
     expect(screen.getByRole("button", { name: /Red/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Green/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Blue/ })).toBeTruthy();
-    // One region each.
     expect(screen.getAllByText("1 region")).toHaveLength(3);
-    // Preview renders one <path> per kept object.
-    expect(document.querySelectorAll("svg path")).toHaveLength(3);
+    expect(document.querySelectorAll("svg[data-preview] path")).toHaveLength(3);
   });
 
-  it("dropping a color removes it from the preview and the applied project", async () => {
-    const onApply = renderDialog();
-    await digitizeToReview();
+  it("re-traces when the color count changes", async () => {
+    renderDialog();
+    await waitForColors();
+    const before = vi.mocked(imageDataToObjects).mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "More colors" }));
+    await waitFor(() =>
+      expect(vi.mocked(imageDataToObjects).mock.calls.length).toBeGreaterThan(before),
+    );
+  });
 
+  it("toggling a color updates the preview WITHOUT re-tracing", async () => {
+    renderDialog();
+    await waitForColors();
+    const before = vi.mocked(imageDataToObjects).mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: /Red/ })); // skip Red
-    await waitFor(() => expect(document.querySelectorAll("svg path")).toHaveLength(2));
+    await waitFor(() => expect(document.querySelectorAll("svg[data-preview] path")).toHaveLength(2));
+    expect(vi.mocked(imageDataToObjects).mock.calls.length).toBe(before); // pure filter
+  });
 
+  it("applies only the kept colors", async () => {
+    const onApply = renderDialog();
+    await waitForColors();
+    fireEvent.click(screen.getByRole("button", { name: /Red/ })); // skip Red
+    await waitFor(() => expect(document.querySelectorAll("svg[data-preview] path")).toHaveLength(2));
     fireEvent.click(screen.getByRole("button", { name: /Add to design/ }));
     expect(onApply).toHaveBeenCalledTimes(1);
     const project = onApply.mock.calls[0][0] as Project;
@@ -85,19 +101,11 @@ describe("AutoDigitizeDialog color picking", () => {
 
   it("disables Add to design when every color is dropped", async () => {
     renderDialog();
-    await digitizeToReview();
+    await waitForColors();
     for (const name of [/Red/, /Green/, /Blue/]) {
       fireEvent.click(screen.getByRole("button", { name }));
     }
     const add = screen.getByRole("button", { name: /Add to design/ }) as HTMLButtonElement;
     expect(add.disabled).toBe(true);
-  });
-
-  it("Back returns to the options step without applying", async () => {
-    const onApply = renderDialog();
-    await digitizeToReview();
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
-    expect(await screen.findByRole("button", { name: "Digitize" })).toBeTruthy();
-    expect(onApply).not.toHaveBeenCalled();
   });
 });
