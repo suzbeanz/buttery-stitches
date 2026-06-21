@@ -18,6 +18,7 @@ export function resetStores(project?: Project) {
     rulerUnit: "mm",
     reviewIds: null,
     reviewIndex: 0,
+    propertiesTab: "object",
     viewMode: "edit",
     simTotal: 0,
     simIndex: 0,

@@ -52,6 +52,19 @@ describe("PropertiesPanel", () => {
     expect(screen.getByText(/Select an object/i)).toBeTruthy();
   });
 
+  it("organizes controls into Object / Arrange / Design / Threads tabs", () => {
+    seedSelectedFill();
+    render(<PropertiesPanel />);
+    // Object tab is default and shows object controls.
+    expect(screen.getByText(/Density/i)).toBeTruthy();
+    // Threads controls are NOT in the object tab.
+    expect(screen.queryByText("+ Add")).toBeNull();
+    // Switching to Threads reveals palette management.
+    fireEvent.click(screen.getByRole("tab", { name: "Threads" }));
+    expect(screen.getByText("+ Add")).toBeTruthy();
+    expect(screen.queryByText(/Density/i)).toBeNull();
+  });
+
   it("shows the satin column-width control for a satin object", () => {
     seedSelectedSatin();
     render(<PropertiesPanel />);
@@ -131,6 +144,7 @@ describe("PropertiesPanel", () => {
   it("adds a thread color", () => {
     resetStores();
     render(<PropertiesPanel />);
+    fireEvent.click(screen.getByRole("tab", { name: "Threads" }));
     const before = useProjectStore.getState().project.colors.length;
     fireEvent.click(screen.getByText("+ Add"));
     expect(useProjectStore.getState().project.colors.length).toBe(before + 1);
@@ -197,6 +211,7 @@ describe("PropertiesPanel", () => {
   it("deletes an unused thread but disables deleting one in use", () => {
     seedSelectedFill(); // colors: the fill's color (in use) + "Red" (unused)
     render(<PropertiesPanel />);
+    fireEvent.click(screen.getByRole("tab", { name: "Threads" }));
     const dels = screen.getAllByLabelText(/^Delete /) as HTMLButtonElement[];
     const enabled = dels.filter((b) => !b.disabled);
     const disabled = dels.filter((b) => b.disabled);
@@ -214,6 +229,7 @@ describe("PropertiesPanel", () => {
     resetStores(project); // no object uses 'Active' → unused & deletable
     useEditorStore.setState({ activeColorId: activeId });
     render(<PropertiesPanel />);
+    fireEvent.click(screen.getByRole("tab", { name: "Threads" }));
 
     const before = useProjectStore.getState().project.colors.length;
     // First click arms the confirm — nothing deleted yet.
@@ -251,18 +267,21 @@ describe("PropertiesPanel", () => {
   it("disables Merge for a single selection", () => {
     seedSelectedFill();
     render(<PropertiesPanel />);
+    fireEvent.click(screen.getByRole("tab", { name: "Arrange" }));
     expect(screen.getByLabelText(/^Merge regions/)).toHaveProperty("disabled", true);
   });
 
   it("disables Merge for two different-color fills", () => {
     seedTwoFills("c_blue");
     render(<PropertiesPanel />);
+    fireEvent.click(screen.getByRole("tab", { name: "Arrange" }));
     expect(screen.getByLabelText(/^Merge regions/)).toHaveProperty("disabled", true);
   });
 
   it("merges two same-color fills into one region", () => {
     seedTwoFills();
     render(<PropertiesPanel />);
+    fireEvent.click(screen.getByRole("tab", { name: "Arrange" }));
     const btn = screen.getByLabelText(/^Merge regions/) as HTMLButtonElement;
     expect(btn.disabled).toBe(false);
     fireEvent.click(btn);
@@ -279,6 +298,7 @@ describe("PropertiesPanel", () => {
     useProjectStore.setState({ selectedIds: [o.id] });
 
     render(<PropertiesPanel />);
+    fireEvent.click(screen.getByRole("tab", { name: "Arrange" }));
     const btn = screen.getByLabelText(/^Split into/) as HTMLButtonElement;
     expect(btn.disabled).toBe(false);
     fireEvent.click(btn);
@@ -288,6 +308,7 @@ describe("PropertiesPanel", () => {
   it("disables Split for a single-piece fill", () => {
     seedSelectedFill();
     render(<PropertiesPanel />);
+    fireEvent.click(screen.getByRole("tab", { name: "Arrange" }));
     expect(screen.getByLabelText(/^Split into/)).toHaveProperty("disabled", true);
   });
 });
