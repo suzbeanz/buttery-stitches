@@ -15,6 +15,8 @@ import {
   ChevronDown,
   Group,
   Ungroup,
+  Combine,
+  Split,
   Trash2,
   Check,
 } from "lucide-react";
@@ -30,6 +32,8 @@ import type {
 } from "../types/project";
 import { newId } from "../lib/id";
 import { convertObjectType, satinWidthOf, setSatinWidth } from "../lib/objects";
+import { splitRegionComponents } from "../lib/regions";
+import { toast } from "../store/toastStore";
 import { MOTIFS } from "../lib/engine/motifs";
 import { buildOutline, DEFAULT_OUTLINE_WIDTH } from "../lib/outline";
 import { generateObjectStitches } from "../lib/engine";
@@ -143,9 +147,30 @@ function ArrangeSection() {
   const moveOrder = useProjectStore((s) => s.moveOrder);
   const groupObjects = useProjectStore((s) => s.groupObjects);
   const ungroupObjects = useProjectStore((s) => s.ungroupObjects);
+  const mergeObjects = useProjectStore((s) => s.mergeObjects);
+  const splitRegion = useProjectStore((s) => s.splitRegion);
   const n = selectedIds.length;
   const selectedSet = new Set(selectedIds);
   const anyGrouped = objects.some((o) => selectedSet.has(o.id) && o.groupId);
+  const selectedObjs = useMemo(
+    () => objects.filter((o) => selectedSet.has(o.id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [objects, selectedIds],
+  );
+  // Merge needs 2+ fills of one color; split needs a lone fill with 2+ pieces.
+  const canMerge =
+    selectedObjs.length >= 2 &&
+    selectedObjs.every(
+      (o) => o.type === "fill" && o.colorId === selectedObjs[0].colorId,
+    );
+  const splitTarget =
+    selectedObjs.length === 1 && selectedObjs[0].type === "fill"
+      ? selectedObjs[0]
+      : null;
+  const canSplit = useMemo(
+    () => !!splitTarget && splitRegionComponents(splitTarget.paths).length > 1,
+    [splitTarget],
+  );
   if (n === 0) return null;
 
   const align = (edge: AlignEdge) =>
@@ -202,6 +227,34 @@ function ArrangeSection() {
         </ArrangeBtn>
         <ArrangeBtn label="Ungroup" disabled={!anyGrouped} onClick={() => ungroupObjects(selectedIds)}>
           <Ungroup size={15} />
+        </ArrangeBtn>
+      </div>
+
+      <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/60">
+        Regions
+      </span>
+      <div className="flex gap-1">
+        <ArrangeBtn
+          label="Merge regions (same-color fills)"
+          disabled={!canMerge}
+          onClick={() => {
+            mergeObjects(selectedIds);
+            toast(`Merged ${selectedObjs.length} regions`, "success");
+          }}
+        >
+          <Combine size={15} />
+        </ArrangeBtn>
+        <ArrangeBtn
+          label="Split into separate pieces"
+          disabled={!canSplit}
+          onClick={() => {
+            if (!splitTarget) return;
+            const count = splitRegionComponents(splitTarget.paths).length;
+            splitRegion(splitTarget.id);
+            toast(`Split into ${count} regions`, "success");
+          }}
+        >
+          <Split size={15} />
         </ArrangeBtn>
       </div>
     </div>

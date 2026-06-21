@@ -12,6 +12,7 @@ import type {
 import { createEmptyProject } from "../lib/project";
 import { translatePaths } from "../lib/geometry";
 import { expandGroups, pathsFromNodes, isClosedType } from "../lib/objects";
+import { mergeRegionPaths, splitRegionComponents } from "../lib/regions";
 import { newId } from "../lib/id";
 
 /**
@@ -50,6 +51,12 @@ export interface ProjectState {
   groupObjects: (ids: string[]) => void;
   /** Remove the group tag from any of these objects' groups. */
   ungroupObjects: (ids: string[]) => void;
+  /** Union 2+ same-color fills into one region. No-op unless all are fills of
+   *  the same color. */
+  mergeObjects: (ids: string[]) => void;
+  /** Separate a fill's disconnected pieces into one object each. No-op unless the
+   *  object is a fill with 2+ components. */
+  splitRegion: (id: string) => void;
 
   addColor: (color: ThreadColor) => void;
   updateColor: (id: string, patch: Partial<ThreadColor>) => void;
@@ -264,6 +271,60 @@ export const useProjectStore = create<ProjectState>()(
                 o.groupId && groups.has(o.groupId) ? { ...o, groupId: undefined } : o,
               ),
             },
+          };
+        }),
+
+      mergeObjects: (ids) =>
+        set((s) => {
+          const sel = new Set(ids);
+          // Selected objects in document (stitch) order.
+          const picked = s.project.objects.filter((o) => sel.has(o.id));
+          if (picked.length < 2) return s;
+          // Only same-color fills union sensibly.
+          const first = picked[0];
+          if (
+            picked.some((o) => o.type !== "fill" || o.colorId !== first.colorId)
+          )
+            return s;
+          const merged = mergeRegionPaths(picked.map((o) => o.paths));
+          if (merged.length === 0) return s;
+          const region: EmbObject = {
+            ...first,
+            id: newId("obj"),
+            paths: merged,
+            nodes: undefined,
+            satinCenterlines: undefined,
+            groupId: undefined,
+          };
+          // Replace the earliest selected with the merged region; drop the rest.
+          const objects = s.project.objects
+            .map((o) => (o.id === first.id ? region : o))
+            .filter((o) => o.id === region.id || !sel.has(o.id));
+          return { project: { ...s.project, objects }, selectedIds: [region.id] };
+        }),
+
+      splitRegion: (id) =>
+        set((s) => {
+          const idx = s.project.objects.findIndex((o) => o.id === id);
+          if (idx < 0) return s;
+          const o = s.project.objects[idx];
+          if (o.type !== "fill") return s;
+          const comps = splitRegionComponents(o.paths);
+          if (comps.length < 2) return s;
+          const parts: EmbObject[] = comps.map((paths, i) => ({
+            ...o,
+            id: newId("obj"),
+            name: `${o.name} ${i + 1}`,
+            paths,
+            nodes: undefined,
+            satinCenterlines: undefined,
+            groupId: undefined,
+          }));
+          const objects = [...s.project.objects];
+          objects.splice(idx, 1, ...parts);
+          return {
+            project: { ...s.project, objects },
+            selectedIds: parts.map((p) => p.id),
           };
         }),
 
