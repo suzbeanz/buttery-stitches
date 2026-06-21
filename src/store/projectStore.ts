@@ -12,8 +12,31 @@ import type {
 import { createEmptyProject } from "../lib/project";
 import { translatePaths } from "../lib/geometry";
 import { expandGroups, pathsFromNodes, isClosedType } from "../lib/objects";
+import { densifyRing } from "../lib/nodes";
+import { smoothPath, smoothRingKeepingCorners } from "../lib/smooth";
 import { mergeRegionPaths, splitRegionComponents } from "../lib/regions";
 import { newId } from "../lib/id";
+
+/**
+ * Round an object's corners into flowing curves. Node-backed objects flip every
+ * control node to smooth and re-densify (so the node tool stays in sync); plain
+ * running lines and fill outlines get a corner-preserving spline. Satin columns
+ * are left alone — smoothing rails independently would misalign the column.
+ */
+function smoothOne(o: EmbObject): EmbObject {
+  if (o.nodes && o.nodes.length > 0) {
+    const closed = isClosedType(o.type);
+    const nodes = o.nodes.map((ring) => ring.map((n) => ({ ...n, smooth: true })));
+    return { ...o, nodes, paths: nodes.map((ring) => densifyRing(ring, closed)) };
+  }
+  if (o.type === "running") {
+    return { ...o, paths: o.paths.map((p) => smoothPath(p)) };
+  }
+  if (o.type === "fill") {
+    return { ...o, paths: o.paths.map((r) => smoothRingKeepingCorners(r)) };
+  }
+  return o; // satin (rail pair) — leave untouched
+}
 
 /**
  * Single project store. The `project` object is the entire editable document;
@@ -44,6 +67,8 @@ export interface ProjectState {
   updateObjectParams: (id: string, patch: Partial<EmbObjectParams>) => void;
   /** Translate several objects together (one undo step). */
   moveObjects: (ids: string[], dxMm: number, dyMm: number) => void;
+  /** Smooth the selected lines/curves: round their corners into flowing curves. */
+  smoothObjects: (ids: string[]) => void;
   reorderObjects: (fromIndex: number, toIndex: number) => void;
   /** Move the selected objects in stitch order: one step or all the way. */
   moveOrder: (ids: string[], dir: "earlier" | "later" | "first" | "last") => void;
@@ -194,6 +219,17 @@ export const useProjectStore = create<ProjectState>()(
                     }
                   : o,
               ),
+            },
+          };
+        }),
+
+      smoothObjects: (ids) =>
+        set((s) => {
+          const sel = new Set(ids);
+          return {
+            project: {
+              ...s.project,
+              objects: s.project.objects.map((o) => (sel.has(o.id) ? smoothOne(o) : o)),
             },
           };
         }),

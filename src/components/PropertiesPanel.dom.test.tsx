@@ -240,6 +240,24 @@ describe("PropertiesPanel", () => {
     expect(useProjectStore.getState().project.colors.length).toBe(before - 1);
   });
 
+  it("smooths the selected line via the Object tab button", () => {
+    const project = createEmptyProject();
+    const colorId = project.colors[0].id;
+    const o = makeObject(
+      "running",
+      [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }],
+      colorId,
+    );
+    project.objects = [o];
+    resetStores(project);
+    useProjectStore.setState({ selectedIds: [o.id] });
+
+    render(<PropertiesPanel />);
+    const before = useProjectStore.getState().project.objects[0].paths[0].length;
+    fireEvent.click(screen.getByRole("button", { name: /Smooth lines/i }));
+    expect(useProjectStore.getState().project.objects[0].paths[0].length).toBeGreaterThan(before);
+  });
+
   // ---- region merge / split ----
   const square = (x: number, y: number, s = 10) => [
     { x, y },
