@@ -209,6 +209,44 @@ export function borderIsTransparent(img: RasterImage): boolean {
   return total > 0 && transparent * 2 > total;
 }
 
+/**
+ * Does the image sit on a solid OPAQUE background (a logo on white/one colour)?
+ * True when the outer border is mostly opaque AND one colour dominates it. Used to
+ * reserve an extra palette slot for that background so it doesn't starve the user's
+ * requested colours (white + 4 brand colours quantized to 4 merges two brands into
+ * mud; quantizing to 5 keeps all four and drops the white). Run on the ORIGINAL
+ * image, before quantization. Anti-aliasing is tolerated by bucketing colours to
+ * 5-bit channels so a near-uniform border still reads as dominated.
+ */
+export function borderIsSolidOpaque(img: RasterImage, dominance = 0.6): boolean {
+  const { width, height, data } = img;
+  if (width < 2 || height < 2) return false;
+  let opaque = 0;
+  let total = 0;
+  const counts = new Map<number, number>();
+  const tally = (x: number, y: number) => {
+    total++;
+    const o = (y * width + x) * 4;
+    if (data[o + 3] < ALPHA_CUTOFF) return;
+    opaque++;
+    // Bucket to 5 bits/channel so anti-aliased near-duplicates count together.
+    const key = ((data[o] >> 3) << 10) | ((data[o + 1] >> 3) << 5) | (data[o + 2] >> 3);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  };
+  for (let x = 0; x < width; x++) {
+    tally(x, 0);
+    tally(x, height - 1);
+  }
+  for (let y = 0; y < height; y++) {
+    tally(0, y);
+    tally(width - 1, y);
+  }
+  if (opaque * 2 < total) return false; // a mostly-transparent border isn't this case
+  let bestN = 0;
+  for (const n of counts.values()) if (n > bestN) bestN = n;
+  return opaque > 0 && bestN / opaque >= dominance;
+}
+
 /** Nearest palette color to (r,g,b) by squared Euclidean distance. */
 /** Index of the palette color closest (squared RGB distance) to (r,g,b). */
 function nearestIndex(palette: RGB[], r: number, g: number, b: number): number {
