@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useProjectStore } from "./projectStore";
 import { createEmptyProject } from "../lib/project";
-import { makeObject, makeNodeObject, cloneObject } from "../lib/objects";
+import { makeObject, makeNodeObject, cloneObject, makeObjectFromPaths } from "../lib/objects";
 
 const line = [
   { x: 0, y: 0 },
@@ -179,6 +179,44 @@ describe("projectStore — QA fixes", () => {
     useProjectStore.getState().addObject(f);
     useProjectStore.getState().splitObject(f.id, 1, { x: 5, y: 5 });
     expect(useProjectStore.getState().project.objects).toHaveLength(1); // unchanged
+  });
+});
+
+describe("projectStore.smoothObjects", () => {
+  beforeEach(() => {
+    useProjectStore.setState({ project: createEmptyProject(), selectedIds: [] });
+    useProjectStore.temporal.getState().clear();
+  });
+
+  it("rounds a node-backed line's corners (densifies + flags nodes smooth)", () => {
+    const cId = useProjectStore.getState().project.colors[0].id;
+    const o = makeNodeObject("running", [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }], cId, false);
+    useProjectStore.getState().addObject(o);
+    const before = o.paths[0].length;
+    useProjectStore.getState().smoothObjects([o.id]);
+    const after = useProjectStore.getState().project.objects[0];
+    expect(after.nodes![0].every((n) => n.smooth)).toBe(true);
+    expect(after.paths[0].length).toBeGreaterThan(before); // curved spans add points
+  });
+
+  it("smooths a plain running polyline and is undoable", () => {
+    const cId = useProjectStore.getState().project.colors[0].id;
+    const o = makeObjectFromPaths("running", [[{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }]], cId);
+    useProjectStore.getState().addObject(o);
+    const before = o.paths[0].length;
+    useProjectStore.getState().smoothObjects([o.id]);
+    expect(useProjectStore.getState().project.objects[0].paths[0].length).toBeGreaterThan(before);
+    useProjectStore.temporal.getState().undo();
+    expect(useProjectStore.getState().project.objects[0].paths[0].length).toBe(before);
+  });
+
+  it("leaves a satin object untouched", () => {
+    const cId = useProjectStore.getState().project.colors[0].id;
+    const o = makeObject("satin", [{ x: 0, y: 0 }, { x: 20, y: 0 }], cId);
+    useProjectStore.getState().addObject(o);
+    const before = o.paths;
+    useProjectStore.getState().smoothObjects([o.id]);
+    expect(useProjectStore.getState().project.objects[0].paths).toBe(before);
   });
 });
 

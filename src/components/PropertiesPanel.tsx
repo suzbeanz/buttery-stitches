@@ -17,6 +17,7 @@ import {
   Ungroup,
   Combine,
   Split,
+  Spline,
   Trash2,
   Check,
 } from "lucide-react";
@@ -56,6 +57,7 @@ export default function PropertiesPanel() {
   const selectedIds = useProjectStore((s) => s.selectedIds);
   const updateObject = useProjectStore((s) => s.updateObject);
   const updateObjectParams = useProjectStore((s) => s.updateObjectParams);
+  const smoothObjects = useProjectStore((s) => s.smoothObjects);
   const tab = useEditorStore((s) => s.propertiesTab);
   const setTab = useEditorStore((s) => s.setPropertiesTab);
 
@@ -143,6 +145,16 @@ export default function PropertiesPanel() {
               {selected[0].type === "fill" && (
                 <OutlineControl fill={selected[0]} />
               )}
+              <div className="border-b border-navy/25 p-3">
+                <button
+                  onClick={() => smoothObjects([selected[0].id])}
+                  disabled={selected[0].type === "satin"}
+                  data-tip="Round corners into flowing curves"
+                  className="tap-target flex w-full items-center justify-center gap-1.5 rounded-sm border border-ink/25 bg-cream py-1.5 text-sm text-ink-deep hover:bg-butter-200 disabled:opacity-30 disabled:hover:bg-cream"
+                >
+                  <Spline size={15} /> Smooth lines &amp; curves
+                </button>
+              </div>
             </>
           ))}
       </div>
