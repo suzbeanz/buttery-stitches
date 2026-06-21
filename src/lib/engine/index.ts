@@ -449,11 +449,12 @@ function seedMidpoint(cl: Path): Point {
  */
 const RUNNING_COLUMN_MM = 0.6;
 
-/** Line-art columns up to this width (mm) render as a single running line. Line-art
- *  sits OVER the fills (which supply the body), so even a moderately wide detail
- *  stroke reads best as a clean centerline; only a genuinely thick brushstroke
- *  beyond this stays a filled satin column. */
-const LINE_ART_RUN_MAX_MM = 6;
+/** Line-art columns up to this width (mm) render as a single running line; wider
+ *  ones get a COVERING satin column. Kept near the satin floor so only genuinely
+ *  fine detail (script hairlines, thin outlines that sit over a fill) runs as a
+ *  crisp centerline — a standalone bar like a flag-pole (~2 mm) is wide enough that
+ *  a centerline leaves it mostly bare fabric, so it must satin-fill solid. */
+const LINE_ART_RUN_MAX_MM = 1.2;
 /** Shortest line-art stroke (centerline mm) worth sewing — below this it's a
  *  medial spur/speck that just adds a trim. */
 const LINE_ART_MIN_LEN_MM = 2.5;

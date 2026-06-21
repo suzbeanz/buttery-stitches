@@ -198,6 +198,17 @@ export function recognizeShape(ring: Path, tolMm = 0.6): Recognized | null {
       return { kind: "ellipse", ring: ell, angleDeg: (rot * 180) / Math.PI };
     }
   }
+
+  // --- Small round dot (golf ball, eye, polka dot): almost certainly MEANT to be a
+  // circle, but a shadow notch or trace noise can nudge it just past the strict
+  // circle test above, leaving a faceted decagon that reads as a bug. Snap a SMALL,
+  // round-aspect, circle-like blob to a true circle on a looser bar. Runs after the
+  // polygon/rectangle checks so a clean hexagon (circularity ~0.91) is already
+  // claimed as a polygon, not rounded off here. ---
+  const aspect = a > b ? a / b : b / a;
+  if (meanR <= 6 && aspect < 1.15 && circularity > 0.92 && radSd / meanR < 0.1) {
+    return { kind: "circle", ring: makeCircle(c, meanR), angleDeg: 0 };
+  }
   return null;
 }
 
