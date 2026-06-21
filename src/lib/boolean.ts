@@ -77,6 +77,24 @@ function erodeMask(mask: Uint8Array, W: number, H: number, iters: number): void 
   }
 }
 
+/** 4-connected dilation by `iters` cells (set a clear cell with a set neighbour). */
+function dilateMask(mask: Uint8Array, W: number, H: number, iters: number): void {
+  for (let n = 0; n < iters; n++) {
+    const fill: number[] = [];
+    for (let j = 0; j < H; j++) {
+      for (let i = 0; i < W; i++) {
+        if (mask[j * W + i]) continue;
+        const up = j > 0 ? mask[(j - 1) * W + i] : 0;
+        const dn = j < H - 1 ? mask[(j + 1) * W + i] : 0;
+        const lt = i > 0 ? mask[j * W + i - 1] : 0;
+        const rt = i < W - 1 ? mask[j * W + i + 1] : 0;
+        if (up || dn || lt || rt) fill.push(j * W + i);
+      }
+    }
+    for (const c of fill) mask[c] = 1;
+  }
+}
+
 /**
  * KNOCKDOWN / trapping: trim a lower (earlier-sewn) region back where higher
  * regions cover it, so colours don't stack into a ridge of thread — but leave a
@@ -139,6 +157,65 @@ export function knockdown(lower: Path[], higher: Path[][], trapMm = 0.35, cellMm
     }
   }
   if (!any) return [];
+  const minArea = Math.max(1, (3 * cell) ** 2);
+  return marchingSquares(mask, W, H)
+    .map((ring) => simplify(ring.map((q) => ({ x: ox + q.x * cell, y: oy + q.y * cell })), cell * 0.9))
+    .filter((r) => r.length >= 3 && area(r) >= minArea);
+}
+
+/**
+ * SEAM TRAP: the complement of knockdown. Where a lower (earlier-sewn) region only
+ * ABUTS a higher (on-top) region — they share a boundary but don't overlap, the
+ * common auto-digitized tiled case — grow the lower a `trapMm` sliver UNDER the
+ * higher so fabric pull can't open a hairline gap that shows fabric at the seam.
+ * Returns `lower ∪ (dilate(lower, trap) ∩ higher)`. A region with no adjacent
+ * higher is returned unchanged (same reference). Pair this BEFORE `knockdown`,
+ * which then clamps every seam to exactly `trapMm` inside the higher's edge.
+ */
+export function seamTrap(lower: Path[], higher: Path[][], trapMm = 0.35, cellMm = 0.2): Path[] {
+  if (higher.length === 0) return lower;
+  const cell = Math.max(0.08, cellMm);
+  const bb = bounds([...lower, ...higher.flat()]);
+  if (!bb) return lower;
+  const pad = 2;
+  const W = Math.max(3, Math.ceil((bb.maxX - bb.minX) / cell) + pad * 2 + 1);
+  const H = Math.max(3, Math.ceil((bb.maxY - bb.minY) / cell) + pad * 2 + 1);
+  if (W * H > MAX_CELLS) return lower;
+  const ox = bb.minX - pad * cell;
+  const oy = bb.minY - pad * cell;
+
+  const lo = new Uint8Array(W * H);
+  const hi = new Uint8Array(W * H);
+  for (let gy = 0; gy < H; gy++) {
+    const py = oy + gy * cell;
+    for (let gx = 0; gx < W; gx++) {
+      const idx = gy * W + gx;
+      const p = { x: ox + gx * cell, y: py };
+      for (const h of higher) {
+        if (inside(p, h)) {
+          hi[idx] = 1;
+          break;
+        }
+      }
+      if (inside(p, lower)) lo[idx] = 1;
+    }
+  }
+
+  // Band = the higher area within `trap` of the lower, but not already the lower.
+  const grown = lo.slice();
+  dilateMask(grown, W, H, Math.max(1, Math.round(trapMm / cell)));
+  const mask = new Uint8Array(W * H);
+  let added = false;
+  for (let i = 0; i < W * H; i++) {
+    if (lo[i]) {
+      mask[i] = 1;
+    } else if (grown[i] && hi[i]) {
+      mask[i] = 1;
+      added = true;
+    }
+  }
+  if (!added) return lower; // no adjacent higher → leave it whole (and unchanged)
+
   const minArea = Math.max(1, (3 * cell) ** 2);
   return marchingSquares(mask, W, H)
     .map((ring) => simplify(ring.map((q) => ({ x: ox + q.x * cell, y: oy + q.y * cell })), cell * 0.9))
