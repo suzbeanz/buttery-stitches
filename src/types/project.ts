@@ -43,6 +43,11 @@ export interface EmbObjectParams {
    *  straight at this angle. `null`/absent = auto direction (principal axis +
    *  `angle`). */
   directionDeg?: number | null;
+  /** A flow curve painted with the Direction tool: the fill's rows run PERPENDICULAR
+   *  to this curve, so the stitches follow it (a leaf vein, a cheek). Stored as
+   *  points NORMALIZED to the object's bbox ([0..1]) so it moves/scales with the
+   *  fill. Takes precedence over `directionDeg`; `null`/absent = not set. */
+  flowPath?: [number, number][] | null;
   /** add a stabilizing underlay pass (default true for fill/satin). */
   underlay?: boolean;
   /** how heavy the underlay is. "auto" follows the fabric; the rest override it
@@ -221,6 +226,7 @@ export const DEFAULT_PARAMS: Required<EmbObjectParams> = {
   fillStitchLength: 4,
   angle: 0,
   directionDeg: null,
+  flowPath: null,
   underlay: true,
   underlayWeight: "auto",
   pullComp: 0.2,
@@ -249,6 +255,7 @@ export function resolveParams(
     fillStitchLength: params.fillStitchLength ?? DEFAULT_PARAMS.fillStitchLength,
     angle: params.angle ?? DEFAULT_PARAMS.angle,
     directionDeg: params.directionDeg ?? DEFAULT_PARAMS.directionDeg,
+    flowPath: params.flowPath ?? DEFAULT_PARAMS.flowPath,
     // running stitch never has underlay regardless of stored value
     underlay:
       type === "running" ? false : (params.underlay ?? DEFAULT_PARAMS.underlay),

@@ -13,7 +13,7 @@ import { satinColumn } from "./satin";
 import { tatamiFill, tatamiConcaveRuns, multiBlendFill, motifFill, motifRunAlong, carvePoints, splitFillRegions, autoFillAngleForRegions } from "./fill";
 import { contourFill } from "./contour";
 import { medialColumns, columnsFromCenterlines, satinCoverage, residualRegions, type SatinColumn } from "./medial";
-import { turningFill, flowFill } from "./turning";
+import { turningFill, flowFill, flowAlong } from "./turning";
 import { isSmallRoundFill } from "./classify";
 import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
 import { dropShortStitches, splitLongTravels } from "./resample";
@@ -627,6 +627,15 @@ export function generateObjectRuns(
   const tatamiAngle = manualDirection
     ? p.directionDeg!
     : autoFillAngleForRegions(regions, p.angle);
+  // A painted flow curve (normalized to the object's bbox) the rows follow. Map it
+  // back to mm here so it rides the object's current position/size.
+  const flowSpineMm: Point[] | null = (() => {
+    if (!p.flowPath || p.flowPath.length < 2) return null;
+    const b = pathsBounds(object.paths);
+    if (!b) return null;
+    const w = b.maxX - b.minX, h = b.maxY - b.minY;
+    return p.flowPath.map(([nx, ny]) => ({ x: b.minX + nx * w, y: b.minY + ny * h }));
+  })();
   regions.forEach((region, regionIdx) => {
     const columns = satin
       ? acceptableSatin(region, density, fabric.pullMul, authoredForRegion(object, region))
@@ -743,15 +752,17 @@ export function generateObjectRuns(
       // patchwork (and can fan an odd diagonal across a letter), so those fill with
       // the object's one shared tatami grain instead.
       const fillOpts = { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp };
-      // A clean single-spine band turns (turningFill); a branchy/organic limbed shape
-      // flows along every limb (flowFill); everything else stays on the concavity-
-      // aware tatami grain. Both decline (→ null) and self-validate to never slash.
-      // A painted Direction means "run straight THIS way" — skip turning/flow so they
-      // don't re-impose their own spine over the user's choice.
+      // Precedence: a painted FLOW CURVE wins (the user drew the grain); else a
+      // painted straight Direction (handled via the angle, so skip turning/flow);
+      // else the AUTO flows — a clean single-spine band turns (turningFill), a
+      // branchy/organic shape flows along its limbs (flowFill); else concavity-aware
+      // tatami. Every path declines (→ null) and self-validates to never slash.
+      const userFlow = flowSpineMm ? flowAlong(region, flowSpineMm, fillOpts) : null;
       const turned =
-        !manualDirection && regions.length === 1
+        userFlow ??
+        (!manualDirection && !flowSpineMm && regions.length === 1
           ? (turningFill(region, fillOpts) ?? flowFill(region, fillOpts))
-          : null;
+          : null);
       tops = turned ?? tatamiConcaveRuns(region, fillOpts);
       tatamiNoBareTravel = true;
     }
