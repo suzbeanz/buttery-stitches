@@ -6,7 +6,7 @@ import { smoothRingKeepingCorners } from "../smooth";
 import { douglasPeucker } from "./simplify";
 import { polygonArea, polygonPerimeter } from "./classify";
 import { recognizeShape } from "./recognize";
-import { quantizeImage, borderBackgroundColor } from "./quantize";
+import { quantizeImage, borderBackgroundColor, borderIsTransparent } from "./quantize";
 
 export * from "./simplify";
 export * from "./classify";
@@ -303,11 +303,22 @@ export function imageDataToObjects(
   // matter far more than their pixel count. colorsampling: 0 forces it to use the
   // fixed palette verbatim.
   const pal = flat.palette.map(([r, g, b]) => ({ r, g, b, a: 255 }));
+  // A transparent background (the common transparent-PNG logo) has no palette slot,
+  // so ImageTracer would snap every see-through pixel to the nearest brand colour
+  // and trace a phantom full-canvas fill (e.g. black → green). Give it a transparent
+  // layer to absorb those pixels — tracedataToObjects drops a:0 layers — and skip the
+  // opaque background hunt, which would otherwise mis-drop the largest real colour.
+  const transparentBg = borderIsTransparent(imageData);
+  if (transparentBg) pal.push({ r: 0, g: 0, b: 0, a: 0 });
   const td = ImageTracer.imagedataToTracedata(
     { width: flat.width, height: flat.height, data: flat.data } as ImageData,
     { ...TRACE_OPTIONS, pal, colorsampling: 0, numberofcolors: pal.length },
   ) as Tracedata;
-  return tracedataToObjects(td, { ...opts, backgroundRgb });
+  return tracedataToObjects(td, {
+    ...opts,
+    backgroundRgb,
+    removeBackground: transparentBg ? false : opts.removeBackground,
+  });
 }
 
 /**
