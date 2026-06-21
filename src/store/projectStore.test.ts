@@ -301,4 +301,24 @@ describe("projectStore.mergeObjects / splitRegion", () => {
     useProjectStore.getState().splitRegion(o.id);
     expect(useProjectStore.getState().project.objects).toHaveLength(1); // unchanged
   });
+
+  it("welds a fill's edge to an abutting neighbor", () => {
+    const cId = useProjectStore.getState().project.colors[0].id;
+    const left = makeObject("fill", square(0, 0), cId);
+    const right = makeObject("fill", square(10, 0), cId);
+    useProjectStore.getState().addObjects([left, right]);
+    const beforeMaxX = Math.max(...left.paths.flat().map((p) => p.x)); // 10
+    useProjectStore.getState().weldObject(left.id);
+    const welded = useProjectStore.getState().project.objects.find((o) => o.id === left.id)!;
+    expect(Math.max(...welded.paths.flat().map((p) => p.x))).toBeGreaterThan(beforeMaxX);
+  });
+
+  it("is a no-op welding an isolated fill", () => {
+    const cId = useProjectStore.getState().project.colors[0].id;
+    const o = makeObject("fill", square(0, 0), cId);
+    useProjectStore.getState().addObject(o);
+    const before = o.paths;
+    useProjectStore.getState().weldObject(o.id);
+    expect(useProjectStore.getState().project.objects[0].paths).toBe(before);
+  });
 });

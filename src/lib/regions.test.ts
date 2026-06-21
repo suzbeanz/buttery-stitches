@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Path } from "../types/project";
-import { mergeRegionPaths, splitRegionComponents } from "./regions";
+import { mergeRegionPaths, splitRegionComponents, weldToNeighbors } from "./regions";
 
 /** A closed square ring with corner (x,y) and side `s` (CCW). */
 function square(x: number, y: number, s = 10): Path {
@@ -11,6 +11,24 @@ function square(x: number, y: number, s = 10): Path {
     { x, y: y + s },
   ];
 }
+
+describe("weldToNeighbors", () => {
+  const maxX = (rings: Path[]) => Math.max(...rings.flat().map((p) => p.x));
+
+  it("grows a fill under an abutting neighbor (seamless trap)", () => {
+    const target = [square(0, 0, 10)]; // shares x=10 with the neighbor
+    const neighbor = [square(10, 0, 10)];
+    const out = weldToNeighbors(target, [neighbor], 0.4);
+    expect(maxX(out)).toBeGreaterThan(10); // tucked under the neighbor
+    expect(maxX(out)).toBeLessThan(10.8); // bounded by the trap
+  });
+
+  it("returns the target unchanged when nothing is adjacent", () => {
+    const target = [square(0, 0, 10)];
+    expect(weldToNeighbors(target, [[square(50, 50, 10)]], 0.4)).toBe(target);
+    expect(weldToNeighbors(target, [], 0.4)).toBe(target);
+  });
+});
 
 describe("mergeRegionPaths", () => {
   it("fuses two overlapping squares into a single component", () => {
