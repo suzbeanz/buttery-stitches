@@ -208,6 +208,10 @@ export default function TopBar({
     setProject(p);
     setImageFile(null);
     goEdit();
+    // Walk the user through each freshly-traced region (confirm type, keep/skip).
+    // Guarded against an empty trace inside startReview. Runs after setProject so
+    // the ids already exist in the project.
+    useEditorStore.getState().startReview(p.objects.map((o) => o.id));
   }
 
   // The empty-state quick-start buttons set this; open the matching flow.

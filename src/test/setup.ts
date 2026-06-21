@@ -16,6 +16,8 @@ export function resetStores(project?: Project) {
     cursorMm: null,
     activeColorId: null,
     rulerUnit: "mm",
+    reviewIds: null,
+    reviewIndex: 0,
     viewMode: "edit",
     simTotal: 0,
     simIndex: 0,

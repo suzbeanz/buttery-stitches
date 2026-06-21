@@ -103,6 +103,15 @@ interface EditorState {
   /** currently focused node for deletion: object id + ring + point index. */
   selectedNode: { objectId: string; ring: number; point: number } | null;
 
+  // ---- guided region review ----
+  /**
+   * Ordered object ids being walked through after an auto-digitize (null = not
+   * reviewing). The list is frozen at start; the cursor (reviewIndex) steps it.
+   * Transient by design — review position must never land in undo history.
+   */
+  reviewIds: string[] | null;
+  reviewIndex: number;
+
   // ---- preview / stitch simulator ----
   viewMode: ViewMode;
   /** total penetrations + jumps in the current design (set by the canvas). */
@@ -139,6 +148,12 @@ interface EditorState {
     v: { objectId: string; ring: number; point: number } | null,
   ) => void;
 
+  startReview: (ids: string[]) => void;
+  endReview: () => void;
+  reviewNext: () => void;
+  reviewPrev: () => void;
+  reviewGoto: (index: number) => void;
+
   setViewMode: (mode: ViewMode) => void;
   setSimTotal: (total: number) => void;
   setSimIndex: (index: number) => void;
@@ -168,6 +183,9 @@ export const useEditorStore = create<EditorState>((set) => ({
   startDismissed: readWelcomeDismissed(),
   fabricColor: "#ECE8DE",
   selectedNode: null,
+
+  reviewIds: null,
+  reviewIndex: 0,
 
   viewMode: "edit",
   simTotal: 0,
@@ -201,6 +219,30 @@ export const useEditorStore = create<EditorState>((set) => ({
   },
   setFabricColor: (fabricColor) => set({ fabricColor }),
   setSelectedNode: (selectedNode) => set({ selectedNode }),
+
+  // Walk the user through each auto-digitized region. Empty input is a no-op so a
+  // no-object digitize doesn't open an empty card. Force edit view + select tool —
+  // reviewing in stitch view, or with a draw tool armed, makes no sense.
+  startReview: (ids) =>
+    set(
+      ids.length === 0
+        ? {}
+        : { reviewIds: ids, reviewIndex: 0, viewMode: "edit", tool: "select" },
+    ),
+  endReview: () => set({ reviewIds: null, reviewIndex: 0 }),
+  reviewNext: () =>
+    set((s) => ({
+      reviewIndex: s.reviewIds
+        ? Math.min(s.reviewIndex + 1, s.reviewIds.length - 1)
+        : s.reviewIndex,
+    })),
+  reviewPrev: () => set((s) => ({ reviewIndex: Math.max(s.reviewIndex - 1, 0) })),
+  reviewGoto: (index) =>
+    set((s) => ({
+      reviewIndex: s.reviewIds
+        ? Math.max(0, Math.min(index, s.reviewIds.length - 1))
+        : s.reviewIndex,
+    })),
 
   setViewMode: (viewMode) =>
     set((s) => ({
