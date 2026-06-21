@@ -29,7 +29,7 @@ import { useProjectStore, useTemporalStore } from "../store/projectStore";
 import { useEditorStore } from "../store/editorStore";
 import { downloadProject, loadProjectFromFile } from "../lib/embproj";
 import { buildWorksheet, worksheetHtml } from "../lib/worksheet";
-import { fixStitches } from "../lib/fix";
+import { fixStitchesWithReport, type CleanupReport } from "../lib/fix";
 import { type ShapeKind } from "../lib/shapes";
 import { cloneObject } from "../lib/objects";
 import { newId } from "../lib/id";
@@ -57,6 +57,17 @@ const AutoDigitizeDialog = lazy(() => import("./AutoDigitizeDialog"));
 // Lazy-loaded: pulls in opentype.js + bundled fonts only when adding text.
 const TextDialog = lazy(() => import("./TextDialog"));
 import type { AddTextResult } from "./TextDialog";
+
+/** Turn a clean-up report into a plain-language summary for the toast. */
+function cleanupMessage(r: CleanupReport): string {
+  const parts: string[] = [];
+  if (r.reordered) parts.push("regrouped by color");
+  if (r.fillStylesSet) parts.push(`set ${r.fillStylesSet} fill style${r.fillStylesSet > 1 ? "s" : ""}`);
+  if (r.densityFixed) parts.push(`fixed ${r.densityFixed} densit${r.densityFixed > 1 ? "ies" : "y"}`);
+  if (r.underlayEnabled) parts.push(`added underlay to ${r.underlayEnabled}`);
+  if (r.seamsTrapped) parts.push(`trapped ${r.seamsTrapped} seam${r.seamsTrapped > 1 ? "s" : ""}`);
+  return parts.length ? `Cleaned up — ${parts.join(", ")}.` : "Already tidy — nothing to change.";
+}
 
 /**
  * Top bar: new / open / save / import image / export plus undo / redo. Kept
@@ -372,10 +383,14 @@ export default function TopBar({
         <BadgeCheck size={18} />
       </BarButton>
       <BarButton
-        label="Clean up the stitching"
+        label="Clean up the stitching — fix densities, fill styles, order & seams"
         onClick={() => {
-          setProject(fixStitches(project));
-          toast("Stitching cleaned up", "success");
+          const { project: cleaned, report } = fixStitchesWithReport(project);
+          setProject(cleaned);
+          // Most fixes are invisible in edit view (params/order), so jump to the
+          // stitch preview where the result actually shows.
+          setViewMode("stitch");
+          toast(cleanupMessage(report), "success");
         }}
       >
         <Wand2 size={18} />
