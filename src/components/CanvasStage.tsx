@@ -38,6 +38,7 @@ import {
   type Bounds,
 } from "../lib/geometry";
 import { snap } from "../lib/snap";
+import { douglasPeucker } from "../lib/trace/simplify";
 import { toast } from "../store/toastStore";
 import { rectFromPoints, rectSpanMm, marqueeSelect } from "../lib/marquee";
 import { smoothPath } from "../lib/smooth";
@@ -173,7 +174,9 @@ export default function CanvasStage() {
   const measuringRef = useRef(false);
   // Direction tool: drag a line across a selected fill to paint its stitch grain.
   // On release the line's angle is written to each selected fill's directionDeg.
-  const [dirDrag, setDirDrag] = useState<{ start: Point; end: Point } | null>(null);
+  // The freehand path captured by the Direction tool: a near-straight drag sets a
+  // straight grain (directionDeg); a curved drag sets a flow curve (flowPath).
+  const [dirDrag, setDirDrag] = useState<Point[] | null>(null);
   const dirDraggingRef = useRef(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -604,7 +607,7 @@ export default function CanvasStage() {
     if (tool === "direction") {
       const p = stagePointMm(stage);
       if (p) {
-        setDirDrag({ start: p, end: p });
+        setDirDrag([p]);
         dirDraggingRef.current = true;
       }
       return;
@@ -660,7 +663,7 @@ export default function CanvasStage() {
     }
     if (dirDraggingRef.current) {
       const p = stagePointMm(stage);
-      if (p) setDirDrag((d) => (d ? { ...d, end: p } : d));
+      if (p) setDirDrag((d) => (d && distance(d[d.length - 1], p) >= 0.8 ? [...d, p] : d));
       return;
     }
     if (!isPointTool(tool)) return;
@@ -725,7 +728,7 @@ export default function CanvasStage() {
     }
     // Direction: one finger drags to paint the selected fill's grain.
     if (tool === "direction" && p) {
-      setDirDrag({ start: p, end: p });
+      setDirDrag([p]);
       dirDraggingRef.current = true;
       return;
     }
@@ -782,7 +785,7 @@ export default function CanvasStage() {
       return;
     }
     if (dirDraggingRef.current) {
-      if (p) setDirDrag((d) => (d ? { ...d, end: p } : d));
+      if (p) setDirDrag((d) => (d && distance(d[d.length - 1], p) >= 0.8 ? [...d, p] : d));
       return;
     }
     const ts = touchStartRef.current;
@@ -826,17 +829,19 @@ export default function CanvasStage() {
     setSelection(rectSpanMm(rect) < 1 ? [] : marqueeSelect(rect, objectBounds));
     setMarquee(null);
   }
-  // Paint direction: on release, write the drag line's angle to every selected
-  // fill. A too-short drag is ignored (a stray click shouldn't wipe the grain).
+  // Paint direction: on release, decide whether the drag was essentially STRAIGHT
+  // (set a fixed grain angle) or a CURVE (set a flow path the rows follow), and write
+  // it to every selected fill. A too-short drag is ignored (a stray click shouldn't
+  // wipe the grain). flowPath and directionDeg are mutually exclusive.
   function finishDirection() {
     if (!dirDraggingRef.current) return;
     dirDraggingRef.current = false;
-    const d = dirDrag;
-    if (!d) return;
-    const len = Math.hypot(d.end.x - d.start.x, d.end.y - d.start.y);
-    if (len < 1.5) return; // a tap, not a drag
-    let deg = (Math.atan2(d.end.y - d.start.y, d.end.x - d.start.x) * 180) / Math.PI;
-    deg = ((deg % 180) + 180) % 180; // grain is an orientation, not a heading
+    const path = dirDrag;
+    if (!path || path.length < 2) return;
+    let total = 0;
+    for (let i = 1; i < path.length; i++) total += distance(path[i - 1], path[i]);
+    if (total < 1.5) return; // a tap, not a drag
+
     const fills = useProjectStore
       .getState()
       .project.objects.filter((o) => selectedIds.includes(o.id) && o.type === "fill");
@@ -844,10 +849,36 @@ export default function CanvasStage() {
       toast("Select a fill first, then drag to set its stitch direction", "info");
       return;
     }
-    for (const o of fills) {
-      updateObject(o.id, { params: { ...o.params, directionDeg: Math.round(deg) } });
+
+    const simp = douglasPeucker(path, 0.8);
+    const a = simp[0], b = simp[simp.length - 1];
+    const chord = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    let maxDev = 0; // farthest the curve strays from the start→end chord
+    for (const q of simp) {
+      const t = ((q.x - a.x) * (b.x - a.x) + (q.y - a.y) * (b.y - a.y)) / (chord * chord);
+      const cxp = a.x + t * (b.x - a.x), cyp = a.y + t * (b.y - a.y);
+      maxDev = Math.max(maxDev, Math.hypot(q.x - cxp, q.y - cyp));
     }
-    toast(`Stitch direction set to ${Math.round(deg)}°`, "success");
+    const straight = simp.length <= 2 || maxDev < Math.max(2, chord * 0.08);
+
+    if (straight) {
+      let deg = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+      deg = ((deg % 180) + 180) % 180; // grain is an orientation, not a heading
+      for (const o of fills) {
+        updateObject(o.id, { params: { ...o.params, directionDeg: Math.round(deg), flowPath: null } });
+      }
+      toast(`Stitch direction set to ${Math.round(deg)}°`, "success");
+    } else {
+      // Store the curve normalized to each fill's own bbox so it rides move/scale.
+      for (const o of fills) {
+        const bb = pathsBounds(o.paths);
+        if (!bb) continue;
+        const w = (bb.maxX - bb.minX) || 1, h = (bb.maxY - bb.minY) || 1;
+        const norm = simp.map((q) => [(q.x - bb.minX) / w, (q.y - bb.minY) / h] as [number, number]);
+        updateObject(o.id, { params: { ...o.params, flowPath: norm, directionDeg: null } });
+      }
+      toast("Stitch flow set — rows follow your curve", "success");
+    }
   }
 
   // Resolve the marquee on any mouse release — even outside the canvas — so the
@@ -1233,24 +1264,46 @@ export default function CanvasStage() {
                   );
                 })()}
 
-                {/* Direction tool: live drag arrow + angle readout. */}
-                {dirDrag && (() => {
-                  const { start, end } = dirDrag;
-                  const x1 = px(start.x), y1 = py(start.y), x2 = px(end.x), y2 = py(end.y);
-                  const ang = Math.atan2(y2 - y1, x2 - x1);
+                {/* Direction tool: the freehand curve you're drawing, with an
+                    arrowhead + angle. A straight drag becomes a fixed grain; a
+                    curved one becomes a flow the rows follow. */}
+                {dirDrag && dirDrag.length >= 1 && (() => {
+                  const pts = dirDrag;
+                  const start = pts[0], end = pts[pts.length - 1];
+                  const x2 = px(end.x), y2 = py(end.y);
+                  const prev = pts.length > 1 ? pts[pts.length - 2] : start;
+                  const ang = Math.atan2(py(end.y) - py(prev.y), px(end.x) - px(prev.x));
                   const ah = 9;
                   let deg = (Math.atan2(end.y - start.y, end.x - start.x) * 180) / Math.PI;
                   deg = Math.round(((deg % 180) + 180) % 180);
                   return (
                     <Group listening={false}>
-                      <Line points={[x1, y1, x2, y2]} stroke={C.navy} strokeWidth={2} />
-                      <Line points={[x2, y2, x2 + ah * Math.cos(ang + 2.6), y2 + ah * Math.sin(ang + 2.6)]} stroke={C.navy} strokeWidth={2} />
-                      <Line points={[x2, y2, x2 + ah * Math.cos(ang - 2.6), y2 + ah * Math.sin(ang - 2.6)]} stroke={C.navy} strokeWidth={2} />
-                      <Rect x={x2 + 8} y={y2 - 8} width={36} height={16} cornerRadius={2} fill={C.navy} opacity={0.92} />
-                      <Text x={x2 + 8} y={y2 - 8} width={36} height={16} text={`${deg}°`} fontSize={11} fontStyle="bold" fontFamily="monospace" fill={C.cream} align="center" verticalAlign="middle" />
+                      <Line points={pts.flatMap((p) => [px(p.x), py(p.y)])} stroke={C.navy} strokeWidth={2} lineJoin="round" lineCap="round" />
+                      {pts.length > 1 && (
+                        <>
+                          <Line points={[x2, y2, x2 + ah * Math.cos(ang + 2.6), y2 + ah * Math.sin(ang + 2.6)]} stroke={C.navy} strokeWidth={2} />
+                          <Line points={[x2, y2, x2 + ah * Math.cos(ang - 2.6), y2 + ah * Math.sin(ang - 2.6)]} stroke={C.navy} strokeWidth={2} />
+                          <Rect x={x2 + 8} y={y2 - 8} width={36} height={16} cornerRadius={2} fill={C.navy} opacity={0.92} />
+                          <Text x={x2 + 8} y={y2 - 8} width={36} height={16} text={`${deg}°`} fontSize={11} fontStyle="bold" fontFamily="monospace" fill={C.cream} align="center" verticalAlign="middle" />
+                        </>
+                      )}
                     </Group>
                   );
                 })()}
+
+                {/* Persistent flow curve on each selected fill that has one painted. */}
+                {tool === "direction" && !dirDrag &&
+                  project.objects
+                    .filter((o) => selectedIds.includes(o.id) && o.type === "fill" && o.params.flowPath)
+                    .map((o) => {
+                      const b = pathsBounds(o.paths);
+                      if (!b) return null;
+                      const w = b.maxX - b.minX, h = b.maxY - b.minY;
+                      const pts = o.params.flowPath!.flatMap(([nx, ny]) => [px(b.minX + nx * w), py(b.minY + ny * h)]);
+                      return (
+                        <Line key={`flow-${o.id}`} points={pts} stroke={C.salted} strokeWidth={2} dash={[5, 3]} lineJoin="round" lineCap="round" listening={false} />
+                      );
+                    })}
 
                 {/* Persistent grain arrow on each selected fill that has a painted
                     direction, so the current manual grain is always visible. */}

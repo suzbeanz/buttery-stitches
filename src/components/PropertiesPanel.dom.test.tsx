@@ -181,6 +181,19 @@ describe("PropertiesPanel", () => {
     expect(dd == null).toBe(true);
   });
 
+  it("shows a Curved (flow) readout when a flow path is painted, and Auto clears it", () => {
+    const { fillId } = seedSelectedFill();
+    useProjectStore.getState().updateObjectParams(fillId, {
+      flowPath: [[0, 0.5], [0.5, 0.2], [1, 0.5]],
+    });
+    render(<PropertiesPanel />);
+    expect(screen.getByText(/Curved \(flow\)/i)).toBeTruthy();
+    expect(screen.queryByText(/Angle \(° from auto\)/i)).toBeNull();
+    fireEvent.click(screen.getByText(/^Auto$/));
+    const fp = useProjectStore.getState().project.objects.find((o) => o.id === fillId)!.params.flowPath;
+    expect(fp == null).toBe(true);
+  });
+
   it("deletes an unused thread but disables deleting one in use", () => {
     seedSelectedFill(); // colors: the fill's color (in use) + "Red" (unused)
     render(<PropertiesPanel />);
