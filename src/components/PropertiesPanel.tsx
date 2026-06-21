@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { alignObjects, distributeObjects, type AlignEdge } from "../lib/arrange";
 import { useProjectStore } from "../store/projectStore";
-import { useEditorStore } from "../store/editorStore";
+import { useEditorStore, type PropertiesTab } from "../store/editorStore";
 import { DEFAULT_PARAMS } from "../types/project";
 import type {
   EmbObject,
@@ -44,11 +44,20 @@ import DesignPanel from "./DesignPanel";
  * management. Live stitch counts and validation warnings arrive with the
  * stitch engine (Phase 3).
  */
+const TABS: { id: PropertiesTab; label: string }[] = [
+  { id: "object", label: "Object" },
+  { id: "arrange", label: "Arrange" },
+  { id: "design", label: "Design" },
+  { id: "threads", label: "Threads" },
+];
+
 export default function PropertiesPanel() {
   const objects = useProjectStore((s) => s.project.objects);
   const selectedIds = useProjectStore((s) => s.selectedIds);
   const updateObject = useProjectStore((s) => s.updateObject);
   const updateObjectParams = useProjectStore((s) => s.updateObjectParams);
+  const tab = useEditorStore((s) => s.propertiesTab);
+  const setTab = useEditorStore((s) => s.setPropertiesTab);
 
   const selected = useMemo(
     () => objects.filter((o) => selectedIds.includes(o.id)),
@@ -61,47 +70,81 @@ export default function PropertiesPanel() {
         <SlidersHorizontal size={14} className="text-ink-deep" aria-hidden /> Properties
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <DesignPanel />
+      {/* Tabs keep each area focused so the panel is never one long scroll. */}
+      <div role="tablist" aria-label="Properties sections" className="flex border-b border-ink/20 bg-butter-100">
+        {TABS.map((t) => {
+          const on = tab === t.id;
+          return (
+            <button
+              key={t.id}
+              role="tab"
+              aria-selected={on}
+              onClick={() => setTab(t.id)}
+              className={`flex-1 border-b-2 px-1 py-1.5 font-label text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+                on
+                  ? "border-ink text-ink"
+                  : "border-transparent text-navy/45 hover:bg-butter-200/60 hover:text-navy"
+              }`}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
 
-        <ArrangeSection />
+      <div className="min-h-0 flex-1 overflow-y-auto" role="tabpanel">
+        {tab === "design" && <DesignPanel />}
 
-        {selected.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
-            <SlidersHorizontal size={22} className="text-ink/25" aria-hidden />
-            <p className="font-body text-sm text-navy/60">
-              Select an object to fine-tune its stitches.
-            </p>
-          </div>
-        ) : selected.length > 1 ? (
-          <div className="px-3 py-4 text-center font-body text-sm text-navy/60">
-            {selected.length} objects selected.
-          </div>
-        ) : (
-          <>
-            <ObjectProperties
-              object={selected[0]}
-              onName={(name) => updateObject(selected[0].id, { name })}
-              // Converting type also rebuilds geometry to satisfy the new
-              // type's invariant (satin = rail pair, running/fill = one
-              // polyline).
-              onType={(type) =>
-                updateObject(
-                  selected[0].id,
-                  convertObjectType(selected[0], type),
-                )
-              }
-              onColor={(colorId) => updateObject(selected[0].id, { colorId })}
-              onPaths={(paths) => updateObject(selected[0].id, { paths })}
-              onParam={(patch) => updateObjectParams(selected[0].id, patch)}
-            />
-            {selected[0].type === "fill" && (
-              <OutlineControl fill={selected[0]} />
-            )}
-          </>
-        )}
+        {tab === "arrange" &&
+          (selected.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
+              <SlidersHorizontal size={22} className="text-ink/25" aria-hidden />
+              <p className="font-body text-sm text-navy/60">
+                Select one or more objects to align, order, group, merge, or split them.
+              </p>
+            </div>
+          ) : (
+            <ArrangeSection />
+          ))}
 
-        <ThreadColors />
+        {tab === "threads" && <ThreadColors />}
+
+        {tab === "object" &&
+          (selected.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
+              <SlidersHorizontal size={22} className="text-ink/25" aria-hidden />
+              <p className="font-body text-sm text-navy/60">
+                Select an object to fine-tune its stitches.
+              </p>
+            </div>
+          ) : selected.length > 1 ? (
+            <div className="px-3 py-4 text-center font-body text-sm text-navy/60">
+              {selected.length} objects selected. Use the <b>Arrange</b> tab to align,
+              group, or merge them.
+            </div>
+          ) : (
+            <>
+              <ObjectProperties
+                object={selected[0]}
+                onName={(name) => updateObject(selected[0].id, { name })}
+                // Converting type also rebuilds geometry to satisfy the new
+                // type's invariant (satin = rail pair, running/fill = one
+                // polyline).
+                onType={(type) =>
+                  updateObject(
+                    selected[0].id,
+                    convertObjectType(selected[0], type),
+                  )
+                }
+                onColor={(colorId) => updateObject(selected[0].id, { colorId })}
+                onPaths={(paths) => updateObject(selected[0].id, { paths })}
+                onParam={(patch) => updateObjectParams(selected[0].id, patch)}
+              />
+              {selected[0].type === "fill" && (
+                <OutlineControl fill={selected[0]} />
+              )}
+            </>
+          ))}
       </div>
     </aside>
   );

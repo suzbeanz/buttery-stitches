@@ -62,6 +62,9 @@ export type RulerUnit = "mm" | "inch";
 /** Edit the vector objects, or watch the stitches redraw. */
 export type ViewMode = "edit" | "stitch";
 
+/** Which section of the right (properties) panel is showing. */
+export type PropertiesTab = "design" | "object" | "arrange" | "threads";
+
 interface EditorState {
   tool: Tool;
   /** which premade shape the `shape` tool stamps (rectangle, ellipse, …). */
@@ -92,6 +95,8 @@ interface EditorState {
   /** whether the left (layers) and right (properties) panels are open. */
   layersOpen: boolean;
   propertiesOpen: boolean;
+  /** which tab of the right (properties) panel is showing. */
+  propertiesTab: PropertiesTab;
   /** id of the text object being re-edited (double-click), or null. */
   editingTextId: string | null;
   /** a quick-start action requested from the empty-state guide. */
@@ -136,6 +141,7 @@ interface EditorState {
   toggleGuides: () => void;
   toggleRealistic: () => void;
   setClipboard: (objects: EmbObject[]) => void;
+  setPropertiesTab: (tab: PropertiesTab) => void;
   setLayersOpen: (open: boolean) => void;
   setPropertiesOpen: (open: boolean) => void;
   toggleLayers: () => void;
@@ -176,6 +182,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   clipboard: [],
   layersOpen: true,
   propertiesOpen: true,
+  propertiesTab: "object",
   editingTextId: null,
   pendingStart: null,
   // The welcome ("Let's make something") is shown until dismissed, then stays
@@ -207,6 +214,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   toggleGuides: () => set((s) => ({ guidesEnabled: !s.guidesEnabled })),
   toggleRealistic: () => set((s) => ({ realistic: !s.realistic })),
   setClipboard: (clipboard) => set({ clipboard }),
+  setPropertiesTab: (propertiesTab) => set({ propertiesTab }),
   setLayersOpen: (layersOpen) => set({ layersOpen }),
   setPropertiesOpen: (propertiesOpen) => set({ propertiesOpen }),
   toggleLayers: () => set((s) => ({ layersOpen: !s.layersOpen })),
