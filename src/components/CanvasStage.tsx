@@ -394,6 +394,21 @@ export default function CanvasStage() {
     };
   }, []);
 
+  // Hold Shift to lock a resize to the object's aspect ratio (like Figma/Illustrator).
+  // The Transformer's `shiftBehavior="none"` stops Konva from inverting on Shift, so we
+  // drive keepRatio ourselves: Konva then handles the proportional anchor math.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Shift") trRef.current?.keepRatio(e.type === "keydown");
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKey);
+    };
+  }, []);
+
   // Paint-bucket flood for the Fill tool: if `at` sits in an area ENCLOSED by
   // existing outlines, fill just that area into a new fill object and return true.
   // Returns false when the click isn't enclosed (so the Fill tool falls back to
@@ -1372,6 +1387,7 @@ export default function CanvasStage() {
                   ref={trRef}
                   rotateEnabled
                   keepRatio={false}
+                  shiftBehavior="none"
                   ignoreStroke
                   anchorFill={C.cream}
                   anchorStroke={C.navy}
