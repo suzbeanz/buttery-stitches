@@ -122,6 +122,28 @@ describe("tracedataToObjects", () => {
     expect(colors[0].rgb).toEqual([200, 20, 30]);
   });
 
+  it("drops a transparent background layer and keeps every brand color", () => {
+    // A transparent-PNG logo: a full-canvas transparent layer (the see-through
+    // background) plus two opaque brand blobs that don't touch the border. The
+    // transparent layer is dropped; neither brand color is mis-dropped.
+    const td = {
+      width: 100,
+      height: 100,
+      palette: [
+        { r: 0, g: 0, b: 0, a: 0 }, // transparent background (largest area)
+        { r: 53, g: 168, b: 84, a: 255 }, // green segment
+        { r: 66, g: 133, b: 244, a: 255 }, // blue segment
+      ],
+      layers: [[sq(0, 0, 100, 100)], [sq(20, 20, 45, 70)], [sq(55, 20, 80, 70)]],
+    } as unknown as Tracedata;
+
+    const { colors, objects } = tracedataToObjects(td, { mmPerPx: 1, removeBackground: false });
+    expect(colors).toHaveLength(2); // both brand colors survive, transparent dropped
+    expect(colors.map((c) => c.rgb)).toEqual([[53, 168, 84], [66, 133, 244]]);
+    // No surviving object spans the full canvas (no phantom background fill).
+    for (const o of objects) expect(polygonArea(o.paths[0])).toBeLessThan(5000);
+  });
+
   it("keeps a foreground island the SAME color as the background (white ball on white)", () => {
     const td = {
       width: 100,
@@ -290,6 +312,50 @@ describe("imageDataToObjects (real imagetracerjs)", () => {
     expect(colors.length).toBeGreaterThanOrEqual(1);
     expect(objects.length).toBeGreaterThanOrEqual(1);
     for (const o of objects) expect(o.paths[0].length).toBeGreaterThanOrEqual(2);
+  });
+
+  // Build an RGBA ImageData (paint returns [r,g,b,a]) — a:0 is a see-through pixel.
+  function imageRGBA(
+    w: number,
+    h: number,
+    paint: (x: number, y: number) => [number, number, number, number],
+  ): ImageData {
+    const data = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        const [r, g, b, a] = paint(x, y);
+        data[i] = r;
+        data[i + 1] = g;
+        data[i + 2] = b;
+        data[i + 3] = a;
+      }
+    return { width: w, height: h, data } as unknown as ImageData;
+  }
+
+  it("does not trace a transparent background as a phantom fill (logo PNG)", () => {
+    // A transparent-background logo: two opaque brand blobs floating in see-through
+    // space, neither touching the border. Before the fix, ImageTracer snapped the
+    // transparent pixels to the nearest brand color and produced a full-canvas
+    // phantom fill (and background removal then ate a real color).
+    const TRANSPARENT: [number, number, number, number] = [0, 0, 0, 0];
+    const img = imageRGBA(40, 40, (x, y) => {
+      const inGreen = x >= 8 && x < 18 && y >= 8 && y < 32;
+      const inBlue = x >= 22 && x < 32 && y >= 8 && y < 32;
+      if (inGreen) return [53, 168, 84, 255];
+      if (inBlue) return [66, 133, 244, 255];
+      return TRANSPARENT;
+    });
+
+    const { colors, objects } = imageDataToObjects(img, 2, { mmPerPx: 1 });
+
+    // Both brand colors survive; nothing is lost to a phantom-background drop.
+    expect(colors).toHaveLength(2);
+    // No object spans the canvas — the see-through background isn't stitched.
+    const canvasArea = 40 * 40;
+    for (const o of objects) {
+      expect(polygonArea(o.paths[0])).toBeLessThan(canvasArea * 0.5);
+    }
   });
 
   it("keeps a small high-contrast feature (a pet's eye) against a dominant field", () => {

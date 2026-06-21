@@ -183,6 +183,32 @@ export function borderBackgroundColor(img: RasterImage): RGB | null {
   return [(bestKey >> 16) & 255, (bestKey >> 8) & 255, bestKey & 255];
 }
 
+/**
+ * Is the image's background transparent? True when a majority of the outer-border
+ * pixels are below the alpha cutoff (the common transparent-PNG logo). Used to
+ * give the tracer a transparent palette slot so the see-through background doesn't
+ * snap to the nearest brand colour and trace as a phantom full-canvas fill.
+ */
+export function borderIsTransparent(img: RasterImage): boolean {
+  const { width, height, data } = img;
+  if (width < 2 || height < 2) return false;
+  let transparent = 0;
+  let total = 0;
+  const tally = (x: number, y: number) => {
+    total++;
+    if (data[(y * width + x) * 4 + 3] < ALPHA_CUTOFF) transparent++;
+  };
+  for (let x = 0; x < width; x++) {
+    tally(x, 0);
+    tally(x, height - 1);
+  }
+  for (let y = 0; y < height; y++) {
+    tally(0, y);
+    tally(width - 1, y);
+  }
+  return total > 0 && transparent * 2 > total;
+}
+
 /** Nearest palette color to (r,g,b) by squared Euclidean distance. */
 /** Index of the palette color closest (squared RGB distance) to (r,g,b). */
 function nearestIndex(palette: RGB[], r: number, g: number, b: number): number {
