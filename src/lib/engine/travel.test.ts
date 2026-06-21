@@ -186,10 +186,11 @@ describe("underpath travel under coverage", () => {
 });
 
 describe("line-art strokes (running lines, not satin)", () => {
-  // A thin elongated bar (a stroke). As plain satin it sews a dense zig-zag; as
-  // line-art it should sew a single running line down the centerline — much longer
-  // median stitch, far fewer penetrations.
-  const bar = [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 1.6 }, { x: 0, y: 1.6 }];
+  // A genuinely thin elongated bar (a hairline stroke, ~1 mm). As plain satin it
+  // sews a dense zig-zag; as line-art it should sew a single running line down the
+  // centerline — much longer median stitch, far fewer penetrations. (Wider bars,
+  // e.g. a ~2 mm flag-pole, satin-fill solid; only true hairlines run.)
+  const bar = [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 0.7 }, { x: 0, y: 0.7 }];
   function design(lineArt: boolean) {
     const o = makeObjectFromPaths("fill", [bar], "c1");
     o.params = { fillStyle: "satin", lineArt, underlay: false };
@@ -214,5 +215,17 @@ describe("line-art strokes (running lines, not satin)", () => {
     // Far fewer penetrations and a longer median stitch (a clean run, not a zig-zag).
     expect(drawnCount(la)).toBeLessThan(drawnCount(satin) / 2);
     expect(medSeg(la)).toBeGreaterThan(medSeg(satin) * 1.5);
+  });
+
+  it("satin-FILLS a wider line-art bar (a ~1.5 mm flag-pole), not a bare line", () => {
+    // A standalone ~1.5 mm bar (a flag-pole) has no fill underneath, so a bare
+    // centerline would leave it mostly empty fabric — it must satin-fill solid.
+    const pole = [{ x: 0, y: 0 }, { x: 1.5, y: 0 }, { x: 1.5, y: 30 }, { x: 0, y: 30 }];
+    const o = makeObjectFromPaths("fill", [pole], "c1");
+    o.params = { fillStyle: "satin", lineArt: true, underlay: false };
+    const d = generateDesign({ ...createEmptyProject(), objects: [o] }, { lockStitches: false });
+    // A solid satin column over 30 mm at ~0.4 mm rows is ~140 penetrations; a bare
+    // running centerline would be ~15. Well above that proves it filled.
+    expect(d.filter((s) => !s.jump && !s.trim).length).toBeGreaterThan(80);
   });
 });

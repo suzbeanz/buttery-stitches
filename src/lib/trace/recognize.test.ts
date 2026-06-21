@@ -19,6 +19,23 @@ describe("smart-shape recognition", () => {
     expect(r?.kind).toBe("circle");
   });
 
+  it("snaps a small round dot with a shadow notch to a perfect circle", () => {
+    // An ~8 mm dot (a golf ball) with a localized inward notch where its shadow
+    // meets the ground — just past the strict circle test, but it should still snap
+    // to a true circle rather than stay a faceted polygon.
+    const ring: Path = [];
+    const n = 56;
+    const R = 4;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const r = i >= 10 && i < 14 ? R - 0.9 : R; // the notch
+      ring.push({ x: 20 + r * Math.cos(a), y: 20 + r * Math.sin(a) });
+    }
+    const rec = recognizeShape(ring, 1.0);
+    expect(rec?.kind).toBe("circle");
+    expect(rec?.ring.length).toBe(64); // a clean 64-point circle, not a faceted blob
+  });
+
   it("recognizes a rotated rectangle", () => {
     const w = 40;
     const h = 16;
