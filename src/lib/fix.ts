@@ -164,8 +164,39 @@ export function fixObjectStitches(object: EmbObject): EmbObject {
   return { ...object, params };
 }
 
+/** What a clean-up pass changed — so the UI can tell the user what happened
+ *  (the geometry often looks identical in edit view, only stitch-out differs). */
+export interface CleanupReport {
+  /** fills whose fill style was assigned or changed (e.g. → satin / contour) */
+  fillStylesSet: number;
+  /** objects whose density was clamped to a safe value */
+  densityFixed: number;
+  /** objects that had underlay turned on */
+  underlayEnabled: number;
+  /** the stitch order changed (objects regrouped by color) */
+  reordered: boolean;
+  /** fills whose edges were trapped against a neighbour */
+  seamsTrapped: number;
+}
+
 export function fixStitches(project: Project): Project {
-  const fixed = project.objects.map(fixObjectStitches);
+  return fixStitchesWithReport(project).project;
+}
+
+/** Like `fixStitches`, but also reports what changed (for user feedback). */
+export function fixStitchesWithReport(project: Project): { project: Project; report: CleanupReport } {
+  const original = project.objects;
+  const fixed = original.map(fixObjectStitches);
+
+  let fillStylesSet = 0;
+  let densityFixed = 0;
+  let underlayEnabled = 0;
+  fixed.forEach((f, i) => {
+    const o = original[i];
+    if ((o.params.fillStyle ?? "") !== (f.params.fillStyle ?? "")) fillStylesSet++;
+    if (f.params.density !== undefined && o.params.density !== f.params.density) densityFixed++;
+    if (o.params.underlay !== true && f.params.underlay === true) underlayEnabled++;
+  });
 
   // Stable group by color: preserve first-seen color order and the relative
   // order within each color, but bring same-color objects together.
@@ -183,8 +214,20 @@ export function fixStitches(project: Project): Project {
       return a.i - b.i; // otherwise keep the drawn order (stable)
     })
     .map((x) => x.o);
+  const reordered = grouped.some((o, i) => o.id !== fixed[i].id);
 
-  return { ...project, objects: knockdownPass(grouped) };
+  const trapped = knockdownPass(grouped);
+  // knockdownPass returns the SAME object reference when it leaves a fill alone,
+  // so a changed reference means its edges were trapped.
+  let seamsTrapped = 0;
+  trapped.forEach((t, i) => {
+    if (t !== grouped[i]) seamsTrapped++;
+  });
+
+  return {
+    project: { ...project, objects: trapped },
+    report: { fillStylesSet, densityFixed, underlayEnabled, reordered, seamsTrapped },
+  };
 }
 
 /**

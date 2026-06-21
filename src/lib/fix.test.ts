@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fixStitches, fixObjectStitches } from "./fix";
+import { fixStitches, fixObjectStitches, fixStitchesWithReport } from "./fix";
 import { makeObject, makeObjectFromPaths } from "./objects";
 import { createEmptyProject } from "./project";
 import type { Path } from "../types/project";
@@ -144,6 +144,34 @@ describe("fixStitches", () => {
     expect(maxX(red.paths)).toBeLessThan(21);
     // The on-top fill is untouched (nothing sits above it).
     expect(maxX(blue.paths)).toBeCloseTo(40, 5);
+  });
+
+  it("reports what the clean-up changed", () => {
+    const p = createEmptyProject();
+    // Two same-color fills drawn out of color-group order with a too-tight density
+    // and no fill style — clean-up should set styles, fix density, and report it.
+    const a = makeObjectFromPaths("fill", [broadFill], "red");
+    a.params = { density: 0.05 };
+    const b = makeObjectFromPaths("fill", [broadFill], "blue");
+    const c = makeObjectFromPaths("fill", [broadFill], "red");
+    p.objects = [a, b, c];
+    const { report } = fixStitchesWithReport(p);
+    expect(report.reordered).toBe(true); // the two reds get grouped together
+    expect(report.fillStylesSet).toBeGreaterThan(0);
+    expect(report.densityFixed).toBeGreaterThan(0);
+  });
+
+  it("reports nothing to change for an already-clean design", () => {
+    const p = createEmptyProject();
+    const clean = fixStitches({ ...p, objects: [makeObjectFromPaths("fill", [broadFill], "c1")] });
+    const { report } = fixStitchesWithReport(clean);
+    expect(report).toEqual({
+      fillStylesSet: 0,
+      densityFixed: 0,
+      underlayEnabled: 0,
+      reordered: false,
+      seamsTrapped: 0,
+    });
   });
 
   it("leaves an isolated fill untrapped", () => {
