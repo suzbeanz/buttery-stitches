@@ -52,6 +52,21 @@ describe("LayerPanel", () => {
     expect(useProjectStore.getState().project.objects[0].visible).toBe(false);
   });
 
+  it("exposes the full name via a title so a truncated name is still readable", () => {
+    render(<LayerPanel />);
+    const name = screen.getByText("Alpha");
+    expect(name.getAttribute("title")).toContain("Alpha");
+  });
+
+  it("renames an object on double-click + Enter", () => {
+    render(<LayerPanel />);
+    fireEvent.doubleClick(screen.getByText("Alpha"));
+    const input = screen.getByLabelText("Layer name") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Renamed" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(useProjectStore.getState().project.objects[0].name).toBe("Renamed");
+  });
+
   it("⌘/Ctrl-click toggles a row in and out of the selection", () => {
     render(<LayerPanel />);
     fireEvent.click(screen.getByText("Alpha")); // select just Alpha
