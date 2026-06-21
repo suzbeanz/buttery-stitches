@@ -430,17 +430,16 @@ function ObjectProperties({
       )}
 
       {object.type === "fill" &&
-        (p.directionDeg != null ? (
-          // A painted grain (Direction tool) overrides the auto angle — show it with
-          // a one-click reset back to the automatic direction.
+        (p.flowPath || p.directionDeg != null ? (
+          // A painted grain (Direction tool) overrides the auto angle — a straight
+          // drag is a fixed angle, a curve is a flow the rows follow. One click resets
+          // both back to the automatic direction.
           <Field label="Direction">
             <div className="flex items-center justify-between gap-2 text-sm text-navy">
-              <span>
-                Manual — {Math.round(p.directionDeg)}°
-              </span>
+              <span>{p.flowPath ? "Curved (flow)" : `Manual — ${Math.round(p.directionDeg!)}°`}</span>
               <button
                 type="button"
-                onClick={() => onParam({ directionDeg: null })}
+                onClick={() => onParam({ directionDeg: null, flowPath: null })}
                 className="rounded-sm border border-ink/20 px-2 py-0.5 font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-navy/70 hover:bg-butter-200/60 hover:text-ink"
               >
                 Auto
