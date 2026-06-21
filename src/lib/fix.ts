@@ -1,7 +1,7 @@
 import type { EmbObject, Project } from "../types/project";
 import { classifyRegion, isSmallRoundFill } from "./engine/classify";
 import { recognizeShape } from "./trace/recognize";
-import { knockdown } from "./boolean";
+import { knockdown, seamTrap } from "./boolean";
 import { polygonArea, polygonPerimeter } from "./trace/classify";
 
 /**
@@ -188,10 +188,13 @@ export function fixStitches(project: Project): Project {
 }
 
 /**
- * KNOCKDOWN pass: in sew order, trim each fill where LATER (on-top) fills cover
- * it, leaving a small trap under their edges. Stops two colours stacking into a
- * thread ridge and prevents pull-gaps where they meet. A no-op for the common
- * tiled (abutting, non-overlapping) case, so it never hurts a clean design.
+ * SEAM pass: in sew order, make each fill share a clean `trapMm` seam with the
+ * LATER (on-top) fills around it. Two complementary raster ops do this:
+ *  • seamTrap grows the fill a sliver UNDER any higher fill it merely ABUTS (the
+ *    common tiled, auto-digitized case) so fabric pull can't open a gap; then
+ *  • knockdown trims where higher fills OVERLAP it, clamping every seam to exactly
+ *    `trapMm` inside the higher's edge — stopping colours stacking into a ridge.
+ * Both are no-ops for an isolated fill, so they never hurt a clean design.
  */
 function knockdownPass(objects: EmbObject[], trapMm = 0.35): EmbObject[] {
   // Only BROAD solid fills on top knock down what's beneath — thin lettering and
@@ -208,7 +211,9 @@ function knockdownPass(objects: EmbObject[], trapMm = 0.35): EmbObject[] {
     if (o.type !== "fill" || o.params.applique || o.paths.length === 0) return o;
     const higher = objects.slice(i + 1).filter(causesKnockdown).map((h) => h.paths);
     if (higher.length === 0) return o;
-    const trimmed = knockdown(o.paths, higher, trapMm);
+    // Grow under abutting neighbours first, then trim overlaps to the trap width.
+    const trapped = seamTrap(o.paths, higher, trapMm);
+    const trimmed = knockdown(trapped, higher, trapMm);
     if (trimmed.length === 0) return o;
     // Re-evaluate the broad fill style on the NEW geometry: a circle carved into a
     // crescent should drop from contour to tatami (contour rings travel badly on a

@@ -46,7 +46,7 @@ describe("boolean polygon ops", () => {
   });
 });
 
-import { knockdown } from "./boolean";
+import { knockdown, seamTrap } from "./boolean";
 
 /** Signed shoelace (outer + holes have opposite winding) → NET area. */
 function netArea(rings: Path[]): number {
@@ -100,5 +100,34 @@ describe("knockdown — no false rim where the top extends past the edge", () =>
     expect(nested).toBe(false);
     expect(netArea(out)).toBeLessThan(1100); // < full circle (1257): the overlap was removed
     expect(netArea(out)).toBeGreaterThan(700);
+  });
+});
+
+describe("seamTrap (abutting seams)", () => {
+  const square = (x0: number, y0: number, x1: number, y1: number): Path[] => [[{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }]];
+  const maxX = (rings: Path[]) => Math.max(...rings.flat().map((p) => p.x));
+
+  it("returns the lower unchanged when nothing is adjacent", () => {
+    const lower = square(0, 0, 10, 10);
+    expect(seamTrap(lower, [], 0.4, 0.2)).toBe(lower);
+    expect(seamTrap(lower, [square(100, 100, 110, 110)], 0.4, 0.2)).toBe(lower);
+  });
+
+  it("grows the lower a trap sliver under an abutting higher", () => {
+    const lower = square(0, 0, 10, 10);
+    const higher = square(10, 0, 20, 10); // shares the x=10 edge, no overlap
+    const out = seamTrap(lower, [higher], 0.4, 0.2);
+    // Extends past the shared boundary into the higher, but only by ~the trap.
+    expect(maxX(out)).toBeGreaterThan(10);
+    expect(maxX(out)).toBeLessThan(10.8);
+    expect(netArea(out)).toBeGreaterThan(netArea(lower));
+  });
+
+  it("clamps the growth to the trap (does not engulf the higher)", () => {
+    const lower = square(0, 0, 10, 10);
+    const higher = square(10, 0, 20, 10);
+    const out = seamTrap(lower, [higher], 0.4, 0.2);
+    // ~0.4mm × 10mm ≈ 4mm² added on top of the 100mm² square.
+    expect(netArea(out)).toBeLessThan(110);
   });
 });

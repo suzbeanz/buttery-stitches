@@ -125,4 +125,33 @@ describe("fixStitches", () => {
     const types = fixStitches({ ...p, objects: [outline, fill] }).objects.map((o) => o.type);
     expect(types).toEqual(["fill", "running"]); // fill sews before the outline
   });
+
+  it("traps abutting different-color fills (underneath grows under the top one)", () => {
+    const maxX = (rings: Path[]) => Math.max(...rings.flat().map((p) => p.x));
+    const left: Path = [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 40 }, { x: 0, y: 40 }];
+    const right: Path = [{ x: 20, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 40 }, { x: 20, y: 40 }];
+    const p = createEmptyProject();
+    // "red" is seen first → sews underneath; it abuts "blue" along x=20.
+    p.objects = [
+      makeObjectFromPaths("fill", [left], "red"),
+      makeObjectFromPaths("fill", [right], "blue"),
+    ];
+    const out = fixStitches(p).objects;
+    const red = out.find((o) => o.colorId === "red")!;
+    const blue = out.find((o) => o.colorId === "blue")!;
+    // The underneath fill now reaches a trap sliver past the seam into the top fill.
+    expect(maxX(red.paths)).toBeGreaterThan(20);
+    expect(maxX(red.paths)).toBeLessThan(21);
+    // The on-top fill is untouched (nothing sits above it).
+    expect(maxX(blue.paths)).toBeCloseTo(40, 5);
+  });
+
+  it("leaves an isolated fill untrapped", () => {
+    const p = createEmptyProject();
+    p.objects = [makeObjectFromPaths("fill", [broadFill], "c1")];
+    const out = fixStitches(p).objects;
+    // Geometry unchanged: a lone fill has no neighbour to trap against.
+    expect(out[0].paths[0]).toBe(broadFill);
+    expect(Math.max(...out[0].paths.flat().map((p) => p.x))).toBeCloseTo(40, 5);
+  });
 });
