@@ -358,6 +358,33 @@ describe("imageDataToObjects (real imagetracerjs)", () => {
     }
   });
 
+  it("keeps all N colors for a logo on a solid OPAQUE background (no starvation)", () => {
+    // 64×64 white field with four distinct brand-color blobs. Quantizing to 4 would
+    // spend a slot on white and merge two brands into mud; reserving N+1 for the
+    // background keeps all four distinct, then drops the white.
+    const blobs: [number, number, number, number, [number, number, number]][] = [
+      [8, 8, 24, 24, [53, 168, 84]],
+      [40, 8, 56, 24, [66, 133, 244]],
+      [8, 40, 24, 56, [250, 187, 5]],
+      [40, 40, 56, 56, [233, 68, 53]],
+    ];
+    const img = imageRGBA(64, 64, (x, y) => {
+      for (const [x0, y0, x1, y1, c] of blobs)
+        if (x >= x0 && x < x1 && y >= y0 && y < y1) return [c[0], c[1], c[2], 255];
+      return [255, 255, 255, 255]; // opaque white background
+    });
+
+    const { colors } = imageDataToObjects(img, 4, { mmPerPx: 1, removeBackground: true });
+    // All four brand colors survive distinctly; white is dropped, not stitched.
+    expect(colors).toHaveLength(4);
+    const near = (rgb: number[], t: [number, number, number]) =>
+      Math.abs(rgb[0] - t[0]) + Math.abs(rgb[1] - t[1]) + Math.abs(rgb[2] - t[2]) < 30;
+    for (const brand of blobs.map((b) => b[4])) {
+      expect(colors.some((c) => near(c.rgb, brand)), `has ${brand}`).toBe(true);
+    }
+    expect(colors.some((c) => near(c.rgb, [255, 255, 255])), "white dropped").toBe(false);
+  });
+
   it("keeps a small high-contrast feature (a pet's eye) against a dominant field", () => {
     // A 60×60 cream field with a small dark 8×8 spot. Population-based quantizers
     // discard the spot (it's <2% of pixels); ours feeds its palette to the tracer

@@ -6,7 +6,7 @@ import { smoothRingKeepingCorners } from "../smooth";
 import { douglasPeucker } from "./simplify";
 import { polygonArea, polygonPerimeter } from "./classify";
 import { recognizeShape } from "./recognize";
-import { quantizeImage, borderBackgroundColor, borderIsTransparent } from "./quantize";
+import { quantizeImage, borderBackgroundColor, borderIsTransparent, borderIsSolidOpaque } from "./quantize";
 
 export * from "./simplify";
 export * from "./classify";
@@ -293,7 +293,13 @@ export function imageDataToObjects(
   numberOfColors: number,
   opts: DigitizeOptions,
 ): DigitizeResult {
-  const flat = quantizeImage(imageData, numberOfColors);
+  // A solid OPAQUE background (a logo on white) would otherwise eat one of the
+  // user's colour slots — quantizing 4 brand colours + white to 4 merges two brands
+  // into mud. Give the background its own slot (N+1) so all N requested colours stay
+  // distinct; the background colour is then removed below, leaving N foreground ones.
+  const transparentBg = borderIsTransparent(imageData);
+  const opaqueBg = !transparentBg && opts.removeBackground !== false && borderIsSolidOpaque(imageData);
+  const flat = quantizeImage(imageData, opaqueBg ? numberOfColors + 1 : numberOfColors);
   // Detect the background from the (now palette-flat) border unless the caller
   // already supplied one.
   const backgroundRgb = opts.backgroundRgb ?? borderBackgroundColor(flat) ?? undefined;
@@ -308,7 +314,6 @@ export function imageDataToObjects(
   // and trace a phantom full-canvas fill (e.g. black → green). Give it a transparent
   // layer to absorb those pixels — tracedataToObjects drops a:0 layers — and skip the
   // opaque background hunt, which would otherwise mis-drop the largest real colour.
-  const transparentBg = borderIsTransparent(imageData);
   if (transparentBg) pal.push({ r: 0, g: 0, b: 0, a: 0 });
   const td = ImageTracer.imagedataToTracedata(
     { width: flat.width, height: flat.height, data: flat.data } as ImageData,
