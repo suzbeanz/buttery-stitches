@@ -18,6 +18,23 @@ export function distance(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
+/**
+ * Even-odd ray-cast point-in-polygon test for a single closed ring. (Several
+ * engine modules carry private copies of this; new code should reuse this one.)
+ */
+export function pointInRing(p: Point, ring: Path): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i];
+    const b = ring[j];
+    const intersects =
+      a.y > p.y !== b.y > p.y &&
+      p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
 /** Total length of a polyline. */
 export function polylineLength(path: Path): number {
   let len = 0;

@@ -181,3 +181,86 @@ describe("projectStore — QA fixes", () => {
     expect(useProjectStore.getState().project.objects).toHaveLength(1); // unchanged
   });
 });
+
+describe("projectStore.mergeObjects / splitRegion", () => {
+  beforeEach(() => {
+    useProjectStore.setState({ project: createEmptyProject(), selectedIds: [] });
+    useProjectStore.temporal.getState().clear();
+  });
+
+  const square = (x: number, y: number, s = 10) => [
+    { x, y },
+    { x: x + s, y },
+    { x: x + s, y: y + s },
+    { x, y: y + s },
+  ];
+
+  it("merges two same-color fills into one region, undoable in one step", () => {
+    const cId = useProjectStore.getState().project.colors[0].id;
+    const a = makeObject("fill", square(0, 0), cId);
+    const b = makeObject("fill", square(20, 0), cId);
+    useProjectStore.getState().addObjects([a, b]);
+    useProjectStore.getState().setSelection([a.id, b.id]);
+
+    useProjectStore.getState().mergeObjects([a.id, b.id]);
+    const { project, selectedIds } = useProjectStore.getState();
+    expect(project.objects).toHaveLength(1);
+    expect(project.objects[0].type).toBe("fill");
+    expect(selectedIds).toEqual([project.objects[0].id]);
+
+    useProjectStore.temporal.getState().undo();
+    expect(useProjectStore.getState().project.objects.map((o) => o.id)).toEqual([
+      a.id,
+      b.id,
+    ]);
+  });
+
+  it("refuses to merge fills of different colors", () => {
+    const cId = useProjectStore.getState().project.colors[0].id;
+    const a = makeObject("fill", square(0, 0), cId);
+    const b = makeObject("fill", square(20, 0), cId);
+    b.colorId = "other-color";
+    useProjectStore.getState().addObjects([a, b]);
+    useProjectStore.getState().mergeObjects([a.id, b.id]);
+    expect(useProjectStore.getState().project.objects).toHaveLength(2); // unchanged
+  });
+
+  it("refuses to merge when a non-fill is selected", () => {
+    const cId = useProjectStore.getState().project.colors[0].id;
+    const a = makeObject("fill", square(0, 0), cId);
+    const b = makeObject("running", [{ x: 0, y: 0 }, { x: 10, y: 0 }], cId);
+    useProjectStore.getState().addObjects([a, b]);
+    useProjectStore.getState().mergeObjects([a.id, b.id]);
+    expect(useProjectStore.getState().project.objects).toHaveLength(2); // unchanged
+  });
+
+  it("splits a fill with two disjoint pieces into two objects", () => {
+    const cId = useProjectStore.getState().project.colors[0].id;
+    const o = makeObject("fill", square(0, 0), cId);
+    o.paths = [square(0, 0), square(20, 0)]; // two detached blobs
+    useProjectStore.getState().addObject(o);
+
+    useProjectStore.getState().splitRegion(o.id);
+    const { project, selectedIds } = useProjectStore.getState();
+    expect(project.objects).toHaveLength(2);
+    expect(project.objects.find((x) => x.id === o.id)).toBeUndefined();
+    expect(selectedIds).toHaveLength(2);
+    expect(project.objects.every((x) => x.type === "fill")).toBe(true);
+  });
+
+  it("is a no-op splitting a single-piece fill", () => {
+    const cId = useProjectStore.getState().project.colors[0].id;
+    const o = makeObject("fill", square(0, 0), cId);
+    useProjectStore.getState().addObject(o);
+    useProjectStore.getState().splitRegion(o.id);
+    expect(useProjectStore.getState().project.objects).toHaveLength(1); // unchanged
+  });
+
+  it("is a no-op splitting a running line", () => {
+    const cId = useProjectStore.getState().project.colors[0].id;
+    const o = makeObject("running", [{ x: 0, y: 0 }, { x: 10, y: 0 }], cId);
+    useProjectStore.getState().addObject(o);
+    useProjectStore.getState().splitRegion(o.id);
+    expect(useProjectStore.getState().project.objects).toHaveLength(1); // unchanged
+  });
+});

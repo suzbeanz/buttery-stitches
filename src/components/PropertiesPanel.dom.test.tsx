@@ -223,4 +223,71 @@ describe("PropertiesPanel", () => {
     fireEvent.click(screen.getByLabelText("Confirm delete Active"));
     expect(useProjectStore.getState().project.colors.length).toBe(before - 1);
   });
+
+  // ---- region merge / split ----
+  const square = (x: number, y: number, s = 10) => [
+    { x, y },
+    { x: x + s, y },
+    { x: x + s, y: y + s },
+    { x, y: y + s },
+  ];
+
+  /** Two fills, same color unless `secondColor` is given; both selected. */
+  function seedTwoFills(secondColor?: string) {
+    const project = createEmptyProject();
+    const colorId = project.colors[0].id;
+    const a = makeObject("fill", square(0, 0), colorId);
+    const b = makeObject("fill", square(20, 0), colorId);
+    if (secondColor) {
+      project.colors.push({ id: secondColor, rgb: [0, 0, 200], name: "Blue" });
+      b.colorId = secondColor;
+    }
+    project.objects = [a, b];
+    resetStores(project);
+    useProjectStore.setState({ selectedIds: [a.id, b.id] });
+    return { a, b };
+  }
+
+  it("disables Merge for a single selection", () => {
+    seedSelectedFill();
+    render(<PropertiesPanel />);
+    expect(screen.getByLabelText(/^Merge regions/)).toHaveProperty("disabled", true);
+  });
+
+  it("disables Merge for two different-color fills", () => {
+    seedTwoFills("c_blue");
+    render(<PropertiesPanel />);
+    expect(screen.getByLabelText(/^Merge regions/)).toHaveProperty("disabled", true);
+  });
+
+  it("merges two same-color fills into one region", () => {
+    seedTwoFills();
+    render(<PropertiesPanel />);
+    const btn = screen.getByLabelText(/^Merge regions/) as HTMLButtonElement;
+    expect(btn.disabled).toBe(false);
+    fireEvent.click(btn);
+    expect(useProjectStore.getState().project.objects).toHaveLength(1);
+  });
+
+  it("splits a multi-piece fill into separate regions", () => {
+    const project = createEmptyProject();
+    const colorId = project.colors[0].id;
+    const o = makeObject("fill", square(0, 0), colorId);
+    o.paths = [square(0, 0), square(20, 0)]; // two detached blobs
+    project.objects = [o];
+    resetStores(project);
+    useProjectStore.setState({ selectedIds: [o.id] });
+
+    render(<PropertiesPanel />);
+    const btn = screen.getByLabelText(/^Split into/) as HTMLButtonElement;
+    expect(btn.disabled).toBe(false);
+    fireEvent.click(btn);
+    expect(useProjectStore.getState().project.objects).toHaveLength(2);
+  });
+
+  it("disables Split for a single-piece fill", () => {
+    seedSelectedFill();
+    render(<PropertiesPanel />);
+    expect(screen.getByLabelText(/^Split into/)).toHaveProperty("disabled", true);
+  });
 });
