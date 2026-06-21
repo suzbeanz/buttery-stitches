@@ -372,3 +372,49 @@ export function flowFill(rings: Path[], opts: FillOptions): Path[] | null {
   if (satinCoverage(oriented, runs) < FLOW_MIN_COVERAGE) return null;
   return runs;
 }
+
+/** A user flow curve only has to cover most of the shape — it's an explicit choice,
+ *  so the bar is a touch lower than the auto flowFill's. */
+const FLOW_ALONG_MIN_COVERAGE = 0.8;
+
+/** Extend a spine past both ends along its end tangents by `margin` mm, so rows
+ *  cast perpendicular to it sweep the WHOLE shape even when the drawn curve stops
+ *  short of the edges (stations that fall outside the shape just clip to nothing). */
+function extendSpine(spine: Path, margin: number): Path {
+  if (spine.length < 2) return spine;
+  const unit = (from: Point, to: Point): Point => {
+    const dx = to.x - from.x, dy = to.y - from.y;
+    const L = Math.hypot(dx, dy) || 1;
+    return { x: dx / L, y: dy / L };
+  };
+  const head = spine[0], afterHead = spine[1];
+  const tail = spine[spine.length - 1], beforeTail = spine[spine.length - 2];
+  const dHead = unit(afterHead, head); // points outward from the start
+  const dTail = unit(beforeTail, tail); // points outward from the end
+  return [
+    { x: head.x + dHead.x * margin, y: head.y + dHead.y * margin },
+    ...spine,
+    { x: tail.x + dTail.x * margin, y: tail.y + dTail.y * margin },
+  ];
+}
+
+/**
+ * USER-GUIDED flow: lay the fill's rows PERPENDICULAR to a spine the user drew, so
+ * the stitches follow their curve (the assisted-digitizing "draw the grain" tool).
+ * Same machinery as `turningFill`/`flowFill` but the spine is supplied, not derived.
+ * Returns serpentine runs, or NULL when the curve can't cover the shape cleanly (the
+ * caller then falls back to tatami) — and, like the auto flows, never slashes.
+ */
+export function flowAlong(rings: Path[], spine: Path, opts: FillOptions): Path[] | null {
+  const oriented = orientByDepth(rings);
+  if (oriented.length === 0 || oriented[0].length < 3 || spine.length < 2) return null;
+  const density = Math.max(MIN_FILL_DENSITY, opts.density);
+  const stitch = opts.stitchLength ?? FILL_STITCH_LENGTH;
+  const comp = Math.max(0, opts.pullCompMm ?? 0);
+  const half = bboxDiag(oriented);
+  const { runs } = marchSpine(extendSpine(spine, half), oriented, density, stitch, comp, half);
+  if (runs.length === 0) return null;
+  if (hasExposedSegment(runs, oriented)) return null; // never slash past the edge
+  if (satinCoverage(oriented, runs) < FLOW_ALONG_MIN_COVERAGE) return null;
+  return runs;
+}

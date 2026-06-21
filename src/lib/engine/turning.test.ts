@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Path, Point } from "../../types/project";
-import { turningFill, flowFill } from "./turning";
+import { turningFill, flowFill, flowAlong } from "./turning";
 
 const opts = { density: 0.6, angle: 0, stitchLength: 3, pullCompMm: 0.2 };
 
@@ -114,5 +114,31 @@ describe("flowFill (branchy / multi-limb shapes)", () => {
     expect(flowFill([rect], opts)).toBeNull();
     const disc = arc(50, 50, 25, 0, 2 * Math.PI, 48);
     expect(flowFill([disc], opts)).toBeNull();
+  });
+});
+
+describe("flowAlong (user-drawn flow curve)", () => {
+  it("follows a spine the user drew along the crescent — turns, stays inside", () => {
+    // A spine that arcs down the middle of the band; rows run perpendicular to it.
+    const spine = arc(50, 55, 35, 205 * D, 335 * D, 20);
+    const runs = flowAlong([crescent], spine, opts);
+    expect(runs).not.toBeNull();
+    let outside = 0;
+    const dirs: number[] = [];
+    for (const run of runs!) {
+      for (const pt of run) if (!inCrescent(pt)) outside++;
+      if (run.length > 4) {
+        const d0 = Math.atan2(run[1].y - run[0].y, run[1].x - run[0].x);
+        const dN = Math.atan2(run[run.length - 1].y - run[run.length - 2].y, run[run.length - 1].x - run[run.length - 2].x);
+        dirs.push(Math.abs(d0 - dN));
+      }
+    }
+    expect(outside).toBe(0); // never slashes past the band
+    expect(Math.max(...dirs, 0)).toBeGreaterThan(0.5); // rows genuinely turn along the arc
+  });
+
+  it("declines when the drawn spine lies outside the shape (→ tatami fallback)", () => {
+    const farSpine: Path = [{ x: 200, y: 200 }, { x: 260, y: 200 }];
+    expect(flowAlong([crescent], farSpine, opts)).toBeNull();
   });
 });
