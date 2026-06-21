@@ -39,6 +39,20 @@ export default function LayerPanel() {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   // Anchor for Shift-range selection (the last plainly/⌘-clicked row).
   const [anchor, setAnchor] = useState<number | null>(null);
+  // Inline rename: double-click a name to edit it.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftName, setDraftName] = useState("");
+  const startRename = (id: string, name: string) => {
+    setEditingId(id);
+    setDraftName(name);
+  };
+  const commitRename = () => {
+    if (editingId) {
+      const n = draftName.trim();
+      if (n) updateObject(editingId, { name: n });
+    }
+    setEditingId(null);
+  };
   const colorById = useMemo(
     () => new Map<string, ThreadColor>(colors.map((c) => [c.id, c])),
     [colors],
@@ -86,7 +100,7 @@ export default function LayerPanel() {
             return (
               <li
                 key={o.id}
-                draggable
+                draggable={editingId !== o.id}
                 onDragStart={() => setDragIndex(index)}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => {
@@ -107,59 +121,78 @@ export default function LayerPanel() {
                   className="shrink-0 cursor-grab text-navy/30"
                   aria-hidden
                 />
-                <button
-                  onClick={(e) => onRowClick(e, o.id, index)}
-                  title={o.type}
-                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                >
-                  <span
-                    className="h-3.5 w-3.5 shrink-0 rounded-sm border border-navy/30"
-                    style={{
-                      backgroundColor: color
-                        ? `rgb(${color.rgb.join(",")})`
-                        : "#888",
+                <span
+                  className="h-3.5 w-3.5 shrink-0 rounded-sm border border-navy/30"
+                  style={{
+                    backgroundColor: color ? `rgb(${color.rgb.join(",")})` : "#888",
+                  }}
+                />
+                {(() => {
+                  const Icon = TYPE_ICON[o.type];
+                  return <Icon size={13} className="shrink-0 text-navy/60" aria-hidden />;
+                })()}
+                {editingId === o.id ? (
+                  <input
+                    autoFocus
+                    value={draftName}
+                    aria-label="Layer name"
+                    onChange={(e) => setDraftName(e.target.value)}
+                    onBlur={commitRename}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") commitRename();
+                      else if (e.key === "Escape") setEditingId(null);
+                      e.stopPropagation();
                     }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="min-w-0 flex-1 rounded-sm border border-ink/40 bg-white px-1 py-0.5 text-navy outline-none"
                   />
-                  {(() => {
-                    const Icon = TYPE_ICON[o.type];
-                    return <Icon size={13} className="shrink-0 text-navy/60" aria-hidden />;
-                  })()}
-                  <span className="flex-1 truncate text-navy">{o.name}</span>
-                </button>
-                <button
-                  data-tip="Move up (stitch earlier)"
-                  aria-label="Move up"
-                  disabled={index === 0}
-                  onClick={() => moveOrder([o.id], "earlier")}
-                  className="tap-target grid h-8 w-7 place-items-center rounded text-navy/55 hover:bg-butter-300/60 hover:text-navy disabled:opacity-25 disabled:hover:bg-transparent"
-                >
-                  <ChevronUp size={15} />
-                </button>
-                <button
-                  data-tip="Move down (stitch later)"
-                  aria-label="Move down"
-                  disabled={index === objects.length - 1}
-                  onClick={() => moveOrder([o.id], "later")}
-                  className="tap-target grid h-8 w-7 place-items-center rounded text-navy/55 hover:bg-butter-300/60 hover:text-navy disabled:opacity-25 disabled:hover:bg-transparent"
-                >
-                  <ChevronDown size={15} />
-                </button>
+                ) : (
+                  <button
+                    onClick={(e) => onRowClick(e, o.id, index)}
+                    onDoubleClick={() => startRename(o.id, o.name)}
+                    title={`${o.name} (${o.type}) — double-click to rename`}
+                    className="min-w-0 flex-1 truncate text-left text-navy"
+                  >
+                    {o.name}
+                  </button>
+                )}
                 <button
                   data-tip={o.visible ? "Hide" : "Show"}
                   aria-label={o.visible ? "Hide" : "Show"}
                   onClick={() => updateObject(o.id, { visible: !o.visible })}
-                  className="tap-target grid h-8 w-8 place-items-center rounded text-navy/70 hover:bg-butter-300/60 hover:text-navy"
+                  className="tap-target grid h-8 w-8 shrink-0 place-items-center rounded text-navy/70 hover:bg-butter-300/60 hover:text-navy"
                 >
                   {o.visible ? <Eye size={15} /> : <EyeOff size={15} />}
                 </button>
-                <button
-                  data-tip="Delete"
-                  aria-label="Delete"
-                  onClick={() => removeObjects([o.id])}
-                  className="tap-target grid h-8 w-8 place-items-center rounded text-ink/45 opacity-0 hover:bg-stamp/10 hover:text-stamp group-hover:opacity-100 focus-visible:opacity-100 [@media(pointer:coarse)]:opacity-100"
-                >
-                  <Trash2 size={15} />
-                </button>
+                {/* Secondary actions reveal on hover/focus so the name has room. */}
+                <span className="flex shrink-0 items-center opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(pointer:coarse)]:opacity-100">
+                  <button
+                    data-tip="Move up (stitch earlier)"
+                    aria-label="Move up"
+                    disabled={index === 0}
+                    onClick={() => moveOrder([o.id], "earlier")}
+                    className="tap-target grid h-8 w-6 place-items-center rounded text-navy/55 hover:bg-butter-300/60 hover:text-navy disabled:opacity-25 disabled:hover:bg-transparent"
+                  >
+                    <ChevronUp size={15} />
+                  </button>
+                  <button
+                    data-tip="Move down (stitch later)"
+                    aria-label="Move down"
+                    disabled={index === objects.length - 1}
+                    onClick={() => moveOrder([o.id], "later")}
+                    className="tap-target grid h-8 w-6 place-items-center rounded text-navy/55 hover:bg-butter-300/60 hover:text-navy disabled:opacity-25 disabled:hover:bg-transparent"
+                  >
+                    <ChevronDown size={15} />
+                  </button>
+                  <button
+                    data-tip="Delete"
+                    aria-label="Delete"
+                    onClick={() => removeObjects([o.id])}
+                    className="tap-target grid h-8 w-8 place-items-center rounded text-ink/45 hover:bg-stamp/10 hover:text-stamp"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </span>
               </li>
             );
           })}
