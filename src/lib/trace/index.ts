@@ -208,14 +208,35 @@ export function tracedataToObjects(
       if (area < minAreaMm2) return; // despeckle
       const perim = polygonPerimeter(rawOuter);
       const meanWidth = perim > 0 ? (2 * area) / perim : 0; // ≈ stroke width for a thin shape
-      // Line-art stroke = thin AND long AND genuinely ELONGATED (length ≫ width).
-      // The elongation test is what separates a true stroke (an outline, a fur
-      // line) from a jagged shading blob that merely has a low mean width — the
-      // blob stays a solid fill instead of fragmenting into a mess of medial stubs.
       const length = perim / 2;
       const elongation = meanWidth > 0 ? length / meanWidth : 0;
+      // Holes (computed up front so they can inform classification). Tiny holes are
+      // trace noise, not real openings, so they're dropped here too.
+      const rawHoles = (path.holechildren ?? [])
+        .map((idx) => layer[idx])
+        .filter(Boolean)
+        .map((h) => simp(pathToPolylinePx(h)))
+        .filter((h) => polygonArea(h) >= minAreaMm2);
+      // Hole-aware line-art NETWORK test. `meanWidth` above looks only at the OUTER
+      // boundary, so a CONNECTED outline whose silhouette is the whole subject (a
+      // truck's black linework, a picture frame, a thin ring) reads as one big solid
+      // blob and gets tatami-filled — heavy and wrong. Subtract the holes to recover
+      // the TRUE wall width and how sparsely ink fills its silhouette: a thin-walled,
+      // mostly-hollow region is line art to stitch down its centerline, not fill.
+      const holeArea = rawHoles.reduce((s, h) => s + polygonArea(h), 0);
+      const holePerim = rawHoles.reduce((s, h) => s + polygonPerimeter(h), 0);
+      const inkArea = Math.max(0, area - holeArea);
+      const wallWidth = perim + holePerim > 0 ? (2 * inkArea) / (perim + holePerim) : 0;
+      const inkFraction = area > 0 ? inkArea / area : 1;
+      const isNetwork = wallWidth > 0 && wallWidth < NETWORK_MAX_WALL_MM && inkFraction < NETWORK_MAX_INK_FRACTION;
+      // Line-art stroke = a thin holey NETWORK, OR thin AND long AND genuinely
+      // ELONGATED (length ≫ width). The elongation test separates a true single
+      // stroke (an outline, a fur line) from a jagged shading blob that merely has a
+      // low mean width — the blob stays a solid fill instead of fragmenting into a
+      // mess of medial stubs.
       const isStroke =
-        meanWidth < STROKE_MAX_WIDTH_MM && length >= STROKE_MIN_LENGTH_MM && elongation >= STROKE_MIN_ELONGATION;
+        isNetwork ||
+        (meanWidth < STROKE_MAX_WIDTH_MM && length >= STROKE_MIN_LENGTH_MM && elongation >= STROKE_MIN_ELONGATION);
       // An INTERIOR island of the background color that is a thin sliver is the
       // background showing THROUGH a gap between two foreground shapes (between sail
       // panels, between letters) — not a feature. Stitching it would lay a line of
@@ -223,11 +244,6 @@ export function tracedataToObjects(
       // genuine same-as-background feature (a white ball on a white page) is blobby,
       // not a sliver, so it fails this test and survives.
       if (isBackground && isStroke) return;
-      const rawHoles = (path.holechildren ?? [])
-        .map((idx) => layer[idx])
-        .filter(Boolean)
-        .map((h) => simp(pathToPolylinePx(h)))
-        .filter((h) => polygonArea(h) >= minAreaMm2);
       const rings = [clean(rawOuter), ...rawHoles.map(clean)];
       if (isStroke) {
         strokeRings.push(...rings);
@@ -271,6 +287,15 @@ const STROKE_MIN_LENGTH_MM = 5;
 /** A stroke must be this many times longer than it is wide — a true line, not a
  *  jagged shading blob that merely has a low mean width. */
 const STROKE_MIN_ELONGATION = 3.5;
+
+/** A holey, thin-walled region — a picture frame, a ring, or a logo's whole
+ *  connected outline network — is line art: stitched down its medial centerline,
+ *  not tatami-filled. Caught when the TRUE wall width (holes subtracted) is thin
+ *  AND ink fills less than half its silhouette. The width cap sits a little above
+ *  STROKE_MAX_WIDTH_MM because the medial engine satin-fills the wider stretches
+ *  and only runs the genuinely thin ones, so a mixed-width network is safe here. */
+const NETWORK_MAX_WALL_MM = 3.0;
+const NETWORK_MAX_INK_FRACTION = 0.5;
 
 /**
  * imagetracerjs trace options. Because we hand it a pre-quantized FLAT image
