@@ -28,6 +28,17 @@ const RETRACE_DEBOUNCE_MS = 250;
 const MIN_COLORS = 2;
 const MAX_COLORS = 12;
 
+/** Per-color stitch style the user can force in the dialog. */
+type StitchStyle = "auto" | "satin" | "outline";
+
+/** Apply a per-color style override to an object (no-op for "auto"). Satin/running
+ *  survive the apply-time fixStitches pass, so the choice sticks. */
+function styleObject(o: EmbObject, style: StitchStyle): EmbObject {
+  if (style === "satin") return { ...o, type: "fill", params: { ...o.params, fillStyle: "satin" } };
+  if (style === "outline") return { ...o, type: "running" };
+  return o;
+}
+
 const rgbToHex = (rgb: [number, number, number]) =>
   "#" + rgb.map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, "0")).join("");
 const hexToRgb = (hex: string): [number, number, number] => [
@@ -60,6 +71,9 @@ export default function AutoDigitizeDialog({
   // The live trace result. Re-runs (debounced) whenever the settings change.
   const [result, setResult] = useState<{ colors: ThreadColor[]; objects: EmbObject[] } | null>(null);
   const [keptIds, setKeptIds] = useState<Set<string>>(new Set());
+  // Per-color stitch style override (by colorId). "auto" = the trace's own
+  // fill/line-art classification; otherwise force the whole color one way.
+  const [styleById, setStyleById] = useState<Record<string, StitchStyle>>({});
   useEscapeToClose(onClose);
   const dialogRef = useDialogFocus<HTMLDivElement>();
 
@@ -135,6 +149,7 @@ export default function AutoDigitizeDialog({
         if (!alive) return;
         setResult({ colors, objects: finalObjects });
         setKeptIds(new Set(colors.map((c) => c.id))); // keep all by default each trace
+        setStyleById({}); // a fresh trace = fresh colorIds, so clear overrides
         setError(
           objects.length === 0
             ? "No shapes found. Try more colors or turn off background removal."
@@ -157,8 +172,13 @@ export default function AutoDigitizeDialog({
     [result],
   );
   const keptObjects = useMemo(
-    () => (result ? result.objects.filter((o) => keptIds.has(o.colorId)) : []),
-    [result, keptIds],
+    () =>
+      result
+        ? result.objects
+            .filter((o) => keptIds.has(o.colorId))
+            .map((o) => styleObject(o, styleById[o.colorId] ?? "auto"))
+        : [],
+    [result, keptIds, styleById],
   );
 
   const setColors = (n: number) => {
@@ -181,6 +201,7 @@ export default function AutoDigitizeDialog({
     setResult((prev) =>
       prev ? { ...prev, colors: prev.colors.map((c) => (c.id === id ? { ...c, rgb } : c)) } : prev,
     );
+  const setStyle = (id: string, style: StitchStyle) => setStyleById((prev) => ({ ...prev, [id]: style }));
   const rename = (id: string, name: string) =>
     setResult((prev) =>
       prev
@@ -212,7 +233,9 @@ export default function AutoDigitizeDialog({
   function apply() {
     if (!result) return;
     const colors = result.colors.filter((c) => keptIds.has(c.id));
-    const objects = result.objects.filter((o) => keptIds.has(o.colorId));
+    const objects = result.objects
+      .filter((o) => keptIds.has(o.colorId))
+      .map((o) => styleObject(o, styleById[o.colorId] ?? "auto"));
     if (objects.length === 0) return;
     // Smart cleanup so the import lands with sensible stitch types, safe densities,
     // and color-grouped order — no manual tuning needed to get a good result.
@@ -376,6 +399,17 @@ export default function AutoDigitizeDialog({
                     <span className="tabular-nums text-[11px] text-navy/50">
                       {regions} region{regions === 1 ? "" : "s"}
                     </span>
+                    {/* per-color stitch style: auto / satin (smooth) / outline (running) */}
+                    <select
+                      value={styleById[c.id] ?? "auto"}
+                      onChange={(e) => setStyle(c.id, e.target.value as StitchStyle)}
+                      aria-label={`Stitch style for ${c.name ?? rgbStr}`}
+                      className="shrink-0 appearance-none rounded-sm border border-ink/30 bg-cream px-1.5 py-0.5 text-[11px] text-navy outline-none focus:ring-1 focus:ring-ink/40"
+                    >
+                      <option value="auto">Auto</option>
+                      <option value="satin">Satin</option>
+                      <option value="outline">Outline</option>
+                    </select>
                     <button
                       onClick={() => toggleColor(c.id)}
                       aria-pressed={kept}
@@ -491,7 +525,14 @@ function DigitizePreview({
         <svg data-preview viewBox={`${box.minX} ${box.minY} ${box.w} ${box.h}`} className="max-h-full max-w-full" preserveAspectRatio="xMidYMid meet">
           {objects.map((o) => {
             const c = colorById.get(o.colorId);
-            return <path key={o.id} d={ringsToSvgPath(o.paths)} fill={c ? `rgb(${c.rgb.join(",")})` : "#888"} fillRule="evenodd" />;
+            const col = c ? `rgb(${c.rgb.join(",")})` : "#888";
+            // "Outline" objects (running) preview as a stroked path, not a fill, so
+            // the chosen stitch style reads at a glance.
+            return o.type === "running" ? (
+              <path key={o.id} d={ringsToSvgPath(o.paths)} fill="none" stroke={col} strokeWidth={0.8} strokeLinejoin="round" />
+            ) : (
+              <path key={o.id} d={ringsToSvgPath(o.paths)} fill={col} fillRule="evenodd" />
+            );
           })}
         </svg>
       ) : (
