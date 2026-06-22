@@ -342,13 +342,13 @@ function useGlobalShortcuts(setShowHelp: (fn: (v: boolean) => boolean) => void) 
       }
       if (mod) return; // leave other Ctrl/Cmd combos to the browser
 
-      // Nudge the selection (arrow = 1 mm, ⇧+arrow = 5 mm) — precise placement
-      // without dragging; one undo step via moveObjects.
+      // Nudge the selection (arrow = 1 mm, ⇧+arrow = 5 mm, ⌥+arrow = 0.25 mm fine)
+      // — precise placement without dragging; one undo step via moveObjects.
       if (e.key.startsWith("Arrow") && editor.viewMode === "edit") {
         const ps = useProjectStore.getState();
         if (ps.selectedIds.length) {
           e.preventDefault();
-          const step = e.shiftKey ? 5 : 1;
+          const step = e.altKey ? 0.25 : e.shiftKey ? 5 : 1;
           const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
           const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
           if (dx || dy) ps.moveObjects(ps.selectedIds, dx, dy);

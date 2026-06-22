@@ -37,6 +37,10 @@ export default function LayerPanel() {
   const moveOrder = useProjectStore((s) => s.moveOrder);
 
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  // The row currently hovered during a drag — drives the insertion line that
+  // shows WHERE the dragged row will land (above it when dragging up, below when
+  // dragging down).
+  const [overIndex, setOverIndex] = useState<number | null>(null);
   // Anchor for Shift-range selection (the last plainly/⌘-clicked row).
   const [anchor, setAnchor] = useState<number | null>(null);
   // Inline rename: double-click a name to edit it.
@@ -97,25 +101,41 @@ export default function LayerPanel() {
           {objects.map((o, index) => {
             const color = colorById.get(o.colorId);
             const selected = selectedIds.includes(o.id);
+            const dropping = dragIndex !== null && dragIndex !== index && overIndex === index;
+            const lineAbove = dropping && (dragIndex as number) > index;
+            const lineBelow = dropping && (dragIndex as number) < index;
             return (
               <li
                 key={o.id}
                 draggable={editingId !== o.id}
                 onDragStart={() => setDragIndex(index)}
-                onDragOver={(e) => e.preventDefault()}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (overIndex !== index) setOverIndex(index);
+                }}
                 onDrop={() => {
                   if (dragIndex !== null && dragIndex !== index) {
                     reorderObjects(dragIndex, index);
                   }
                   setDragIndex(null);
+                  setOverIndex(null);
                 }}
                 // Reset even when the drop lands outside any row, so the dragged
                 // row doesn't stay dimmed.
-                onDragEnd={() => setDragIndex(null)}
-                className={`group flex items-center gap-2 px-2 py-1.5 text-sm transition-colors duration-150 ${
+                onDragEnd={() => {
+                  setDragIndex(null);
+                  setOverIndex(null);
+                }}
+                className={`group relative flex items-center gap-2 px-2 py-1.5 text-sm transition-colors duration-150 ${
                   selected ? "bg-butter-300" : "hover:bg-butter-200/70"
                 } ${dragIndex === index ? "opacity-50" : ""}`}
               >
+                {(lineAbove || lineBelow) && (
+                  <span
+                    data-drop-indicator
+                    className={`pointer-events-none absolute inset-x-1 h-0.5 rounded bg-ink ${lineAbove ? "top-0" : "bottom-0"}`}
+                  />
+                )}
                 <GripVertical
                   size={14}
                   className="shrink-0 cursor-grab text-navy/30"

@@ -432,10 +432,18 @@ export default function TopBar({
 
       <div className="mx-1.5 h-5 w-px shrink-0 bg-butter-200/20" />
 
-      <BarButton label="Undo" onClick={() => undo()} disabled={pastStates.length === 0}>
+      <BarButton
+        label={pastStates.length ? `Undo (${pastStates.length})` : "Undo"}
+        onClick={() => undo()}
+        disabled={pastStates.length === 0}
+      >
         <Undo2 size={18} />
       </BarButton>
-      <BarButton label="Redo" onClick={() => redo()} disabled={futureStates.length === 0}>
+      <BarButton
+        label={futureStates.length ? `Redo (${futureStates.length})` : "Redo"}
+        onClick={() => redo()}
+        disabled={futureStates.length === 0}
+      >
         <Redo2 size={18} />
       </BarButton>
 

@@ -65,6 +65,17 @@ describe("LayerPanel", () => {
     expect(wrapper?.className).not.toContain("opacity-0");
   });
 
+  it("shows a drop-target line while dragging a row over another", () => {
+    render(<LayerPanel />);
+    const rows = document.querySelectorAll("li");
+    expect(document.querySelector("[data-drop-indicator]")).toBeNull();
+    fireEvent.dragStart(rows[0]); // drag Alpha
+    fireEvent.dragOver(rows[1]); // over Beta
+    expect(document.querySelector("[data-drop-indicator]")).toBeTruthy();
+    fireEvent.dragEnd(rows[0]);
+    expect(document.querySelector("[data-drop-indicator]")).toBeNull();
+  });
+
   it("renames an object on double-click + Enter", () => {
     render(<LayerPanel />);
     fireEvent.doubleClick(screen.getByText("Alpha"));
