@@ -7,7 +7,7 @@ import { ocrWords } from "../lib/trace/ocr";
 import { recognizeTextObjects, applyTextRecognition } from "../lib/trace/textRecognize";
 import { loadFont, DEFAULT_FONT_ID } from "../lib/text/fonts";
 import { fixStitches } from "../lib/fix";
-import { mergeSimilarColors } from "../lib/thread/reduce";
+import { mergeSimilarColors, consolidateFringeColors } from "../lib/thread/reduce";
 import { matchColorsToChart } from "../lib/thread/match";
 import { THREAD_CHARTS } from "../lib/thread/catalog";
 import { pathsBounds } from "../lib/geometry";
@@ -117,12 +117,23 @@ export default function AutoDigitizeDialog({
         const mmPerPx = Math.min(hoop.wMm / imageData.width, hoop.hMm / imageData.height) * fit;
         const offsetX = (hoop.wMm - imageData.width * mmPerPx) / 2;
         const offsetY = (hoop.hMm - imageData.height * mmPerPx) / 2;
-        const { colors, objects } = imageDataToObjects(imageData, numColors, {
+        const traced = imageDataToObjects(imageData, numColors, {
           mmPerPx,
           offsetX,
           offsetY,
           removeBackground,
           detail,
+        });
+        // Collapse near-duplicate palette entries k-means split off a flat region
+        // (anti-alias bands, thin shadow shades) so the body doesn't fragment and
+        // thread slots aren't wasted. Area-aware, so distinct colors stay.
+        const { colors, objects } = consolidateFringeColors({
+          version: 1,
+          widthMm: hoop.wMm,
+          heightMm: hoop.hMm,
+          hoop: { ...hoop },
+          colors: traced.colors,
+          objects: traced.objects,
         });
 
         let finalObjects = objects;

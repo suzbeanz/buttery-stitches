@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { nearestThread, matchColorsToChart, colorDistance } from "./match";
+import { nearestThread, matchColorsToChart, colorDistance, type RGB } from "./match";
 import { BUTTERY_STANDARD } from "./catalog";
-import { reduceProjectColors, mergeSimilarColors } from "./reduce";
+import { reduceProjectColors, mergeSimilarColors, consolidateFringeColors } from "./reduce";
 import { createEmptyProject } from "../project";
 import { makeObjectFromPaths } from "../objects";
 import type { Project, ThreadColor } from "../../types/project";
@@ -76,5 +76,52 @@ describe("color reduction", () => {
   it("merge-similar is a no-op when nothing is within the threshold", () => {
     const out = mergeSimilarColors(proj(), 1);
     expect(out.colors).toHaveLength(4);
+  });
+});
+
+describe("fringe color consolidation", () => {
+  // A right triangle with legs L → outer-ring area L²/2, so L sets the color's area.
+  const tri = (L: number, id: string) =>
+    makeObjectFromPaths("fill", [[{ x: 0, y: 0 }, { x: L, y: 0 }, { x: L, y: L }]], id);
+  const build = (rows: Array<[string, RGB, number]>): Project => {
+    const p = createEmptyProject();
+    p.colors = rows.map(([id, rgb]) => ({ id, rgb }));
+    p.objects = rows.map(([id, , L]) => tri(L, id));
+    return p;
+  };
+
+  it("folds a small near-duplicate shade into its large neighbor (the two-reds case)", () => {
+    const out = consolidateFringeColors(
+      build([
+        ["red", [218, 29, 34], 100], // big flat body
+        ["darkred", [155, 15, 19], 2], // tiny shadow/anti-alias sliver, ΔE≈22
+        ["blue", [30, 40, 220], 100], // distinct, large
+      ]),
+    );
+    expect(out.colors).toHaveLength(2); // darkred merged away, blue intact
+    expect(out.objects[1].colorId).toBe(out.objects[0].colorId); // darkred → red
+    const ids = new Set(out.colors.map((c) => c.id));
+    for (const o of out.objects) expect(ids.has(o.colorId)).toBe(true); // no orphans
+  });
+
+  it("leaves two LARGE distinct colors apart even at the same ΔE", () => {
+    const out = consolidateFringeColors(
+      build([
+        ["red", [218, 29, 34], 100],
+        ["darkred", [155, 15, 19], 100], // same ΔE≈22 but now large → not fringe
+      ]),
+    );
+    expect(out.colors).toHaveLength(2);
+  });
+
+  it("merges a true near-duplicate (ΔE≈2) regardless of size", () => {
+    const out = consolidateFringeColors(
+      build([
+        ["a", [10, 10, 10], 100],
+        ["b", [12, 12, 14], 100], // near-black twin
+        ["c", [220, 30, 30], 100],
+      ]),
+    );
+    expect(out.colors).toHaveLength(2); // a+b collapse, c survives
   });
 });

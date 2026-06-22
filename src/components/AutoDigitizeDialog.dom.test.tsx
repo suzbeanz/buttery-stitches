@@ -53,6 +53,9 @@ describe("AutoDigitizeDialog (live preview)", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    // Re-establish the default trace result (clearAllMocks keeps any per-test
+    // mockReturnValue override otherwise, leaking into later tests).
+    vi.mocked(imageDataToObjects).mockReturnValue({ colors: COLORS, objects: OBJECTS });
     // jsdom lacks object URLs.
     URL.createObjectURL = vi.fn(() => "blob:x");
     URL.revokeObjectURL = vi.fn();
@@ -66,6 +69,33 @@ describe("AutoDigitizeDialog (live preview)", () => {
     expect(screen.getByRole("button", { name: /Blue/ })).toBeTruthy();
     expect(screen.getAllByText("1 region")).toHaveLength(3);
     expect(document.querySelectorAll("svg[data-preview] path")).toHaveLength(3);
+  });
+
+  it("consolidates near-duplicate fringe colors from the trace before showing them", async () => {
+    // A flat red plus a TINY dark-red sliver (the anti-alias/shadow split) and a
+    // distinct blue. The small dark red should fold into red; blue survives.
+    const sliver = {
+      ...obj("od", "c4", 60),
+      paths: [[{ x: 60, y: 0 }, { x: 62, y: 0 }, { x: 62, y: 2 }, { x: 60, y: 2 }]],
+    };
+    vi.mocked(imageDataToObjects).mockReturnValue({
+      colors: [
+        { id: "c1", rgb: [218, 29, 34], name: "Red" },
+        { id: "c4", rgb: [155, 15, 19], name: "Dark red" },
+        { id: "c3", rgb: [30, 40, 220], name: "Blue" },
+      ],
+      objects: [obj("o1", "c1", 0), sliver, obj("o3", "c3", 40)],
+    });
+    const onApply = renderDialog();
+    await screen.findByRole("button", { name: /^Red/ }, { timeout: 2000 });
+    // "Dark red" was folded into "Red"; only two swatches remain.
+    await waitFor(() => expect(screen.queryByRole("button", { name: /Dark red/ })).toBeNull());
+    expect(screen.getByRole("button", { name: /Blue/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Add to design/ }));
+    const project = onApply.mock.calls[0][0] as Project;
+    expect(project.colors).toHaveLength(2);
+    const ids = new Set(project.colors.map((c) => c.id));
+    for (const o of project.objects) expect(ids.has(o.colorId)).toBe(true);
   });
 
   it("re-traces when the color count changes", async () => {
