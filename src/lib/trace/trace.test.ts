@@ -329,6 +329,30 @@ describe("imageDataToObjects (real imagetracerjs)", () => {
     expect(detailed.objects.length).toBeGreaterThan(smooth.objects.length);
   });
 
+  it("classifies a thin connected outline NETWORK as centerline line-art, not a tatami fill", () => {
+    // A black picture-frame-with-crossbars (≈2mm walls) on white: one connected,
+    // thin-walled, mostly-hollow region → should sew down its medial centerline
+    // (fillStyle "satin" + lineArt), NOT as a heavy tatami fill of its silhouette.
+    const W = 60, H = 60, t = 2;
+    const onWall = (x: number, y: number) =>
+      x < t || x >= W - t || y < t || y >= H - t || Math.abs(x - W / 2) < t || Math.abs(y - H / 2) < t;
+    const img = image(W, H, (x, y) => (onWall(x, y) ? [10, 10, 10] : [245, 245, 245]));
+    const { colors, objects } = imageDataToObjects(img, 2, { mmPerPx: 1, removeBackground: false });
+    const black = colors.find((c) => c.rgb[0] < 60);
+    expect(black).toBeTruthy();
+    const blackObjs = objects.filter((o) => o.colorId === black!.id);
+    expect(blackObjs.length).toBeGreaterThan(0);
+    expect(blackObjs.some((o) => o.params.fillStyle === "satin" && o.params.lineArt === true)).toBe(true);
+    expect(blackObjs.some((o) => o.params.fillStyle === "tatami")).toBe(false);
+  });
+
+  it("keeps a SOLID block as a fill (not line-art)", () => {
+    const img = image(30, 30, () => [20, 20, 20]); // fully solid, no holes
+    const { objects } = imageDataToObjects(img, 2, { mmPerPx: 1, removeBackground: false });
+    expect(objects.length).toBeGreaterThanOrEqual(1);
+    for (const o of objects) expect(o.params.lineArt).toBeFalsy();
+  });
+
   // Build an RGBA ImageData (paint returns [r,g,b,a]) — a:0 is a see-through pixel.
   function imageRGBA(
     w: number,
