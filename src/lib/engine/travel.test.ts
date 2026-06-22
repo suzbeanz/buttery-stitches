@@ -228,4 +228,23 @@ describe("line-art strokes (running lines, not satin)", () => {
     // running centerline would be ~15. Well above that proves it filled.
     expect(d.filter((s) => !s.jump && !s.trim).length).toBeGreaterThan(80);
   });
+
+  it("runs a thick RING line-art as a centerline loop, not a radial satin fill", () => {
+    // A 3 mm-walled annulus (a tire, an 'O'): wide enough that a LONE bar would
+    // satin-fill, but a ring MUST run its centerline — satin thrown across a ring
+    // fans into a radial starburst. So it sews as a low-penetration running loop
+    // with long stitches, not a dense zig-zag.
+    const circle = (r: number, n = 64) =>
+      Array.from({ length: n }, (_, i) => {
+        const a = (2 * Math.PI * i) / n;
+        return { x: 20 + r * Math.cos(a), y: 20 + r * Math.sin(a) };
+      });
+    const ring = makeObjectFromPaths("fill", [circle(10), circle(7)], "c1");
+    ring.params = { fillStyle: "satin", lineArt: true, underlay: false };
+    const d = generateDesign({ ...createEmptyProject(), objects: [ring] }, { lockStitches: false });
+    // Centerline loop (circumference ≈ 2π·8.5 ≈ 53 mm) bean-tripled is ~60–120
+    // penetrations; a satin fill of the 3 mm band would be many hundreds.
+    expect(drawnCount(d)).toBeLessThan(150);
+    expect(medSeg(d)).toBeGreaterThan(1.2); // long running stitches, not a zig-zag
+  });
 });
