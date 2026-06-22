@@ -21,8 +21,9 @@ posterized result (with a warning). That's on purpose.
 ## What you can do
 
 - **Auto-digitize an image.** Import a logo and it traces, simplifies, and turns
-  it into fill/running objects — adjustable color count, background removal,
-  despeckle.
+  it into fill/running objects — adjustable color count and detail, background
+  removal, despeckle, smart **centerline outlines**, automatic **color
+  consolidation**, per-color stitch style, and one-click match to real threads.
 - **Add text.** Type something, pick a font (Oswald — tuned for embroidery — plus
   Poppins, Playfair Display, Roboto Slab, Pacifico), set the size, drop it in.
   Curve it onto a **circle** or along a **path** for badges and arches.
@@ -62,13 +63,21 @@ reads the *shape* of each region and picks the stitch a hand digitizer would:
   become tatami, and round shapes / thin ring-bands fill as concentric **contour**
   rows. A broad blob with a hole punched in it (a bun around a sausage) fills as
   flat tatami, not topographic rings.
-- **Line-art over fills.** Auto-digitize separates each colour's *thin, elongated*
-  regions — bold outlines, fur/detail strokes — from its solid blobs, sewing the
-  strokes as clean **running lines down their centerline** (the line follows the
+- **Line-art over fills.** Auto-digitize separates each colour's *thin* regions —
+  bold outlines, fur/detail strokes, and whole connected **outline networks** (a
+  cartoon's black linework, a picture frame, a ring) — from its solid blobs, sewing
+  them as clean **running lines down their centerline** (the line follows the
   stroke's own direction) laid ON TOP of the fills, the way a digitizer outlines a
-  shape, instead of filling them into fragmented slivers or a heavy satin zig-zag.
-  Solid features (an eye, a nose) fill solid rather than spiralling as tiny contour
-  rings.
+  shape, instead of filling them into fragmented slivers, a heavy satin zig-zag, or
+  a tatami slab over the whole silhouette. It catches a network even when its outer
+  boundary is the whole subject by measuring the *true* wall width (holes
+  subtracted), not the silhouette. Solid features (an eye, a nose) fill solid rather
+  than spiralling as tiny contour rings.
+- **Clean palette.** Near-duplicate shades that quantization splits off a flat
+  region — anti-alias fringe, a faint shadow tone (one red becoming two reds) — are
+  perceptually **consolidated** back together (area-aware, in CIELAB) so a flat fill
+  doesn't fragment and thread slots aren't wasted, while genuinely distinct colours
+  stay put.
 - **Turning (directional) fills.** A curved, elongated shape — a banner, a leaf, a
   crescent, a sausage — is filled with rows that *follow the curve* (laid
   perpendicular to the shape's medial spine) instead of one flat angle, the way a
@@ -98,6 +107,99 @@ The reasoning is written up in
 [`docs/stitch-logic.md`](docs/stitch-logic.md), and it's all pure, unit-tested
 code — the same engine drives both the on-screen simulator and the exported file,
 so what you see is what you get.
+
+## The math behind the stitches
+
+Every stage is plain geometry and arithmetic — no model, no randomness. Here's the
+whole pipeline, image → machine file, with the actual formulas and the files they
+live in. (Numbers below are the shipped defaults.)
+
+**1 · Units & coordinate space** — everything internal is in **millimetres**. An
+imported image is scaled to the hoop by
+`mmPerPx = min(hoopW / imgW, hoopH / imgH) × 0.92` (a 0.92 fit margin) and centred
+with `offset = (hoop − img × mmPerPx) / 2`. At export, mm convert to integer
+**1/10 mm** machine units (`×10`). Each format caps a single stitch/jump move:
+**121 units = 12.1 mm** for DST/EXP, **127 = 12.7 mm** for PES/JEF/VP3
+(`MAX_STITCH_TENTHS`, `src/lib/export/index.ts`); longer travels are split into
+chained moves under the cap, and any non-finite coordinate is filtered out.
+
+**2 · Colour — quantization & perceptual distance** — the palette comes from
+**k-means++**: seed with the mean colour, then repeatedly add the sample farthest
+from every chosen centre, and run **12 Lloyd iterations** minimising squared-RGB
+distance over up to 20 000 sampled pixels (`src/lib/trace/quantize.ts`). Matching
+and merging happen in perceptual **CIELAB** using CIE76
+`ΔE = √(ΔL² + Δa² + Δb²)` after an sRGB→Lab transform (`src/lib/thread/match.ts`).
+The new fringe **consolidation** merges the closest qualifying pair when
+`ΔE < 10` (true duplicate, any size) **or** `ΔE < 30` **and** the smaller colour is
+`< 6%` of the design's area — area measured by the shoelace formula over each
+colour's regions (`src/lib/thread/reduce.ts`). A final optional snap maps each
+colour to the nearest real thread in a chart (same ΔE metric).
+
+**3 · Vectorize — simplify & smooth** — traced outlines are thinned with
+**Douglas–Peucker** at a tolerance that tracks the Detail control (≈0.15 mm
+detailed → 0.5 mm smoother), then rounded with **Catmull–Rom** /
+corner-preserving smoothing so curves read clean without rounding off real corners
+(`src/lib/trace/simplify.ts`, `src/lib/smooth.ts`).
+
+**4 · Classify each region** — for every region: shoelace area
+`A = ½|Σ(xᵢyᵢ₊₁ − xᵢ₊₁yᵢ)|`, perimeter `P`, mean width `w ≈ 2A / P`, and
+`elongation = (P / 2) / w`. A region becomes **line art** when it's thin and truly
+elongated (`w < 2.2 mm`, length `≥ 5 mm`, `elongation ≥ 3.5`) **or** it's a thin
+**holey network**: subtract the holes to get `inkArea = A − ΣholeArea`, then
+`wallWidth = 2·inkArea / (Pₒᵤₜₑᵣ + ΣPₕₒₗₑ)` and `inkFraction = inkArea / A`; it's a
+network when `wallWidth < 3 mm` and `inkFraction < 0.5` (`src/lib/trace/index.ts`,
+`src/lib/trace/classify.ts`). Otherwise it's a solid fill.
+
+**5 · Centerlines — the medial axis** — line-art regions are skeletonised
+(`src/lib/engine/medial.ts`): rasterize to a grid (cell `= clamp(span / 60, 0.12,
+0.4) mm`, winding-number inside test), run a **Chamfer (3, 4) distance transform**,
+**Zhang–Suen thin** to a one-pixel skeleton, and trace it into polylines that chain
+intelligently through junctions. Each skeleton point ray-casts to the *true* drawn
+edges to recover local width, and columns are mitred where branches meet.
+
+**6 · Satin columns** — from a centerline, rails are offset `± width/2`
+(`railsFromCenterline`, `src/lib/geometry.ts`); the zig-zag "throws" advance along
+the rails until **whichever rail has moved one stitch spacing** (density
+compensation keeps the outside of a curve from gapping). **Pull compensation**
+widens the column by `pullComp` (default 0.2 mm, clamped 0–0.6) to counter thread
+draw-in. Columns wider than **6 mm** split each throw so no stitch overshoots;
+columns thinner than the run threshold (1.2 mm for line art, 0.6 mm otherwise)
+collapse to a single **running line** down the centerline (`src/lib/engine/index.ts`).
+
+**7 · Fills** — a **tatami** fill lays parallel rows spaced by `density` mm, each
+row sampled at the stitch length (2.5 mm default, 4 mm for broad fill), at the
+**fewest-fragments angle** — the grain whose rows break the least across the
+shape's concavities — over a **boustrophedon** cell decomposition so the serpentine
+travels *inside* the shape instead of slashing across a notch. A finishing **edge
+run** is inset 0.4 mm inside the outline for a crisp silhouette. **Contour** fills
+lay concentric offset rings at `density` spacing and sew outer→inner as one spiral.
+**Running** = the path resampled at `stitchLength`; **bean** = N back-and-forth
+repeats per segment (`src/lib/engine/*`).
+
+**8 · Density, underlay & compensation** — `density` is the **gap in mm between
+rows/stitches**, so stitches-per-mm `= 1 / density`; defaults are 0.35 mm (fill) and
+0.4 mm (satin), clamped to a machine-safe **0.3–0.5 mm** (`src/lib/fix.ts`). A
+low-density **underlay** pass is added (inset so it never peeks past the top), and a
+**fabric preset** bends the numbers — knit packs rows `×0.9` and pulls `×1.5`, sheer
+the opposite (`FABRICS`, `src/types/project.ts`). A **min-stitch filter** drops
+sub-0.3 mm stitches so the needle doesn't jam, and **tie-in/tie-off** locks
+(amplitude 0.8 mm, 3 stitches) anchor every thread end.
+
+**9 · Order & trim economy** — within a colour, object order is optimised with
+**2-opt** to cut jumps; before any same-colour move would cut the thread, an **A\***
+search over a 1 mm coverage grid looks for a route buried *under* existing stitches
+(up to a ~60 mm detour) and travels there instead of trimming — the way a hand
+digitizer hides a jump (`src/lib/engine/index.ts`). A real file lands near
+~1 trim / 1000 stitches.
+
+**10 · Export** — the resolved plan becomes a list of 1/10 mm integer opcodes
+(stitch / jump / trim / stop); a colour change emits a trim + stop, over-long moves
+are split to the format cap, and [`pyembroidery`](https://github.com/EmbroideryHub/pyembroidery)
+(run in-browser via Pyodide) encodes the binary PES/DST/JEF/EXP/VP3
+(`src/lib/export/index.ts`, `src/lib/export/embroidery.py`).
+
+The same numbers drive the on-screen simulator and the exported file, and every
+formula above is covered by unit tests.
 
 ## How it works under the hood
 
