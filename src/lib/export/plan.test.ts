@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { packRgb, planFromDesign, planStitchCount } from "./index";
+import { packRgb, planFromDesign, planStitchCount, friendlyExportError } from "./index";
 import type { EngineStitch } from "../engine";
 import { mmToTenths } from "../units";
 
@@ -52,5 +52,56 @@ describe("export plan", () => {
     const plan = planFromDesign(design, colors);
     expect(plan.blocks).toHaveLength(1);
     expect(plan.blocks[0].cmds).toContainEqual(["t"]);
+  });
+
+  it("drops non-finite coordinates so they never reach the file", () => {
+    const design: EngineStitch[] = [
+      { x: 0, y: 0, colorId: "a", objectId: "o" },
+      { x: NaN, y: 5, colorId: "a", objectId: "o" },
+      { x: 5, y: Infinity, colorId: "a", objectId: "o" },
+      { x: 3, y: 4, colorId: "a", objectId: "o" },
+    ];
+    const plan = planFromDesign(design, colors);
+    const coords = plan.blocks.flatMap((b) => b.cmds);
+    expect(coords).toHaveLength(2); // the two finite stitches only
+    for (const c of coords) {
+      if (c[0] === "s" || c[0] === "j") {
+        expect(Number.isFinite(c[1]) && Number.isFinite(c[2])).toBe(true);
+      }
+    }
+  });
+
+  it("keeps blocks in stitch order across several color changes", () => {
+    const design: EngineStitch[] = [
+      { x: 0, y: 0, colorId: "a", objectId: "o1" },
+      { x: 1, y: 0, colorId: "b", objectId: "o2" },
+      { x: 2, y: 0, colorId: "a", objectId: "o3" }, // back to a — a fresh block, not merged
+    ];
+    const plan = planFromDesign(design, colors);
+    expect(plan.blocks.map((b) => b.rgb)).toEqual([0x2050c0, 0xff0000, 0x2050c0]);
+  });
+
+  it("handles an empty design without throwing", () => {
+    const plan = planFromDesign([], colors);
+    expect(plan.blocks).toHaveLength(0);
+    expect(planStitchCount(plan)).toBe(0);
+  });
+});
+
+describe("friendlyExportError", () => {
+  it("maps engine load / network failures to a connection hint", () => {
+    expect(friendlyExportError(new Error("Failed to load the Pyodide runtime script."))).toMatch(/export engine/i);
+    expect(friendlyExportError(new Error("TypeError: Failed to fetch"))).toMatch(/connection/i);
+  });
+
+  it("maps a pyembroidery traceback to a writeable-format hint, not a stack", () => {
+    const msg = friendlyExportError(new Error("Traceback (most recent call last):\n  File ...\n  in write_dst\nValueError: bad"));
+    expect(msg).toMatch(/couldn't be written/i);
+    expect(msg).not.toMatch(/Traceback/);
+  });
+
+  it("falls back to the last meaningful line, capped", () => {
+    expect(friendlyExportError(new Error("something odd happened"))).toBe("something odd happened");
+    expect(friendlyExportError(new Error("a\n\n  the real reason  "))).toBe("the real reason");
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { splitPlanForFormat, MAX_STITCH_TENTHS, type StitchPlan, type PlanCmd } from "./index";
+import { splitPlanForFormat, MAX_STITCH_TENTHS, EMB_FORMATS, type StitchPlan, type PlanCmd } from "./index";
 
 /** Longest move (in tenths) between consecutive coordinate commands in a block. */
 function longestMove(cmds: PlanCmd[]): number {
@@ -59,5 +59,24 @@ describe("splitPlanForFormat", () => {
   it("is deterministic", () => {
     const p = plan([["s", 0, 0], ["s", 333, 211]]);
     expect(splitPlanForFormat(p, "dst")).toEqual(splitPlanForFormat(p, "dst"));
+  });
+
+  it("never leaves an over-limit move in ANY format, across multiple blocks", () => {
+    // A multi-block plan with long stitches and jumps in every block — after the
+    // split, no move in any block may exceed the format's machine limit.
+    const multi: StitchPlan = {
+      blocks: [
+        { rgb: 0xff0000, cmds: [["s", 0, 0], ["s", 600, 250], ["t"], ["s", -300, 400]] },
+        { rgb: 0x00ff00, cmds: [["j", 0, 0], ["j", 900, 0], ["s", 900, 900], ["stop"]] },
+      ],
+    };
+    for (const fmt of EMB_FORMATS) {
+      const out = splitPlanForFormat(multi, fmt);
+      for (const b of out.blocks) {
+        expect(longestMove(b.cmds), `${fmt} block`).toBeLessThanOrEqual(MAX_STITCH_TENTHS[fmt] + 1e-6);
+      }
+      // block count + colors preserved
+      expect(out.blocks.map((b) => b.rgb)).toEqual([0xff0000, 0x00ff00]);
+    }
   });
 });

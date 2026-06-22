@@ -248,6 +248,25 @@ export async function importDesignBytes(
   return run;
 }
 
+/**
+ * Turn a raw export failure (a Pyodide load error, a multi-line Python traceback,
+ * a network blip) into one friendly sentence for the user. Pure, so it's unit
+ * tested; the UI shows the result instead of a raw stack trace.
+ */
+export function friendlyExportError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const low = raw.toLowerCase();
+  if (low.includes("failed to fetch") || low.includes("networkerror") || low.includes("micropip"))
+    return "Couldn't download the export engine. Check your connection and try again.";
+  if (low.includes("pyodide") || low.includes("loadpyodide") || low.includes("runtime script"))
+    return "Couldn't load the export engine. Check your connection and try again.";
+  if (low.includes("traceback") || low.includes("write_") || low.includes("embpattern") || low.includes("pyembroidery"))
+    return "Sorry — this design couldn't be written to that format. Please report it if it keeps happening.";
+  // Fallback: the last non-empty line (Python puts the real message last), capped.
+  const line = raw.split("\n").map((s) => s.trim()).filter(Boolean).pop() ?? "Unknown error";
+  return line.length > 160 ? line.slice(0, 157) + "…" : line;
+}
+
 /** Trigger a browser download of raw bytes. */
 export function downloadBytes(
   bytes: Uint8Array,

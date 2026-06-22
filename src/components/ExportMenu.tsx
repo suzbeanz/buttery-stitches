@@ -9,6 +9,7 @@ import {
   exportAndDownload,
   exportBundle,
   downloadBytes,
+  friendlyExportError,
   planFromDesign,
   type EmbFormat,
   type PesVersion,
@@ -78,8 +79,9 @@ export default function ExportMenu({
       setOpen(false);
       toast(`Exported buttery-stitches.${format} to your downloads`, "success");
     } catch (err) {
-      setError((err as Error).message);
-      toast(`Export failed — ${(err as Error).message}`, "error");
+      const msg = friendlyExportError(err);
+      setError(msg);
+      toast(`Export failed — ${msg}`, "error");
     } finally {
       setBusy(false);
     }
@@ -95,8 +97,9 @@ export default function ExportMenu({
       setOpen(false);
       toast(`Exported all ${EMB_FORMATS.length} formats as a .zip`, "success");
     } catch (err) {
-      setError((err as Error).message);
-      toast(`Export failed — ${(err as Error).message}`, "error");
+      const msg = friendlyExportError(err);
+      setError(msg);
+      toast(`Export failed — ${msg}`, "error");
     } finally {
       setBusy(false);
     }
