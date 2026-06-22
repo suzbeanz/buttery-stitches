@@ -25,6 +25,7 @@ import {
 import { alignObjects, distributeObjects, type AlignEdge } from "../lib/arrange";
 import { useProjectStore } from "../store/projectStore";
 import { useEditorStore, type PropertiesTab } from "../store/editorStore";
+import ColorSelect from "./ColorSelect";
 import { DEFAULT_PARAMS } from "../types/project";
 import type {
   EmbObject,
@@ -379,17 +380,7 @@ function ObjectProperties({
       </Field>
 
       <Field label="Thread color">
-        <select
-          value={object.colorId}
-          onChange={(e) => onColor(e.target.value)}
-          className="input"
-        >
-          {colors.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name ?? `rgb(${c.rgb.join(",")})`}
-            </option>
-          ))}
-        </select>
+        <ColorSelect value={object.colorId} colors={colors} onChange={onColor} label="Thread color" />
       </Field>
 
       {object.type === "running" && (
@@ -490,17 +481,12 @@ function ObjectProperties({
 
       {object.type === "fill" && p.fillStyle === "blend" && (
         <Field label="Blend to color">
-          <select
+          <ColorSelect
             value={p.blendColorId ?? colors.find((c) => c.id !== object.colorId)?.id ?? object.colorId}
-            onChange={(e) => onParam({ blendColorId: e.target.value })}
-            className="input"
-          >
-            {colors.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name ?? `rgb(${c.rgb.join(",")})`}
-              </option>
-            ))}
-          </select>
+            colors={colors}
+            onChange={(id) => onParam({ blendColorId: id })}
+            label="Blend to color"
+          />
         </Field>
       )}
 
@@ -718,18 +704,13 @@ function OutlineControl({ fill }: { fill: EmbObject }) {
       />
 
       <Field label="Outline color">
-        <select
+        <ColorSelect
           value={colorChoice}
-          onChange={(e) => setColorChoice(e.target.value)}
-          className="input"
-        >
-          {colors.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name ?? `rgb(${c.rgb.join(",")})`}
-            </option>
-          ))}
-          <option value={NEW_COLOR}>New color…</option>
-        </select>
+          colors={colors}
+          onChange={setColorChoice}
+          extra={[{ value: NEW_COLOR, label: "New color…" }]}
+          label="Outline color"
+        />
       </Field>
 
       <label className="flex items-center gap-2 text-navy">

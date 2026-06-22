@@ -110,12 +110,10 @@ describe("PropertiesPanel", () => {
     const { fillId, outlineColorId } = seedSelectedFill();
     render(<PropertiesPanel />);
 
-    // Pick the outline color (the second project color, "Red").
-    const colorSelect = screen
-      .getByText(/Outline color/i)
-      .closest("label")!
-      .querySelector("select") as HTMLSelectElement;
-    fireEvent.change(colorSelect, { target: { value: outlineColorId } });
+    // Pick the outline color (the second project color, "Red") via the swatch dropdown.
+    fireEvent.click(screen.getByRole("button", { name: /^Outline color:/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Red" }));
+    void outlineColorId;
 
     fireEvent.click(screen.getByText(/Add satin outline/i));
 
