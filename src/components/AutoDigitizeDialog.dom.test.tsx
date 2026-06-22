@@ -162,6 +162,24 @@ describe("AutoDigitizeDialog (live preview)", () => {
     expect(project.colors.every((c) => c.brand && c.code)).toBe(true);
   });
 
+  it("applies a per-color stitch style: Outline → running, Satin → satin fill", async () => {
+    const onApply = renderDialog();
+    await waitForColors();
+    fireEvent.change(screen.getByLabelText(/Stitch style for Red/) as HTMLSelectElement, {
+      target: { value: "outline" },
+    });
+    fireEvent.change(screen.getByLabelText(/Stitch style for Green/) as HTMLSelectElement, {
+      target: { value: "satin" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Add to design/ }));
+    const project = onApply.mock.calls[0][0] as Project;
+    const red = project.objects.find((o) => o.colorId === "c1");
+    const green = project.objects.find((o) => o.colorId === "c2");
+    expect(red?.type).toBe("running");
+    expect(green?.type).toBe("fill");
+    expect(green?.params.fillStyle).toBe("satin");
+  });
+
   it("disables Add to design when every color is dropped", async () => {
     renderDialog();
     await waitForColors();
