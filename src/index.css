@@ -332,11 +332,16 @@ body::after {
     top: calc(100% + 6px);
     left: 50%;
     transform: translateX(-50%);
-    white-space: nowrap;
+    /* Wrap long tips into a tidy box instead of one over-wide line. Short tips
+       still sit on a single line (max-width only wraps when needed). */
+    white-space: normal;
+    max-width: 220px;
+    width: max-content;
+    text-align: center;
     background: #173a7a;
     color: #f6efcb;
     font-size: 11px;
-    line-height: 1;
+    line-height: 1.35;
     padding: 5px 8px;
     border-radius: 6px;
     box-shadow: 0 6px 20px -10px rgba(22, 35, 74, 0.6);
