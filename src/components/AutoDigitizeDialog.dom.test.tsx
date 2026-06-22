@@ -153,6 +153,15 @@ describe("AutoDigitizeDialog (live preview)", () => {
     expect(project.objects.every((o) => ids.has(o.colorId))).toBe(true);
   });
 
+  it("matches the palette to real threads, stamping brand + code on the applied colors", async () => {
+    const onApply = renderDialog();
+    await waitForColors();
+    fireEvent.click(screen.getByRole("button", { name: /Match to thread colors/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Add to design/ }));
+    const project = onApply.mock.calls[0][0] as Project;
+    expect(project.colors.every((c) => c.brand && c.code)).toBe(true);
+  });
+
   it("disables Add to design when every color is dropped", async () => {
     renderDialog();
     await waitForColors();
