@@ -315,6 +315,20 @@ describe("imageDataToObjects (real imagetracerjs)", () => {
     for (const o of objects) expect(o.paths[0].length).toBeGreaterThanOrEqual(2);
   });
 
+  it("detail level controls despeckling: 'smooth' drops small stray pieces 'detailed' keeps", () => {
+    // A red field with several tiny blue specks scattered in it. At 1mm/px each
+    // 2×2 speck is ~4mm² — kept at "detailed" (minArea 0.4), dropped at "smooth"
+    // (minArea 3). The big red region survives in both.
+    const specks = [[4, 4], [10, 4], [4, 10], [10, 10]];
+    const img = image(20, 20, (x, y) =>
+      specks.some(([sx, sy]) => x >= sx && x < sx + 2 && y >= sy && y < sy + 2) ? [30, 60, 200] : [220, 30, 30],
+    );
+    const opts = { mmPerPx: 1, removeBackground: false } as const;
+    const detailed = imageDataToObjects(img, 2, { ...opts, detail: "detailed" });
+    const smooth = imageDataToObjects(img, 2, { ...opts, detail: "smooth" });
+    expect(detailed.objects.length).toBeGreaterThan(smooth.objects.length);
+  });
+
   // Build an RGBA ImageData (paint returns [r,g,b,a]) — a:0 is a see-through pixel.
   function imageRGBA(
     w: number,

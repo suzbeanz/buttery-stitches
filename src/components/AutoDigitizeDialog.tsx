@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Eye, EyeOff, Minus, Plus } from "lucide-react";
 import type { EmbObject, Hoop, Project, ThreadColor } from "../types/project";
 import { loadImageData } from "../lib/image";
-import { imageDataToObjects, estimateColorComplexity, suggestColorCount } from "../lib/trace";
+import { imageDataToObjects, estimateColorComplexity, suggestColorCount, type DigitizeDetail } from "../lib/trace";
 import { ocrWords } from "../lib/trace/ocr";
 import { recognizeTextObjects, applyTextRecognition } from "../lib/trace/textRecognize";
 import { loadFont, DEFAULT_FONT_ID } from "../lib/text/fonts";
@@ -51,6 +51,7 @@ export default function AutoDigitizeDialog({
   const [numColors, setNumColors] = useState(4);
   const [userSetColors, setUserSetColors] = useState(false);
   const [removeBackground, setRemoveBackground] = useState(true);
+  const [detail, setDetail] = useState<DigitizeDetail>("balanced");
   const [recognizeText, setRecognizeText] = useState(false);
   const [updating, setUpdating] = useState(true); // a trace is in flight
   const [error, setError] = useState<string | null>(null);
@@ -105,6 +106,7 @@ export default function AutoDigitizeDialog({
           offsetX,
           offsetY,
           removeBackground,
+          detail,
         });
 
         let finalObjects = objects;
@@ -146,7 +148,7 @@ export default function AutoDigitizeDialog({
       alive = false;
       clearTimeout(handle);
     };
-  }, [imageData, numColors, removeBackground, recognizeText, hoop.wMm, hoop.hMm]);
+  }, [imageData, numColors, removeBackground, detail, recognizeText, hoop.wMm, hoop.hMm]);
 
   const colorById = useMemo(
     () => new Map((result?.colors ?? []).map((c) => [c.id, c] as const)),
@@ -284,6 +286,29 @@ export default function AutoDigitizeDialog({
         <p className="mb-3 text-[11px] text-navy/55">
           More colors catch finer detail and thin parts (and add thread changes); fewer keep it bold
           and simple. Logos look best at 3–5; try 6–8 for a busy photo. The preview updates as you change this.
+        </p>
+
+        {/* Detail level — steers trace smoothing, simplification, and despeckling. */}
+        <div className="mb-1 flex items-center justify-between">
+          <span className="text-sm text-navy">Detail</span>
+          <div className="inline-flex overflow-hidden rounded-sm border-2 border-ink/30" role="group" aria-label="Detail level">
+            {([["smooth", "Smoother"], ["balanced", "Balanced"], ["detailed", "Detailed"]] as const).map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => setDetail(value)}
+                aria-pressed={detail === value}
+                className={`px-3 py-1 font-label text-[11px] font-semibold uppercase tracking-wide transition ${
+                  detail === value ? "bg-ink text-cream" : "bg-cream text-navy/70 hover:bg-butter-200"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="mb-3 text-[11px] text-navy/55">
+          Smoother keeps it bold and drops tiny stray pieces; Detailed catches fine lines and small
+          features (more stitches and thread stops). The preview updates as you change this.
         </p>
 
         <label className="mb-2 flex items-center gap-2 text-sm text-navy">

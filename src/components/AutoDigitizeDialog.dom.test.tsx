@@ -78,6 +78,19 @@ describe("AutoDigitizeDialog (live preview)", () => {
     );
   });
 
+  it("re-traces when the detail level changes", async () => {
+    renderDialog();
+    await waitForColors();
+    const before = vi.mocked(imageDataToObjects).mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Detailed" }));
+    await waitFor(() =>
+      expect(vi.mocked(imageDataToObjects).mock.calls.length).toBeGreaterThan(before),
+    );
+    // the detail choice reaches the tracer
+    const lastOpts = vi.mocked(imageDataToObjects).mock.calls.at(-1)?.[2];
+    expect(lastOpts?.detail).toBe("detailed");
+  });
+
   it("toggling a color updates the preview WITHOUT re-tracing", async () => {
     renderDialog();
     await waitForColors();

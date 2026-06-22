@@ -56,7 +56,14 @@ export interface DigitizeOptions {
   removeBackground?: boolean;
   /** the detected background RGB (from the image border); falls back to area. */
   backgroundRgb?: [number, number, number];
+  /** how much fine detail to keep vs how bold/clean to simplify (default
+   *  "balanced"). Drives trace smoothing, path simplification, and despeckling
+   *  together; explicit simplifyTolMm/minAreaMm2 still override. */
+  detail?: DigitizeDetail;
 }
+
+/** Detail level for auto-digitize: bolder & cleaner ↔ finer & busier. */
+export type DigitizeDetail = "smooth" | "balanced" | "detailed";
 
 export interface DigitizeResult {
   colors: ThreadColor[];
@@ -282,6 +289,21 @@ const TRACE_OPTIONS = {
 };
 
 /**
+ * Per-detail-level knobs. "balanced" matches the long-standing defaults. Higher
+ * `pathomit`/`blurradius`/`ltres`/`qtres` and a larger min-area drop tiny pieces
+ * and smooth the pixel staircase (bolder, fewer thread stops); lower values keep
+ * fine lines and small features (busier, more stitches).
+ */
+const DETAIL_PRESETS: Record<
+  DigitizeDetail,
+  { pathomit: number; blurradius: number; ltres: number; qtres: number; simplifyTolMm: number; minAreaMm2: number }
+> = {
+  smooth: { pathomit: 16, blurradius: 3, ltres: 1.5, qtres: 1.5, simplifyTolMm: 0.5, minAreaMm2: 3 },
+  balanced: { pathomit: 8, blurradius: 1, ltres: 1, qtres: 1, simplifyTolMm: 0.3, minAreaMm2: 1 },
+  detailed: { pathomit: 3, blurradius: 0, ltres: 0.5, qtres: 0.5, simplifyTolMm: 0.15, minAreaMm2: 0.4 },
+};
+
+/**
  * Full auto-digitize: a raster segmentation pre-pass (median-cut quantization
  * flattens the photo/logo to N solid colors) followed by tracing each color into
  * a solid fill. Flattening first is what makes the result look like real
@@ -315,11 +337,25 @@ export function imageDataToObjects(
   // layer to absorb those pixels — tracedataToObjects drops a:0 layers — and skip the
   // opaque background hunt, which would otherwise mis-drop the largest real colour.
   if (transparentBg) pal.push({ r: 0, g: 0, b: 0, a: 0 });
+  // Detail level steers trace smoothing/omission AND the downstream
+  // simplify/despeckle defaults together. Explicit opts still override the preset.
+  const preset = DETAIL_PRESETS[opts.detail ?? "balanced"];
   const td = ImageTracer.imagedataToTracedata(
     { width: flat.width, height: flat.height, data: flat.data } as ImageData,
-    { ...TRACE_OPTIONS, pal, colorsampling: 0, numberofcolors: pal.length },
+    {
+      ...TRACE_OPTIONS,
+      pathomit: preset.pathomit,
+      blurradius: preset.blurradius,
+      ltres: preset.ltres,
+      qtres: preset.qtres,
+      pal,
+      colorsampling: 0,
+      numberofcolors: pal.length,
+    },
   ) as Tracedata;
   return tracedataToObjects(td, {
+    simplifyTolMm: preset.simplifyTolMm,
+    minAreaMm2: preset.minAreaMm2,
     ...opts,
     backgroundRgb,
     removeBackground: transparentBg ? false : opts.removeBackground,
