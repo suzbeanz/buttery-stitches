@@ -163,6 +163,16 @@ describe("PropertiesPanel", () => {
     expect(d2).toBeGreaterThanOrEqual(0.1);
   });
 
+  it("nudges a numeric param with the branded + / − steppers", () => {
+    const { fillId } = seedSelectedFill();
+    render(<PropertiesPanel />);
+    const input = screen.getByText(/Density/i).closest("label")!.querySelector("input") as HTMLInputElement;
+    const shown = Number(input.value); // the displayed (default) density
+    fireEvent.click(screen.getByRole("button", { name: /Increase Density/i }));
+    const after = useProjectStore.getState().project.objects.find((o) => o.id === fillId)!.params.density!;
+    expect(after).toBeGreaterThan(shown);
+  });
+
   it("tucks the carve/appliqué controls behind the Advanced fill disclosure", () => {
     seedSelectedFill();
     render(<PropertiesPanel />);
