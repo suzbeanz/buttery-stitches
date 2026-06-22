@@ -73,7 +73,8 @@ describe("authored alphabet (flagship Oswald)", () => {
   it("the authored centerlines build a satin that covers the glyph", () => {
     // Each authored seed, snapped to the real outline, must yield columns that
     // cover the letter — the gate the engine uses before preferring them.
-    for (const ch of ["A", "W", "K", "V", "N", "X", "Y", "Z", "M", "B", "n", "u", "r", "h", "m", "b", "d", "D", "P", "R"]) {
+    for (const ch of ["A", "W", "K", "V", "N", "X", "Y", "Z", "M", "B", "n", "u", "r", "h", "m", "b", "d", "D", "P", "R",
+      "E", "F", "H", "L", "T", "U", "G", "a", "f", "g", "p", "q", "t", "7"]) {
       const { object } = layoutText({ text: ch, font: oswald, heightMm: 18, colorId: "c1", fontId: "oswald" });
       const region = splitFillRegions(object.paths)[0];
       const seeds = (object.satinCenterlines ?? []).filter((cl) =>
