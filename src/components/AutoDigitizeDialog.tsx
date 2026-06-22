@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Eye, EyeOff, Minus, Plus } from "lucide-react";
 import type { EmbObject, Hoop, Project, ThreadColor } from "../types/project";
 import { loadImageData } from "../lib/image";
@@ -11,7 +11,10 @@ import { mergeSimilarColors, consolidateFringeColors } from "../lib/thread/reduc
 import { matchColorsToChart } from "../lib/thread/match";
 import { THREAD_CHARTS } from "../lib/thread/catalog";
 import { pathsBounds } from "../lib/geometry";
-import { ringsToSvgPath } from "../lib/svgPath";
+import { generateDesign } from "../lib/engine";
+import { designToSegments } from "../lib/engine/render";
+import { drawStitches } from "../lib/render-stitches";
+import { createEmptyProject } from "../lib/project";
 import { useEscapeToClose, useDialogFocus } from "./useEscapeToClose";
 
 /**
@@ -511,9 +514,11 @@ function StepBtn({
   );
 }
 
-/** A small SVG preview of the kept traced regions, colored by thread (even-odd so
- *  holes/counters show). Fits the design to the box; updates as colors are toggled.
- *  A veil dims it while a fresh trace is in flight. */
+/** A live preview of the kept regions sewn by the REAL engine — the same stitches
+ *  the canvas and simulator produce (bold bean outlines, satin columns, tatami
+ *  fills), drawn with the shared TrueView painter so "what you see is what you'll
+ *  get". Fits the design to the box and re-renders as colors/styles change. A veil
+ *  dims it while a fresh trace is in flight. */
 function DigitizePreview({
   objects,
   colorById,
@@ -523,34 +528,74 @@ function DigitizePreview({
   colorById: Map<string, ThreadColor>;
   updating: boolean;
 }) {
-  const box = useMemo(() => {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const { segs, box } = useMemo(() => {
     const b = pathsBounds(objects.flatMap((o) => o.paths));
-    if (!b) return null;
+    if (!b) return { segs: [], box: null as null | { minX: number; minY: number; w: number; h: number } };
     const pad = 2;
-    return { minX: b.minX - pad, minY: b.minY - pad, w: b.maxX - b.minX + pad * 2, h: b.maxY - b.minY + pad * 2 };
+    const box = { minX: b.minX - pad, minY: b.minY - pad, w: b.maxX - b.minX + pad * 2, h: b.maxY - b.minY + pad * 2 };
+    const design = generateDesign({
+      ...createEmptyProject(),
+      objects: objects.map((o) => ({ ...o, visible: true })),
+    });
+    return { segs: designToSegments(design), box };
   }, [objects]);
 
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const wrap = wrapRef.current;
+    if (!canvas || !wrap || !box) return;
+    const draw = () => {
+      // getContext returns null with no 2d support, and jsdom throws outright — in
+      // either case there's nothing to paint (the kept-object count is still exposed
+      // via the data attribute for tests).
+      let ctx: CanvasRenderingContext2D | null = null;
+      try {
+        ctx = canvas.getContext("2d");
+      } catch {
+        return;
+      }
+      if (!ctx) return;
+      const cssW = wrap.clientWidth || 1;
+      const cssH = wrap.clientHeight || 1;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(cssW * dpr);
+      canvas.height = Math.round(cssH * dpr);
+      canvas.style.width = `${cssW}px`;
+      canvas.style.height = `${cssH}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssW, cssH);
+      const scale = Math.min(cssW / box.w, cssH / box.h);
+      const offX = (cssW - box.w * scale) / 2;
+      const offY = (cssH - box.h * scale) / 2;
+      const px = (x: number) => offX + (x - box.minX) * scale;
+      const py = (y: number) => offY + (y - box.minY) * scale;
+      const threadPx = Math.min(4, Math.max(1.2, scale * 0.42));
+      drawStitches(ctx, segs, { colorById, px, py, threadPx, realistic: true });
+    };
+    draw();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(draw);
+    ro.observe(wrap);
+    return () => ro.disconnect();
+  }, [segs, box, colorById]);
+
   return (
-    <div className="relative flex h-40 items-center justify-center rounded border border-navy/10 bg-white">
+    <div
+      ref={wrapRef}
+      data-preview
+      data-preview-objects={objects.length}
+      className="relative flex h-40 items-center justify-center overflow-hidden rounded border border-navy/10 bg-white"
+    >
       {box ? (
-        <svg data-preview viewBox={`${box.minX} ${box.minY} ${box.w} ${box.h}`} className="max-h-full max-w-full" preserveAspectRatio="xMidYMid meet">
-          {objects.map((o) => {
-            const c = colorById.get(o.colorId);
-            const col = c ? `rgb(${c.rgb.join(",")})` : "#888";
-            // "Outline" objects (running) preview as a stroked path, not a fill, so
-            // the chosen stitch style reads at a glance.
-            return o.type === "running" ? (
-              <path key={o.id} d={ringsToSvgPath(o.paths)} fill="none" stroke={col} strokeWidth={0.8} strokeLinejoin="round" />
-            ) : (
-              <path key={o.id} d={ringsToSvgPath(o.paths)} fill={col} fillRule="evenodd" />
-            );
-          })}
-        </svg>
+        <canvas ref={canvasRef} className="h-full w-full" />
       ) : (
         !updating && <span className="text-[12px] text-navy/40">Nothing to preview</span>
       )}
       {updating && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-white/70">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-white/70" aria-live="polite">
           <span className="font-mono text-[11px] text-ink">Updating…</span>
           <div className="h-[3px] w-24 overflow-hidden rounded-full bg-ink/10">
             <div className="anim-indeterminate h-full w-1/3 rounded-full bg-stamp" />
