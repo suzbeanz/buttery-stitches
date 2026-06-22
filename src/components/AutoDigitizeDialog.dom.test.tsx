@@ -181,6 +181,7 @@ describe("AutoDigitizeDialog (live preview)", () => {
     fireEvent.input(screen.getByLabelText(/Recolor Green/) as HTMLInputElement, {
       target: { value: "#e74637" }, // ≈ rgb(231,70,55), within ΔE of Red
     });
+    fireEvent.click(screen.getByRole("button", { name: /Advanced options/ }));
     fireEvent.click(screen.getByRole("button", { name: /Merge similar shades/ }));
     await waitFor(() =>
       expect(screen.queryAllByRole("button", { name: /tap to (keep|skip)/ }).length).toBe(2),
@@ -195,6 +196,7 @@ describe("AutoDigitizeDialog (live preview)", () => {
   it("matches the palette to real threads, stamping brand + code on the applied colors", async () => {
     const onApply = renderDialog();
     await waitForColors();
+    fireEvent.click(screen.getByRole("button", { name: /Advanced options/ }));
     fireEvent.click(screen.getByRole("button", { name: /Match to thread colors/ }));
     fireEvent.click(screen.getByRole("button", { name: /Add to design/ }));
     const project = onApply.mock.calls[0][0] as Project;
@@ -204,6 +206,9 @@ describe("AutoDigitizeDialog (live preview)", () => {
   it("applies a per-color stitch style: Outline → running, Satin → satin fill", async () => {
     const onApply = renderDialog();
     await waitForColors();
+    // Per-color stitch style lives under Advanced options.
+    expect(screen.queryByLabelText(/Stitch style for Red/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Advanced options/ }));
     fireEvent.change(screen.getByLabelText(/Stitch style for Red/) as HTMLSelectElement, {
       target: { value: "outline" },
     });
@@ -217,6 +222,20 @@ describe("AutoDigitizeDialog (live preview)", () => {
     expect(red?.type).toBe("running");
     expect(green?.type).toBe("fill");
     expect(green?.params.fillStyle).toBe("satin");
+  });
+
+  it("keeps the first view calm — power tools hidden until Advanced is opened", async () => {
+    renderDialog();
+    await waitForColors();
+    // Basics are grouped; power tools (merge/match, per-color style) start hidden.
+    expect(screen.getByText("Basics")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Merge similar shades/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Match to thread colors/ })).toBeNull();
+    expect(screen.queryByLabelText(/Stitch style for Red/)).toBeNull();
+    // Opening Advanced reveals them.
+    fireEvent.click(screen.getByRole("button", { name: /Advanced options/ }));
+    expect(screen.getByRole("button", { name: /Match to thread colors/ })).toBeTruthy();
+    expect(screen.getByLabelText(/Stitch style for Red/)).toBeTruthy();
   });
 
   it("disables Add to design when every color is dropped", async () => {

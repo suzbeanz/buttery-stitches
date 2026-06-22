@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Eye, EyeOff, Minus, Plus } from "lucide-react";
+import { AlertTriangle, ChevronDown, Eye, EyeOff, Minus, Plus } from "lucide-react";
 import type { EmbObject, Hoop, Project, ThreadColor } from "../types/project";
 import { loadImageData } from "../lib/image";
 import { imageDataToObjects, estimateColorComplexity, suggestColorCount, type DigitizeDetail } from "../lib/trace";
@@ -69,6 +69,9 @@ export default function AutoDigitizeDialog({
   const [removeBackground, setRemoveBackground] = useState(true);
   const [detail, setDetail] = useState<DigitizeDetail>("balanced");
   const [recognizeText, setRecognizeText] = useState(false);
+  // Power tools (per-color stitch style, palette merge/match) stay tucked until
+  // asked for, so the first view is calm and most users never need them.
+  const [advanced, setAdvanced] = useState(false);
   const [updating, setUpdating] = useState(true); // a trace is in flight
   const [error, setError] = useState<string | null>(null);
   // The live trace result. Re-runs (debounced) whenever the settings change.
@@ -269,7 +272,7 @@ export default function AutoDigitizeDialog({
     // Click-outside closes; keyboard users dismiss with Escape (useEscapeToClose).
     // eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
     <div
-      className="anim-scrim-in fixed inset-0 z-50 flex items-center justify-center bg-navy/40 p-4"
+      className="anim-scrim-in fixed inset-0 z-50 flex items-center justify-center bg-navy/40 p-2 sm:p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -280,7 +283,7 @@ export default function AutoDigitizeDialog({
         aria-modal="true"
         tabIndex={-1}
         aria-label="Turn an image into stitches"
-        className="anim-press-in max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-4 shadow-press outline-none"
+        className="anim-press-in max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-3 shadow-press outline-none sm:p-5"
       >
         <h2 className="mb-3 font-label text-lg font-semibold uppercase tracking-[0.08em] text-navy">
           Turn an image into stitches
@@ -292,7 +295,7 @@ export default function AutoDigitizeDialog({
             <figcaption className="mb-1 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/50">
               Your image
             </figcaption>
-            <div className="flex h-40 items-center justify-center rounded border border-navy/10 bg-[repeating-conic-gradient(#eee_0_25%,#fff_0_50%)] bg-[length:16px_16px] p-2">
+            <div className="flex h-28 items-center justify-center rounded border border-navy/10 bg-[repeating-conic-gradient(#eee_0_25%,#fff_0_50%)] bg-[length:16px_16px] p-2 sm:h-40">
               {/* eslint-disable-next-line jsx-a11y/img-redundant-alt */}
               <img src={previewUrl} alt="Image to digitize" className="max-h-full max-w-full object-contain" />
             </div>
@@ -316,64 +319,75 @@ export default function AutoDigitizeDialog({
           </p>
         )}
 
-        {/* Colors stepper. */}
-        <div className="mb-1 flex items-center justify-between">
-          <span className="text-sm text-navy">Colors</span>
-          <div className="flex items-center gap-2">
-            <StepBtn label="Fewer colors" onClick={() => setColors(numColors - 1)} disabled={numColors <= MIN_COLORS}>
-              <Minus size={15} />
-            </StepBtn>
-            <span className="w-6 text-center text-sm font-semibold tabular-nums text-navy">{numColors}</span>
-            <StepBtn label="More colors" onClick={() => setColors(numColors + 1)} disabled={numColors >= MAX_COLORS}>
-              <Plus size={15} />
-            </StepBtn>
+        {/* BASICS — the few controls most designs need, grouped so the dialog
+            reads calm and "ready to apply" at a glance. */}
+        <fieldset className="mb-4 rounded-sm border-2 border-ink/15 bg-butter-50 p-3">
+          <legend className="px-1 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/50">
+            Basics
+          </legend>
+
+          {/* Colors stepper. */}
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-sm text-navy">Colors</span>
+            <div className="flex items-center gap-2">
+              <StepBtn label="Fewer colors" onClick={() => setColors(numColors - 1)} disabled={numColors <= MIN_COLORS}>
+                <Minus size={15} />
+              </StepBtn>
+              <span className="w-6 text-center text-sm font-semibold tabular-nums text-navy">{numColors}</span>
+              <StepBtn label="More colors" onClick={() => setColors(numColors + 1)} disabled={numColors >= MAX_COLORS}>
+                <Plus size={15} />
+              </StepBtn>
+            </div>
           </div>
-        </div>
-        <p className="mb-3 text-[11px] text-navy/55">
-          More colors catch finer detail and thin parts (and add thread changes); fewer keep it bold
-          and simple. Logos look best at 3–5; try 6–8 for a busy photo. The preview updates as you change this.
-        </p>
+          <p className="mb-3 text-[11px] text-navy/55">
+            More colors catch finer detail and thin parts (and add thread changes); fewer keep it bold
+            and simple. Logos look best at 3–5; try 6–8 for a busy photo. The preview updates as you change this.
+          </p>
 
-        {/* Detail level — steers trace smoothing, simplification, and despeckling. */}
-        <div className="mb-1 flex items-center justify-between">
-          <span className="text-sm text-navy">Detail</span>
-          <div className="inline-flex overflow-hidden rounded-sm border-2 border-ink/30" role="group" aria-label="Detail level">
-            {([["smooth", "Smoother"], ["balanced", "Balanced"], ["detailed", "Detailed"]] as const).map(([value, label]) => (
-              <button
-                key={value}
-                onClick={() => setDetail(value)}
-                aria-pressed={detail === value}
-                className={`px-3 py-1 font-label text-[11px] font-semibold uppercase tracking-wide transition ${
-                  detail === value ? "bg-ink text-cream" : "bg-cream text-navy/70 hover:bg-butter-200"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+          {/* Detail level — steers trace smoothing, simplification, and despeckling. */}
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-sm text-navy">Detail</span>
+            <div className="inline-flex overflow-hidden rounded-sm border-2 border-ink/30" role="group" aria-label="Detail level">
+              {([["smooth", "Smoother"], ["balanced", "Balanced"], ["detailed", "Detailed"]] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => setDetail(value)}
+                  aria-pressed={detail === value}
+                  className={`px-3 py-1 font-label text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ink ${
+                    detail === value ? "bg-ink text-cream" : "bg-cream text-navy/70 hover:bg-butter-200"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-        <p className="mb-3 text-[11px] text-navy/55">
-          Smoother keeps it bold and drops tiny stray pieces; Detailed catches fine lines and small
-          features (more stitches and thread stops). The preview updates as you change this.
-        </p>
+          <p className="mb-3 text-[11px] text-navy/55">
+            Smoother keeps it bold and drops tiny stray pieces; Detailed catches fine lines and small
+            features (more stitches and thread stops). The preview updates as you change this.
+          </p>
 
-        <label className="mb-2 flex items-center gap-2 text-sm text-navy">
-          <input type="checkbox" checked={removeBackground} onChange={(e) => setRemoveBackground(e.target.checked)} className="accent-ink" />
-          Remove background
-        </label>
+          <label className="flex items-center gap-2 text-sm text-navy">
+            <input type="checkbox" checked={removeBackground} onChange={(e) => setRemoveBackground(e.target.checked)} className="accent-ink" />
+            Remove background
+          </label>
+          <p className="mb-2 ml-6 text-[11px] text-navy/55">
+            Turns the flat backdrop transparent so only the subject is stitched.
+          </p>
 
-        <label className="mb-1 flex items-center gap-2 text-sm text-navy">
-          <input type="checkbox" checked={recognizeText} onChange={(e) => setRecognizeText(e.target.checked)} className="accent-ink" />
-          Recognize text as lettering
-        </label>
-        <p className="mb-4 ml-6 text-[11px] text-navy/55">
-          Re-sets words in a clean satin font instead of tracing their pixels. Best on clear,
-          horizontal logo text; loads a recognizer the first time.
-        </p>
+          <label className="flex items-center gap-2 text-sm text-navy">
+            <input type="checkbox" checked={recognizeText} onChange={(e) => setRecognizeText(e.target.checked)} className="accent-ink" />
+            Recognize text as lettering
+          </label>
+          <p className="ml-6 text-[11px] text-navy/55">
+            Re-sets words in a clean satin font instead of tracing their pixels. Best on clear,
+            horizontal logo text; loads a recognizer the first time.
+          </p>
+        </fieldset>
 
         {/* Color list — tap to keep or skip; the preview updates instantly. */}
         {result && result.colors.length > 0 && (
-          <div className="mb-3">
+          <div className="mb-4 rounded-sm border-2 border-ink/15 bg-butter-50 p-3">
             <p className="mb-1.5 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/50">
               Colors found — recolor or rename a shade, or skip a stray one
             </p>
@@ -385,7 +399,7 @@ export default function AutoDigitizeDialog({
                 return (
                   <div
                     key={c.id}
-                    className={`flex items-center gap-2 rounded-sm border-2 px-2 py-1.5 text-sm transition ${
+                    className={`flex flex-wrap items-center gap-x-2 gap-y-1 rounded-sm border-2 px-2 py-1.5 text-sm transition ${
                       kept ? "border-ink bg-butter-200 text-navy" : "border-ink/20 bg-cream text-navy/45"
                     }`}
                   >
@@ -408,27 +422,29 @@ export default function AutoDigitizeDialog({
                       }}
                       onBlur={(e) => rename(c.id, e.target.value)}
                       aria-label={`Rename ${c.name ?? rgbStr}`}
-                      className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 outline-none focus:bg-cream focus:ring-1 focus:ring-ink/40"
+                      className="min-w-0 flex-1 basis-24 truncate rounded-sm bg-transparent px-1 py-0.5 outline-none focus:bg-cream focus:ring-1 focus:ring-ink/40"
                     />
                     <span className="tabular-nums text-[11px] text-navy/50">
                       {regions} region{regions === 1 ? "" : "s"}
                     </span>
-                    {/* per-color stitch style: auto / satin (smooth) / outline (running) */}
-                    <select
-                      value={styleById[c.id] ?? "auto"}
-                      onChange={(e) => setStyle(c.id, e.target.value as StitchStyle)}
-                      aria-label={`Stitch style for ${c.name ?? rgbStr}`}
-                      className="shrink-0 appearance-none rounded-sm border border-ink/30 bg-cream px-1.5 py-0.5 text-[11px] text-navy outline-none focus:ring-1 focus:ring-ink/40"
-                    >
-                      <option value="auto">Auto</option>
-                      <option value="satin">Satin</option>
-                      <option value="outline">Outline</option>
-                    </select>
+                    {/* per-color stitch style (advanced): auto / satin / outline */}
+                    {advanced && (
+                      <select
+                        value={styleById[c.id] ?? "auto"}
+                        onChange={(e) => setStyle(c.id, e.target.value as StitchStyle)}
+                        aria-label={`Stitch style for ${c.name ?? rgbStr}`}
+                        className="shrink-0 appearance-none rounded-sm border border-ink/30 bg-cream px-1.5 py-0.5 text-[11px] text-navy outline-none focus:ring-1 focus:ring-ink/40"
+                      >
+                        <option value="auto">Auto</option>
+                        <option value="satin">Satin</option>
+                        <option value="outline">Outline</option>
+                      </select>
+                    )}
                     <button
                       onClick={() => toggleColor(c.id)}
                       aria-pressed={kept}
                       aria-label={`${c.name ?? rgbStr} — tap to ${kept ? "skip" : "keep"}`}
-                      className="flex shrink-0 items-center gap-1"
+                      className="flex shrink-0 items-center gap-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
                     >
                       {kept ? (
                         <Eye size={15} className="text-navy/60" aria-hidden />
@@ -443,22 +459,36 @@ export default function AutoDigitizeDialog({
                 );
               })}
             </div>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {result.colors.length > 1 && (
+
+            {/* Power tools — per-color stitch style (above) plus palette merge/match
+                — stay tucked behind this toggle so the list reads calm by default. */}
+            <button
+              onClick={() => setAdvanced((v) => !v)}
+              aria-expanded={advanced}
+              className="mt-2 flex items-center gap-1 rounded-sm font-label text-[10px] font-semibold uppercase tracking-wide text-navy/60 transition hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
+            >
+              <ChevronDown size={13} className={`transition-transform ${advanced ? "rotate-180" : ""}`} aria-hidden />
+              Advanced options
+            </button>
+
+            {advanced && (
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {result.colors.length > 1 && (
+                  <button
+                    onClick={mergeSimilar}
+                    className="rounded-sm border-2 border-ink/40 px-2.5 py-1 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/70 transition hover:border-ink hover:bg-butter-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
+                  >
+                    Merge similar shades
+                  </button>
+                )}
                 <button
-                  onClick={mergeSimilar}
-                  className="rounded-sm border-2 border-ink/40 px-2.5 py-1 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/70 transition hover:border-ink hover:bg-butter-200"
+                  onClick={matchToThreads}
+                  className="rounded-sm border-2 border-ink/40 px-2.5 py-1 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/70 transition hover:border-ink hover:bg-butter-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
                 >
-                  Merge similar shades
+                  Match to thread colors
                 </button>
-              )}
-              <button
-                onClick={matchToThreads}
-                className="rounded-sm border-2 border-ink/40 px-2.5 py-1 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/70 transition hover:border-ink hover:bg-butter-200"
-              >
-                Match to thread colors
-              </button>
-            </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -507,7 +537,7 @@ function StepBtn({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="grid h-7 w-7 place-items-center rounded-sm border-2 border-ink text-ink hover:bg-butter-200 disabled:opacity-30 disabled:hover:bg-transparent"
+      className="grid h-7 w-7 place-items-center rounded-sm border-2 border-ink text-ink hover:bg-butter-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink disabled:opacity-30 disabled:hover:bg-transparent"
     >
       {children}
     </button>
@@ -587,7 +617,7 @@ function DigitizePreview({
       ref={wrapRef}
       data-preview
       data-preview-objects={objects.length}
-      className="relative flex h-40 items-center justify-center overflow-hidden rounded border border-navy/10 bg-white"
+      className="relative flex h-28 items-center justify-center overflow-hidden rounded border border-navy/10 bg-white sm:h-40"
     >
       {box ? (
         <canvas ref={canvasRef} className="h-full w-full" />
