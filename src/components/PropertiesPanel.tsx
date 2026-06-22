@@ -19,6 +19,8 @@ import {
   Split,
   Spline,
   Magnet,
+  Minus,
+  Plus,
   Trash2,
   Check,
 } from "lucide-react";
@@ -371,7 +373,7 @@ function ObjectProperties({
         <select
           value={object.type}
           onChange={(e) => onType(e.target.value as EmbObject["type"])}
-          className="input"
+          className="select"
         >
           <option value="running">Running</option>
           <option value="satin">Satin</option>
@@ -396,7 +398,7 @@ function ObjectProperties({
             <select
               value={p.beanRepeats ?? DEFAULT_PARAMS.beanRepeats}
               onChange={(e) => onParam({ beanRepeats: Number(e.target.value) })}
-              className="input"
+              className="select"
             >
               <option value={0}>Single</option>
               <option value={3}>Bold — triple (3×)</option>
@@ -408,7 +410,7 @@ function ObjectProperties({
             <select
               value={p.motifRun ?? "none"}
               onChange={(e) => onParam({ motifRun: e.target.value })}
-              className="input"
+              className="select"
             >
               <option value="none">None (plain line)</option>
               {MOTIFS.map((m) => (
@@ -467,7 +469,7 @@ function ObjectProperties({
                   : p.blendColorId;
               onParam({ fillStyle, blendColorId });
             }}
-            className="input"
+            className="select"
           >
             <option value="tatami">Solid fill (tatami)</option>
             <option value="satin">Satin columns</option>
@@ -496,7 +498,7 @@ function ObjectProperties({
             <select
               value={p.motif ?? DEFAULT_PARAMS.motif}
               onChange={(e) => onParam({ motif: e.target.value })}
-              className="input"
+              className="select"
             >
               {MOTIFS.map((m) => (
                 <option key={m.id} value={m.id}>{m.name}</option>
@@ -519,7 +521,7 @@ function ObjectProperties({
             <select
               value={p.carve ?? "none"}
               onChange={(e) => onParam({ carve: e.target.value })}
-              className="input"
+              className="select"
             >
               <option value="none">None</option>
               {MOTIFS.map((m) => (
@@ -612,7 +614,7 @@ function ObjectProperties({
                 underlayWeight: e.target.value as "auto" | "light" | "standard" | "heavy",
               })
             }
-            className="input"
+            className="select"
           >
             <option value="auto">Auto (from fabric)</option>
             <option value="light">Light — edge only</option>
@@ -1000,21 +1002,45 @@ function NumberField({
     if (c !== value) onChange(c);
     setDraft(String(c)); // show the clamped value
   };
+  // Branded −/+ steppers: nudge by one step, snapped to 3 decimals so float math
+  // doesn't show "0.300000004". Commits immediately like an arrow-key nudge.
+  const stepBy = (dir: number) => {
+    const c = clamp(Math.round((value + dir * (step ?? 1)) * 1000) / 1000);
+    if (c !== value) onChange(c);
+  };
   return (
     <Field label={label}>
-      <input
-        type="number"
-        value={draft}
-        step={step}
-        min={min}
-        max={max}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-        }}
-        className="input"
-      />
+      <div className="flex items-stretch gap-1">
+        <button
+          type="button"
+          aria-label={`Decrease ${label}`}
+          onClick={() => stepBy(-1)}
+          className="grid w-7 shrink-0 place-items-center rounded-sm border-2 border-ink/70 text-ink hover:bg-butter-200"
+        >
+          <Minus size={14} />
+        </button>
+        <input
+          type="number"
+          value={draft}
+          step={step}
+          min={min}
+          max={max}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
+          className="input no-spin text-center"
+        />
+        <button
+          type="button"
+          aria-label={`Increase ${label}`}
+          onClick={() => stepBy(1)}
+          className="grid w-7 shrink-0 place-items-center rounded-sm border-2 border-ink/70 text-ink hover:bg-butter-200"
+        >
+          <Plus size={14} />
+        </button>
+      </div>
     </Field>
   );
 }
