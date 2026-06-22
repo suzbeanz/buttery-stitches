@@ -8,6 +8,8 @@ import { recognizeTextObjects, applyTextRecognition } from "../lib/trace/textRec
 import { loadFont, DEFAULT_FONT_ID } from "../lib/text/fonts";
 import { fixStitches } from "../lib/fix";
 import { mergeSimilarColors } from "../lib/thread/reduce";
+import { matchColorsToChart } from "../lib/thread/match";
+import { THREAD_CHARTS } from "../lib/thread/catalog";
 import { pathsBounds } from "../lib/geometry";
 import { ringsToSvgPath } from "../lib/svgPath";
 import { useEscapeToClose, useDialogFocus } from "./useEscapeToClose";
@@ -199,6 +201,13 @@ export default function AutoDigitizeDialog({
     setKeptIds(new Set(merged.colors.map((c) => c.id)));
   };
 
+  // Snap the traced palette to the nearest real threads (name + code + exact spool
+  // rgb), so the design lands ready to order instead of as raw scanned colors.
+  const matchToThreads = () => {
+    if (!result) return;
+    setResult({ ...result, colors: matchColorsToChart(result.colors, THREAD_CHARTS[0]) });
+  };
+
   /** Apply only the kept colors. Filtering by colorId needs no re-trace. */
   function apply() {
     if (!result) return;
@@ -386,14 +395,22 @@ export default function AutoDigitizeDialog({
                 );
               })}
             </div>
-            {result.colors.length > 1 && (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {result.colors.length > 1 && (
+                <button
+                  onClick={mergeSimilar}
+                  className="rounded-sm border-2 border-ink/40 px-2.5 py-1 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/70 transition hover:border-ink hover:bg-butter-200"
+                >
+                  Merge similar shades
+                </button>
+              )}
               <button
-                onClick={mergeSimilar}
-                className="mt-1.5 rounded-sm border-2 border-ink/40 px-2.5 py-1 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/70 transition hover:border-ink hover:bg-butter-200"
+                onClick={matchToThreads}
+                className="rounded-sm border-2 border-ink/40 px-2.5 py-1 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/70 transition hover:border-ink hover:bg-butter-200"
               >
-                Merge similar shades
+                Match to thread colors
               </button>
-            )}
+            </div>
           </div>
         )}
 
