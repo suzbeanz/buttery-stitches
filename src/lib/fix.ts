@@ -3,6 +3,7 @@ import { classifyRegion, isSmallRoundFill } from "./engine/classify";
 import { recognizeShape } from "./trace/recognize";
 import { knockdown, seamTrap } from "./boolean";
 import { polygonArea, polygonPerimeter } from "./trace/classify";
+import { pathsBounds } from "./geometry";
 
 /**
  * "Fix stitches": a smart auto-cleanup pass over a design. It walks an explicit
@@ -29,6 +30,38 @@ const LAYER_RANK: Record<EmbObject["type"], number> = { fill: 0, satin: 1, runni
 
 /** Width (mm) below which a fill reads as a stroke and should be satin. */
 export const SATIN_WIDTH_THRESHOLD = 3.5;
+
+/** A small detail needs no underlay — the foundation just adds bulk under a
+ *  feature too small to benefit. Suppress it when the shape's smaller bbox
+ *  dimension or its bbox area falls below these (pros skip underlay on tiny bits). */
+const UNDERLAY_MIN_DIM_MM = 2.5;
+const UNDERLAY_MIN_AREA_MM2 = 12;
+
+/** A genuine sub-millimetre speck: a fill tiny in BOTH min-dimension AND area —
+ *  trace noise, not a feature. Dropped so it doesn't sew as a lump (the area-only
+ *  despeckle in trace can miss a thin sliver). Thresholds are deliberately tight so
+ *  a real small mark (e.g. a 3.4 mm-long, 0.5 mm-tall detail) survives. */
+const SPECK_MIN_DIM_MM = 0.5;
+const SPECK_MIN_AREA_MM2 = 1.2;
+
+/** True when an object is small enough that underlay is just needless bulk. */
+function isSmallElement(paths: EmbObject["paths"]): boolean {
+  const b = pathsBounds(paths);
+  if (!b) return true;
+  const w = b.maxX - b.minX;
+  const h = b.maxY - b.minY;
+  return Math.min(w, h) < UNDERLAY_MIN_DIM_MM || w * h < UNDERLAY_MIN_AREA_MM2;
+}
+
+/** True when a fill is a genuine sub-mm speck that should be dropped. */
+function isSpeck(o: EmbObject): boolean {
+  if (o.type !== "fill" || o.paths.length === 0) return false;
+  const b = pathsBounds(o.paths);
+  if (!b) return true;
+  const minDim = Math.min(b.maxX - b.minX, b.maxY - b.minY);
+  const outer = o.paths.reduce((a, r) => (Math.abs(polygonArea(r)) > Math.abs(polygonArea(a)) ? r : a));
+  return minDim < SPECK_MIN_DIM_MM && Math.abs(polygonArea(outer)) < SPECK_MIN_AREA_MM2;
+}
 
 /** The fill style for a BROAD region (one the classifier called tatami):
  *  • a recognized round shape (circle / ellipse) → CONTOUR (concentric rows echo
@@ -126,13 +159,19 @@ export function fixObjectStitches(object: EmbObject): EmbObject {
   } else if (object.type === "satin") {
     params.density = clamp(params.density ?? 0.4, 0.3, 0.5);
     params.pullComp = clamp(params.pullComp ?? 0.2, 0, 0.6);
-    params.underlay = params.underlay ?? true;
+    // Underlay on by default, but suppressed for a small detail (just bulk there).
+    params.underlay = params.underlay ?? !isSmallElement(object.paths);
   } else {
-    // fill — default to a dense 0.35 mm row spacing (was 0.40) so solid areas read
-    // rich and opaque like professional output, not airy with fabric showing
-    // between rows; the floor drops to 0.30 mm so a user can push to premium-dense.
-    params.density = clamp(params.density ?? 0.35, 0.3, 0.5);
-    params.underlay = params.underlay ?? true;
+    // fill — density depends on role:
+    //  • a broad solid fill defaults to a dense 0.32 mm row spacing so areas read
+    //    rich and opaque like professional output, not airy with fabric showing;
+    //  • a line-art outline (rendered as a thin satin network) defaults to a lighter
+    //    0.40 mm — standard satin spacing that covers a thin band fully without
+    //    piling stitches into a heavy ridge (the outline is often the bulk of a
+    //    cartoon's stitch count). The floor stays 0.30 mm so a user can push denser.
+    params.density = clamp(params.density ?? (params.lineArt ? 0.4 : 0.32), 0.3, 0.5);
+    // Underlay on by default, but suppressed for a small detail (just bulk there).
+    params.underlay = params.underlay ?? !isSmallElement(object.paths);
     // SMART STITCH TREATMENT (geometry-driven, like a digitizer's eye):
     //  • thin strokes / rings / text → satin columns (shiny; the engine renders
     //    very-thin columns as running and falls back to tatami where satin won't
@@ -198,11 +237,15 @@ export function fixStitchesWithReport(project: Project): { project: Project; rep
     if (o.params.underlay !== true && f.params.underlay === true) underlayEnabled++;
   });
 
+  // Drop genuine sub-mm specks (trace noise the area-only despeckle can miss) so
+  // they don't sew as lumps. Done after the change report so its indices stay aligned.
+  const kept = fixed.filter((o) => !isSpeck(o));
+
   // Stable group by color: preserve first-seen color order and the relative
   // order within each color, but bring same-color objects together.
   const colorOrder = new Map<string, number>();
-  for (const o of fixed) if (!colorOrder.has(o.colorId)) colorOrder.set(o.colorId, colorOrder.size);
-  const grouped = fixed
+  for (const o of kept) if (!colorOrder.has(o.colorId)) colorOrder.set(o.colorId, colorOrder.size);
+  const grouped = kept
     .map((o, i) => ({ o, i }))
     .sort((a, b) => {
       const ca = colorOrder.get(a.o.colorId)!;
@@ -214,7 +257,7 @@ export function fixStitchesWithReport(project: Project): { project: Project; rep
       return a.i - b.i; // otherwise keep the drawn order (stable)
     })
     .map((x) => x.o);
-  const reordered = grouped.some((o, i) => o.id !== fixed[i].id);
+  const reordered = grouped.length !== fixed.length || grouped.some((o, i) => o.id !== kept[i].id);
 
   const trapped = knockdownPass(grouped);
   // knockdownPass returns the SAME object reference when it leaves a fill alone,
