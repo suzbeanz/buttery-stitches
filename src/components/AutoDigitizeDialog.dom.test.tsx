@@ -44,9 +44,15 @@ function renderDialog(onApply = vi.fn()) {
 }
 
 // The first trace runs after the image loads + the debounce; wait for the swatches.
+/** The canvas preview renders the real engine output; it exposes the kept-object
+ *  count as a data attribute so the (canvas-less) jsdom tests can assert on it. */
+function previewCount(): string | null {
+  return document.querySelector("[data-preview]")?.getAttribute("data-preview-objects") ?? null;
+}
+
 async function waitForColors() {
   await screen.findByRole("button", { name: /Red/ }, { timeout: 2000 });
-  await waitFor(() => expect(document.querySelectorAll("svg[data-preview] path")).toHaveLength(3));
+  await waitFor(() => expect(previewCount()).toBe("3"));
 }
 
 describe("AutoDigitizeDialog (live preview)", () => {
@@ -59,6 +65,9 @@ describe("AutoDigitizeDialog (live preview)", () => {
     // jsdom lacks object URLs.
     URL.createObjectURL = vi.fn(() => "blob:x");
     URL.revokeObjectURL = vi.fn();
+    // jsdom throws on canvas getContext; the preview guards on a null context, so
+    // stub it to null (the kept-object count is asserted via the data attribute).
+    HTMLCanvasElement.prototype.getContext = vi.fn(() => null) as never;
   });
 
   it("auto-traces and shows a swatch per color with region counts and a live preview", async () => {
@@ -68,7 +77,7 @@ describe("AutoDigitizeDialog (live preview)", () => {
     expect(screen.getByRole("button", { name: /Green/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Blue/ })).toBeTruthy();
     expect(screen.getAllByText("1 region")).toHaveLength(3);
-    expect(document.querySelectorAll("svg[data-preview] path")).toHaveLength(3);
+    expect(previewCount()).toBe("3");
   });
 
   it("consolidates near-duplicate fringe colors from the trace before showing them", async () => {
@@ -126,7 +135,7 @@ describe("AutoDigitizeDialog (live preview)", () => {
     await waitForColors();
     const before = vi.mocked(imageDataToObjects).mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: /Red/ })); // skip Red
-    await waitFor(() => expect(document.querySelectorAll("svg[data-preview] path")).toHaveLength(2));
+    await waitFor(() => expect(previewCount()).toBe("2"));
     expect(vi.mocked(imageDataToObjects).mock.calls.length).toBe(before); // pure filter
   });
 
@@ -134,7 +143,7 @@ describe("AutoDigitizeDialog (live preview)", () => {
     const onApply = renderDialog();
     await waitForColors();
     fireEvent.click(screen.getByRole("button", { name: /Red/ })); // skip Red
-    await waitFor(() => expect(document.querySelectorAll("svg[data-preview] path")).toHaveLength(2));
+    await waitFor(() => expect(previewCount()).toBe("2"));
     fireEvent.click(screen.getByRole("button", { name: /Add to design/ }));
     expect(onApply).toHaveBeenCalledTimes(1);
     const project = onApply.mock.calls[0][0] as Project;

@@ -47,6 +47,7 @@ import { mmToInch } from "../lib/units";
 import ContextMenu from "./ContextMenu";
 import { designFor, orientByDepth } from "../lib/engine";
 import { designToSegments, needleAt } from "../lib/engine/render";
+import { drawStitches } from "../lib/render-stitches";
 
 /**
  * Center canvas: the hoop, butter-stick measurement rulers, all stitch objects,
@@ -1740,57 +1741,6 @@ function DraftPreview({
 // ---------------------------------------------------------------------------
 
 /** Lighten (f>1) or darken (f<1) an rgb triple to a css color, clamped. */
-function shadeRgb(rgb: number[], f: number): string {
-  const ch = (v: number) => Math.max(0, Math.min(255, Math.round(v * f)));
-  return `rgb(${ch(rgb[0])},${ch(rgb[1])},${ch(rgb[2])})`;
-}
-
-/** Deterministic fraction in [-1, 1] from an integer key — reproducible jitter,
- *  no randomness (the preview is identical every render). */
-function jitterAt(k: number): number {
-  const s = Math.sin(k * 127.1 + 311.7) * 43758.5453;
-  return (s - Math.floor(s)) * 2 - 1;
-}
-
-/**
- * Stroke a single "fiber" of a stitch run: the same polyline, but each vertex is
- * nudged a little along the LOCAL normal by a deterministic per-vertex amount, so
- * the strand visibly wanders off-center like a real twisted filament. `amp` is the
- * wander in px, `seed` decorrelates the two strands, and `shade`/`alpha`/`width`
- * style it (a lit strand and a shadow strand together read as fuzzy thread).
- */
-function fiberStrand(
-  ctx: Konva.Context,
-  pts: { x: number; y: number }[],
-  px: (x: number) => number,
-  py: (y: number) => number,
-  amp: number,
-  seed: number,
-  stroke: string,
-  alpha: number,
-  width: number,
-): void {
-  if (pts.length < 2) return;
-  ctx.beginPath();
-  for (let i = 1; i < pts.length; i++) {
-    const a = pts[i - 1];
-    const b = pts[i];
-    let nx = -(b.y - a.y);
-    let ny = b.x - a.x;
-    const len = Math.hypot(nx, ny) || 1;
-    nx /= len;
-    ny /= len;
-    const j0 = amp * jitterAt(i + seed);
-    const j1 = amp * jitterAt(i + 1 + seed);
-    ctx.moveTo(px(a.x) + nx * j0, py(a.y) + ny * j0);
-    ctx.lineTo(px(b.x) + nx * j1, py(b.y) + ny * j1);
-  }
-  ctx.setAttr("strokeStyle", stroke);
-  ctx.setAttr("lineWidth", width);
-  ctx.setAttr("globalAlpha", alpha);
-  ctx.stroke();
-}
-
 /** Read-only render of the assembled stitches, up to the simulator cursor.
  * Subscribes to `simIndex` itself so playback re-renders only this view, not the
  * whole (hidden) edit layer. */
@@ -1835,67 +1785,15 @@ function StitchView({
     <Group ref={groupRef} listening={false}>
       <Shape
         sceneFunc={(ctx) => {
-          // Stroke each STITCH as its own round-capped capsule (a separate
-          // subpath) rather than one polyline per run. Overlapping capsules read
-          // as solid satin and solid tatami, while the sharp serpentine turns at
-          // a fill's edge no longer round-join into a ragged, "spiky" fringe.
-          ctx.setAttr("lineCap", "round");
-          // Realistic (TrueView): each thread is a tube — a shaded full-width body
-          // plus a lighter core offset toward an upper-left light, so dense fills
-          // read as rounded, lit thread instead of flat scanlines.
-          const od = realistic ? -threadPx * 0.16 : 0;
-          for (const seg of segs) {
-            if (seg.points.length < 2) continue;
-            const c = colorById.get(seg.colorId);
-            const rgb = c ? c.rgb : [136, 136, 136];
-            const path = (dx: number, dy: number) => {
-              ctx.beginPath();
-              for (let i = 1; i < seg.points.length; i++) {
-                ctx.moveTo(px(seg.points[i - 1].x) + dx, py(seg.points[i - 1].y) + dy);
-                ctx.lineTo(px(seg.points[i].x) + dx, py(seg.points[i].y) + dy);
-              }
-            };
-            if (seg.underlay) {
-              path(0, 0);
-              ctx.setAttr("strokeStyle", shadeRgb(rgb, 1));
-              ctx.setAttr("lineWidth", 0.6);
-              ctx.setAttr("globalAlpha", 0.4);
-              ctx.stroke();
-            } else if (realistic) {
-              // FUZZ HALO: a soft, wider, low-alpha pass gives each thread a
-              // downy, out-of-focus edge — real floss is hairy, not a hard tube.
-              path(0, 0);
-              ctx.setAttr("strokeStyle", shadeRgb(rgb, 0.82));
-              ctx.setAttr("lineWidth", threadPx * 1.42);
-              ctx.setAttr("globalAlpha", 0.22);
-              ctx.stroke();
-              // body (shaded sides)
-              path(0, 0);
-              ctx.setAttr("strokeStyle", shadeRgb(rgb, 0.72));
-              ctx.setAttr("lineWidth", threadPx);
-              ctx.setAttr("globalAlpha", 1);
-              ctx.stroke();
-              // lit core, offset toward the light
-              path(od, od);
-              ctx.setAttr("strokeStyle", shadeRgb(rgb, 1.16));
-              ctx.setAttr("lineWidth", threadPx * 0.5);
-              ctx.setAttr("globalAlpha", 0.92);
-              ctx.stroke();
-              // FIBER STRANDS: two thin lines that wander slightly off the
-              // centerline (deterministic jitter along the local normal), one
-              // catching the light and one in shadow — the twisted, multi-filament
-              // look of real thread instead of a flat ribbon.
-              fiberStrand(ctx, seg.points, px, py, threadPx * 0.22, 11, shadeRgb(rgb, 1.34), 0.42, threadPx * 0.16);
-              fiberStrand(ctx, seg.points, px, py, threadPx * 0.2, 41, shadeRgb(rgb, 0.86), 0.42, threadPx * 0.16);
-            } else {
-              path(0, 0);
-              ctx.setAttr("strokeStyle", shadeRgb(rgb, 1));
-              ctx.setAttr("lineWidth", threadPx);
-              ctx.setAttr("globalAlpha", 0.95);
-              ctx.stroke();
-            }
-          }
-          ctx.setAttr("globalAlpha", 1);
+          // Draw straight to the layer's NATIVE 2D context via the shared painter,
+          // so the live simulator and the digitize-dialog preview render stitches
+          // identically (one source of truth). Each stitch is a round-capped
+          // capsule — overlapping capsules read as solid satin/tatami — and in
+          // TrueView each thread is a shaded, lit, fuzzy tube. The shape is
+          // visual-only (listening false), so bypassing Konva's hit tracing here
+          // is safe.
+          const native = (ctx as unknown as { _context: CanvasRenderingContext2D })._context;
+          drawStitches(native, segs, { colorById, px, py, threadPx, realistic });
         }}
       />
       {needle && (
