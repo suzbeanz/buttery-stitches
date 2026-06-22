@@ -458,6 +458,20 @@ const LINE_ART_RUN_MAX_MM = 1.2;
 /** Shortest line-art stroke (centerline mm) worth sewing — below this it's a
  *  medial spur/speck that just adds a trim. */
 const LINE_ART_MIN_LEN_MM = 2.5;
+/** Line-art centerlines sew as a BOLD triple (bean) stitch — a single running
+ *  pass reads thin and weak for a cartoon outline, so each stroke is retraced
+ *  forward/back/forward for a solid, dark, hand-digitized line. Wide strokes also
+ *  get residual fill on their flanks; the bean is what gives a NARROW outline
+ *  (pure centerline, no flank fill) its body. The min-length filter already drops
+ *  specks, so every kept stroke is a real outline worth bolding. The odd repeat
+ *  count finishes at the stroke's far end, which keeps branch chaining simple. */
+const LINE_ART_BEAN_REPEATS = 3;
+/** Max gap (mm) between two line-art centerlines for them to be CHAINED into one
+ *  continuous run. A connected outline network breaks into many medial branches
+ *  that meet at junctions; linking branches whose ends nearly touch lets the whole
+ *  outline sew as a few long passes instead of dozens of runs each needing a trim.
+ *  Kept small so the connector never slashes across open fabric. */
+const LINE_ART_LINK_MM = 1.5;
 
 /** Arc length of a polyline (mm). */
 function polylineLength(line: Point[]): number {
@@ -534,6 +548,27 @@ function beanPath(line: Point[], repeats: number): Point[] {
     const pass = i % 2 === 1 ? [...line].reverse() : [...line];
     out = out.concat(pass.slice(1));
   }
+  return out;
+}
+
+/** Chain pre-ordered polylines that nearly touch end-to-end into single continuous
+ *  runs. Consecutive lines whose tail→head gap is within `maxGapMm` are concatenated
+ *  (the short connector becomes stitched), so a line-art network's branches that
+ *  meet at a junction sew as one pass instead of separate runs that each trim. The
+ *  input should already be oriented for adjacency (e.g. via `orderByNearest`). */
+function chainNearbyLines(lines: Point[][], maxGapMm: number): Point[][] {
+  const out: Point[][] = [];
+  let cur: Point[] | null = null;
+  for (const line of lines) {
+    if (line.length < 2) continue;
+    if (cur && distance(cur[cur.length - 1], line[0]) <= maxGapMm) {
+      cur = cur.concat(line);
+    } else {
+      if (cur) out.push(cur);
+      cur = [...line];
+    }
+  }
+  if (cur) out.push(cur);
   return out;
 }
 
@@ -718,11 +753,25 @@ export function generateObjectRuns(
       const keep = p.lineArt
         ? columns.filter((c) => polylineLength(c.centerline) >= LINE_ART_MIN_LEN_MM)
         : columns;
-      tops = keep.map((c) =>
-        c.widthMm < runMax
-          ? runningStitch(c.centerline, stitchLength)
-          : c.throws,
-      );
+      if (p.lineArt) {
+        // Bold cartoon outline: thin columns sew as running centerlines (bean /
+        // triple stitch for the heavier strokes so the line reads bold, single
+        // pass for hairlines), wide ones still satin-fill. The running lines are
+        // ordered for adjacency then CHAINED where branches meet at a junction, so
+        // a connected outline sews as a few long passes instead of many trims.
+        const runLines = keep
+          .filter((c) => c.widthMm < runMax)
+          .map((c) => beanPath(runningStitch(c.centerline, stitchLength), LINE_ART_BEAN_REPEATS));
+        const chained = chainNearbyLines(orderByNearest(runLines, cursor), LINE_ART_LINK_MM);
+        const wide = keep.filter((c) => c.widthMm >= runMax).map((c) => c.throws);
+        tops = [...chained, ...wide];
+      } else {
+        tops = keep.map((c) =>
+          c.widthMm < runMax
+            ? runningStitch(c.centerline, stitchLength)
+            : c.throws,
+        );
+      }
     } else if (contour) {
       const echo = contourFill(region, { density });
       tops = echo.length
