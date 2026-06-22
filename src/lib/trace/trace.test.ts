@@ -5,6 +5,7 @@ import {
   tracedataToObjects,
   imageDataToObjects,
   estimateColorComplexity,
+  suggestColorCount,
   type Tracedata,
 } from "./index";
 
@@ -403,6 +404,39 @@ describe("imageDataToObjects (real imagetracerjs)", () => {
     const flat = image(20, 20, () => [100, 100, 100]);
     const noisy = image(20, 20, (x, y) => [(x * 13) % 256, (y * 29) % 256, (x * y) % 256]);
     expect(estimateColorComplexity(noisy)).toBeGreaterThan(estimateColorComplexity(flat));
+  });
+
+  describe("suggestColorCount", () => {
+    it("suggests the dominant-color count for a flat few-color logo", () => {
+      // Three equal vertical bands → three dominant colors.
+      const tri = image(60, 30, (x) =>
+        x < 20 ? [220, 30, 30] : x < 40 ? [30, 180, 60] : [40, 60, 220],
+      );
+      expect(suggestColorCount(tri)).toBe(3);
+    });
+
+    it("suggests more colors for a busier image than a flatter one", () => {
+      const flat = image(40, 40, (x) => (x < 20 ? [10, 10, 10] : [240, 240, 240]));
+      const busy = image(40, 40, (x, y) => [(x * 16) % 256, (y * 16) % 256, ((x + y) * 16) % 256]);
+      expect(suggestColorCount(busy)).toBeGreaterThan(suggestColorCount(flat));
+    });
+
+    it("clamps to the [min, max] bounds", () => {
+      const photo = image(60, 60, (x, y) => [(x * 7) % 256, (y * 11) % 256, (x * y * 3) % 256]);
+      expect(suggestColorCount(photo, 2, 6)).toBeLessThanOrEqual(6);
+      const flat = image(20, 20, () => [128, 128, 128]);
+      expect(suggestColorCount(flat, 3, 12)).toBeGreaterThanOrEqual(3);
+    });
+
+    it("ignores faint anti-alias fringe (dominant 92% wins)", () => {
+      // A two-tone logo where a single row is a noisy 'fringe' — the suggestion
+      // should still land at the two dominant colors, not balloon with the fringe.
+      const img = image(40, 40, (x, y) => {
+        if (y === 0) return [(x * 23) % 256, (x * 51) % 256, (x * 91) % 256]; // 2.5% fringe row
+        return x < 20 ? [20, 20, 20] : [230, 230, 230];
+      });
+      expect(suggestColorCount(img)).toBe(2);
+    });
   });
 
   it("drops a thin background-color sliver trapped between shapes", () => {
