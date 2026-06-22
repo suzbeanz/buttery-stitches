@@ -22,6 +22,7 @@ import {
   Import as ImportIcon,
   BadgeCheck,
   Check,
+  MoreHorizontal,
   type LucideIcon,
 } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
@@ -94,6 +95,7 @@ export default function TopBar({
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [showText, setShowText] = useState(false);
   const [showShapes, setShowShapes] = useState(false);
+  const [showMore, setShowMore] = useState(false);
   const [showCheck, setShowCheck] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const activeColorId = useEditorStore((s) => s.activeColorId);
@@ -260,6 +262,11 @@ export default function TopBar({
     setShowShapes(false);
   }
 
+  function saveCopy() {
+    downloadProject(project);
+    toast("Project saved to your downloads", "success");
+  }
+
   function openWorksheet() {
     const ws = buildWorksheet(project);
     if (ws.totalStitches === 0) {
@@ -301,24 +308,24 @@ export default function TopBar({
         </span>
       </button>
 
-      <BarButton label="New" onClick={() => newProject()}>
-        <FilePlus2 size={18} />
-      </BarButton>
-      <BarButton label="Open" onClick={() => fileInput.current?.click()}>
-        <FolderOpen size={18} />
-      </BarButton>
-      <BarButton label="Import & add a design (.embproj, .pes, .dst, .jef, .exp, .vp3)" onClick={() => importInput.current?.click()}>
-        <ImportIcon size={18} />
-      </BarButton>
-      <BarButton
-        label="Save a copy to your downloads (.embproj). Your work also auto-saves to this browser."
-        onClick={() => {
-          downloadProject(project);
-          toast("Project saved to your downloads", "success");
-        }}
-      >
-        <Save size={18} />
-      </BarButton>
+      {/* File group — inline on wide screens; tucked into the "More" menu on narrow. */}
+      <div className="hidden items-center gap-1 lg:flex">
+        <BarButton label="New" onClick={() => newProject()}>
+          <FilePlus2 size={18} />
+        </BarButton>
+        <BarButton label="Open" onClick={() => fileInput.current?.click()}>
+          <FolderOpen size={18} />
+        </BarButton>
+        <BarButton label="Import & add a design (.embproj, .pes, .dst, .jef, .exp, .vp3)" onClick={() => importInput.current?.click()}>
+          <ImportIcon size={18} />
+        </BarButton>
+        <BarButton
+          label="Save a copy to your downloads (.embproj). Your work also auto-saves to this browser."
+          onClick={saveCopy}
+        >
+          <Save size={18} />
+        </BarButton>
+      </div>
 
       {/* Quiet autosave reassurance — appears only while saving / just-saved. */}
       {saveStatus !== "idle" && (
@@ -362,7 +369,7 @@ export default function TopBar({
           <>
             {/* Presentational backdrop — dismiss is a mouse convenience; keyboard closes via the toggle button. */}
             <div aria-hidden className="fixed inset-0 z-20" onClick={() => setShowShapes(false)} />
-            <div className="anim-press-in absolute left-0 z-30 mt-1 grid w-44 grid-cols-3 gap-1 rounded-sm border-2 border-ink bg-cream p-1.5 text-navy shadow-press">
+            <div className="anim-press-in absolute left-0 z-30 mt-1 grid w-44 max-w-[calc(100vw-1rem)] grid-cols-3 gap-1 rounded-sm border-2 border-ink bg-cream p-1.5 text-navy shadow-press">
               {SHAPES.map(({ kind, label, Icon }) => (
                 <button
                   key={kind}
@@ -379,9 +386,6 @@ export default function TopBar({
       </div>
 
       <ExportMenu open={exportOpen} onOpenChange={setExportOpen} />
-      <BarButton label="Check design — is it ready to stitch?" onClick={() => setShowCheck(true)}>
-        <BadgeCheck size={18} />
-      </BarButton>
       <BarButton
         label="Clean up the stitching — fix densities, fill styles, order & seams"
         onClick={() => {
@@ -395,9 +399,36 @@ export default function TopBar({
       >
         <Wand2 size={18} />
       </BarButton>
-      <BarButton label="Print thread list" onClick={openWorksheet}>
-        <ClipboardList size={18} />
-      </BarButton>
+      {/* Check + Print — inline on wide screens; in the "More" menu on narrow. */}
+      <div className="hidden items-center gap-1 lg:flex">
+        <BarButton label="Check design — is it ready to stitch?" onClick={() => setShowCheck(true)}>
+          <BadgeCheck size={18} />
+        </BarButton>
+        <BarButton label="Print thread list" onClick={openWorksheet}>
+          <ClipboardList size={18} />
+        </BarButton>
+      </div>
+
+      {/* Overflow menu — only on narrow screens, so the bar stays one row. */}
+      <div className="relative lg:hidden">
+        <BarButton label="More actions" onClick={() => setShowMore((v) => !v)} active={showMore}>
+          <MoreHorizontal size={18} />
+        </BarButton>
+        {showMore && (
+          <>
+            <div aria-hidden className="fixed inset-0 z-20" onClick={() => setShowMore(false)} />
+            <div className="anim-press-in absolute left-0 z-30 mt-1 flex w-52 flex-col gap-0.5 rounded-sm border-2 border-ink bg-cream p-1.5 text-navy shadow-press">
+              <MoreItem icon={FilePlus2} label="New" onClick={() => { newProject(); setShowMore(false); }} />
+              <MoreItem icon={FolderOpen} label="Open…" onClick={() => { fileInput.current?.click(); setShowMore(false); }} />
+              <MoreItem icon={ImportIcon} label="Import & add…" onClick={() => { importInput.current?.click(); setShowMore(false); }} />
+              <MoreItem icon={Save} label="Save a copy" onClick={() => { saveCopy(); setShowMore(false); }} />
+              <div className="my-0.5 h-px bg-ink/15" />
+              <MoreItem icon={BadgeCheck} label="Check design" onClick={() => { setShowCheck(true); setShowMore(false); }} />
+              <MoreItem icon={ClipboardList} label="Print thread list" onClick={() => { openWorksheet(); setShowMore(false); }} />
+            </div>
+          </>
+        )}
+      </div>
 
       <div className="mx-1.5 h-5 w-px shrink-0 bg-butter-200/20" />
 
@@ -497,6 +528,19 @@ export default function TopBar({
         </Suspense>
       )}
     </header>
+  );
+}
+
+/** A labeled row in the narrow-screen "More" overflow menu. */
+function MoreItem({ icon: Icon, label, onClick }: { icon: LucideIcon; label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-butter-200"
+    >
+      <Icon size={16} className="shrink-0" />
+      {label}
+    </button>
   );
 }
 
