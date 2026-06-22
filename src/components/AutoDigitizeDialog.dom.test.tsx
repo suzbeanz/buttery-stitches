@@ -122,6 +122,24 @@ describe("AutoDigitizeDialog (live preview)", () => {
     expect(project.colors.find((c) => c.id === "c1")?.name).toBe("Crimson");
   });
 
+  it("merges similar shades, reducing the palette with no orphan colorIds", async () => {
+    const onApply = renderDialog();
+    await waitForColors();
+    // Recolor Green to near-Red so the two are within the merge threshold.
+    fireEvent.input(screen.getByLabelText(/Recolor Green/) as HTMLInputElement, {
+      target: { value: "#e74637" }, // ≈ rgb(231,70,55), within ΔE of Red
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Merge similar shades/ }));
+    await waitFor(() =>
+      expect(screen.queryAllByRole("button", { name: /tap to (keep|skip)/ }).length).toBe(2),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Add to design/ }));
+    const project = onApply.mock.calls[0][0] as Project;
+    expect(project.colors.length).toBe(2);
+    const ids = new Set(project.colors.map((c) => c.id));
+    expect(project.objects.every((o) => ids.has(o.colorId))).toBe(true);
+  });
+
   it("disables Add to design when every color is dropped", async () => {
     renderDialog();
     await waitForColors();
