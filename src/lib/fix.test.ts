@@ -99,6 +99,29 @@ describe("fixObjectStitches", () => {
     expect(fixed.params.underlay).toBe(true);
   });
 
+  it("defaults a broad fill dense (0.32) but a line-art outline lighter (0.40)", () => {
+    const broad = fixObjectStitches(makeObjectFromPaths("fill", [broadFill], "c1"));
+    expect(broad.params.density).toBe(0.32);
+    const outline = makeObjectFromPaths("fill", [strokeFill], "c1");
+    outline.params = { fillStyle: "satin", lineArt: true, underlay: false };
+    expect(fixObjectStitches(outline).params.density).toBe(0.4);
+  });
+
+  it("suppresses underlay on a small element but keeps it on a broad one", () => {
+    const tiny: Path = [
+      { x: 0, y: 0 },
+      { x: 2, y: 0 },
+      { x: 2, y: 2 },
+      { x: 0, y: 2 },
+    ];
+    expect(fixObjectStitches(makeObjectFromPaths("fill", [tiny], "c1")).params.underlay).toBe(false);
+    expect(fixObjectStitches(makeObjectFromPaths("fill", [broadFill], "c1")).params.underlay).toBe(true);
+    // An explicit user choice is still respected, small or not.
+    const forced = makeObjectFromPaths("fill", [tiny], "c1");
+    forced.params = { underlay: true };
+    expect(fixObjectStitches(forced).params.underlay).toBe(true);
+  });
+
   it("clamps running stitch length into a safe range", () => {
     const o = makeObject("running", [{ x: 0, y: 0 }, { x: 50, y: 0 }], "c1");
     o.params = { stitchLength: 20 };
@@ -172,6 +195,29 @@ describe("fixStitches", () => {
       reordered: false,
       seamsTrapped: 0,
     });
+  });
+
+  it("drops a genuine sub-mm speck fill but keeps a real small mark", () => {
+    const p = createEmptyProject();
+    const speck: Path = [
+      { x: 0, y: 0 },
+      { x: 3, y: 0 },
+      { x: 3, y: 0.3 },
+      { x: 0, y: 0.3 },
+    ]; // 0.3 mm tall, ~0.9 mm² → noise
+    const realMark: Path = [
+      { x: 0, y: 10 },
+      { x: 4, y: 10 },
+      { x: 4, y: 10.8 },
+      { x: 0, y: 10.8 },
+    ]; // 0.8 mm tall → a thin but genuine detail, survives
+    p.objects = [
+      makeObjectFromPaths("fill", [broadFill], "c1"),
+      makeObjectFromPaths("fill", [speck], "c1"),
+      makeObjectFromPaths("fill", [realMark], "c1"),
+    ];
+    const out = fixStitches(p).objects;
+    expect(out.length).toBe(2); // the speck is gone, the broad fill + real mark remain
   });
 
   it("leaves an isolated fill untrapped", () => {
