@@ -100,6 +100,28 @@ describe("AutoDigitizeDialog (live preview)", () => {
     expect(project.objects).toHaveLength(2);
   });
 
+  it("recolors a traced shade, and the new rgb flows into the applied design", async () => {
+    const onApply = renderDialog();
+    await waitForColors();
+    const recolor = screen.getByLabelText(/Recolor Red/) as HTMLInputElement;
+    fireEvent.input(recolor, { target: { value: "#112233" } });
+    fireEvent.click(screen.getByRole("button", { name: /Add to design/ }));
+    const project = onApply.mock.calls[0][0] as Project;
+    const red = project.colors.find((c) => c.id === "c1");
+    expect(red?.rgb).toEqual([0x11, 0x22, 0x33]);
+  });
+
+  it("renames a traced color, and the name flows into the applied design", async () => {
+    const onApply = renderDialog();
+    await waitForColors();
+    const rename = screen.getByLabelText(/Rename Red/) as HTMLInputElement;
+    fireEvent.change(rename, { target: { value: "Crimson" } });
+    fireEvent.blur(rename);
+    fireEvent.click(screen.getByRole("button", { name: /Add to design/ }));
+    const project = onApply.mock.calls[0][0] as Project;
+    expect(project.colors.find((c) => c.id === "c1")?.name).toBe("Crimson");
+  });
+
   it("disables Add to design when every color is dropped", async () => {
     renderDialog();
     await waitForColors();

@@ -25,6 +25,14 @@ const RETRACE_DEBOUNCE_MS = 250;
 const MIN_COLORS = 2;
 const MAX_COLORS = 12;
 
+const rgbToHex = (rgb: [number, number, number]) =>
+  "#" + rgb.map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, "0")).join("");
+const hexToRgb = (hex: string): [number, number, number] => [
+  parseInt(hex.slice(1, 3), 16),
+  parseInt(hex.slice(3, 5), 16),
+  parseInt(hex.slice(5, 7), 16),
+];
+
 export default function AutoDigitizeDialog({
   file,
   hoop,
@@ -161,6 +169,20 @@ export default function AutoDigitizeDialog({
       return next;
     });
 
+  // Edit the traced palette in place (no re-trace): recolor swaps a shade,
+  // rename labels it. Both flow straight into `result.colors`, so the preview
+  // and the applied design pick them up.
+  const recolor = (id: string, rgb: [number, number, number]) =>
+    setResult((prev) =>
+      prev ? { ...prev, colors: prev.colors.map((c) => (c.id === id ? { ...c, rgb } : c)) } : prev,
+    );
+  const rename = (id: string, name: string) =>
+    setResult((prev) =>
+      prev
+        ? { ...prev, colors: prev.colors.map((c) => (c.id === id ? { ...c, name: name.trim() || undefined } : c)) }
+        : prev,
+    );
+
   /** Apply only the kept colors. Filtering by colorId needs no re-trace. */
   function apply() {
     if (!result) return;
@@ -268,38 +290,60 @@ export default function AutoDigitizeDialog({
         {result && result.colors.length > 0 && (
           <div className="mb-3">
             <p className="mb-1.5 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/50">
-              Colors found — tap to drop an unwanted background or stray shade
+              Colors found — recolor or rename a shade, or skip a stray one
             </p>
             <div className="flex flex-col gap-1">
               {result.colors.map((c) => {
                 const kept = keptIds.has(c.id);
                 const regions = result.objects.filter((o) => o.colorId === c.id).length;
+                const rgbStr = `rgb(${c.rgb.join(",")})`;
                 return (
-                  <button
+                  <div
                     key={c.id}
-                    onClick={() => toggleColor(c.id)}
-                    aria-pressed={kept}
-                    className={`flex items-center gap-2 rounded-sm border-2 px-3 py-1.5 text-left text-sm transition ${
+                    className={`flex items-center gap-2 rounded-sm border-2 px-2 py-1.5 text-sm transition ${
                       kept ? "border-ink bg-butter-200 text-navy" : "border-ink/20 bg-cream text-navy/45"
                     }`}
                   >
-                    <span
-                      className={`h-4 w-4 shrink-0 rounded-sm border border-navy/30 ${kept ? "" : "opacity-40"}`}
-                      style={{ backgroundColor: `rgb(${c.rgb.join(",")})` }}
+                    {/* recolor: native picker styled as the swatch */}
+                    <input
+                      type="color"
+                      value={rgbToHex(c.rgb)}
+                      onChange={(e) => recolor(c.id, hexToRgb(e.target.value))}
+                      aria-label={`Recolor ${c.name ?? rgbStr}`}
+                      title="Change this color"
+                      className={`h-5 w-5 shrink-0 cursor-pointer rounded-sm border border-navy/30 bg-transparent p-0 ${kept ? "" : "opacity-40"}`}
                     />
-                    <span className="flex-1 truncate">{c.name ?? `rgb(${c.rgb.join(",")})`}</span>
+                    {/* rename: commit on Enter / blur */}
+                    <input
+                      type="text"
+                      defaultValue={c.name ?? ""}
+                      placeholder={rgbStr}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                      }}
+                      onBlur={(e) => rename(c.id, e.target.value)}
+                      aria-label={`Rename ${c.name ?? rgbStr}`}
+                      className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 outline-none focus:bg-cream focus:ring-1 focus:ring-ink/40"
+                    />
                     <span className="tabular-nums text-[11px] text-navy/50">
                       {regions} region{regions === 1 ? "" : "s"}
                     </span>
-                    {kept ? (
-                      <Eye size={15} className="text-navy/60" aria-hidden />
-                    ) : (
-                      <EyeOff size={15} className="text-navy/40" aria-hidden />
-                    )}
-                    <span className="w-8 font-label text-[10px] font-semibold uppercase tracking-wide">
-                      {kept ? "Keep" : "Skip"}
-                    </span>
-                  </button>
+                    <button
+                      onClick={() => toggleColor(c.id)}
+                      aria-pressed={kept}
+                      aria-label={`${c.name ?? rgbStr} — tap to ${kept ? "skip" : "keep"}`}
+                      className="flex shrink-0 items-center gap-1"
+                    >
+                      {kept ? (
+                        <Eye size={15} className="text-navy/60" aria-hidden />
+                      ) : (
+                        <EyeOff size={15} className="text-navy/40" aria-hidden />
+                      )}
+                      <span className="w-8 font-label text-[10px] font-semibold uppercase tracking-wide">
+                        {kept ? "Keep" : "Skip"}
+                      </span>
+                    </button>
+                  </div>
                 );
               })}
             </div>
