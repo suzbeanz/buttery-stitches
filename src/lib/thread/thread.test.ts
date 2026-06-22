@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { nearestThread, matchColorsToChart, colorDistance } from "./match";
 import { BUTTERY_STANDARD } from "./catalog";
-import { reduceProjectColors } from "./reduce";
+import { reduceProjectColors, mergeSimilarColors } from "./reduce";
 import { createEmptyProject } from "../project";
 import { makeObjectFromPaths } from "../objects";
 import type { Project, ThreadColor } from "../../types/project";
@@ -62,5 +62,19 @@ describe("color reduction", () => {
   it("is a no-op when already within the limit", () => {
     const p = proj();
     expect(reduceProjectColors(p, 10)).toBe(p);
+  });
+
+  it("merge-similar collapses only the near-duplicate shades", () => {
+    // The two near-blacks (ΔE ~2) merge; red and blue are far apart and survive.
+    const out = mergeSimilarColors(proj(), 8);
+    expect(out.colors).toHaveLength(3);
+    expect(out.objects[0].colorId).toBe(out.objects[1].colorId); // the two blacks
+    const ids = new Set(out.colors.map((c) => c.id));
+    for (const o of out.objects) expect(ids.has(o.colorId)).toBe(true);
+  });
+
+  it("merge-similar is a no-op when nothing is within the threshold", () => {
+    const out = mergeSimilarColors(proj(), 1);
+    expect(out.colors).toHaveLength(4);
   });
 });

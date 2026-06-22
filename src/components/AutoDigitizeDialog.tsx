@@ -7,6 +7,7 @@ import { ocrWords } from "../lib/trace/ocr";
 import { recognizeTextObjects, applyTextRecognition } from "../lib/trace/textRecognize";
 import { loadFont, DEFAULT_FONT_ID } from "../lib/text/fonts";
 import { fixStitches } from "../lib/fix";
+import { mergeSimilarColors } from "../lib/thread/reduce";
 import { pathsBounds } from "../lib/geometry";
 import { ringsToSvgPath } from "../lib/svgPath";
 import { useEscapeToClose, useDialogFocus } from "./useEscapeToClose";
@@ -183,6 +184,19 @@ export default function AutoDigitizeDialog({
         : prev,
     );
 
+  // Collapse near-duplicate shades (anti-alias bands, JPEG noise) under a ΔE
+  // threshold — fewer, cleaner threads without a re-trace.
+  const MERGE_DELTA_E = 10;
+  const mergeSimilar = () => {
+    if (!result) return;
+    const merged = mergeSimilarColors(
+      { version: 1, widthMm: hoop.wMm, heightMm: hoop.hMm, hoop: { ...hoop }, colors: result.colors, objects: result.objects },
+      MERGE_DELTA_E,
+    );
+    setResult({ colors: merged.colors, objects: merged.objects });
+    setKeptIds(new Set(merged.colors.map((c) => c.id)));
+  };
+
   /** Apply only the kept colors. Filtering by colorId needs no re-trace. */
   function apply() {
     if (!result) return;
@@ -347,6 +361,14 @@ export default function AutoDigitizeDialog({
                 );
               })}
             </div>
+            {result.colors.length > 1 && (
+              <button
+                onClick={mergeSimilar}
+                className="mt-1.5 rounded-sm border-2 border-ink/40 px-2.5 py-1 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/70 transition hover:border-ink hover:bg-butter-200"
+              >
+                Merge similar shades
+              </button>
+            )}
           </div>
         )}
 
