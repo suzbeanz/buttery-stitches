@@ -164,8 +164,9 @@ export default function LayerPanel() {
                 >
                   {o.visible ? <Eye size={15} /> : <EyeOff size={15} />}
                 </button>
-                {/* Secondary actions reveal on hover/focus so the name has room. */}
-                <span className="flex shrink-0 items-center opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(pointer:coarse)]:opacity-100">
+                {/* Secondary actions reveal on hover/focus. `hidden` (not opacity-0) so they
+                    take ZERO width at rest and the name actually fills the row. */}
+                <span className="hidden shrink-0 items-center group-hover:flex focus-within:flex [@media(pointer:coarse)]:flex">
                   <button
                     data-tip="Move up (stitch earlier)"
                     aria-label="Move up"

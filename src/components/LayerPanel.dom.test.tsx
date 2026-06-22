@@ -58,6 +58,13 @@ describe("LayerPanel", () => {
     expect(name.getAttribute("title")).toContain("Alpha");
   });
 
+  it("keeps the secondary buttons zero-width (hidden, not opacity-0) at rest so the name fills the row", () => {
+    render(<LayerPanel />);
+    const wrapper = screen.getAllByLabelText("Move up")[0].closest("span");
+    expect(wrapper?.className).toContain("hidden");
+    expect(wrapper?.className).not.toContain("opacity-0");
+  });
+
   it("renames an object on double-click + Enter", () => {
     render(<LayerPanel />);
     fireEvent.doubleClick(screen.getByText("Alpha"));

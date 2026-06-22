@@ -44,15 +44,15 @@ describe("ToolRail", () => {
     expect(screen.queryByRole("button", { name: "Box" })).toBeNull();
   });
 
-  it("gives tools purpose-first tooltips and shows shortcut keys", () => {
+  it("gives tools concise purpose-first tooltips and shows shortcut keys", () => {
     render(<ToolRail />);
     const select = screen.getByRole("button", { name: "Select" });
-    // Tooltip explains WHEN/why, not just how, and advertises the shortcut.
+    // Tooltip is purpose-first and concise (the shortcut shows as a kbd badge, not in the tip).
     expect(select.getAttribute("data-tip")).toMatch(/Select & move/);
-    expect(select.getAttribute("data-tip")).toMatch(/shortcut: V/);
+    expect(select.getAttribute("data-tip")).not.toMatch(/shortcut/i);
     expect(select.getAttribute("aria-keyshortcuts")).toBe("V");
-    // Fill explains its purpose (solid areas).
-    expect(screen.getByRole("button", { name: "Fill" }).getAttribute("data-tip")).toMatch(/solid areas/i);
+    // Fill explains its purpose (solid area).
+    expect(screen.getByRole("button", { name: "Fill" }).getAttribute("data-tip")).toMatch(/solid area/i);
   });
 
   it("shows a paused hint and disables edit tools in stitch view", () => {
