@@ -27,6 +27,7 @@ vi.mock("../lib/image", () => ({
 vi.mock("../lib/trace", () => ({
   imageDataToObjects: vi.fn(() => ({ colors: COLORS, objects: OBJECTS })),
   estimateColorComplexity: vi.fn(() => 0),
+  suggestColorCount: vi.fn(() => 4),
 }));
 // Keep fixStitches an identity so onApply gets exactly the filtered subset.
 vi.mock("../lib/fix", () => ({ fixStitches: vi.fn((p: Project) => p) }));

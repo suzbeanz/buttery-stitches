@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Eye, EyeOff, Minus, Plus } from "lucide-react";
 import type { EmbObject, Hoop, Project, ThreadColor } from "../types/project";
 import { loadImageData } from "../lib/image";
-import { imageDataToObjects, estimateColorComplexity } from "../lib/trace";
+import { imageDataToObjects, estimateColorComplexity, suggestColorCount } from "../lib/trace";
 import { ocrWords } from "../lib/trace/ocr";
 import { recognizeTextObjects, applyTextRecognition } from "../lib/trace/textRecognize";
 import { loadFont, DEFAULT_FONT_ID } from "../lib/text/fonts";
@@ -70,13 +70,13 @@ export default function AutoDigitizeDialog({
   );
   const looksLikePhoto = complexity > PHOTO_COMPLEXITY;
 
-  // Adaptive default color count. Flat, limited-palette artwork (a logo, an
-  // illustration — what this tool is FOR) wants few colors; photos need more. Once
+  // Adaptive default color count, graded to the image's dominant-color count
+  // (flat logos land low, busy art/photos higher) instead of a binary 4/8. Once
   // the user nudges the stepper we stop steering.
   useEffect(() => {
     if (!imageData || userSetColors) return;
-    setNumColors(looksLikePhoto ? 8 : 4);
-  }, [imageData, looksLikePhoto, userSetColors]);
+    setNumColors(suggestColorCount(imageData, MIN_COLORS, MAX_COLORS));
+  }, [imageData, userSetColors]);
 
   // LIVE re-trace: whenever the image or any setting changes, re-digitize after a
   // short debounce so dragging the stepper doesn't trace on every tick. The trace
