@@ -172,12 +172,30 @@ export function recognizeShape(ring: Path, tolMm = 0.6): Recognized | null {
 
   // --- Regular polygon: 3–12 corners, equidistant from the centre. ---
   const simp = douglasPeucker(open, Math.max(tolMm * 1.5, perim * 0.012));
-  const corners = simp.length > 1 && dist(simp[0], simp[simp.length - 1]) < 1e-6 ? simp.slice(0, -1) : simp;
+  let corners = simp.length > 1 && dist(simp[0], simp[simp.length - 1]) < 1e-6 ? simp.slice(0, -1) : simp;
+  // Merge a STUB corner — a vertex separated from its neighbour by far less than the
+  // average edge (a trace seam or an open-ring closing artifact) — so it doesn't fake
+  // an extra side and skew the edge-uniformity test below.
+  if (corners.length >= 4) {
+    const avgEdge = corners.reduce((s, p, i) => s + dist(p, corners[(i + 1) % corners.length]), 0) / corners.length;
+    const merged: Path = [];
+    for (const p of corners) if (!merged.length || dist(p, merged[merged.length - 1]) > avgEdge * 0.33) merged.push(p);
+    if (merged.length > 1 && dist(merged[0], merged[merged.length - 1]) < avgEdge * 0.33) merged.pop();
+    corners = merged;
+  }
   if (corners.length >= 3 && corners.length <= 12) {
     const cr = corners.map((p) => dist(p, c));
     const mr = cr.reduce((s, r) => s + r, 0) / cr.length;
     const crSd = Math.sqrt(cr.reduce((s, r) => s + (r - mr) ** 2, 0) / cr.length);
-    if (crSd / mr < 0.08) {
+    // A regular polygon also has UNIFORM EDGE LENGTHS. Without this, a rounded or
+    // slanted rectangle (a cartoon window) whose corners happen to sit at similar
+    // radii gets mis-snapped to an octagon — its edges alternate long sides / short
+    // corner-cuts, so an edge-uniformity gate rejects it (and it straightens cleanly
+    // instead), while a true hexagon (equal edges) still passes.
+    const edges = corners.map((p, i) => dist(p, corners[(i + 1) % corners.length]));
+    const me = edges.reduce((s, e) => s + e, 0) / edges.length;
+    const eSd = Math.sqrt(edges.reduce((s, e) => s + (e - me) ** 2, 0) / edges.length);
+    if (crSd / mr < 0.08 && me > 0 && eSd / me < 0.22) {
       const rot0 = Math.atan2(corners[0].y - c.y, corners[0].x - c.x);
       const ringP = makeRegular(c, mr, corners.length, rot0);
       // Fit tolerance RELATIVE to size: a real polygon's edges sit on its samples
