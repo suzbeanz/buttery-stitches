@@ -449,11 +449,6 @@ function seedMidpoint(cl: Path): Point {
  */
 const RUNNING_COLUMN_MM = 0.6;
 
-/** A LONE open line-art bar wider than this (mm) satin-fills (a flag-pole, a single
- *  thick stroke) — a centerline would leave it mostly bare fabric. Only applies to a
- *  solitary open stroke; a NETWORK or a RING always runs its centerline regardless of
- *  width (satin there fans into starbursts / combs / fat bands). */
-const LINE_ART_RUN_MAX_MM = 1.2;
 /** Shortest line-art stroke (centerline mm) worth sewing — below this it's a
  *  medial spur/speck that just adds a trim. */
 const LINE_ART_MIN_LEN_MM = 2.5;
@@ -741,10 +736,13 @@ export function generateObjectRuns(
     // order (not re-sorting) keeps each ring one density-step from the next so they
     // connect with a hidden travel instead of a trimmed hop across the band.
     let contourSpiral = false;
-    // True when the line-art region is sewn as pure running centerlines (no satin
-    // throws) — used below to skip the residual tatami fill, which would otherwise
-    // flood the thin outline region solid.
+    // True when a line-art object is sewn as bold running centerlines (a hairline
+    // fallback) — used below to skip the residual tatami fill, which would flood the
+    // thin stroke region solid.
     let lineArtCenterline = false;
+    // True when a line-art object is rendered as a SOLID contour fill — its concentric
+    // rings sew through the general spiral path below, not the satin emission path.
+    let lineArtFill = false;
     if (usingSatin) {
       // Line-art: drop medial-axis SPURS (tiny centerline stubs off a blobby
       // region) — they sew as 1-stitch specks that only add trims and clutter.
@@ -752,30 +750,28 @@ export function generateObjectRuns(
         ? columns.filter((c) => polylineLength(c.centerline) >= LINE_ART_MIN_LEN_MM)
         : columns;
       if (p.lineArt) {
-        // A connected NETWORK (many medial branches) or a closed RING sews as bold
-        // running centerlines for EVERY column, thin or thick: satin thrown across a
-        // ring fans into a radial starburst, across a network of short branches into a
-        // comb, across a thick outline into a fat band (all of which look terrible).
-        // A LONE open stroke (a single wide bar — a flag-pole) is the one case satin
-        // still serves: it covers the bar solid with no fanning. A loop has a closed
-        // centerline (first point ≈ last).
-        const isLoopCol = (c: SatinColumn) => {
-          const cl = c.centerline;
-          return cl.length > 2 && Math.hypot(cl[0].x - cl[cl.length - 1].x, cl[0].y - cl[cl.length - 1].y) < 0.1;
-        };
-        const networkLike = keep.length > 1 || keep.some(isLoopCol);
-        const beaned = (c: SatinColumn) => beanPath(runningStitch(c.centerline, stitchLength), LINE_ART_BEAN_REPEATS);
-        if (networkLike) {
-          // The lines are ordered for adjacency then CHAINED where branches meet at a
-          // junction, so a connected outline sews as a few long passes, not many trims.
-          tops = chainNearbyLines(orderByNearest(keep.map(beaned), cursor), LINE_ART_LINK_MM);
-          lineArtCenterline = true;
+        // Auto-traced line-art — a cartoon's bold black linework (the silhouette
+        // outline, the tire rings, the ladder, window frames) — reads as SOLID shapes,
+        // not thin pen lines. Fill the region with concentric CONTOUR rings that follow
+        // the shape: a 2 mm stroke becomes a few bold lines, a tire ring fills solid
+        // concentrically (none of the radial starburst that satin throws fan into), a
+        // thick blob fills solid. Stitching ALONG the stroke, not across it, is what
+        // keeps rings and junctions clean. A genuine HAIRLINE (too thin to seat even
+        // one ring) falls back to a bold running centerline so fine detail still reads.
+        const echo = contourFill(region, { density });
+        if (echo.length) {
+          tops = echo;
+          contourSpiral = true;
+          lineArtFill = true;
         } else {
-          const runLines = keep.filter((c) => c.widthMm < LINE_ART_RUN_MAX_MM).map(beaned);
-          const chained = chainNearbyLines(orderByNearest(runLines, cursor), LINE_ART_LINK_MM);
-          const wide = keep.filter((c) => c.widthMm >= LINE_ART_RUN_MAX_MM).map((c) => c.throws);
-          tops = [...chained, ...wide];
-          lineArtCenterline = wide.length === 0;
+          tops = chainNearbyLines(
+            orderByNearest(
+              keep.map((c) => beanPath(runningStitch(c.centerline, stitchLength), LINE_ART_BEAN_REPEATS)),
+              cursor,
+            ),
+            LINE_ART_LINK_MM,
+          );
+          lineArtCenterline = true;
         }
       } else {
         const runMax = RUNNING_COLUMN_MM;
@@ -836,7 +832,7 @@ export function generateObjectRuns(
     // throw sequence) then splits. Tatami/contour split the fill path into
     // machine-safe pieces FIRST, then order those — so a concave shape's spans
     // connect with short travels instead of leaping (and trimming) across it.
-    if (usingSatin) {
+    if (usingSatin && !lineArtFill) {
       // A true satin fill tatami-fills any interior the satin left bare — the small
       // patches at stroke crossings and 3-way junctions where columns are trimmed
       // back so they don't fan. Without this a self-crossing script loop (the 'l' in
@@ -844,7 +840,8 @@ export function generateObjectRuns(
       // Centerline line-art is just thin running lines, so it gets NO residual fill —
       // its "bare" interior is the whole stroke region, and flooding it would turn the
       // outline into a solid black silhouette. A satin column (incl. a lone wide
-      // line-art bar) still patches the bare slivers at its junctions.
+      // line-art bar) still patches the bare slivers at its junctions. Line-art that is
+      // a solid CONTOUR fill (lineArtFill) routes through the general spiral path below.
       if (!lineArtCenterline) {
         for (const patch of residualRegions(region, tops)) {
           const fill = tatamiFill([patch], {
