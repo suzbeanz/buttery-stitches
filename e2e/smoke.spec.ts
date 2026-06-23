@@ -31,7 +31,8 @@ test("draw a fill object and manage it", async ({ page }) => {
   await page.mouse.click(a.x, a.y);
   await page.mouse.click(b.x, b.y);
   await page.mouse.click(c.x, c.y);
-  await page.mouse.dblclick(c.x, c.y); // finish
+  await page.keyboard.press("Enter"); // finish (Enter is the reliable commit path; a
+  // synthetic dblclick doesn't always register as a Konva dblclick in headless)
 
   // One object now exists (top bar counter on the wide layout).
   await expect(page.getByText("1 object", { exact: true })).toBeVisible();
