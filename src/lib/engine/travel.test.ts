@@ -217,23 +217,23 @@ describe("line-art strokes (running lines, not satin)", () => {
     expect(medSeg(la)).toBeGreaterThan(medSeg(satin) * 1.5);
   });
 
-  it("satin-FILLS a wider line-art bar (a ~1.5 mm flag-pole), not a bare line", () => {
+  it("FILLS a wider line-art bar (a ~1.5 mm flag-pole) solid, not a bare line", () => {
     // A standalone ~1.5 mm bar (a flag-pole) has no fill underneath, so a bare
-    // centerline would leave it mostly empty fabric — it must satin-fill solid.
+    // centerline would leave it mostly empty fabric — line-art fills it solid (with
+    // shape-following contour rings + an edge run).
     const pole = [{ x: 0, y: 0 }, { x: 1.5, y: 0 }, { x: 1.5, y: 30 }, { x: 0, y: 30 }];
     const o = makeObjectFromPaths("fill", [pole], "c1");
     o.params = { fillStyle: "satin", lineArt: true, underlay: false };
     const d = generateDesign({ ...createEmptyProject(), objects: [o] }, { lockStitches: false });
-    // A solid satin column over 30 mm at ~0.4 mm rows is ~140 penetrations; a bare
-    // running centerline would be ~15. Well above that proves it filled.
-    expect(d.filter((s) => !s.jump && !s.trim).length).toBeGreaterThan(80);
+    // A bare running centerline over 30 mm at 2.5 mm would be ~13 penetrations; a
+    // solid contour fill is several passes — well above that proves it filled.
+    expect(d.filter((s) => !s.jump && !s.trim).length).toBeGreaterThan(30);
   });
 
-  it("runs a thick RING line-art as a centerline loop, not a radial satin fill", () => {
-    // A 3 mm-walled annulus (a tire, an 'O'): wide enough that a LONE bar would
-    // satin-fill, but a ring MUST run its centerline — satin thrown across a ring
-    // fans into a radial starburst. So it sews as a low-penetration running loop
-    // with long stitches, not a dense zig-zag.
+  it("FILLS a thick RING line-art SOLID (concentric), not a hollow loop or radial starburst", () => {
+    // A 3 mm-walled annulus (a tire, an 'O') must read as a SOLID black ring — the
+    // engine fills it with concentric contour rings that follow the band, so it is
+    // neither a hollow single loop (a thin outline) nor a radial satin starburst.
     const circle = (r: number, n = 64) =>
       Array.from({ length: n }, (_, i) => {
         const a = (2 * Math.PI * i) / n;
@@ -242,9 +242,8 @@ describe("line-art strokes (running lines, not satin)", () => {
     const ring = makeObjectFromPaths("fill", [circle(10), circle(7)], "c1");
     ring.params = { fillStyle: "satin", lineArt: true, underlay: false };
     const d = generateDesign({ ...createEmptyProject(), objects: [ring] }, { lockStitches: false });
-    // Centerline loop (circumference ≈ 2π·8.5 ≈ 53 mm) bean-tripled is ~60–120
-    // penetrations; a satin fill of the 3 mm band would be many hundreds.
-    expect(drawnCount(d)).toBeLessThan(150);
-    expect(medSeg(d)).toBeGreaterThan(1.2); // long running stitches, not a zig-zag
+    // A single hollow loop (circumference ≈ 53 mm at 2.5 mm × 3 bean) is ~64; a SOLID
+    // concentric fill of the 3 mm wall is several rings → well above that.
+    expect(drawnCount(d)).toBeGreaterThan(150);
   });
 });
