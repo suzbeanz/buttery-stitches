@@ -6,6 +6,7 @@ import { smoothRingKeepingCorners } from "../smooth";
 import { douglasPeucker } from "./simplify";
 import { polygonArea, polygonPerimeter } from "./classify";
 import { recognizeShape } from "./recognize";
+import { idealizeDesign } from "./idealize";
 import { quantizeImage, borderBackgroundColor, borderIsTransparent, borderIsSolidOpaque } from "./quantize";
 
 export * from "./simplify";
@@ -60,6 +61,9 @@ export interface DigitizeOptions {
    *  "balanced"). Drives trace smoothing, path simplification, and despeckling
    *  together; explicit simplifyTolMm/minAreaMm2 still override. */
   detail?: DigitizeDetail;
+  /** apply design-level idealization (regularize even/uniform repeats like a ladder's
+   *  rungs into one canonical shape at a single pitch). Default on. */
+  idealize?: boolean;
 }
 
 /** Detail level for auto-digitize: bolder & cleaner ↔ finer & busier. */
@@ -289,7 +293,8 @@ export function tracedataToObjects(
   // Sew solid fills first (largest → smallest), then all line-art strokes, so the
   // outlines and detail land crisply ON TOP of the fills instead of being buried.
   built.sort((a, b) => Number(a.stroke) - Number(b.stroke) || b.area - a.area);
-  return { colors, objects: built.map((b) => b.object) };
+  const objects = built.map((b) => b.object);
+  return { colors, objects: opts.idealize === false ? objects : idealizeDesign(objects) };
 }
 
 /** A traced region thinner than this (mean width, mm) is line-art (a stroke), not
