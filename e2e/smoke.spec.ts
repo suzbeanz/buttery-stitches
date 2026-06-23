@@ -17,22 +17,21 @@ test("draw a fill object and manage it", async ({ page }) => {
   // Dismiss the start hint so it doesn't intercept canvas clicks.
   await page.getByRole("button", { name: "Close" }).first().click();
 
-  // Pick the Fill tool and draw a triangle on the canvas.
+  // Pick the Fill tool and draw a triangle on the canvas. A fill needs >= 3 placed
+  // points; the vertices are spread wide and each click is given a beat to land so
+  // every mousedown registers as its own Konva point in headless (a fast/tight
+  // sequence can drop one and leave the draft below the 3-point minimum).
   await page.getByRole("button", { name: "Fill", exact: true }).click();
   const canvas = page.locator("canvas").first();
   const box = (await canvas.boundingBox())!;
-  const at = (fx: number, fy: number) => ({
-    x: box.x + box.width * fx,
-    y: box.y + box.height * fy,
-  });
-  const a = at(0.4, 0.4);
-  const b = at(0.6, 0.4);
-  const c = at(0.5, 0.6);
-  await page.mouse.click(a.x, a.y);
-  await page.mouse.click(b.x, b.y);
-  await page.mouse.click(c.x, c.y);
-  await page.keyboard.press("Enter"); // finish (Enter is the reliable commit path; a
-  // synthetic dblclick doesn't always register as a Konva dblclick in headless)
+  const clickAt = async (fx: number, fy: number) => {
+    await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy);
+    await page.waitForTimeout(80);
+  };
+  await clickAt(0.3, 0.4);
+  await clickAt(0.7, 0.4);
+  await clickAt(0.5, 0.7);
+  await page.keyboard.press("Enter"); // commit the draft (same path as the running test)
 
   // One object now exists (top bar counter on the wide layout).
   await expect(page.getByText("1 object", { exact: true })).toBeVisible();
