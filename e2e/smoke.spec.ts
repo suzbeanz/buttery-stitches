@@ -18,7 +18,7 @@ test("draw a fill object and manage it", async ({ page }) => {
   await page.getByRole("button", { name: "Close" }).first().click();
 
   // Pick the Fill tool and draw a triangle on the canvas.
-  await page.getByRole("button", { name: "Fill" }).click();
+  await page.getByRole("button", { name: "Fill", exact: true }).click();
   const canvas = page.locator("canvas").first();
   const box = (await canvas.boundingBox())!;
   const at = (fx: number, fy: number) => ({
@@ -34,7 +34,7 @@ test("draw a fill object and manage it", async ({ page }) => {
   await page.mouse.dblclick(c.x, c.y); // finish
 
   // One object now exists (top bar counter on the wide layout).
-  await expect(page.getByText("1 object")).toBeVisible();
+  await expect(page.getByText("1 object", { exact: true })).toBeVisible();
 
   // Toggle visibility off and on via the layer row.
   await page.getByTitle("Hide").first().click();
@@ -51,7 +51,7 @@ test("draws a running stitch and switches its type to satin", async ({ page }) =
   await page.mouse.click(box.x + box.width * 0.7, box.y + box.height * 0.5);
   await page.keyboard.press("Enter"); // finish
 
-  await expect(page.getByText("1 object")).toBeVisible();
+  await expect(page.getByText("1 object", { exact: true })).toBeVisible();
 
   // Properties panel reflects the selection; change type to Satin.
   await page.getByRole("combobox").first().selectOption("satin");

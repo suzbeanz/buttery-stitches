@@ -142,7 +142,7 @@ export default function SimulatorBar() {
           </button>
         </>
       ) : (
-        <span className="text-xs text-navy/70">
+        <span className="text-xs text-navy/80">
           Switch to <b>Stitch view</b> to watch the design redraw stitch by stitch — or press <kbd className="rounded border border-navy/25 px-1 font-mono text-[10px]">P</kbd>.
         </span>
       )}
