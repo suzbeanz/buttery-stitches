@@ -1,7 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { regularizeRepeats } from "./idealize";
+import { regularizeRepeats, unifyCircles } from "./idealize";
 import { polygonArea } from "./classify";
+import { makeObjectFromPaths } from "../objects";
 import type { Path } from "../../types/project";
+
+const circle = (cx: number, cy: number, r: number, n = 64): Path =>
+  Array.from({ length: n }, (_, i) => { const a = (2 * Math.PI * i) / n; return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) }; });
+const radiusOf = (ring: Path) => { const c = centroid(ring); return Math.hypot(ring[0].x - c.x, ring[0].y - c.y); };
 
 const rect = (cx: number, cy: number, hw: number, hh: number): Path => [
   { x: cx - hw, y: cy - hh }, { x: cx + hw, y: cy - hh }, { x: cx + hw, y: cy + hh }, { x: cx - hw, y: cy + hh },
@@ -39,5 +44,26 @@ describe("regularizeRepeats", () => {
   it("does not fire on fewer than 5 members", () => {
     const rings: Path[] = Array.from({ length: 4 }, (_, i) => rect(10 + i * 8, 20, 2, 3));
     expect(regularizeRepeats(rings).count).toBe(0);
+  });
+});
+
+describe("unifyCircles", () => {
+  it("snaps two near-equal circles (two wheels) to one identical radius", () => {
+    const objs = [
+      makeObjectFromPaths("fill", [circle(0, 0, 5.0)], "c1"),
+      makeObjectFromPaths("fill", [circle(40, 0, 5.4)], "c1"),
+    ];
+    const out = unifyCircles(objs);
+    expect(Math.abs(radiusOf(out[0].paths[0]) - radiusOf(out[1].paths[0]))).toBeLessThan(1e-6);
+  });
+
+  it("leaves circles of clearly different size alone", () => {
+    const objs = [
+      makeObjectFromPaths("fill", [circle(0, 0, 5)], "c1"),
+      makeObjectFromPaths("fill", [circle(40, 0, 12)], "c1"),
+    ];
+    const out = unifyCircles(objs);
+    expect(radiusOf(out[0].paths[0])).toBeCloseTo(5, 1);
+    expect(radiusOf(out[1].paths[0])).toBeCloseTo(12, 1);
   });
 });
