@@ -455,6 +455,12 @@ export interface SatinColumn {
   centerline: Path;
   throws: Path;
   widthMm: number;
+  /** The two smoothed edge rails of the stroke (aligned, equal length). Lets a
+   *  caller fill the column with parallel passes ALONG the stroke (between the
+   *  rails) instead of satin throws ACROSS it — a clean solid band that never fans
+   *  into a starburst on a wide ring. */
+  left: Path;
+  right: Path;
 }
 
 /**
@@ -853,7 +859,7 @@ function buildColumn(
   const sorted = [...halves].sort((p, q) => p - q);
   const medianHalf = sorted[sorted.length >> 1] ?? 0;
   const widthMm = Math.max(0, 2 * (medianHalf - OVERSHOOT_MM));
-  return { centerline: center, throws: capped, widthMm };
+  return { centerline: center, throws: capped, widthMm, left, right };
 }
 
 /**
