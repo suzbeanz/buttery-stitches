@@ -1,5 +1,6 @@
 import type { EmbObject, Path, Point } from "../../types/project";
 import { polygonArea } from "./classify";
+import { recognizeShape } from "./recognize";
 
 /**
  * Design-level idealization — the "smart" half of Image-Trace-grade tracing. After
@@ -149,10 +150,56 @@ function principalDir(pts: Point[], c: Point): { dir: Point; nrm: Point } {
   return { dir: { x: Math.cos(ang), y: Math.sin(ang) }, nrm: { x: -Math.sin(ang), y: Math.cos(ang) } };
 }
 
-/** Apply the design-level idealizations to traced objects (currently: even repeats). */
+function makeCircle(c: Point, r: number, n = 64): Path {
+  const out: Path = [];
+  for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; out.push({ x: c.x + r * Math.cos(a), y: c.y + r * Math.sin(a) }); }
+  return out;
+}
+
+/**
+ * Congruence/symmetry: across ALL rings, find circles whose radii are near-equal
+ * (within 12 %) and snap each such group to its median radius — so a design's paired
+ * elements (a vehicle's two wheels, two hub-caps) come out truly IDENTICAL rather than
+ * each independently round. Centres are kept; only the radius is unified. A lone circle
+ * (no congruent partner) and circles of clearly different size are left untouched.
+ */
+export function unifyCircles(objects: EmbObject[]): EmbObject[] {
+  const found: { oi: number; ri: number; c: Point; r: number }[] = [];
+  objects.forEach((o, oi) =>
+    o.paths.forEach((ring, ri) => {
+      const rec = recognizeShape(ring, 1.0);
+      if (rec && rec.kind === "circle") {
+        const c = centroidOf(rec.ring);
+        found.push({ oi, ri, c, r: Math.hypot(rec.ring[0].x - c.x, rec.ring[0].y - c.y) });
+      }
+    }),
+  );
+  if (found.length < 2) return objects;
+  // cluster by ascending radius; compare to the cluster's SMALLEST member so the whole
+  // cluster stays within 12 % (no "chaining" a gradient of sizes into one group).
+  const sorted = [...found].sort((a, b) => a.r - b.r);
+  const clusters: (typeof found)[] = [];
+  for (const f of sorted) {
+    const last = clusters[clusters.length - 1];
+    if (last && f.r <= last[0].r * 1.12) last.push(f);
+    else clusters.push([f]);
+  }
+  const paths = objects.map((o) => o.paths.slice());
+  let changed = false;
+  for (const cl of clusters) {
+    if (cl.length < 2) continue;
+    const R = median(cl.map((f) => f.r));
+    for (const f of cl) { paths[f.oi][f.ri] = makeCircle(f.c, R); changed = true; }
+  }
+  return changed ? objects.map((o, oi) => ({ ...o, paths: paths[oi] })) : objects;
+}
+
+/** Apply the design-level idealizations to traced objects: even/uniform repeats, then
+ *  unify congruent circles (identical wheels/hubs). */
 export function idealizeDesign(objects: EmbObject[]): EmbObject[] {
-  return objects.map((o) => {
+  const regularized = objects.map((o) => {
     const reg = regularizeRepeats(o.paths);
     return reg.count ? { ...o, paths: reg.rings } : o;
   });
+  return unifyCircles(regularized);
 }
