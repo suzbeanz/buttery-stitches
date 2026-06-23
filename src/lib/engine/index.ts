@@ -134,6 +134,11 @@ export interface StitchRun {
    *  hidden under the stitching or be trimmed, never slash across a counter. Tatami
    *  rows leave this false so a fill's own spans still bridge a notch. */
   noBareTravel?: boolean;
+  /** TRIM across any gap into this run — never bridge it with a stitched travel, not
+   *  even a hidden/buried one. Set for top-layer line-art (an outline, a ladder): the
+   *  separate strokes shouldn't be linked by thread (a buried connector still shows
+   *  where it crosses a gap between strokes), so a clean jump+trim is the right move. */
+  trimGaps?: boolean;
   /** override thread color for this run (multi-blend's second color); defaults to
    *  the object's colorId. */
   colorId?: string;
@@ -147,8 +152,9 @@ function addRun(
   region = 0,
   noBareTravel = false,
   colorId?: string,
+  trimGaps = false,
 ): void {
-  if (pts.length > 0) runs.push({ pts, underlay, region, noBareTravel, colorId });
+  if (pts.length > 0) runs.push({ pts, underlay, region, noBareTravel, colorId, trimGaps });
 }
 
 /**
@@ -452,20 +458,13 @@ const RUNNING_COLUMN_MM = 0.6;
 /** Shortest line-art stroke (centerline mm) worth sewing — below this it's a
  *  medial spur/speck that just adds a trim. */
 const LINE_ART_MIN_LEN_MM = 2.5;
-/** Line-art centerlines sew as a BOLD triple (bean) stitch — a single running
- *  pass reads thin and weak for a cartoon outline, so each stroke is retraced
- *  forward/back/forward for a solid, dark, hand-digitized line. EVERY line-art
- *  column runs its centerline this way (thin or thick); the bean is what gives the
- *  line its body in place of a satin fill. The min-length filter already drops
- *  specks, so every kept stroke is a real outline worth bolding. The odd repeat
- *  count finishes at the stroke's far end, which keeps branch chaining simple. */
+/** Line-art strokes at/above this width (mm) are RIBBON-filled solid (an outline band,
+ *  a tire wall); thinner detail (a hairline, an antenna) is bean-retraced down its
+ *  centerline instead — too narrow to fill, but a single pass reads weak. */
+const LINE_ART_RIBBON_MIN_MM = 0.9;
+/** A thin line-art stroke is retraced forward/back/forward (bean / triple) so the
+ *  hairline reads bold and dark instead of a single weak pass. */
 const LINE_ART_BEAN_REPEATS = 3;
-/** Max gap (mm) between two line-art centerlines for them to be CHAINED into one
- *  continuous run. A connected outline network breaks into many medial branches
- *  that meet at junctions; linking branches whose ends nearly touch lets the whole
- *  outline sew as a few long passes instead of dozens of runs each needing a trim.
- *  Kept small so the connector never slashes across open fabric. */
-const LINE_ART_LINK_MM = 1.5;
 
 /** Arc length of a polyline (mm). */
 function polylineLength(line: Point[]): number {
@@ -545,25 +544,28 @@ function beanPath(line: Point[], repeats: number): Point[] {
   return out;
 }
 
-/** Chain pre-ordered polylines that nearly touch end-to-end into single continuous
- *  runs. Consecutive lines whose tail→head gap is within `maxGapMm` are concatenated
- *  (the short connector becomes stitched), so a line-art network's branches that
- *  meet at a junction sew as one pass instead of separate runs that each trim. The
- *  input should already be oriented for adjacency (e.g. via `orderByNearest`). */
-function chainNearbyLines(lines: Point[][], maxGapMm: number): Point[][] {
-  const out: Point[][] = [];
-  let cur: Point[] | null = null;
-  for (const line of lines) {
-    if (line.length < 2) continue;
-    if (cur && distance(cur[cur.length - 1], line[0]) <= maxGapMm) {
-      cur = cur.concat(line);
-    } else {
-      if (cur) out.push(cur);
-      cur = [...line];
-    }
+/** Fill a medial column with parallel passes running ALONG the stroke — interpolated
+ *  between its two smoothed edge rails — instead of satin throws ACROSS it. The passes
+ *  follow the smooth centerline, so a stroke fills as a clean solid band and a ring
+ *  fills as clean concentric loops (a tire), with none of satin's radial starburst on
+ *  a wide ring nor region-contour's wobble from tracing the jagged boundary. The passes
+ *  alternate direction and join into ONE continuous serpentine (the next pass is a
+ *  density-step away at the same end), so the whole stroke sews as a single run — no
+ *  travel tangle between dozens of separate rows. */
+function ribbonFill(c: SatinColumn, density: number, stitchLength: number): Point[] {
+  const L = c.left;
+  const R = c.right;
+  const n = Math.min(L.length, R.length);
+  if (n < 2) return runningStitch(c.centerline, stitchLength);
+  const levels = Math.max(1, Math.round(c.widthMm / density));
+  let path: Point[] = [];
+  for (let k = 0; k <= levels; k++) {
+    const t = k / levels;
+    const line: Point[] = [];
+    for (let i = 0; i < n; i++) line.push({ x: L[i].x + (R[i].x - L[i].x) * t, y: L[i].y + (R[i].y - L[i].y) * t });
+    path = path.concat(k % 2 === 0 ? line : line.reverse());
   }
-  if (cur) out.push(cur);
-  return out;
+  return runningStitch(path, stitchLength);
 }
 
 /**
@@ -736,12 +738,9 @@ export function generateObjectRuns(
     // order (not re-sorting) keeps each ring one density-step from the next so they
     // connect with a hidden travel instead of a trimmed hop across the band.
     let contourSpiral = false;
-    // True when a line-art object is sewn as bold running centerlines (a hairline
-    // fallback) — used below to skip the residual tatami fill, which would flood the
-    // thin stroke region solid.
-    let lineArtCenterline = false;
-    // True when a line-art object is rendered as a SOLID contour fill — its concentric
-    // rings sew through the general spiral path below, not the satin emission path.
+    // True when a line-art object is rendered as a SOLID ribbon fill (parallel passes
+    // along each stroke). It sews through the general ordered path below, not the satin
+    // emission path, and gets no residual tatami fill.
     let lineArtFill = false;
     if (usingSatin) {
       // Line-art: drop medial-axis SPURS (tiny centerline stubs off a blobby
@@ -752,27 +751,20 @@ export function generateObjectRuns(
       if (p.lineArt) {
         // Auto-traced line-art — a cartoon's bold black linework (the silhouette
         // outline, the tire rings, the ladder, window frames) — reads as SOLID shapes,
-        // not thin pen lines. Fill the region with concentric CONTOUR rings that follow
-        // the shape: a 2 mm stroke becomes a few bold lines, a tire ring fills solid
-        // concentrically (none of the radial starburst that satin throws fan into), a
-        // thick blob fills solid. Stitching ALONG the stroke, not across it, is what
-        // keeps rings and junctions clean. A genuine HAIRLINE (too thin to seat even
-        // one ring) falls back to a bold running centerline so fine detail still reads.
-        const echo = contourFill(region, { density });
-        if (echo.length) {
-          tops = echo;
-          contourSpiral = true;
-          lineArtFill = true;
-        } else {
-          tops = chainNearbyLines(
-            orderByNearest(
-              keep.map((c) => beanPath(runningStitch(c.centerline, stitchLength), LINE_ART_BEAN_REPEATS)),
-              cursor,
-            ),
-            LINE_ART_LINK_MM,
-          );
-          lineArtCenterline = true;
-        }
+        // not thin pen lines. Fill each medial column with parallel passes running
+        // ALONG the stroke (interpolated between its smoothed rails): a clean solid
+        // BAND for an outline, clean CONCENTRIC rings for a tire wall. Because the
+        // passes follow the SMOOTH centerline, there's none of satin's radial starburst
+        // (throws ACROSS a wide ring) nor region-contour's wavy nested loops (which
+        // trace the jagged boundary). A degenerate column with no rails falls back to
+        // its centerline so a hairline still sews.
+        tops = keep.map((c) =>
+          c.widthMm < LINE_ART_RIBBON_MIN_MM
+            ? beanPath(runningStitch(c.centerline, stitchLength), LINE_ART_BEAN_REPEATS)
+            : ribbonFill(c, density, stitchLength),
+        );
+        tatamiNoBareTravel = true; // a fill: order for shortest travel, never slash a bare gap
+        lineArtFill = true;
       } else {
         const runMax = RUNNING_COLUMN_MM;
         tops = keep.map((c) =>
@@ -837,24 +829,18 @@ export function generateObjectRuns(
       // patches at stroke crossings and 3-way junctions where columns are trimmed
       // back so they don't fan. Without this a self-crossing script loop (the 'l' in
       // "hello") shows a hole. Laid first so the satin sits on top at the seams.
-      // Centerline line-art is just thin running lines, so it gets NO residual fill —
-      // its "bare" interior is the whole stroke region, and flooding it would turn the
-      // outline into a solid black silhouette. A satin column (incl. a lone wide
-      // line-art bar) still patches the bare slivers at its junctions. Line-art that is
-      // a solid CONTOUR fill (lineArtFill) routes through the general spiral path below.
-      if (!lineArtCenterline) {
-        for (const patch of residualRegions(region, tops)) {
-          const fill = tatamiFill([patch], {
-            density,
-            angle: tatamiAngle,
-            stitchLength: p.fillStitchLength,
-            pullCompMm: pullComp,
-          });
-          for (const sub of orderByNearest(splitLongTravels(fill, travelMax), cursor)) {
-            const r = dropShortStitches(sub);
-            addRun(runs, r, false, regionIdx, true);
-            if (r.length) cursor = r[r.length - 1];
-          }
+      // (Line-art renders as a ribbon fill via lineArtFill and skips this path.)
+      for (const patch of residualRegions(region, tops)) {
+        const fill = tatamiFill([patch], {
+          density,
+          angle: tatamiAngle,
+          stitchLength: p.fillStitchLength,
+          pullCompMm: pullComp,
+        });
+        for (const sub of orderByNearest(splitLongTravels(fill, travelMax), cursor)) {
+          const r = dropShortStitches(sub);
+          addRun(runs, r, false, regionIdx, true);
+          if (r.length) cursor = r[r.length - 1];
         }
       }
       // Both satin and line-art forbid a BARE travel: a stitched move across the
@@ -881,12 +867,18 @@ export function generateObjectRuns(
       const noBare = tatamiNoBareTravel || contourSpiral;
       for (const sub of ordered) {
         const r = dropShortStitches(sub, minStitch);
-        addRun(runs, r, false, regionIdx, noBare);
+        // Line-art is separate top-layer strokes — trim across the gaps between them
+        // (a buried connector would show where it crosses bare fabric), so it sews
+        // clean with no stray travel threads.
+        addRun(runs, r, false, regionIdx, noBare, undefined, lineArtFill);
         if (r.length) cursor = r[r.length - 1];
       }
       // Finishing edge run: walk the boundary just inside the edge so the fill's
-      // row-ends are capped and the silhouette (and its end-caps) read crisp.
-      for (const run of orderByNearest(fillEdgeRuns(region, EDGE_RUN_STITCH_MM), cursor)) {
+      // row-ends are capped and the silhouette (and its end-caps) read crisp. (Skip
+      // for line-art — the ribbon already follows the edges; retracing the whole
+      // network boundary only adds travel.)
+      const edgeRuns = lineArtFill ? [] : orderByNearest(fillEdgeRuns(region, EDGE_RUN_STITCH_MM), cursor);
+      for (const run of edgeRuns) {
         for (const sub of splitLongTravels(run, travelMax)) {
           const r = dropShortStitches(sub);
           addRun(runs, r, false, regionIdx);
@@ -1047,6 +1039,7 @@ export function generateDesign(
       region: run.region ?? 0,
       stopAfter: run.stopAfter,
       noBareTravel: run.noBareTravel ?? false,
+      trimGaps: run.trimGaps ?? false,
       colorId: run.colorId ?? g.object.colorId,
     })),
   );
@@ -1322,17 +1315,18 @@ export function generateDesign(
         gap <= INTRA_REGION_TRAVEL;
       const hiddenTravel =
         !colorChanged &&
+        !d.trimGaps &&
         gap > jumpThreshold &&
         gap <= MAX_COVERED_TRAVEL &&
         coveredBetween(prevPoint, start, col, drawOrder.get(object.id) ?? di);
       const shortTravel =
-        !colorChanged && !d.noBareTravel && gap > jumpThreshold && gap <= exposedMax;
+        !colorChanged && !d.noBareTravel && !d.trimGaps && gap > jumpThreshold && gap <= exposedMax;
       // Direct (straight) travel when the move is already safe to stitch.
       let travelPath: Point[] | null =
         intraTravel || hiddenTravel || shortTravel ? [prevPoint, start] : null;
       // Otherwise, before trimming a same-color move, try to route it UNDER the
       // design's coverage and bury the travel (the pro move) instead of cutting.
-      if (!travelPath && !colorChanged && gap > jumpThreshold && gap <= ROUTE_CAP) {
+      if (!travelPath && !d.trimGaps && !colorChanged && gap > jumpThreshold && gap <= ROUTE_CAP) {
         travelPath = routeUnderCoverage(prevPoint, start, col);
       }
       if (travelPath) {
