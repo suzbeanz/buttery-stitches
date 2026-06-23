@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { logError, downloadErrorReport } from "../lib/log";
 
 /**
  * Catches render/runtime errors anywhere below it so a single failing component
@@ -20,8 +21,10 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    // Surface it for debugging without taking the UI down.
+    // Surface it for debugging without taking the UI down, and record it in the
+    // local (never-uploaded) log so the user can download a report if they want.
     console.error("Buttery Stitches hit an error:", error, info.componentStack);
+    logError(error.message || error.name, `${error.stack ?? ""}${info.componentStack ?? ""}`);
   }
 
   render(): ReactNode {
@@ -42,12 +45,20 @@ export default class ErrorBoundary extends Component<Props, State> {
         <pre className="max-w-md overflow-auto rounded-sm border-2 border-ink/15 bg-butter-50 p-3 text-left text-xs text-navy/60">
           {error.message}
         </pre>
-        <button
-          onClick={() => window.location.reload()}
-          className="rounded-sm border-2 border-ink bg-ink px-6 py-2.5 font-label text-sm font-semibold uppercase tracking-[0.1em] text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none"
-        >
-          Reload
-        </button>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <button
+            onClick={() => window.location.reload()}
+            className="rounded-sm border-2 border-ink bg-ink px-6 py-2.5 font-label text-sm font-semibold uppercase tracking-[0.1em] text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none"
+          >
+            Reload
+          </button>
+          <button
+            onClick={() => downloadErrorReport()}
+            className="rounded-sm border-2 border-ink bg-cream px-6 py-2.5 font-label text-sm font-semibold uppercase tracking-[0.1em] text-ink shadow-press-sm transition-transform hover:bg-butter-200 active:translate-y-[2px] active:shadow-none"
+          >
+            Download report
+          </button>
+        </div>
       </div>
     );
   }

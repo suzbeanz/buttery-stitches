@@ -16,6 +16,7 @@ import { designToSegments } from "../lib/engine/render";
 import { drawStitches } from "../lib/render-stitches";
 import { createEmptyProject } from "../lib/project";
 import { useEscapeToClose, useDialogFocus } from "./useEscapeToClose";
+import { logError } from "../lib/log";
 
 /**
  * Auto-digitize dialog: one live screen — the source image beside a preview that
@@ -90,7 +91,10 @@ export default function AutoDigitizeDialog({
     let alive = true;
     loadImageData(file)
       .then((d) => alive && setImageData(d))
-      .catch((e) => alive && setError((e as Error).message));
+      .catch((e) => {
+        logError(`Couldn't load image: ${(e as Error).message}`, (e as Error).stack);
+        if (alive) setError((e as Error).message);
+      });
     return () => {
       alive = false;
     };
@@ -173,6 +177,7 @@ export default function AutoDigitizeDialog({
             : null,
         );
       } catch (e) {
+        logError(`Digitize failed: ${(e as Error).message}`, (e as Error).stack);
         if (alive) setError((e as Error).message);
       } finally {
         if (alive) setUpdating(false);
