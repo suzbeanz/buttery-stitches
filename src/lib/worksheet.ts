@@ -104,9 +104,6 @@ export function worksheetHtml(worksheet: Worksheet, title = "Buttery Stitches"):
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8" />
 <title>${esc(title)} — Thread Worksheet</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Libre+Franklin:wght@400;600&display=swap" rel="stylesheet" />
 <style>
   /* Pressed Butter brand tokens — match the app exactly. */
   :root { --ink:#173A7A; --ink-deep:#102A57; --butter:#F1DE8B; --cream:#F6EFCB; --stamp:#B23A2E; --char:#25241C; }
