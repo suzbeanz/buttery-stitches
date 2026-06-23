@@ -84,7 +84,10 @@ export default function LayerPanel() {
   };
 
   return (
-    <aside className="flex h-full w-60 shrink-0 flex-col border-r border-navy/25 bg-butter-100">
+    <aside
+      aria-label="Layers and stitch order"
+      className="flex h-full w-60 shrink-0 flex-col border-r border-navy/25 bg-butter-100"
+    >
       <div className="flex items-center gap-1.5 border-b border-ink/20 px-3 py-2.5 font-label text-xs font-semibold uppercase tracking-[0.18em] text-ink-deep">
         <ListOrdered size={14} className="text-ink-deep" aria-hidden /> Stitch Order
       </div>

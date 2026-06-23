@@ -50,7 +50,10 @@ export default function ToolRail() {
     // overflow-visible (not -auto): a vertical scroll container forces the cross
     // axis to clip, which hid the right-side tooltips inside the rail and flashed a
     // horizontal scrollbar. The compact two-column layout fits the kit without it.
-    <aside className="flex w-28 shrink-0 flex-col gap-0.5 overflow-visible border-r-2 border-ink bg-cream py-1.5">
+    <aside
+      aria-label="Drawing tools"
+      className="flex w-28 shrink-0 flex-col gap-0.5 overflow-visible border-r-2 border-ink bg-cream py-1.5"
+    >
       {locked && (
         <div className="mx-1.5 mb-1 rounded-sm bg-butter-200 px-1 py-1 text-center font-label text-[9px] font-semibold uppercase leading-tight tracking-wide text-ink/70">
           Stitch view — tools paused

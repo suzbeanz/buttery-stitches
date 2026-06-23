@@ -976,11 +976,23 @@ export default function CanvasStage() {
   return (
     <main
       ref={containerRef}
+      aria-label="Embroidery canvas"
       className="relative min-w-0 flex-1 overflow-hidden"
       // touch-action none so the browser doesn't scroll/zoom the page while the
       // user draws, pans, or pinch-zooms on the canvas.
       style={{ background: C.cream, touchAction: "none" }}
     >
+      {/* The Konva canvas is opaque to assistive tech, so describe its state in a
+          polite live region: how many objects, how many selected, which view. */}
+      <div className="sr-only" aria-live="polite">
+        {viewMode === "stitch" ? "Stitch preview. " : "Editing canvas. "}
+        {project.objects.length === 0
+          ? "No objects yet — draw a shape, add words, or import an image to begin."
+          : `${project.objects.length} object${project.objects.length === 1 ? "" : "s"} on the canvas` +
+            (selectedIds.length
+              ? `, ${selectedIds.length} selected.`
+              : ", none selected.")}
+      </div>
       {size.width > 0 && (
         <Stage
           width={size.width}

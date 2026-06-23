@@ -24,7 +24,10 @@ export default function Toaster() {
         return (
           <div
             key={t.id}
-            role="status"
+            // Errors interrupt (assertive); successes/info wait their turn.
+            role={t.kind === "error" ? "alert" : "status"}
+            aria-live={t.kind === "error" ? "assertive" : "polite"}
+            aria-atomic="true"
             className="anim-toast-in pointer-events-auto flex w-full max-w-sm items-start gap-2 rounded-sm border-2 border-ink bg-cream px-3 py-2 text-sm text-char shadow-press"
           >
             <Icon size={16} className={`mt-0.5 shrink-0 ${ICON_COLOR[t.kind]}`} aria-hidden />
