@@ -1,16 +1,21 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * End-to-end smoke test of the manual-editing flow. Does not depend on Pyodide
- * (export is exercised separately because it loads the runtime from a CDN).
+ * End-to-end smoke test of the manual-editing flow in the studio (route "/app").
+ * Does not depend on Pyodide (export loads the runtime from a CDN and is
+ * exercised separately). Drawing relies on the wide desktop layout (the top-bar
+ * object counter is hidden on narrow viewports), so this file is desktop-only —
+ * the mobile project ignores it (see playwright.config.ts).
  */
 
 test("draw a fill object and manage it", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/app");
 
-  // App loads with the butter wordmark and an empty canvas.
+  // Studio loads with the wordmark and the empty-state start hint.
   await expect(page.getByText("Buttery Stitches")).toBeVisible();
-  await expect(page.getByText(/No objects yet/i)).toBeVisible();
+  await expect(page.getByText(/Let's make something/i)).toBeVisible();
+  // Dismiss the start hint so it doesn't intercept canvas clicks.
+  await page.getByRole("button", { name: "Close" }).first().click();
 
   // Pick the Fill tool and draw a triangle on the canvas.
   await page.getByRole("button", { name: "Fill" }).click();
@@ -28,9 +33,8 @@ test("draw a fill object and manage it", async ({ page }) => {
   await page.mouse.click(c.x, c.y);
   await page.mouse.dblclick(c.x, c.y); // finish
 
-  // One object now exists (top bar counter) and the empty state is gone.
+  // One object now exists (top bar counter on the wide layout).
   await expect(page.getByText("1 object")).toBeVisible();
-  await expect(page.getByText(/No objects yet/i)).toHaveCount(0);
 
   // Toggle visibility off and on via the layer row.
   await page.getByTitle("Hide").first().click();
@@ -38,8 +42,9 @@ test("draw a fill object and manage it", async ({ page }) => {
 });
 
 test("draws a running stitch and switches its type to satin", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("button", { name: "Running" }).click();
+  await page.goto("/app");
+  await page.getByRole("button", { name: "Close" }).first().click(); // dismiss start hint
+  await page.getByRole("button", { name: "Run" }).click();
   const canvas = page.locator("canvas").first();
   const box = (await canvas.boundingBox())!;
   await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.5);
