@@ -112,6 +112,13 @@ function touchesBorder(pts: Point[], w: number, h: number): boolean {
   return false;
 }
 
+/** Straightening tolerance (mm) for the ring-cleanup pass. The tracer leaves a small
+ *  (~0.2–0.5 mm) smooth bow on edges that are meant to be straight; re-simplifying a
+ *  non-primitive ring at this tolerance collapses the bow to a true straight line while
+ *  real corners (which deviate far more) survive. Above ~0.6 mm it starts clipping
+ *  genuine small features, so keep it modest. */
+const STRAIGHTEN_TOL_MM = 0.5;
+
 /**
  * Convert imagetracerjs tracedata into stitch objects (Section 5, steps 3–5).
  * Pure — feed it a tracedata object and it returns colors + classified
@@ -192,7 +199,13 @@ export function tracedataToObjects(
     // a shape — while broad regions stay solid fills. Tiny specks (area) and short
     // thin fringe (length) are despeckled. The nonzero fill engine handles each
     // object's disjoint blobs + holes together.
-    const clean = (r: Path) => recognizeShape(r, 1.0)?.ring ?? smoothRingKeepingCorners(r, 0.8);
+    // Ring cleanup: snap a true primitive (circle/ellipse/rectangle/polygon) if one
+    // fits, else STRAIGHTEN — re-simplify at ~0.5 mm so the trace's small smooth bow
+    // on a "straight" edge collapses to a true straight line (real corners deviate far
+    // more and survive DP), then corner-aware smooth so genuine curves stay smooth.
+    // This is what kills the "shakily drawn" look regardless of the detail preset.
+    const clean = (r: Path) =>
+      recognizeShape(r, 1.0)?.ring ?? smoothRingKeepingCorners(douglasPeucker(r, STRAIGHTEN_TOL_MM), 0.6);
     const fillRings: Path[] = [];
     const strokeRings: Path[] = [];
     let fillArea = 0;

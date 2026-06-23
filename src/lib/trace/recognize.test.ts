@@ -74,6 +74,21 @@ describe("smart-shape recognition", () => {
     expect(r?.kind).toBe("polygon");
   });
 
+  it("does NOT snap a chamfered rectangle to an octagon (uneven edges)", () => {
+    // A 12×12 square with 1.5 mm corner chamfers → 8 vertices, but the edges alternate
+    // long sides (~9 mm) and short cuts (~2 mm). A real cartoon window (rounded/slanted
+    // rect) looks like this; it must NOT be mis-snapped to a regular octagon — it should
+    // stay a rectangle (or fall through), never "polygon".
+    const s = 6, ch = 1.5;
+    const v: Path = [
+      { x: -s + ch, y: -s }, { x: s - ch, y: -s }, { x: s, y: -s + ch }, { x: s, y: s - ch },
+      { x: s - ch, y: s }, { x: -s + ch, y: s }, { x: -s, y: s - ch }, { x: -s, y: -s + ch },
+    ];
+    const ring: Path = [];
+    for (let i = 0; i < 8; i++) { const a = v[i], b = v[(i + 1) % 8]; for (let k = 0; k < 5; k++) ring.push({ x: a.x + ((b.x - a.x) * k) / 5, y: a.y + ((b.y - a.y) * k) / 5 }); }
+    expect(recognizeShape(ring, 0.8)?.kind).not.toBe("polygon");
+  });
+
   it("recognizes an ellipse (and not as a circle)", () => {
     const ring = sampled(64, (t) => ({ x: 30 * Math.cos(t * 2 * Math.PI), y: 12 * Math.sin(t * 2 * Math.PI) }));
     const r = recognizeShape(ring, 0.8);
