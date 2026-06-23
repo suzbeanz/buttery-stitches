@@ -323,6 +323,11 @@ const FLOW_MAX_BRANCHES = 3;
 /** The longest limb must span at least this fraction of the shape's diagonal —
  *  proof the "limbs" are real arms that carry the form, not short surface spikes. */
 const FLOW_MIN_SPAN_FRAC = 0.35;
+/** A clean flow breaks its serpentine ~once per limb at most (a cap turnaround).
+ *  More than that means the rows are fanning — the perpendicular is sweeping through
+ *  many angles around an interior hole or a notch (the golf-green starburst) — so the
+ *  shape isn't really flowable and plain tatami sews far cleaner. */
+const FLOW_MAX_BREAKS_PER_BRANCH = 1;
 
 /**
  * Directional fill for a BRANCHY or organic shape — a Y, a cross, a multi-lobe
@@ -362,11 +367,19 @@ export function flowFill(rings: Path[], opts: FillOptions): Path[] | null {
   const half = bboxDiag(oriented);
 
   const runs: Path[] = [];
+  let totalBreaks = 0;
   for (const spine of branches) {
-    const { runs: r } = marchSpine(spine, oriented, density, stitch, comp, half);
+    const { runs: r, breaks } = marchSpine(spine, oriented, density, stitch, comp, half);
+    totalBreaks += breaks;
     for (const run of r) runs.push(run);
   }
   if (runs.length === 0) return null;
+  // Fanning guard: a real flow turns gently and breaks at most about once per limb
+  // (a cap turnaround). When the rows fan — the perpendicular spinning through many
+  // angles around an interior hole/notch — the serpentine shatters into far more
+  // breaks than there are limbs. That's the golf-green starburst; bail so the caller
+  // uses the clean concavity-aware tatami instead.
+  if (totalBreaks > branches.length * FLOW_MAX_BREAKS_PER_BRANCH) return null;
   // Must never slash, and must actually cover the shape — else tatami is safer.
   if (hasExposedSegment(runs, oriented)) return null;
   if (satinCoverage(oriented, runs) < FLOW_MIN_COVERAGE) return null;
