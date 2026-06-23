@@ -14,23 +14,30 @@ test("draw a fill object and manage it", async ({ page }) => {
   // Studio loads with the wordmark and the empty-state start hint.
   await expect(page.getByText("Buttery Stitches")).toBeVisible();
   await expect(page.getByText(/Let's make something/i)).toBeVisible();
-  // Dismiss the start hint so it doesn't intercept canvas clicks.
+  // Dismiss the start hint so its full-canvas overlay can't intercept clicks, and
+  // confirm it's actually gone before drawing.
   await page.getByRole("button", { name: "Close" }).first().click();
+  await expect(page.getByText(/Let's make something/i)).toBeHidden();
 
-  // Pick the Fill tool and draw a triangle on the canvas. A fill needs >= 3 placed
-  // points; the vertices are spread wide and each click is given a beat to land so
-  // every mousedown registers as its own Konva point in headless (a fast/tight
-  // sequence can drop one and leave the draft below the 3-point minimum).
-  await page.getByRole("button", { name: "Fill", exact: true }).click();
+  // Pick the Fill tool and confirm it's active (a fill needs >= 3 placed points;
+  // if the tool didn't engage, canvas clicks would just clear the selection).
+  const fillBtn = page.getByRole("button", { name: "Fill", exact: true });
+  await fillBtn.click();
+  await expect(fillBtn).toHaveAttribute("aria-pressed", "true");
+
+  // Draw a triangle in the central band of the canvas (the same safe zone the
+  // running-stitch test uses — clicks near the top/edges can land on the ruler or
+  // floating toolbars that overlap the canvas box). Pace each click so every
+  // mousedown registers as its own Konva point.
   const canvas = page.locator("canvas").first();
   const box = (await canvas.boundingBox())!;
   const clickAt = async (fx: number, fy: number) => {
     await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy);
     await page.waitForTimeout(80);
   };
-  await clickAt(0.3, 0.4);
-  await clickAt(0.7, 0.4);
-  await clickAt(0.5, 0.7);
+  await clickAt(0.35, 0.45);
+  await clickAt(0.65, 0.45);
+  await clickAt(0.5, 0.6);
   await page.keyboard.press("Enter"); // commit the draft (same path as the running test)
 
   // One object now exists (top bar counter on the wide layout).
@@ -38,7 +45,6 @@ test("draw a fill object and manage it", async ({ page }) => {
   // "object never created" (counter reads 0) from "created but locator/visibility"
   // (counter reads 1 but hidden). Remove once the root cause is fixed.
   console.log("DIAG object-texts:", JSON.stringify(await page.getByText(/object/i).allInnerTexts().catch(() => "ERR")));
-  console.log("DIAG stitch-order-present:", await page.getByText(/Stitch Order/i).count());
   await expect(page.getByText("1 object", { exact: true })).toBeVisible();
 
   // Toggle visibility off and on via the layer row.
