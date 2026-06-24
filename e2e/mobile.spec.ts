@@ -8,6 +8,10 @@ import { test, expect } from "@playwright/test";
  */
 
 test("studio loads and the layers drawer opens", async ({ page }) => {
+  // The slide-over layers drawer only exists below the `sm` breakpoint; on a wide
+  // desktop viewport the panel is shown inline (and the toggle hides it), so this
+  // drawer-open flow is mobile-only.
+  test.skip((page.viewportSize()?.width ?? 0) > 640, "layers drawer is mobile-only");
   await page.goto("/app");
   await expect(page.getByText(/Let's make something/i)).toBeVisible();
 

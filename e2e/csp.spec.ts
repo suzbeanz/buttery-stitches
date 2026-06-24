@@ -34,7 +34,10 @@ for (const path of ["/", "/app"]) {
     });
 
     await page.goto(path);
-    await expect(page.getByText("Buttery Stitches")).toBeVisible();
+    // Readiness gate, not a visibility assertion: the top-bar wordmark is present
+    // on every route but is `hidden sm:inline`, so it's not visible on the mobile
+    // viewport — assert it's attached (the page has rendered) rather than visible.
+    await expect(page.getByText("Buttery Stitches").first()).toBeAttached();
     // Give late resources (fonts, lazy chunks) a moment to settle.
     await page.waitForTimeout(500);
 

@@ -1516,7 +1516,7 @@ export default function CanvasStage() {
             <div className="font-label uppercase tracking-[0.08em] text-2xl font-semibold">
               Let&apos;s make something 🧈
             </div>
-            <p className="mt-1 text-sm text-navy/60">Pick how you&apos;d like to start.</p>
+            <p className="mt-1 text-sm text-navy/80">Pick how you&apos;d like to start.</p>
             <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <StartButton
                 icon={ImageIcon}
@@ -1546,7 +1546,7 @@ export default function CanvasStage() {
                 }}
               />
             </div>
-            <p className="mt-3 text-xs text-navy/70">
+            <p className="mt-3 text-xs text-navy/80">
               New here? Press <b>?</b> any time for help.
             </p>
           </div>
@@ -1610,7 +1610,7 @@ function StartButton({
       <Icon size={26} strokeWidth={1.75} aria-hidden />
 
       <span className="font-label text-sm font-semibold uppercase tracking-wide">{label}</span>
-      <span className="font-body text-[11px] text-char/60">{hint}</span>
+      <span className="font-body text-[11px] text-char/80">{hint}</span>
     </button>
   );
 }

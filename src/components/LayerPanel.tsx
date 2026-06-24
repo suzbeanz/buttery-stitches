@@ -95,7 +95,7 @@ export default function LayerPanel() {
       {objects.length === 0 ? (
         <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
           <ListOrdered size={22} className="text-ink/25" aria-hidden />
-          <p className="font-body text-sm text-navy/60">
+          <p className="font-body text-sm text-navy/80">
             Nothing stitched yet. Pick a tool and draw, or bring in an image.
           </p>
         </div>

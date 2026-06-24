@@ -173,7 +173,7 @@ export default function ToolRail() {
 function Group({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="px-1.5">
-      <div className="mb-0.5 text-center font-label text-[9px] font-semibold uppercase tracking-[0.16em] text-ink/45">
+      <div className="mb-0.5 text-center font-label text-[9px] font-semibold uppercase tracking-[0.16em] text-ink/80">
         {label}
       </div>
       {/* Two columns so the whole kit fits at a glance without scrolling. */}
