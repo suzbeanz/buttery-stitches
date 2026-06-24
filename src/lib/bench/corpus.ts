@@ -59,6 +59,14 @@ function project(name: string, objects: EmbObject[], colors: ThreadColor[] = [GR
 
 const D = Math.PI / 180;
 
+/** A 4×3 grid of centres listed in a scrambled (non-sequential) order, so the
+ *  router has real travel to save — greedy nearest-neighbour leaves slack a 2-opt
+ *  pass can recover. Shared by the cross-object and multi-region routing designs. */
+const SCATTER_CENTERS: [number, number][] = [
+  [51, 25], [24, 23], [34, 83], [13, 80], [22, 29], [33, 72],
+  [43, 53], [81, 46], [26, 45], [76, 37], [31, 58], [20, 85],
+];
+
 export const CORPUS: { name: string; project: Project }[] = [
   // Flat solid fills — the baseline tatami path.
   project("rect-fill", [fillObject("rect", [rect(30, 38, 40, 24)], { fillStyle: "tatami", density: 0.4 })]),
@@ -95,4 +103,22 @@ export const CORPUS: { name: string; project: Project }[] = [
     [satinObject("band", arc(50, 50, 30, 200 * D, 340 * D, 40), arc(50, 50, 24, 200 * D, 340 * D, 40))],
     [NAVY],
   ),
+  // Cross-object routing stress: 12 same-colour dots scattered across the hoop in a
+  // deliberately non-sequential order. Exercises routeGroups (the design-level
+  // object sequencer) — where the travel/trim numbers live.
+  project(
+    "scatter-dots",
+    SCATTER_CENTERS.map(([cx, cy], i) =>
+      fillObject(`dot-${i}`, [circle(cx, cy, 4)], { fillStyle: "tatami", density: 0.4 }),
+    ),
+  ),
+  // Multi-region routing stress: ONE fill object whose 12 disconnected squares must
+  // be ordered to minimise inter-region travel (exercises orderByTravel).
+  project("multiregion-grid", [
+    fillObject(
+      "grid",
+      SCATTER_CENTERS.map(([cx, cy]) => rect(cx - 4, cy - 4, 8, 8)),
+      { fillStyle: "tatami", density: 0.4 },
+    ),
+  ]),
 ];

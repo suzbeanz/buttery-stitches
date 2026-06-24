@@ -164,8 +164,15 @@ replacing heuristics with **solved problems** on the five fronts below, each sco
 2. **Global routing optimizer** *(math; high leverage, medium effort)*
    Model fill rows as required edges (Rural-Postman / min-cost matching) and inter-object
    jumps as TSP; replace greedy+2-opt. **Metric: `travel(mm)`, `travel%`, `trims`, `jumps`.**
-   *Prereq:* broaden the corpus with multi-region logos + lettering so the metric has
-   teeth (today’s single-region corpus hides it).
+   - **Done (object level).** `routeGroups` (the design-level cross-object sequencer) was
+     pure greedy nearest-neighbour; it now seeds with NN and refines with **Or-opt**
+     (relocate chains of 1–3 objects — reversal-free, so a group's underlay→top order and
+     appliqué STOPs stay intact, which a 2-opt reversal would break). New corpus stressors
+     `scatter-dots` (NN-trap) + `multiregion-grid`. Result: **scatter-dots travel
+     220.5 → 150.6 mm (−32%)**, two-discs 65.8 → 23.5 mm; coverage unchanged. Region/run
+     ordering already had 2-opt (`orderByTravel`/`orderByNearest`).
+   - **Next:** lift inter-object pairing to true start/end-aware optimization (an LKH-style
+     pass), add a lettering corpus design, and tackle the within-region Rural-Postman framing.
 
 3. **Physical pull-compensation model** *(math; high value, higher effort)*
    Fabric as an elastic sheet + thread tension; solve predicted distortion, pre-distort
