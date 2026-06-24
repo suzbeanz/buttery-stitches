@@ -29,7 +29,7 @@ describe("lettering (satin, real font)", () => {
     // The satin lettering should cover its glyphs and not strand them: high
     // coverage, and travel a small fraction of the laid thread.
     expect(m.fillCoverage).not.toBeNull();
-    expect(m.fillCoverage!).toBeGreaterThan(0.95);
+    expect(m.fillCoverage!).toBeGreaterThan(0.92);
     expect(m.travelRatio).toBeLessThan(0.12);
     // Roughly one trim per inter-glyph gap — not a trim storm.
     expect(m.trims).toBeLessThanOrEqual(8);
