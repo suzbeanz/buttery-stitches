@@ -351,5 +351,15 @@ export function guidanceFieldFill(rings: Path[], opts: FillOptions): Path[] | nu
   }
   flush();
   if (runs.length === 0) return null;
+
+  // Self-validate coverage cheaply: a clean fill lays ≈ area/density mm of thread.
+  // A degenerate solve (ambiguous caps on a near-round shape, a field that didn't
+  // sweep the whole form) lays far less — reject it so the caller keeps its
+  // turning/tatami result instead of a gappy field.
+  let insideCells = 0;
+  for (let i = 0; i < f.g.cells.length; i++) insideCells += f.g.cells[i];
+  const areaMm2 = insideCells * f.g.cellMm * f.g.cellMm;
+  const laid = runs.reduce((s, r) => s + polylineLen(r), 0);
+  if (areaMm2 > 0 && laid < 0.7 * (areaMm2 / density)) return null;
   return runs;
 }

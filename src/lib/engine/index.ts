@@ -817,11 +817,18 @@ export function generateObjectRuns(
       // branchy/organic shape flows along its limbs (flowFill); else concavity-aware
       // tatami. Every path declines (→ null) and self-validates to never slash.
       const userFlow = flowSpineMm ? flowAlong(region, flowSpineMm, fillOpts) : null;
+      const autoSingle = !manualDirection && !flowSpineMm && regions.length === 1;
+      // A clean single-spine band (banner, leaf, crescent) turns. The guidance FIELD
+      // is the promoted default there — it sweeps the form cap-to-cap and beats the
+      // spine-march on coverage + long-stitch count (bench: crescent-field) — with
+      // turningFill kept as the fallback when the field declines (it self-validates
+      // coverage). A branchy/organic shape still flows along its limbs (flowFill).
+      const autoTurn = autoSingle ? turningFill(region, fillOpts) : null;
       const turned =
         userFlow ??
-        (!manualDirection && !flowSpineMm && regions.length === 1
-          ? (turningFill(region, fillOpts) ?? flowFill(region, fillOpts))
-          : null);
+        (autoTurn
+          ? (guidanceFieldFill(region, fillOpts) ?? autoTurn)
+          : (autoSingle ? flowFill(region, fillOpts) : null));
       tops = turned ?? tatamiConcaveRuns(region, fillOpts);
       tatamiNoBareTravel = true;
     }

@@ -151,9 +151,15 @@ replacing heuristics with **solved problems** on the five fronts below, each sco
      even-division (`ceil`) resampling + dedup. Measured `crescent-field` vs
      `crescent-turning`: **coverage 98.5% > 97.6%** ✓, **>4mm stitches 2 vs 30** ✓,
      `lenCV` 0.35≈0.33 and `short%` 6.4%≈5.3% (parity), pile-ups eliminated. A clean
-     win on a curved band. **Next: promote from opt-in to the auto path** — port
-     turning/flow's engage gates (elongation/curvature; decline round shapes so tatami
-     keeps them) and A/B the full corpus before flipping the default.
+     win on a curved band.
+   - **Promoted to the auto path.** The field is now the default wherever `turningFill`
+     engages (a curved single-spine band); turning is kept as the fallback when the
+     field's coverage self-check declines, and `flowFill` still handles branchy shapes.
+     Full-corpus A/B: **only the curved band changed (coverage 97.6%→98.5%); every
+     other design byte-identical** (turning declines round/straight shapes, so the
+     field is never invoked there). Follow-ups: perf (the SOR solve runs per curved
+     fill — cache / coarsen for interactive edits) and extending the field to branchy
+     shapes (replacing flowFill too).
 
 2. **Global routing optimizer** *(math; high leverage, medium effort)*
    Model fill rows as required edges (Rural-Postman / min-cost matching) and inter-object
