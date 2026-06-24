@@ -43,6 +43,18 @@ function satinObject(id: string, left: Path, right: Path, colorId = NAVY.id): Em
   return { id, name: id, type: "satin", colorId, paths: [left, right], params: { ...DEFAULT_PARAMS }, visible: true };
 }
 
+function runningObject(id: string, path: Path, colorId = NAVY.id): EmbObject {
+  return { id, name: id, type: "running", colorId, paths: [path], params: { ...DEFAULT_PARAMS }, visible: true };
+}
+
+/** Scattered line segments whose endpoints are far apart, so sewing DIRECTION
+ *  (which end you enter) drives the inter-object travel — the reversal-aware
+ *  routing case. */
+const LINE_SEGS: [number, number][][] = [
+  [[15, 20], [35, 35]], [[80, 15], [60, 30]], [[20, 80], [40, 65]], [[85, 80], [65, 70]],
+  [[50, 12], [50, 40]], [[12, 55], [30, 50]], [[88, 50], [70, 45]], [[45, 88], [60, 72]],
+];
+
 function project(name: string, objects: EmbObject[], colors: ThreadColor[] = [GREEN]): { name: string; project: Project } {
   return {
     name,
@@ -111,6 +123,18 @@ export const CORPUS: { name: string; project: Project }[] = [
     SCATTER_CENTERS.map(([cx, cy], i) =>
       fillObject(`dot-${i}`, [circle(cx, cy, 4)], { fillStyle: "tatami", density: 0.4 }),
     ),
+  ),
+  // Reversal-aware routing: scattered running lines (freely reversible) — the
+  // router should enter each from whichever end is nearer, not always its start.
+  project(
+    "scatter-lines",
+    LINE_SEGS.map(([a, b], i) =>
+      runningObject(`line-${i}`, [
+        { x: a[0], y: a[1] },
+        { x: b[0], y: b[1] },
+      ]),
+    ),
+    [NAVY],
   ),
   // Multi-region routing stress: ONE fill object whose 12 disconnected squares must
   // be ordered to minimise inter-region travel (exercises orderByTravel).
