@@ -263,26 +263,34 @@ function medianGradAlong(f: Field, poly: Path): number {
   return gs[gs.length >> 1];
 }
 
-/** Resample a polyline to ~stitch spacing, keeping the endpoints. */
+/** Resample a polyline into EQUAL-length segments (~step), endpoints exact. Even
+ *  division avoids a short leftover tail on every row (which otherwise shows up as
+ *  one sub-min stitch per row — the dominant short-stitch source). */
 function resample(poly: Path, step: number): Path {
   if (poly.length < 2) return poly;
+  const L = polylineLen(poly);
+  if (L < 1e-6) return [poly[0], poly[poly.length - 1]];
+  const n = Math.max(1, Math.ceil(L / step)); // ceil so no segment exceeds stitch length
+  const seg = L / n;
   const out: Point[] = [poly[0]];
-  let carry = 0;
-  for (let i = 1; i < poly.length; i++) {
-    let a = poly[i - 1];
-    const b = poly[i];
-    let segLen = Math.hypot(b.x - a.x, b.y - a.y);
-    while (carry + segLen >= step) {
-      const t = (step - carry) / segLen;
-      a = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-      out.push(a);
-      segLen = Math.hypot(b.x - a.x, b.y - a.y);
-      carry = 0;
+  let i = 1;
+  let a = poly[0];
+  let rem = Math.hypot(poly[1].x - poly[0].x, poly[1].y - poly[0].y);
+  for (let k = 1; k < n; k++) {
+    let dist = seg;
+    while (dist > rem && i < poly.length - 1) {
+      dist -= rem;
+      a = poly[i];
+      i++;
+      rem = Math.hypot(poly[i].x - poly[i - 1].x, poly[i].y - poly[i - 1].y);
     }
-    carry += segLen;
+    const b = poly[i];
+    const t = rem > 1e-9 ? dist / rem : 0;
+    a = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+    out.push(a);
+    rem -= dist;
   }
-  const last = poly[poly.length - 1];
-  if (Math.hypot(out[out.length - 1].x - last.x, out[out.length - 1].y - last.y) > 1e-6) out.push(last);
+  out.push(poly[poly.length - 1]);
   return out;
 }
 
@@ -299,34 +307,49 @@ export function guidanceFieldFill(rings: Path[], opts: FillOptions): Path[] | nu
   const density = Math.max(MIN_FILL_DENSITY, opts.density);
   const stitch = opts.stitchLength ?? FILL_STITCH_LENGTH;
 
+  // Connect consecutive rows into ONE serpentine run (like turningFill) so the
+  // assembler doesn't stitch up-to-travelMax hops between hundreds of tiny runs
+  // (those showed up as >4mm connectors AND sub-0.3mm pile-ups). Break the run
+  // only when the next row is a real gap away (a concavity/hole) — then the engine
+  // jumps/trims instead of slashing. Dedup kills near-coincident pile-ups.
+  const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
+  const CONNECT_MAX_MM = Math.max(2, density * 4);
+  const DEDUP_MM = Math.min(0.3, density * 0.6);
   const runs: Path[] = [];
+  let current: Point[] = [];
+  const flush = () => {
+    if (current.length >= 2) runs.push(current);
+    current = [];
+  };
+  const pushPt = (p: Point) => {
+    const last = current[current.length - 1];
+    if (!last || dist(last, p) >= DEDUP_MM) current.push(p);
+  };
+
   let level = 0;
-  let lastPt: Point | null = null;
   let guard = 0;
   while (level < 1 && guard++ < 10000) {
     const loops = isoline(f, level).filter((p) => polylineLen(p) >= density);
-    // Pick the dominant isoline at this level (largest); ignore tiny saddle bits.
     loops.sort((a, b) => polylineLen(b) - polylineLen(a));
     let stepGrad = 0;
     for (const loop of loops) {
       const mg = medianGradAlong(f, loop);
       if (mg > stepGrad) stepGrad = mg;
       let row = resample(extendEnds(f, loop, opts.pullCompMm ?? 0), stitch);
-      if (lastPt && row.length > 1) {
-        const dEnd = Math.hypot(lastPt.x - row[row.length - 1].x, lastPt.y - row[row.length - 1].y);
-        const dStart = Math.hypot(lastPt.x - row[0].x, lastPt.y - row[0].y);
-        if (dEnd < dStart) row = row.slice().reverse(); // serpentine by nearest end
+      if (row.length < 2) continue;
+      const tail = current[current.length - 1];
+      if (tail) {
+        if (dist(tail, row[row.length - 1]) < dist(tail, row[0])) row = row.slice().reverse();
+        if (dist(tail, row[0]) > CONNECT_MAX_MM) flush(); // real gap → break, don't slash
       }
-      if (row.length >= 2) {
-        runs.push(row);
-        lastPt = row[row.length - 1];
-      }
+      for (const p of row) pushPt(p);
     }
-    // Adaptive step: advance the level so consecutive isolines are ~density apart
-    // in mm (Δlevel = density · |∇u|). Floor keeps it moving through flat patches.
+    // Adaptive step: advance so consecutive isolines are ~density apart in mm
+    // (Δlevel = density · |∇u|). Tiny floor only guarantees progress.
     const dLevel = stepGrad > 1e-6 ? density * stepGrad : 0.05;
-    level += Math.max(dLevel, 0.0008); // tiny floor only to guarantee progress
+    level += Math.max(dLevel, 0.0008);
   }
-  if (runs.length < 2) return null;
+  flush();
+  if (runs.length === 0) return null;
   return runs;
 }

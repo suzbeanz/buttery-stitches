@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-06-24T02:11:40.939Z",
+  "generatedAt": "2026-06-24T02:22:30.861Z",
   "summary": {
     "designs": 9,
-    "totalStitches": 10477,
+    "totalStitches": 10374,
     "totalTravelMm": 223.1,
     "meanTravelPct": "1%",
     "meanFillCoverage": "99.5%"
@@ -141,27 +141,27 @@
     {
       "name": "crescent-field",
       "metrics": {
-        "stitches": 1340,
+        "stitches": 1237,
         "jumps": 0,
         "trims": 0,
         "colors": 1,
-        "threadLengthMm": 3525.442981994831,
-        "runtimeMin": 1.9142857142857144,
+        "threadLengthMm": 3509.551223234804,
+        "runtimeMin": 1.7671428571428571,
         "widthMm": 74.26484620780158,
         "heightMm": 30.990518730361472,
         "withinHoop": true,
         "travelMm": 0,
         "travelRatio": 0,
         "stitchLen": {
-          "min": 0.050010725478102626,
-          "mean": 2.632892443610775,
-          "median": 2.333865234288472,
-          "p95": 3.9999949043229353,
-          "max": 4.4236936911731615,
-          "cv": 0.5070020264009598,
-          "shortPct": 0.15160567587752055
+          "min": 0.14619228234822113,
+          "mean": 2.8394427372449833,
+          "median": 3.4703220973558766,
+          "p95": 3.7347170753908734,
+          "max": 4.146740050765127,
+          "cv": 0.345010059634767,
+          "shortPct": 0.063915857605178
         },
-        "fillCoverage": 0.9858761570379828
+        "fillCoverage": 0.9852377912543888
       }
     },
     {

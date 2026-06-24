@@ -145,13 +145,15 @@ replacing heuristics with **solved problems** on the five fronts below, each sco
    turning + flow + manual flow as special cases; closes the coverage hole and improves
    smoothness. **Metric: `coverage` → ~100% on `crescent`; `lenCV` down.** First proof
    point already in the baseline.
-   - **v1 prototype shipped** (`engine/field.ts`, opt-in `fillStyle: "field"`): harmonic
-     sweep potential (Laplace/SOR) + masked marching-squares isolines, spaced by
-     `density·|∇u|`. Measured on `crescent-field` vs `crescent-turning`: **coverage
-     98.6% > 97.6%** ✓ and form-following confirmed — but `lenCV` 0.51 (vs 0.33) and
-     `short%` 15.2% (vs 5.3%) regressed: radial rows crowd on the concave arc. **Next:
-     field-aware density compensation (thin rows on the inner curve, à la satin
-     short-stitches)** to win evenness too, then promote from opt-in to the auto path.
+   - **Prototype shipped + tuned** (`engine/field.ts`, opt-in `fillStyle: "field"`):
+     harmonic sweep potential (Laplace/SOR) + masked marching-squares isolines spaced
+     by `density·|∇u|`, assembled into in-order serpentine strips (break-on-gap) with
+     even-division (`ceil`) resampling + dedup. Measured `crescent-field` vs
+     `crescent-turning`: **coverage 98.5% > 97.6%** ✓, **>4mm stitches 2 vs 30** ✓,
+     `lenCV` 0.35≈0.33 and `short%` 6.4%≈5.3% (parity), pile-ups eliminated. A clean
+     win on a curved band. **Next: promote from opt-in to the auto path** — port
+     turning/flow's engage gates (elongation/curvature; decline round shapes so tatami
+     keeps them) and A/B the full corpus before flipping the default.
 
 2. **Global routing optimizer** *(math; high leverage, medium effort)*
    Model fill rows as required edges (Rural-Postman / min-cost matching) and inter-object
