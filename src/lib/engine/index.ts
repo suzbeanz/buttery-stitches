@@ -14,6 +14,7 @@ import { tatamiFill, tatamiConcaveRuns, multiBlendFill, motifFill, motifRunAlong
 import { contourFill } from "./contour";
 import { medialColumns, columnsFromCenterlines, satinCoverage, residualRegions, type SatinColumn } from "./medial";
 import { turningFill, flowFill, flowAlong } from "./turning";
+import { guidanceFieldFill } from "./field";
 import { isSmallRoundFill } from "./classify";
 import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
 import { dropShortStitches, splitLongTravels } from "./resample";
@@ -780,6 +781,13 @@ export function generateObjectRuns(
         : tatamiConcaveRuns(region, { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp });
       if (echo.length) contourSpiral = true;
       else tatamiNoBareTravel = true;
+    } else if (p.fillStyle === "field") {
+      // Guidance-field fill: rows follow a solved harmonic direction field that
+      // sweeps the form cap-to-cap (generalises turning/flow). Falls back to the
+      // concavity-aware tatami when the shape can't seat a clean field.
+      const fopts = { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp };
+      tops = guidanceFieldFill(region, fopts) ?? tatamiConcaveRuns(region, fopts);
+      tatamiNoBareTravel = true;
     } else if (motifMode) {
       // Motif fill: tile a decorative motif across the region (no underlay).
       tops = motifFill(region, { motifId: p.motif, sizeMm: p.motifSizeMm, angle: tatamiAngle });

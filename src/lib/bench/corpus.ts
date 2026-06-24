@@ -75,6 +75,13 @@ export const CORPUS: { name: string; project: Project }[] = [
       density: 0.4,
     }),
   ]),
+  // Same crescent via the guidance-field fill — direct A/B against turning above.
+  project("crescent-field", [
+    fillObject("crescent", [[...arc(50, 55, 40, 200 * D, 340 * D, 60), ...arc(50, 55, 26, 340 * D, 200 * D, 60)]], {
+      fillStyle: "field",
+      density: 0.4,
+    }),
+  ]),
   // Real auto-traced concave silhouette (ellipse + ball hole + flagpole notch).
   project("golf-green", [fillObject("golf", golfGreenRegion, { fillStyle: "tatami", density: 0.4 })]),
   // Multi-object routing: two discs apart — exercises inter-object travel/sequencing.
