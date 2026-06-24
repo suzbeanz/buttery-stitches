@@ -1,6 +1,7 @@
-import { writeFileSync, mkdirSync } from "node:fs";
-import { CORPUS } from "../src/lib/bench/corpus";
+import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
+import { CORPUS, letteringProject } from "../src/lib/bench/corpus";
 import { benchMetrics, type BenchMetrics } from "../src/lib/bench/metrics";
+import { parseFont } from "../src/lib/text/fonts";
 
 /**
  * Benchmark runner: score every corpus design and print the scoreboard, then
@@ -13,7 +14,21 @@ import { benchMetrics, type BenchMetrics } from "../src/lib/bench/metrics";
 const round = (n: number, d = 1) => Math.round(n * 10 ** d) / 10 ** d;
 const pct = (x: number) => `${round(x * 100, 1)}%`;
 
-const results: { name: string; metrics: BenchMetrics }[] = CORPUS.map(({ name, project }) => ({
+// Real lettering, loaded from the bundled flagship font (Oswald) — added at
+// runtime because parsing a .ttf needs node, which the static corpus avoids.
+function letteringDesigns(): { name: string; project: import("../src/types/project").Project }[] {
+  try {
+    const buf = readFileSync("src/lib/text/fonts/Oswald-Medium.ttf");
+    const font = parseFont(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer);
+    return [letteringProject("lettering-STITCH", font, "STITCH")];
+  } catch (e) {
+    console.warn("lettering design skipped:", (e as Error).message);
+    return [];
+  }
+}
+
+const designs = [...CORPUS, ...letteringDesigns()];
+const results: { name: string; metrics: BenchMetrics }[] = designs.map(({ name, project }) => ({
   name,
   metrics: benchMetrics(project),
 }));

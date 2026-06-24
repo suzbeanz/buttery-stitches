@@ -177,7 +177,11 @@ replacing heuristics with **solved problems** on the five fronts below, each sco
      to objects without underlay/STOP so underlay→top order and appliqué stay correct.
      New `scatter-lines` corpus: **travel 228.9 → 149.3 mm (−35%)**; underlaid `scatter-dots`
      correctly unaffected.
-   - **Next:** a lettering corpus design, and the within-region Rural-Postman framing.
+   - **Lettering corpus added** (`letteringProject`, real Oswald via the bench runner):
+     `lettering-STITCH` measures the #1 embroidery job — **99.8% coverage, 5 trims for 6
+     glyphs, 4% travel**. Confirms satin lettering covers and routes tightly (the high
+     `short%`/`lenCV` are inherent to satin's dense throws, not a defect).
+   - **Next:** the within-region Rural-Postman framing for fill rows.
 
 3. **Physical pull-compensation model** *(math; high value, higher effort)*
    Fabric as an elastic sheet + thread tension; solve predicted distortion, pre-distort
