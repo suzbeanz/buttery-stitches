@@ -248,19 +248,27 @@ function extendEnds(f: Field, poly: Path, extra: number): Path {
   return [head, ...poly, tail];
 }
 
-/** Median |∇u| (per mm) sampled along an isoline — sets the next level step. */
-function medianGradAlong(f: Field, poly: Path): number {
+/**
+ * A LOW percentile of |∇u| (per mm) along an isoline. The mm gap to the next
+ * isoline is Δlevel/|∇u|, so it's WIDEST where |∇u| is smallest — the outer edge of
+ * a curve, where the rows fan apart. Stepping by a low percentile (not the median)
+ * keeps that widest gap ~density, so the outer edge is covered instead of left gappy
+ * (the curved-fill ~87%→~99% fix). p≈0.1 is a robust near-minimum (ignores a lone
+ * degenerate cell). Slightly over-stitches the tight inner edge — the price of a
+ * coverage guarantee on a fanned band.
+ */
+function lowGradAlong(f: Field, poly: Path, p = 0.1): number {
   const gs: number[] = [];
-  for (const p of poly) {
-    const gx = Math.round((p.x - f.g.ox) / f.g.cellMm);
-    const gy = Math.round((p.y - f.g.oy) / f.g.cellMm);
+  for (const pt of poly) {
+    const gx = Math.round((pt.x - f.g.ox) / f.g.cellMm);
+    const gy = Math.round((pt.y - f.g.oy) / f.g.cellMm);
     if (gx > 0 && gx < f.g.w - 1 && gy > 0 && gy < f.g.h - 1 && f.g.cells[idx(f.g, gx, gy)]) {
       gs.push(gradMag(f, gx, gy));
     }
   }
   if (gs.length === 0) return 0;
   gs.sort((a, b) => a - b);
-  return gs[gs.length >> 1];
+  return gs[Math.min(gs.length - 1, Math.floor(p * gs.length))];
 }
 
 /** Resample a polyline into EQUAL-length segments (~step), endpoints exact. Even
@@ -331,10 +339,13 @@ export function guidanceFieldFill(rings: Path[], opts: FillOptions): Path[] | nu
   while (level < 1 && guard++ < 10000) {
     const loops = isoline(f, level).filter((p) => polylineLen(p) >= density);
     loops.sort((a, b) => polylineLen(b) - polylineLen(a));
-    let stepGrad = 0;
+    // Step by the TIGHTEST spacing any isoline at this level needs: the smallest
+    // low-percentile |∇u| across them (where rows fan widest). This keeps the
+    // widest mm gap ~density so the outer edge of a curve is covered.
+    let stepGrad = Infinity;
     for (const loop of loops) {
-      const mg = medianGradAlong(f, loop);
-      if (mg > stepGrad) stepGrad = mg;
+      const lg = lowGradAlong(f, loop);
+      if (lg > 1e-6 && lg < stepGrad) stepGrad = lg;
       let row = resample(extendEnds(f, loop, opts.pullCompMm ?? 0), stitch);
       if (row.length < 2) continue;
       const tail = current[current.length - 1];
@@ -344,9 +355,9 @@ export function guidanceFieldFill(rings: Path[], opts: FillOptions): Path[] | nu
       }
       for (const p of row) pushPt(p);
     }
-    // Adaptive step: advance so consecutive isolines are ~density apart in mm
-    // (Δlevel = density · |∇u|). Tiny floor only guarantees progress.
-    const dLevel = stepGrad > 1e-6 ? density * stepGrad : 0.05;
+    // Adaptive step: advance so the WIDEST gap between consecutive isolines stays
+    // ~density in mm (Δlevel = density · min|∇u|). Tiny floor only guarantees progress.
+    const dLevel = Number.isFinite(stepGrad) ? density * stepGrad : 0.05;
     level += Math.max(dLevel, 0.0008);
   }
   flush();
