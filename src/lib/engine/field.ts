@@ -271,6 +271,32 @@ function lowGradAlong(f: Field, poly: Path, p = 0.1): number {
   return gs[Math.min(gs.length - 1, Math.floor(p * gs.length))];
 }
 
+/** |∇u| (per mm) at an arbitrary mm point; 0 outside the grid (so extended row ends,
+ *  which sit just past the edge, read as low-gradient = kept by the thinning). */
+function gradAtPoint(f: Field, p: Point): number {
+  const gx = Math.round((p.x - f.g.ox) / f.g.cellMm);
+  const gy = Math.round((p.y - f.g.oy) / f.g.cellMm);
+  if (gx > 0 && gx < f.g.w - 1 && gy > 0 && gy < f.g.h - 1 && f.g.cells[idx(f.g, gx, gy)]) {
+    return gradMag(f, gx, gy);
+  }
+  return 0;
+}
+
+/** The longest contiguous sub-run of `arr` whose elements pass `keep`. Used to thin
+ *  an over-dense stretch off an alternate row without fragmenting it into a gap. */
+function longestRun(arr: Point[], keep: (p: Point) => boolean): Point[] {
+  let bestStart = 0, bestLen = 0, start = -1;
+  for (let i = 0; i <= arr.length; i++) {
+    if (i < arr.length && keep(arr[i])) {
+      if (start < 0) start = i;
+    } else {
+      if (start >= 0 && i - start > bestLen) { bestLen = i - start; bestStart = start; }
+      start = -1;
+    }
+  }
+  return arr.slice(bestStart, bestStart + bestLen);
+}
+
 /** Resample a polyline into EQUAL-length segments (~step), endpoints exact. Even
  *  division avoids a short leftover tail on every row (which otherwise shows up as
  *  one sub-min stitch per row — the dominant short-stitch source). */
@@ -336,9 +362,14 @@ export function guidanceFieldFill(rings: Path[], opts: FillOptions): Path[] | nu
 
   let level = 0;
   let guard = 0;
+  let rowIndex = 0;
+  // Thin an alternate row's points where consecutive rows crowd to < THIN_FRAC·density
+  // apart; halving them there leaves ~density (covered) instead of 2× (over-stitched).
+  const THIN_FRAC = 0.5;
   while (level < 1 && guard++ < 10000) {
-    const loops = isoline(f, level).filter((p) => polylineLen(p) >= density);
-    loops.sort((a, b) => polylineLen(b) - polylineLen(a));
+    const loops = isoline(f, level)
+      .filter((p) => polylineLen(p) >= density)
+      .sort((a, b) => polylineLen(b) - polylineLen(a));
     // Step by the TIGHTEST spacing any isoline at this level needs: the smallest
     // low-percentile |∇u| across them (where rows fan widest). This keeps the
     // widest mm gap ~density so the outer edge of a curve is covered.
@@ -346,7 +377,19 @@ export function guidanceFieldFill(rings: Path[], opts: FillOptions): Path[] | nu
     for (const loop of loops) {
       const lg = lowGradAlong(f, loop);
       if (lg > 1e-6 && lg < stepGrad) stepGrad = lg;
+    }
+    const dLevel = Number.isFinite(stepGrad) ? density * stepGrad : 0.05;
+    // |∇u| above which two rows sit < THIN_FRAC·density apart (over-dense → thin).
+    const thinThresh = Number.isFinite(stepGrad) && stepGrad > 0 ? stepGrad / THIN_FRAC : Infinity;
+
+    for (const loop of loops) {
       let row = resample(extendEnds(f, loop, opts.pullCompMm ?? 0), stitch);
+      // Every other row drops its over-dense (high-|∇u|) stretch — the inner edge of
+      // a fanned curve — so that edge keeps ~density rather than piling up at 2×.
+      if (rowIndex % 2 === 1 && Number.isFinite(thinThresh)) {
+        row = longestRun(row, (p) => gradAtPoint(f, p) <= thinThresh);
+      }
+      rowIndex++;
       if (row.length < 2) continue;
       const tail = current[current.length - 1];
       if (tail) {
@@ -355,9 +398,6 @@ export function guidanceFieldFill(rings: Path[], opts: FillOptions): Path[] | nu
       }
       for (const p of row) pushPt(p);
     }
-    // Adaptive step: advance so the WIDEST gap between consecutive isolines stays
-    // ~density in mm (Δlevel = density · min|∇u|). Tiny floor only guarantees progress.
-    const dLevel = Number.isFinite(stepGrad) ? density * stepGrad : 0.05;
     level += Math.max(dLevel, 0.0008);
   }
   flush();
