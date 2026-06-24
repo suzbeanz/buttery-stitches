@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
+    "bench": "vite-node scripts/bench.ts",
     "derisk": "node scripts/derisk-pyodide.mjs",
     "typecheck": "tsc --noEmit"
   },
