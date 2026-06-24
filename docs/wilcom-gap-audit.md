@@ -148,10 +148,15 @@ replacing heuristics with **solved problems** on the five fronts below, each sco
    - **Prototype shipped + tuned** (`engine/field.ts`, opt-in `fillStyle: "field"`):
      harmonic sweep potential (Laplace/SOR) + masked marching-squares isolines spaced
      by `density·|∇u|`, assembled into in-order serpentine strips (break-on-gap) with
-     even-division (`ceil`) resampling + dedup. Measured `crescent-field` vs
-     `crescent-turning`: **coverage 98.5% > 97.6%** ✓, **>4mm stitches 2 vs 30** ✓,
-     `lenCV` 0.35≈0.33 and `short%` 6.4%≈5.3% (parity), pile-ups eliminated. A clean
-     win on a curved band.
+     even-division (`ceil`) resampling + dedup. Genuine wins vs `turningFill`: **>4mm
+     stitches 2 vs 30** and pile-ups eliminated, with `lenCV`/`short%` at parity.
+   - **CORRECTION (sharper coverage metric).** The earlier "coverage 98.5% > 97.6%"
+     field win was a **measurement artifact** of the coarse coverage raster. With the
+     accurate thread-footprint metric (see below), `crescent-turning` and
+     `crescent-field` are **both 87.1%** — equal. The field's real value is generality
+     (one method subsumes turning/flow) + form-following direction; it did **not**
+     improve coverage and it adds an SOR solve. Whether it stays the default vs reverts
+     to opt-in should be revisited once the curved-fill coverage gap (below) is closed.
    - **Promoted to the auto path.** The field is now the default wherever `turningFill`
      engages (a curved single-spine band); turning is kept as the fallback when the
      field's coverage self-check declines, and `flowFill` still handles branchy shapes.
@@ -191,6 +196,18 @@ replacing heuristics with **solved problems** on the five fronts below, each sco
 4. **Coverage as a guarantee** *(math; medium)*
    Adapt density to curvature + layering to hit a target opacity with minimum stitches.
    **Metric: `coverage` at fixed `stitches` (efficiency frontier).**
+   - **Metric sharpened (prerequisite done).** The coverage raster now models the real
+     thread footprint (accurate point-to-segment distance, 0.15 mm cells) instead of a
+     fat square stamp that read ~100% for everything. The frontier is now visible: a
+     disc holds ~99% at density 0.4 (rows just touch the 0.4 mm thread) and falls to
+     83% at 0.5, 73% at 0.6 — so the default density is already on the frontier (no
+     over-stitching to recover). **What it newly exposes: real under-coverage** the old
+     metric hid — **curved fills 87% (turning & field), contour 94%, small shapes/
+     lettering 94–96%**. Flat fills are genuinely ~99%.
+   - **Next (the real win):** close the curved-fill gap — rows are spaced by `density`
+     along the spine, but the OUTER edge of a curve spreads wider, leaving gaps. Space
+     rows by the spacing needed at the widest radius (curvature-aware density). Now
+     measurable, and it lifts both turning and the field.
 
 5. **Simulation-in-the-loop** *(math + infra; enables 3 & 4)*
    A physical thread/penetration model → honest preview **and** a loss function to optimize
@@ -201,7 +218,8 @@ compute coverage), auto multi-hoop split, more fonts/thread catalogs.
 
 ## Metrics we still need to add
 The harness measures economy/efficiency/coverage today. To score the roadmap we need:
-- **Multi-region + lettering corpus entries** (unlocks routing metrics #2).
+- ~~Multi-region + lettering corpus entries~~ **(done)** — scatter-dots/lines, multiregion-grid, lettering-STITCH.
+- ~~Accurate fill-coverage~~ **(done)** — thread-footprint raster; revealed real under-coverage on curved/contour/small fills.
 - **Trace-fidelity** metric: stitched raster vs source image (auto-digitize quality).
 - **Distortion/registration** metric from the simulator (#3, #5) — the one that finally
   scores “does it sew out true,” which is ultimately how you beat Wilcom on a hoop.

@@ -20,8 +20,10 @@ import { designInfo, type DesignInfo } from "../engine/info";
 export const SHORT_STITCH_MM = 0.8;
 /** Assumed laid-thread width (mm) for the coverage raster (≈ 40wt polyneon). */
 export const THREAD_WIDTH_MM = 0.4;
-/** Coverage raster cell (mm). Fine enough to resolve row gaps, cheap enough to run. */
-export const COVERAGE_CELL_MM = 0.3;
+/** Coverage raster cell (mm). Fine enough to resolve the gap a row pitch wider
+ *  than the thread leaves (so the metric can actually see over-/under-stitching),
+ *  cheap enough to run over the corpus. */
+export const COVERAGE_CELL_MM = 0.15;
 
 export interface StitchLenStats {
   min: number;
@@ -166,27 +168,38 @@ export function fillCoverage(
   }
   if (targetCount === 0) return null;
 
-  // Covered = cells within half the thread width of a real stitched segment.
+  // Covered = cells whose centre lies within half the thread width of a real
+  // stitched segment (accurate point-to-segment distance, not a square stamp — the
+  // square over-covered and hid the density/coverage tradeoff). The thread footprint
+  // is the simplest physical model: a capsule of width `threadWidthMm` along each
+  // stitch.
   const half = threadWidthMm / 2;
-  const rad = Math.ceil(half / cellMm);
-  const step = cellMm / 2;
-  const stamp = (x: number, y: number) => {
-    const cc = Math.floor((x - minX) / cellMm);
-    const cr = Math.floor((y - minY) / cellMm);
-    for (let dr = -rad; dr <= rad; dr++) {
-      for (let dc = -rad; dc <= rad; dc++) {
-        const c = cc + dc, r = cr + dr;
-        if (c >= 0 && c < cols && r >= 0 && r < rows) covered[idx(c, r)] = 1;
+  const distToSeg = (px: number, py: number, ax: number, ay: number, bx: number, by: number): number => {
+    const dx = bx - ax, dy = by - ay;
+    const L2 = dx * dx + dy * dy;
+    let t = L2 > 1e-12 ? ((px - ax) * dx + (py - ay) * dy) / L2 : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+  };
+  const markSeg = (ax: number, ay: number, bx: number, by: number) => {
+    const c0 = Math.max(0, Math.floor((Math.min(ax, bx) - half - minX) / cellMm));
+    const c1 = Math.min(cols - 1, Math.floor((Math.max(ax, bx) + half - minX) / cellMm));
+    const r0 = Math.max(0, Math.floor((Math.min(ay, by) - half - minY) / cellMm));
+    const r1 = Math.min(rows - 1, Math.floor((Math.max(ay, by) + half - minY) / cellMm));
+    for (let r = r0; r <= r1; r++) {
+      const y = minY + (r + 0.5) * cellMm;
+      for (let c = c0; c <= c1; c++) {
+        const i = idx(c, r);
+        if (covered[i]) continue;
+        const x = minX + (c + 0.5) * cellMm;
+        if (distToSeg(x, y, ax, ay, bx, by) <= half) covered[i] = 1;
       }
     }
   };
   let prev: EngineStitch | null = null;
   for (const s of design) {
     if (isReal(s) && prev && isReal(prev) && prev.colorId === s.colorId) {
-      const dx = s.x - prev.x, dy = s.y - prev.y;
-      const len = Math.hypot(dx, dy);
-      const n = Math.max(1, Math.ceil(len / step));
-      for (let k = 0; k <= n; k++) stamp(prev.x + (dx * k) / n, prev.y + (dy * k) / n);
+      markSeg(prev.x, prev.y, s.x, s.y);
     }
     prev = s;
   }
