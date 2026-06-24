@@ -1,6 +1,8 @@
 import type { Project, EmbObject, EmbObjectParams, Path, ThreadColor } from "../../types/project";
 import { DEFAULT_PARAMS } from "../../types/project";
 import { golfGreenRegion } from "../engine/turning.fixture";
+import type { Font } from "opentype.js";
+import { layoutText } from "../text/layout";
 
 /**
  * The benchmark corpus: a small, fixed set of canonical designs that exercise the
@@ -146,3 +148,28 @@ export const CORPUS: { name: string; project: Project }[] = [
     ),
   ]),
 ];
+
+/**
+ * A lettering design from a real font — the most common embroidery job, and the
+ * stress case for satin lettering + multi-region routing across glyphs. Font-free
+ * (the caller passes a parsed Font, since loading a .ttf needs node/DOM), so this
+ * stays usable from both the bench runner and tests. The laid-out word is centred
+ * in the hoop and sewn as satin (authored Oswald centrelines when fontId matches).
+ */
+export function letteringProject(
+  name: string,
+  font: Font,
+  word: string,
+  heightMm = 14,
+): { name: string; project: Project } {
+  const { object } = layoutText({ text: word, font, heightMm, colorId: GREEN.id, fontId: "oswald" });
+  const shift = (p: Path): Path => p.map((pt) => ({ x: pt.x + 50, y: pt.y + 50 }));
+  const obj: EmbObject = {
+    ...object,
+    id: `text-${name}`,
+    paths: object.paths.map(shift),
+    satinCenterlines: object.satinCenterlines?.map(shift),
+    params: { ...object.params, fillStyle: "satin" },
+  };
+  return project(name, [obj]);
+}
