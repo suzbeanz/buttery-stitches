@@ -21,4 +21,13 @@ describe("global routing", () => {
     const travel = travelLengthMm(designFor(proj));
     expect(travel).toBeLessThan(185);
   });
+
+  it("enters reversible objects from the nearer end (start/end-aware)", () => {
+    // Fixed start→end orientation costs ~229mm of travel on these scattered lines;
+    // choosing each line's sewing direction brings it to ~149mm. The threshold
+    // fails a regression to fixed-orientation routing.
+    const proj = CORPUS.find((c) => c.name === "scatter-lines")!.project;
+    const travel = travelLengthMm(designFor(proj));
+    expect(travel).toBeLessThan(190);
+  });
 });

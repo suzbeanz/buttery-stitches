@@ -171,8 +171,13 @@ replacing heuristics with **solved problems** on the five fronts below, each sco
      `scatter-dots` (NN-trap) + `multiregion-grid`. Result: **scatter-dots travel
      220.5 → 150.6 mm (−32%)**, two-discs 65.8 → 23.5 mm; coverage unchanged. Region/run
      ordering already had 2-opt (`orderByTravel`/`orderByNearest`).
-   - **Next:** lift inter-object pairing to true start/end-aware optimization (an LKH-style
-     pass), add a lettering corpus design, and tackle the within-region Rural-Postman framing.
+   - **Done (start/end-aware).** The block orderer now chooses each *reversible* object's
+     sewing DIRECTION too — entering a running line / no-underlay shape from whichever end
+     is nearer (greedy nearest-PORT seed + Or-opt with per-object flips). Reversal is gated
+     to objects without underlay/STOP so underlay→top order and appliqué stay correct.
+     New `scatter-lines` corpus: **travel 228.9 → 149.3 mm (−35%)**; underlaid `scatter-dots`
+     correctly unaffected.
+   - **Next:** a lettering corpus design, and the within-region Rural-Postman framing.
 
 3. **Physical pull-compensation model** *(math; high value, higher effort)*
    Fabric as an elastic sheet + thread tension; solve predicted distortion, pre-distort

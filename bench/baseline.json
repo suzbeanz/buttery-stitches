@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-06-24T13:24:10.746Z",
+  "generatedAt": "2026-06-24T15:43:33.898Z",
   "summary": {
-    "designs": 11,
-    "totalStitches": 12765,
-    "totalTravelMm": 484,
-    "meanTravelPct": "1.7%",
+    "designs": 12,
+    "totalStitches": 12905,
+    "totalTravelMm": 633.3,
+    "meanTravelPct": "4.9%",
     "meanFillCoverage": "99.7%"
   },
   "results": [
@@ -266,6 +266,32 @@
           "shortPct": 0.15206929740134745
         },
         "fillCoverage": 1
+      }
+    },
+    {
+      "name": "scatter-lines",
+      "metrics": {
+        "stitches": 140,
+        "jumps": 7,
+        "trims": 7,
+        "colors": 1,
+        "threadLengthMm": 228.55547535899825,
+        "runtimeMin": 0.43333333333333335,
+        "widthMm": 76,
+        "heightMm": 76,
+        "withinHoop": true,
+        "travelMm": 149.3095773007147,
+        "travelRatio": 0.39513994811045866,
+        "stitchLen": {
+          "min": 0.5,
+          "mean": 1.7314808739318037,
+          "median": 2.4999999999999973,
+          "p95": 2.5000000000000027,
+          "max": 2.500000000000013,
+          "cv": 0.49002560417852153,
+          "shortPct": 0.13636363636363635
+        },
+        "fillCoverage": null
       }
     },
     {

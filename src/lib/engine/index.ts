@@ -980,70 +980,108 @@ const groupEnd = (g: ObjGroup): Point => {
  *  this within a single colour; the cap just bounds worst-case cost. */
 const ORDER_OPT_MAX = 80;
 
-/** Cost of sewing `seq` in order, entered from `cursor`: the entry jump plus every
- *  object-end → next-object-start travel. (Within-object stitching is fixed.) */
-function blockTravelCost(seq: ObjGroup[], cursor: Point | null): number {
+/** A group can be sewn from either end (traversal reversed) only when that stays
+ *  correct: no underlay run (reversing would lay underlay last, over the top) and
+ *  no appliqué STOP (whose order is part of the production sequence). Running lines
+ *  and no-underlay fills/satin qualify; underlaid fills don't. */
+function reversibleGroup(g: ObjGroup): boolean {
+  return g.runs.length > 0 && g.runs.every((r) => !r.underlay && !r.stopAfter);
+}
+
+/** The same group sewn end-to-start: reverse the run order and each run's points. */
+function reverseGroup(g: ObjGroup): ObjGroup {
+  return {
+    object: g.object,
+    runs: g.runs.slice().reverse().map((r) => ({ ...r, pts: r.pts.slice().reverse() })),
+  };
+}
+
+/** A group with a chosen sewing direction. `rev` = enter from its end. */
+interface OrientedGroup {
+  g: ObjGroup;
+  rev: boolean;
+  reversible: boolean;
+}
+const oStart = (it: OrientedGroup): Point => (it.rev ? groupEnd(it.g) : groupStart(it.g));
+const oEnd = (it: OrientedGroup): Point => (it.rev ? groupStart(it.g) : groupEnd(it.g));
+
+/** Travel of an oriented sequence entered from `cursor`: entry jump + every
+ *  object-exit → next-object-entry hop. (Within-object stitching is fixed.) */
+function orientedCost(seq: OrientedGroup[], cursor: Point | null): number {
   if (seq.length === 0) return 0;
-  let c = cursor ? Math.hypot(cursor.x - groupStart(seq[0]).x, cursor.y - groupStart(seq[0]).y) : 0;
+  let c = cursor ? Math.hypot(cursor.x - oStart(seq[0]).x, cursor.y - oStart(seq[0]).y) : 0;
   for (let i = 1; i < seq.length; i++) {
-    const a = groupEnd(seq[i - 1]);
-    const b = groupStart(seq[i]);
+    const a = oEnd(seq[i - 1]);
+    const b = oStart(seq[i]);
     c += Math.hypot(a.x - b.x, a.y - b.y);
   }
   return c;
 }
 
 /**
- * Order one same-colour block to minimise travel: a greedy nearest-neighbour seed
- * (from the running cursor) refined by Or-opt — relocating chains of 1–3 objects to
- * their best slot until no move helps. Or-opt is the right move here because whole
- * objects relocate WITHOUT reversing (a group's runs must stay underlay→top, and
- * appliqué STOPs in order), so it fixes greedy-NN's stranded outliers (a far dot it
- * left for last, forcing a long backtrack) that a reversal-based 2-opt can't touch
- * safely. Returns the reordered block.
+ * Order one same-colour block to minimise travel, choosing each reversible object's
+ * sewing DIRECTION as well as the visiting order — entering a running line / no-
+ * underlay shape from whichever end is nearer saves the backtrack a fixed start→end
+ * orientation forces (14–38% of inter-object travel on scattered directed segments).
+ * Greedy nearest-PORT seed (either end of a reversible object) refined by Or-opt that
+ * relocates chains of 1–3 objects and flips single reversible ones. Or-opt + flips are
+ * the safe moves: whole objects move/flip, never splitting a group's runs, so
+ * underlay→top order and appliqué STOPs stay intact.
  */
 function orderColorBlock(block: ObjGroup[], cursor: Point | null): ObjGroup[] {
   if (block.length <= 1) return block;
-  // Greedy nearest-neighbour seed, continuing from the previous block's cursor.
-  const remaining = block.slice();
-  let seq: ObjGroup[] = [];
+  // Greedy nearest-PORT seed: for a reversible object, the nearer of its two ends.
+  const remaining: OrientedGroup[] = block.map((g) => ({ g, rev: false, reversible: reversibleGroup(g) }));
+  let seq: OrientedGroup[] = [];
   let cur = cursor;
   while (remaining.length > 0) {
     let best = 0;
-    if (cur) {
-      let bd = Infinity;
-      for (let k = 0; k < remaining.length; k++) {
-        const s = groupStart(remaining[k]);
-        const d = Math.hypot(s.x - cur.x, s.y - cur.y);
-        if (d < bd) { bd = d; best = k; }
+    let bestRev = false;
+    let bd = Infinity;
+    for (let k = 0; k < remaining.length; k++) {
+      const it = remaining[k];
+      const ds = cur ? Math.hypot(cur.x - groupStart(it.g).x, cur.y - groupStart(it.g).y) : 0;
+      if (ds < bd) { bd = ds; best = k; bestRev = false; }
+      if (it.reversible && cur) {
+        const de = Math.hypot(cur.x - groupEnd(it.g).x, cur.y - groupEnd(it.g).y);
+        if (de < bd) { bd = de; best = k; bestRev = true; }
       }
     }
-    seq.push(remaining.splice(best, 1)[0]);
-    cur = groupEnd(seq[seq.length - 1]);
+    const it = remaining.splice(best, 1)[0];
+    it.rev = bestRev;
+    seq.push(it);
+    cur = oEnd(it);
   }
-  if (block.length > ORDER_OPT_MAX) return seq;
 
-  let improved = true;
-  let pass = 0;
-  while (improved && pass++ < 8) {
-    improved = false;
-    for (let L = 1; L <= Math.min(3, seq.length - 1); L++) {
-      for (let i = 0; i + L <= seq.length; i++) {
-        const seg = seq.slice(i, i + L);
-        const rest = seq.slice(0, i).concat(seq.slice(i + L));
-        let bestSeq: ObjGroup[] | null = null;
-        let bestCost = blockTravelCost(seq, cursor);
-        for (let k = 0; k <= rest.length; k++) {
-          if (k === i) continue; // same spot
-          const cand = rest.slice(0, k).concat(seg, rest.slice(k));
-          const c = blockTravelCost(cand, cursor);
-          if (c + 1e-6 < bestCost) { bestCost = c; bestSeq = cand; }
+  if (block.length <= ORDER_OPT_MAX) {
+    let improved = true;
+    let pass = 0;
+    while (improved && pass++ < 8) {
+      improved = false;
+      for (let L = 1; L <= Math.min(3, seq.length - 1); L++) {
+        for (let i = 0; i + L <= seq.length; i++) {
+          const seg = seq.slice(i, i + L);
+          const rest = seq.slice(0, i).concat(seq.slice(i + L));
+          let bestSeq: OrientedGroup[] | null = null;
+          let bestCost = orientedCost(seq, cursor);
+          for (let k = 0; k <= rest.length; k++) {
+            // A lone reversible object may also flip in its new slot.
+            const variants: OrientedGroup[][] =
+              L === 1 && seg[0].reversible
+                ? [[{ ...seg[0], rev: false }], [{ ...seg[0], rev: true }]]
+                : [seg];
+            for (const v of variants) {
+              const cand = rest.slice(0, k).concat(v, rest.slice(k));
+              const c = orientedCost(cand, cursor);
+              if (c + 1e-6 < bestCost) { bestCost = c; bestSeq = cand; }
+            }
+          }
+          if (bestSeq) { seq = bestSeq; improved = true; }
         }
-        if (bestSeq) { seq = bestSeq; improved = true; }
       }
     }
   }
-  return seq;
+  return seq.map((it) => (it.rev ? reverseGroup(it.g) : it.g));
 }
 
 /**
