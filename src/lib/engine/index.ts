@@ -975,13 +975,84 @@ const groupEnd = (g: ObjGroup): Point => {
   return last[last.length - 1];
 };
 
+/** Above this many same-colour objects in one block, skip the Or-opt polish (it's
+ *  O(n³)) and keep the greedy nearest-neighbour order. Real designs rarely exceed
+ *  this within a single colour; the cap just bounds worst-case cost. */
+const ORDER_OPT_MAX = 80;
+
+/** Cost of sewing `seq` in order, entered from `cursor`: the entry jump plus every
+ *  object-end → next-object-start travel. (Within-object stitching is fixed.) */
+function blockTravelCost(seq: ObjGroup[], cursor: Point | null): number {
+  if (seq.length === 0) return 0;
+  let c = cursor ? Math.hypot(cursor.x - groupStart(seq[0]).x, cursor.y - groupStart(seq[0]).y) : 0;
+  for (let i = 1; i < seq.length; i++) {
+    const a = groupEnd(seq[i - 1]);
+    const b = groupStart(seq[i]);
+    c += Math.hypot(a.x - b.x, a.y - b.y);
+  }
+  return c;
+}
+
+/**
+ * Order one same-colour block to minimise travel: a greedy nearest-neighbour seed
+ * (from the running cursor) refined by Or-opt — relocating chains of 1–3 objects to
+ * their best slot until no move helps. Or-opt is the right move here because whole
+ * objects relocate WITHOUT reversing (a group's runs must stay underlay→top, and
+ * appliqué STOPs in order), so it fixes greedy-NN's stranded outliers (a far dot it
+ * left for last, forcing a long backtrack) that a reversal-based 2-opt can't touch
+ * safely. Returns the reordered block.
+ */
+function orderColorBlock(block: ObjGroup[], cursor: Point | null): ObjGroup[] {
+  if (block.length <= 1) return block;
+  // Greedy nearest-neighbour seed, continuing from the previous block's cursor.
+  const remaining = block.slice();
+  let seq: ObjGroup[] = [];
+  let cur = cursor;
+  while (remaining.length > 0) {
+    let best = 0;
+    if (cur) {
+      let bd = Infinity;
+      for (let k = 0; k < remaining.length; k++) {
+        const s = groupStart(remaining[k]);
+        const d = Math.hypot(s.x - cur.x, s.y - cur.y);
+        if (d < bd) { bd = d; best = k; }
+      }
+    }
+    seq.push(remaining.splice(best, 1)[0]);
+    cur = groupEnd(seq[seq.length - 1]);
+  }
+  if (block.length > ORDER_OPT_MAX) return seq;
+
+  let improved = true;
+  let pass = 0;
+  while (improved && pass++ < 8) {
+    improved = false;
+    for (let L = 1; L <= Math.min(3, seq.length - 1); L++) {
+      for (let i = 0; i + L <= seq.length; i++) {
+        const seg = seq.slice(i, i + L);
+        const rest = seq.slice(0, i).concat(seq.slice(i + L));
+        let bestSeq: ObjGroup[] | null = null;
+        let bestCost = blockTravelCost(seq, cursor);
+        for (let k = 0; k <= rest.length; k++) {
+          if (k === i) continue; // same spot
+          const cand = rest.slice(0, k).concat(seg, rest.slice(k));
+          const c = blockTravelCost(cand, cursor);
+          if (c + 1e-6 < bestCost) { bestCost = c; bestSeq = cand; }
+        }
+        if (bestSeq) { seq = bestSeq; improved = true; }
+      }
+    }
+  }
+  return seq;
+}
+
 /**
  * Order object-groups to minimize travel. Color blocks (maximal runs of the same
  * thread color, in their original sequence) are preserved so the color order and
- * layering never change; inside each block the objects are sewn nearest-neighbor,
- * continuing from where the previous block left off. A whole object's runs stay
- * together and in order (underlay before top), so only the travel between objects
- * is optimized — never the stitching within one.
+ * layering never change; inside each block the objects are travel-ordered
+ * (nearest-neighbour + Or-opt), continuing from where the previous block left off.
+ * A whole object's runs stay together and in order (underlay before top), so only
+ * the travel between objects is optimized — never the stitching within one.
  */
 function routeGroups(groups: ObjGroup[]): ObjGroup[] {
   const out: ObjGroup[] = [];
@@ -990,23 +1061,9 @@ function routeGroups(groups: ObjGroup[]): ObjGroup[] {
   while (i < groups.length) {
     let j = i;
     while (j < groups.length && groups[j].object.colorId === groups[i].object.colorId) j++;
-    const remaining = groups.slice(i, j);
-    while (remaining.length > 0) {
-      let best = 0;
-      if (cursor) {
-        let bestDist = Infinity;
-        for (let k = 0; k < remaining.length; k++) {
-          const s = groupStart(remaining[k]);
-          const d = Math.hypot(s.x - cursor.x, s.y - cursor.y);
-          if (d < bestDist) {
-            bestDist = d;
-            best = k;
-          }
-        }
-      }
-      const [chosen] = remaining.splice(best, 1);
-      out.push(chosen);
-      cursor = groupEnd(chosen);
+    for (const g of orderColorBlock(groups.slice(i, j), cursor)) {
+      out.push(g);
+      cursor = groupEnd(g);
     }
     i = j;
   }
