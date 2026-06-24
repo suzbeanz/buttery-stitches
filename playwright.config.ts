@@ -14,7 +14,16 @@ export default defineConfig({
     baseURL: "http://localhost:5173",
     trace: "on-first-retry",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    {
+      // Phone viewport. The smoke (drawing) spec depends on the wide layout's
+      // object counter, so it's ignored here; a11y/csp/mobile specs still run.
+      name: "mobile",
+      use: { ...devices["Pixel 7"] },
+      testIgnore: /smoke\.spec\.ts/,
+    },
+  ],
   webServer: {
     command: "npm run dev -- --port 5173",
     url: "http://localhost:5173",

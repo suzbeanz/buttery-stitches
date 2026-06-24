@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Download, AlertTriangle } from "lucide-react";
 import { toast } from "../store/toastStore";
 import type { LoadStage } from "../lib/pyodide/loader";
@@ -51,6 +51,18 @@ export default function ExportMenu({
   const [stage, setStage] = useState<LoadStage>("idle");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Let keyboard users dismiss the open menu with Escape (don't trap focus — this
+  // is a lightweight popover, not a modal dialog).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   // Recompute the design only while the menu is open.
   const { design, stitches, changes, warnings } = useMemo(() => {
@@ -118,7 +130,15 @@ export default function ExportMenu({
       </button>
 
       {open && (
-        <div className="anim-press-in absolute left-0 z-20 mt-1 max-h-[70vh] w-72 max-w-[90vw] overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-2.5 text-char shadow-press">
+        <>
+          {/* Presentational backdrop — click outside to dismiss; keyboard users
+              close via the toggle button or Escape (above). */}
+          <div aria-hidden className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div
+            role="menu"
+            aria-label="Export options"
+            className="anim-press-in absolute left-0 z-20 mt-1 max-h-[70vh] w-72 max-w-[90vw] overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-2.5 text-char shadow-press"
+          >
           {empty ? (
             <p className="px-1 py-2 font-body text-[12px] text-char/60">
               Nothing to export yet — draw or import a design first.
@@ -198,7 +218,8 @@ export default function ExportMenu({
             </div>
           )}
           {error && <p className="mt-2 px-1 font-body text-[11px] text-stamp">{error}</p>}
-        </div>
+          </div>
+        </>
       )}
     </div>
   );

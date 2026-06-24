@@ -84,7 +84,10 @@ export default function LayerPanel() {
   };
 
   return (
-    <aside className="flex h-full w-60 shrink-0 flex-col border-r border-navy/25 bg-butter-100">
+    <aside
+      aria-label="Layers and stitch order"
+      className="flex h-full w-60 shrink-0 flex-col border-r border-navy/25 bg-butter-100"
+    >
       <div className="flex items-center gap-1.5 border-b border-ink/20 px-3 py-2.5 font-label text-xs font-semibold uppercase tracking-[0.18em] text-ink-deep">
         <ListOrdered size={14} className="text-ink-deep" aria-hidden /> Stitch Order
       </div>
@@ -92,7 +95,7 @@ export default function LayerPanel() {
       {objects.length === 0 ? (
         <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
           <ListOrdered size={22} className="text-ink/25" aria-hidden />
-          <p className="font-body text-sm text-navy/60">
+          <p className="font-body text-sm text-navy/80">
             Nothing stitched yet. Pick a tool and draw, or bring in an image.
           </p>
         </div>

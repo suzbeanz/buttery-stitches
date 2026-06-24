@@ -472,6 +472,7 @@ export default function TopBar({
         ref={fileInput}
         type="file"
         accept=".embproj,application/json"
+        aria-label="Open a project file"
         className="hidden"
         onChange={onOpenFile}
       />
@@ -479,6 +480,7 @@ export default function TopBar({
         ref={importInput}
         type="file"
         accept=".embproj,.pes,.dst,.jef,.exp,.vp3,application/json"
+        aria-label="Import a design file"
         className="hidden"
         onChange={onImportFile}
       />
@@ -486,6 +488,7 @@ export default function TopBar({
         ref={imageInput}
         type="file"
         accept="image/*"
+        aria-label="Choose an image to digitize"
         className="hidden"
         onChange={onPickImage}
       />

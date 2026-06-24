@@ -1,5 +1,6 @@
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { CheckCircle2, AlertTriangle, X, Wand2, Sparkles, Download } from "lucide-react";
+import { useDialogFocus, useEscapeToClose } from "./useEscapeToClose";
 import { useProjectStore } from "../store/projectStore";
 import { useEditorStore } from "../store/editorStore";
 import { designFor, countStitches, countColorChanges } from "../lib/engine";
@@ -25,6 +26,9 @@ export default function DesignCheck({
   const project = useProjectStore((s) => s.project);
   const setProject = useProjectStore((s) => s.setProject);
   const rulerUnit = useEditorStore((s) => s.rulerUnit);
+  // Move focus into the dialog, trap Tab, and restore focus on close; Esc dismisses.
+  const dialogRef = useDialogFocus<HTMLDivElement>();
+  useEscapeToClose(onClose);
 
   const design = useMemo(() => designFor(project), [project]);
   const warnings = useMemo(() => validateDesign(design, project), [design, project]);
@@ -43,15 +47,6 @@ export default function DesignCheck({
   const empty = visible === 0;
   const ready = !empty && warnings.length === 0;
 
-  // Esc to dismiss.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   const dims =
     rulerUnit === "inch"
       ? `${mmToInch(project.widthMm).toFixed(2)} × ${mmToInch(project.heightMm).toFixed(2)} in`
@@ -66,10 +61,12 @@ export default function DesignCheck({
       }}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Check design"
-        className="anim-press-in max-h-[90vh] w-full max-w-md overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-5 text-navy shadow-press"
+        tabIndex={-1}
+        className="anim-press-in max-h-[90vh] w-full max-w-md overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-5 text-navy shadow-press outline-none"
       >
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-label text-lg font-semibold uppercase tracking-[0.08em]">

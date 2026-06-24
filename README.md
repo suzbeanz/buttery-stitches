@@ -204,7 +204,13 @@ formula above is covered by unit tests.
 ## How it works under the hood
 
 - **No backend.** It's just static files. Your images and designs stay on your
-  machine.
+  machine — and there's **no third-party request on load**: the web fonts are
+  self-hosted (Latin subsets vendored by `scripts/fetch-fonts.mjs`), not pulled
+  from Google Fonts. A strict **Content-Security-Policy** (a `<meta>` tag, since
+  a static host can't set headers) locks origins down to `'self'` plus exactly
+  what Pyodide needs on demand. The only network call the app ever makes is
+  fetching the Pyodide runtime from a CDN the first time you export — and even
+  that uploads nothing.
 - **Real file formats, not my homegrown guesses.** Writing PES/DST/etc. is handled
   by [`pyembroidery`](https://github.com/EmbroideryHub/pyembroidery), run in the
   browser with [Pyodide](https://pyodide.org/) (WebAssembly).
@@ -214,18 +220,43 @@ formula above is covered by unit tests.
   objects, and their order (which *is* the stitch sequence). It's lossless and
   re-editable. An exported `.pes` is lossy, so don't try to round-trip it back.
 
+## Privacy, security & accessibility
+
+- **Privacy by construction.** No server, no analytics, no telemetry. Images and
+  designs never leave the browser; uncaught errors are kept in a small in-memory
+  log you can optionally **download as a redacted report** (no design data) to
+  attach to a bug — nothing is sent anywhere (`src/lib/log.ts`).
+- **Hardened delivery.** Strict CSP, self-hosted fonts, no third-party requests
+  on load (verified in CI by `e2e/csp.spec.ts`).
+- **Accessible.** Labelled landmarks and controls, `aria-pressed`/`aria-selected`
+  toggles, focus-trapped dialogs that restore focus, a global focus-visible ring,
+  live-region announcements (incl. a text description of the canvas for screen
+  readers), and assertive error toasts. Accessibility is enforced two ways:
+  component-level axe checks in the unit suite (`src/test/a11y.dom.test.tsx`) and
+  full-page axe scans across desktop + mobile viewports in the e2e suite
+  (`e2e/a11y.spec.ts`).
+
 ## Run it locally
 
 ```bash
 npm install
 npm run dev        # dev server
-npm test           # unit + component tests
+npm test           # unit + component tests (incl. axe a11y checks)
 npm run typecheck  # types
 npm run lint       # lint
-npm run build      # production build
+npm run build      # production build (tsc -b + vite)
+npm run e2e        # Playwright end-to-end (needs `npx playwright install chromium`)
 ```
 
-Needs Node 22.
+Needs Node 22. CI runs the unit gate, the Playwright e2e suite (desktop +
+mobile, with axe and CSP checks), and a Lighthouse pass (`lighthouserc.json`,
+warn-level budgets) on every pull request.
+
+To refresh the self-hosted fonts after a design-system change:
+
+```bash
+node scripts/fetch-fonts.mjs   # re-vendors Latin woff2 + regenerates src/fonts.css
+```
 
 ## Keyboard shortcuts
 

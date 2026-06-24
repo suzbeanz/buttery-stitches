@@ -71,7 +71,10 @@ export default function PropertiesPanel() {
   );
 
   return (
-    <aside className="flex h-full w-64 shrink-0 flex-col border-l border-navy/25 bg-butter-100">
+    <aside
+      aria-label="Properties and threads"
+      className="flex h-full w-64 shrink-0 flex-col border-l border-navy/25 bg-butter-100"
+    >
       <div className="flex items-center gap-1.5 border-b border-ink/20 px-3 py-2.5 font-label text-xs font-semibold uppercase tracking-[0.18em] text-ink-deep">
         <SlidersHorizontal size={14} className="text-ink-deep" aria-hidden /> Properties
       </div>
@@ -89,7 +92,7 @@ export default function PropertiesPanel() {
               className={`flex-1 border-b-2 px-1 py-1.5 font-label text-[10px] font-semibold uppercase tracking-wide transition-colors ${
                 on
                   ? "border-ink text-ink"
-                  : "border-transparent text-navy/45 hover:bg-butter-200/60 hover:text-navy"
+                  : "border-transparent text-navy/80 hover:bg-butter-200/60 hover:text-navy"
               }`}
             >
               {t.label}
@@ -105,7 +108,7 @@ export default function PropertiesPanel() {
           (selected.length === 0 ? (
             <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
               <SlidersHorizontal size={22} className="text-ink/25" aria-hidden />
-              <p className="font-body text-sm text-navy/60">
+              <p className="font-body text-sm text-navy/80">
                 Select one or more objects to align, order, group, merge, or split them.
               </p>
             </div>
@@ -119,12 +122,12 @@ export default function PropertiesPanel() {
           (selected.length === 0 ? (
             <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
               <SlidersHorizontal size={22} className="text-ink/25" aria-hidden />
-              <p className="font-body text-sm text-navy/60">
+              <p className="font-body text-sm text-navy/80">
                 Select an object to fine-tune its stitches.
               </p>
             </div>
           ) : selected.length > 1 ? (
-            <div className="px-3 py-4 text-center font-body text-sm text-navy/60">
+            <div className="px-3 py-4 text-center font-body text-sm text-navy/80">
               {selected.length} objects selected. Use the <b>Arrange</b> tab to align,
               group, or merge them.
             </div>
@@ -693,7 +696,7 @@ function OutlineControl({ fill }: { fill: EmbObject }) {
 
   return (
     <div className="flex flex-col gap-2 border-b border-navy/25 p-3 text-sm">
-      <span className="text-xs font-semibold uppercase tracking-wide text-navy/60">
+      <span className="text-xs font-semibold uppercase tracking-wide text-navy/80">
         Outline
       </span>
 

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Path, Point } from "../../types/project";
 import { turningFill, flowFill, flowAlong } from "./turning";
+import { golfGreenRegion } from "./turning.fixture";
 
 const opts = { density: 0.6, angle: 0, stitchLength: 3, pullCompMm: 0.2 };
 
@@ -114,6 +115,15 @@ describe("flowFill (branchy / multi-limb shapes)", () => {
     expect(flowFill([rect], opts)).toBeNull();
     const disc = arc(50, 50, 25, 0, 2 * Math.PI, 48);
     expect(flowFill([disc], opts)).toBeNull();
+  });
+
+  it("declines a holed/notched ellipse instead of fanning rows (the golf-green starburst)", () => {
+    // Real traced geometry: a wide ellipse with the ball cutout and a flagpole notch.
+    // Its skeleton forks at many angles around the hole, so flowing rows perpendicular
+    // to each fork sprays them into a radial fan that still 'covers' and never 'slashes'
+    // — passing the old safety nets. The fanning guard must catch it so the caller fills
+    // it with clean parallel tatami instead.
+    expect(flowFill(golfGreenRegion, { density: 0.32, angle: 0, pullCompMm: 0 })).toBeNull();
   });
 });
 
