@@ -64,7 +64,7 @@ export interface EmbObjectParams {
    *  contour (rows that echo the shape's outline), gradient (tatami whose row
    *  spacing ramps for a shaded/ombré effect), or motif (a tiled decorative
    *  motif). */
-  fillStyle?: "tatami" | "satin" | "contour" | "gradient" | "motif" | "blend";
+  fillStyle?: "tatami" | "satin" | "contour" | "gradient" | "motif" | "blend" | "field";
   /** LINE-ART: render this (satin) object's medial columns as clean RUNNING lines
    *  down their centerline rather than filled satin — for outlines and fine detail
    *  strokes (auto-set by the tracer on thin regions). */

@@ -14,6 +14,7 @@ import { tatamiFill, tatamiConcaveRuns, multiBlendFill, motifFill, motifRunAlong
 import { contourFill } from "./contour";
 import { medialColumns, columnsFromCenterlines, satinCoverage, residualRegions, type SatinColumn } from "./medial";
 import { turningFill, flowFill, flowAlong } from "./turning";
+import { guidanceFieldFill } from "./field";
 import { isSmallRoundFill } from "./classify";
 import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
 import { dropShortStitches, splitLongTravels } from "./resample";
@@ -780,6 +781,13 @@ export function generateObjectRuns(
         : tatamiConcaveRuns(region, { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp });
       if (echo.length) contourSpiral = true;
       else tatamiNoBareTravel = true;
+    } else if (p.fillStyle === "field") {
+      // Guidance-field fill: rows follow a solved harmonic direction field that
+      // sweeps the form cap-to-cap (generalises turning/flow). Falls back to the
+      // concavity-aware tatami when the shape can't seat a clean field.
+      const fopts = { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp };
+      tops = guidanceFieldFill(region, fopts) ?? tatamiConcaveRuns(region, fopts);
+      tatamiNoBareTravel = true;
     } else if (motifMode) {
       // Motif fill: tile a decorative motif across the region (no underlay).
       tops = motifFill(region, { motifId: p.motif, sizeMm: p.motifSizeMm, angle: tatamiAngle });
@@ -809,11 +817,18 @@ export function generateObjectRuns(
       // branchy/organic shape flows along its limbs (flowFill); else concavity-aware
       // tatami. Every path declines (→ null) and self-validates to never slash.
       const userFlow = flowSpineMm ? flowAlong(region, flowSpineMm, fillOpts) : null;
+      const autoSingle = !manualDirection && !flowSpineMm && regions.length === 1;
+      // A clean single-spine band (banner, leaf, crescent) turns. The guidance FIELD
+      // is the promoted default there — it sweeps the form cap-to-cap and beats the
+      // spine-march on coverage + long-stitch count (bench: crescent-field) — with
+      // turningFill kept as the fallback when the field declines (it self-validates
+      // coverage). A branchy/organic shape still flows along its limbs (flowFill).
+      const autoTurn = autoSingle ? turningFill(region, fillOpts) : null;
       const turned =
         userFlow ??
-        (!manualDirection && !flowSpineMm && regions.length === 1
-          ? (turningFill(region, fillOpts) ?? flowFill(region, fillOpts))
-          : null);
+        (autoTurn
+          ? (guidanceFieldFill(region, fillOpts) ?? autoTurn)
+          : (autoSingle ? flowFill(region, fillOpts) : null));
       tops = turned ?? tatamiConcaveRuns(region, fillOpts);
       tatamiNoBareTravel = true;
     }
