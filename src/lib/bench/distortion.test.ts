@@ -3,7 +3,7 @@ import type { EngineStitch } from "../engine";
 import { designFor } from "../engine";
 import { DEFAULT_PARAMS } from "../../types/project";
 import type { Project } from "../../types/project";
-import { simulateDistortion } from "./distortion";
+import { simulateDistortion, precompensate } from "./distortion";
 
 const s = (x: number, y: number, extra: Partial<EngineStitch> = {}): EngineStitch => ({
   x, y, colorId: "c1", objectId: "o1", ...extra,
@@ -56,5 +56,16 @@ describe("fabric-pull simulation", () => {
     const dense = simulateDistortion(designFor(rectFill(0.3))).pullInMm;
     const sparse = simulateDistortion(designFor(rectFill(0.6))).pullInMm;
     expect(dense).toBeGreaterThanOrEqual(sparse - 1e-6);
+  });
+
+  it("pre-compensation drives the landed-vs-target error toward zero", () => {
+    const r = precompensate(designFor(rectFill(0.4)));
+    expect(r.beforeMm).toBeGreaterThan(0.1); // the raw pull is real
+    expect(r.afterMm).toBeLessThan(r.beforeMm * 0.3); // cancelled to <30% of it
+    expect(r.placed.length).toBeGreaterThan(0);
+  });
+
+  it("pre-compensation is a no-op on an empty design", () => {
+    expect(precompensate([])).toMatchObject({ beforeMm: 0, afterMm: 0 });
   });
 });
