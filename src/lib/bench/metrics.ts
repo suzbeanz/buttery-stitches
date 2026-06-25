@@ -1,6 +1,7 @@
 import type { Project, EmbObject, Point } from "../../types/project";
 import { designFor, type EngineStitch } from "../engine";
 import { designInfo, type DesignInfo } from "../engine/info";
+import { simulateDistortion } from "./distortion";
 
 /**
  * Benchmark metrics — the objective scoreboard for the stitch engine.
@@ -47,6 +48,12 @@ export interface BenchMetrics extends DesignInfo {
   /** thread coverage of the fill regions in [0,1] (covered area ÷ region area), or
    *  null when the design has no fill objects. Higher is better (1 = full coverage). */
   fillCoverage: number | null;
+  /** predicted net pull-in (mm) from the fabric-pull simulation — how far the sewn
+   *  shape gathers inward under thread tension. Lower is better; what pull
+   *  compensation exists to cancel. */
+  pullInMm: number;
+  /** predicted worst single-point displacement (mm) from the same simulation. */
+  distortMaxMm: number;
 }
 
 /** True when a stitch is a real needle penetration (not a jump/trim/stop marker). */
@@ -217,7 +224,16 @@ export function benchMetrics(project: Project): BenchMetrics {
   const stitchLen = summarizeLengths(stitchSegmentLengths(design));
   const travelRatio =
     travelMm + info.threadLengthMm > 0 ? travelMm / (travelMm + info.threadLengthMm) : 0;
-  return { ...info, travelMm, travelRatio, stitchLen, fillCoverage: fillCoverage(project, design) };
+  const distort = simulateDistortion(design);
+  return {
+    ...info,
+    travelMm,
+    travelRatio,
+    stitchLen,
+    fillCoverage: fillCoverage(project, design),
+    pullInMm: distort.pullInMm,
+    distortMaxMm: distort.maxMm,
+  };
 }
 
 export type { EmbObject };
