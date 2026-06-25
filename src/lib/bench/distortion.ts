@@ -139,6 +139,8 @@ export interface PrecompResult {
   beforeMm: number;
   /** mean landed-vs-target error after pre-compensation (mm) — should be ≈ 0. */
   afterMm: number;
+  /** digitized target position per fabric node (parallel to `placed`). */
+  target: Point[];
   /** the placed (pre-warped) node positions that sew to the target. */
   placed: Point[];
 }
@@ -154,7 +156,7 @@ export interface PrecompResult {
 export function precompensate(design: EngineStitch[], iters = 6): PrecompResult {
   const { nodes: target, springs } = buildNetwork(design);
   const n = target.length;
-  if (n === 0 || springs.length === 0) return { beforeMm: 0, afterMm: 0, placed: target };
+  if (n === 0 || springs.length === 0) return { beforeMm: 0, afterMm: 0, target, placed: target };
   const tx = new Float64Array(n), ty = new Float64Array(n);
   for (let i = 0; i < n; i++) { tx[i] = target[i].x; ty[i] = target[i].y; }
 
@@ -179,5 +181,45 @@ export function precompensate(design: EngineStitch[], iters = 6): PrecompResult 
     placed = placed.map((p, i) => ({ x: p.x + (tx[i] - lx[i]), y: p.y + (ty[i] - ly[i]) }));
   }
   const landF = land(placed);
-  return { beforeMm, afterMm: errorVs(landF.x, landF.y), placed };
+  return { beforeMm, afterMm: errorVs(landF.x, landF.y), target, placed };
+}
+
+/**
+ * Produce the EXPORTABLE pre-compensated stitch stream: shift every stitch (real
+ * penetrations, and the jumps/ties/trims that ride with them) by the correction of
+ * its nearest fabric node, so the sewn-out result lands on the digitized intent.
+ * This is what an engine would emit once predictive compensation is enabled.
+ *
+ * NOTE: the model constants (PULL_STRAIN, BACKING) are physically plausible but not
+ * yet CALIBRATED to a real sew-out, so this is provided as the proven pipeline /
+ * opt-in path — turning it on by default should wait on calibration and on
+ * reconciling with the engine's existing heuristic pullComp (don't double-count).
+ */
+export function applyPrecompensation(design: EngineStitch[], iters = 6): EngineStitch[] {
+  const { target, placed } = precompensate(design, iters);
+  if (target.length === 0) return design;
+  // Correction field, indexed by the same NODE_MERGE_MM grid buildNetwork used.
+  const cell = NODE_MERGE_MM;
+  const cellKey = (x: number, y: number) => `${Math.round(x / cell)},${Math.round(y / cell)}`;
+  const idxAt = new Map<string, number>();
+  target.forEach((t, i) => idxAt.set(cellKey(t.x, t.y), i));
+  const nearest = (x: number, y: number): number => {
+    const bx = Math.round(x / cell), by = Math.round(y / cell);
+    let best = -1, bd = Infinity;
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const i = idxAt.get(`${bx + dx},${by + dy}`);
+        if (i !== undefined) {
+          const d = Math.hypot(target[i].x - x, target[i].y - y);
+          if (d < bd) { bd = d; best = i; }
+        }
+      }
+    }
+    return best;
+  };
+  return design.map((s) => {
+    const i = nearest(s.x, s.y);
+    if (i < 0) return s;
+    return { ...s, x: s.x + (placed[i].x - target[i].x), y: s.y + (placed[i].y - target[i].y) };
+  });
 }
