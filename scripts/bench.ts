@@ -45,6 +45,7 @@ const table = results.map(({ name, metrics: m }) => ({
   lenCV: round(m.stitchLen.cv, 2),
   "short%": pct(m.stitchLen.shortPct),
   coverage: m.fillCoverage == null ? "—" : pct(m.fillCoverage),
+  "pullIn(mm)": round(m.pullInMm, 3),
 }));
 
 console.table(table);
