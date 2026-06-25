@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-06-24T20:42:37.936Z",
+  "generatedAt": "2026-06-25T01:37:40.323Z",
   "summary": {
     "designs": 13,
-    "totalStitches": 14438,
+    "totalStitches": 14462,
     "totalTravelMm": 699.5,
     "meanTravelPct": "4.8%",
-    "meanFillCoverage": "96.5%"
+    "meanFillCoverage": "96.6%"
   },
   "results": [
     {
@@ -63,27 +63,27 @@
     {
       "name": "disc-fill-contour",
       "metrics": {
-        "stitches": 1294,
+        "stitches": 1318,
         "jumps": 0,
         "trims": 0,
         "colors": 1,
-        "threadLengthMm": 3157.0220060818688,
-        "runtimeMin": 1.8485714285714285,
-        "widthMm": 35.81999999999999,
-        "heightMm": 35.519999999999996,
+        "threadLengthMm": 3466.4128939403686,
+        "runtimeMin": 1.8828571428571428,
+        "widthMm": 35.640000014305116,
+        "heightMm": 35.52,
         "withinHoop": true,
         "travelMm": 0,
         "travelRatio": 0,
         "stitchLen": {
-          "min": 0.30000000000000426,
-          "mean": 2.4416256814244863,
-          "median": 2.95458961703905,
-          "p95": 3,
-          "max": 3.2191291067827335,
-          "cv": 0.3817942366650553,
-          "shortPct": 0.14153132250580047
+          "min": 0.3438664800126362,
+          "mean": 2.632052311268314,
+          "median": 2.953435200542346,
+          "p95": 2.9847764614137824,
+          "max": 3.295993305227161,
+          "cv": 0.2810122474987639,
+          "shortPct": 0.07137433561123765
         },
-        "fillCoverage": 0.9417090989594864
+        "fillCoverage": 0.9628957272526013
       }
     },
     {

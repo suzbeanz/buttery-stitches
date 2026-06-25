@@ -21,4 +21,9 @@ describe("curved-fill coverage", () => {
     const proj = CORPUS.find((c) => c.name === "rect-fill")!.project;
     expect(benchMetrics(proj).fillCoverage!).toBeGreaterThan(0.97);
   });
+
+  it("contour rings cover (no jitter gaps between echo loops)", () => {
+    const proj = CORPUS.find((c) => c.name === "disc-fill-contour")!.project;
+    expect(benchMetrics(proj).fillCoverage!).toBeGreaterThan(0.95);
+  });
 });
