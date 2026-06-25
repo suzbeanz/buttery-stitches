@@ -15,8 +15,13 @@ import { resampleByDistance } from "./resample";
  * to the nearest boundary, inner or outer). Pure and unit-testable.
  */
 
-const DEFAULT_CELL_MM = 0.3;
+const DEFAULT_CELL_MM = 0.2;
 const DEFAULT_STITCH_MM = 3;
+/** Ring step as a fraction of density. Rings nominally one density apart would JUST
+ *  touch a same-width thread — but the distance-transform raster jitters ring radii
+ *  by ~a cell, so any drift opens a gap. Stepping a touch tighter gives the margin
+ *  that keeps a contour fill covered; with the finer 0.2mm cell a 0.9 margin suffices (disc-contour 94.2% → 96.2% at ~+2% stitches). */
+const CONTOUR_STEP_FRAC = 0.9;
 
 export interface ContourOptions {
   /** mm between successive rings (the fill density). */
@@ -164,7 +169,7 @@ export function contourFill(rings: Path[], opts: ContourOptions): Path[] {
     return s;
   };
   const loops: { level: number; pts: Point[] }[] = [];
-  for (let level = density * 0.6; level < maxMm; level += density) {
+  for (let level = density * 0.6; level < maxMm; level += density * CONTOUR_STEP_FRAC) {
     for (const loop of isoContours(fieldMm, w, h, level, ptAt)) {
       if (loop.length >= 3 && perim(loop) >= minPerim) loops.push({ level, pts: loop });
     }
