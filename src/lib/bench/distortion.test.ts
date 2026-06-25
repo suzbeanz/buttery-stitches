@@ -3,7 +3,7 @@ import type { EngineStitch } from "../engine";
 import { designFor } from "../engine";
 import { DEFAULT_PARAMS } from "../../types/project";
 import type { Project } from "../../types/project";
-import { simulateDistortion, precompensate } from "./distortion";
+import { simulateDistortion, precompensate, applyPrecompensation } from "./distortion";
 
 const s = (x: number, y: number, extra: Partial<EngineStitch> = {}): EngineStitch => ({
   x, y, colorId: "c1", objectId: "o1", ...extra,
@@ -67,5 +67,19 @@ describe("fabric-pull simulation", () => {
 
   it("pre-compensation is a no-op on an empty design", () => {
     expect(precompensate([])).toMatchObject({ beforeMm: 0, afterMm: 0 });
+  });
+
+  it("produces an exportable compensated stream, same length, pre-warped", () => {
+    const design = designFor(rectFill(0.4));
+    const warped = applyPrecompensation(design);
+    expect(warped.length).toBe(design.length);
+    // Every stitch shifted (the pre-warp), flags preserved.
+    let moved = 0;
+    for (let i = 0; i < design.length; i++) {
+      if (Math.hypot(warped[i].x - design[i].x, warped[i].y - design[i].y) > 1e-6) moved++;
+      expect(warped[i].jump).toBe(design[i].jump);
+    }
+    expect(moved).toBeGreaterThan(design.length * 0.5);
+    expect(applyPrecompensation([])).toEqual([]);
   });
 });
