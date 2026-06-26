@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
-import ContextMenu, { clampMenu } from "./ContextMenu";
+import ContextMenu from "./ContextMenu";
+import { clampMenu } from "./contextMenuLayout";
 import { useProjectStore } from "../store/projectStore";
 import { useEditorStore } from "../store/editorStore";
 import { resetStores } from "../test/setup";

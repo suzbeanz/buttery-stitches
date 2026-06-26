@@ -161,6 +161,22 @@ function Studio({ onHome, saveStatus }: { onHome: () => void; saveStatus: SaveSt
     setPropertiesOpen(!isNarrow);
   }, [isNarrow, setLayersOpen, setPropertiesOpen]);
 
+  // One-time touch hint: long-press is the stand-in for right-click. Surface it
+  // the first time there's an object to act on, so the gesture is discoverable
+  // (a finger has no hover tooltip to lean on). Shown once per browser.
+  const objectCount = useProjectStore((s) => s.project.objects.length);
+  useEffect(() => {
+    if (objectCount === 0) return;
+    if (!window.matchMedia?.("(pointer: coarse)").matches) return;
+    try {
+      if (localStorage.getItem("bs-longpress-hint") === "seen") return;
+      localStorage.setItem("bs-longpress-hint", "seen");
+    } catch {
+      return; // storage blocked (private mode) — skip rather than nag every load
+    }
+    toast("Tip: press and hold an object for more actions — copy, delete, group…", "info");
+  }, [objectCount]);
+
   const overlay = "absolute inset-y-0 z-40 shadow-press";
 
   return (
