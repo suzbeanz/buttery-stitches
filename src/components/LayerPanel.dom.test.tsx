@@ -85,6 +85,15 @@ describe("LayerPanel", () => {
     expect(useProjectStore.getState().project.objects[0].name).toBe("Renamed");
   });
 
+  it("renames via the explicit Rename button (the touch path with no double-click)", () => {
+    render(<LayerPanel />);
+    fireEvent.click(screen.getAllByLabelText("Rename")[0]);
+    const input = screen.getByLabelText("Layer name") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Tapped" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(useProjectStore.getState().project.objects[0].name).toBe("Tapped");
+  });
+
   it("⌘/Ctrl-click toggles a row in and out of the selection", () => {
     render(<LayerPanel />);
     fireEvent.click(screen.getByText("Alpha")); // select just Alpha
