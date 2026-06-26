@@ -196,8 +196,14 @@ export default function CanvasStage() {
   }, []);
 
   const { hoop } = project;
-  const availW = size.width - RULER - PADDING * 2;
-  const availH = size.height - RULER - PADDING * 2;
+  // On a phone the fixed 48px breathing room is a big slice of a small canvas.
+  // Edit view draws only a plain dashed hoop rect (no protruding frame/brackets),
+  // so it's safe to tighten the padding there for more drawing room; stitch view
+  // keeps the full padding its decorative hoop mockup needs.
+  const narrow = size.width > 0 && size.width < 560;
+  const pad = narrow && viewMode === "edit" ? 16 : PADDING;
+  const availW = size.width - RULER - pad * 2;
+  const availH = size.height - RULER - pad * 2;
   // Base "fit" scale (hoop fills the workspace), then the user's zoom on top.
   const fitScale =
     availW > 0 && availH > 0 ? Math.min(availW / hoop.wMm, availH / hoop.hMm) : 1;
@@ -205,8 +211,8 @@ export default function CanvasStage() {
   const hoopW = hoop.wMm * scale;
   const hoopH = hoop.hMm * scale;
   // Hoop is centered at fit, then shifted by the user's pan (px).
-  const baseOriginX = RULER + PADDING + (availW - hoopW) / 2;
-  const baseOriginY = RULER + PADDING + (availH - hoopH) / 2;
+  const baseOriginX = RULER + pad + (availW - hoopW) / 2;
+  const baseOriginY = RULER + pad + (availH - hoopH) / 2;
   const originX = baseOriginX + pan.x;
   const originY = baseOriginY + pan.y;
 
@@ -230,8 +236,8 @@ export default function CanvasStage() {
     const mx = (anchorX - originX) / scale;
     const my = (anchorY - originY) / scale;
     const newScale = fitScale * z;
-    const nbX = RULER + PADDING + (availW - hoop.wMm * newScale) / 2;
-    const nbY = RULER + PADDING + (availH - hoop.hMm * newScale) / 2;
+    const nbX = RULER + pad + (availW - hoop.wMm * newScale) / 2;
+    const nbY = RULER + pad + (availH - hoop.hMm * newScale) / 2;
     setZoom(z);
     setPan({ x: anchorX - mx * newScale - nbX, y: anchorY - my * newScale - nbY });
   }
@@ -784,8 +790,8 @@ export default function CanvasStage() {
       const { startDist, mmAtMid, startZoom } = pinchRef.current;
       const z = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, (startZoom * info.dist) / startDist));
       const newScale = fitScale * z;
-      const nbX = RULER + PADDING + (availW - hoop.wMm * newScale) / 2;
-      const nbY = RULER + PADDING + (availH - hoop.hMm * newScale) / 2;
+      const nbX = RULER + pad + (availW - hoop.wMm * newScale) / 2;
+      const nbY = RULER + pad + (availH - hoop.hMm * newScale) / 2;
       // Zoom about the pinch midpoint AND pan with it (so two fingers also drag).
       setZoom(z);
       setPan({ x: info.mid.x - mmAtMid.x * newScale - nbX, y: info.mid.y - mmAtMid.y * newScale - nbY });
