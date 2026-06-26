@@ -131,6 +131,17 @@ export default function CanvasStage() {
   // Freehand pencil stroke in progress, and a single-finger pan anchor.
   const pencilingRef = useRef(false);
   const panTouchRef = useRef<{ x: number; y: number } | null>(null);
+  // Long-press is the touch stand-in for right-click: a finger held still on an
+  // object opens the context menu. `timer` fires after the hold; `fired` tells
+  // touchend to suppress its tap (and the ghost click that would dismiss the menu).
+  const longPressRef = useRef<number | null>(null);
+  const longPressFiredRef = useRef(false);
+  function cancelLongPress() {
+    if (longPressRef.current !== null) {
+      clearTimeout(longPressRef.current);
+      longPressRef.current = null;
+    }
+  }
 
   const viewMode = useEditorStore((s) => s.viewMode);
   const simPlaying = useEditorStore((s) => s.simPlaying);
@@ -721,9 +732,10 @@ export default function CanvasStage() {
     const stage = e.target.getStage();
     if (!stage) return;
     if (e.evt.touches.length >= 2) {
-      // Begin a pinch — cancel any single-finger marquee/tap in progress.
+      // Begin a pinch — cancel any single-finger marquee/tap/long-press in progress.
       setMarquee(null);
       touchStartRef.current = null;
+      cancelLongPress();
       const info = twoFinger(stage);
       if (info) {
         pinchRef.current = { startDist: info.dist, mmAtMid: toMm(info.mid.x, info.mid.y), startZoom: zoom };
@@ -769,9 +781,29 @@ export default function CanvasStage() {
       return;
     }
     touchStartRef.current = p ? { mm: p, moved: false } : null;
+    longPressFiredRef.current = false;
+    cancelLongPress();
     // Select tool on empty canvas → rubber-band; drawing taps are placed on release.
     if (!isDrawTool(tool) && tool === "select" && e.target === stage && p) {
       setMarquee({ start: p, end: p });
+    }
+    // Long-press an object → open the context menu (the touch right-click). Only
+    // where right-click itself works: an editing tool (select/node) over an object.
+    if ((tool === "select" || tool === "node") && e.target !== stage) {
+      const id = objectIdAt(e.target);
+      const t = e.evt.touches[0];
+      if (id && t) {
+        const cx = t.clientX;
+        const cy = t.clientY;
+        longPressRef.current = window.setTimeout(() => {
+          longPressRef.current = null;
+          longPressFiredRef.current = true;
+          if (!useProjectStore.getState().selectedIds.includes(id)) setSelection([id]);
+          setMarquee(null);
+          touchStartRef.current = null;
+          setMenu({ x: cx, y: cy });
+        }, 480);
+      }
     }
   }
 
@@ -825,7 +857,10 @@ export default function CanvasStage() {
       return;
     }
     const ts = touchStartRef.current;
-    if (ts && p && Math.hypot(p.x - ts.mm.x, p.y - ts.mm.y) > 1.5) ts.moved = true;
+    if (ts && p && Math.hypot(p.x - ts.mm.x, p.y - ts.mm.y) > 1.5) {
+      ts.moved = true;
+      cancelLongPress(); // a drag, not a hold — don't pop the menu
+    }
     if (marquee) {
       if (p) setMarquee((m) => (m ? { ...m, end: p } : m));
       return;
@@ -833,8 +868,18 @@ export default function CanvasStage() {
     if (isPointTool(tool)) setCursor(p);
   }
 
-  function onTouchEnd() {
+  function onTouchEnd(e: Konva.KonvaEventObject<TouchEvent>) {
     panTouchRef.current = null;
+    cancelLongPress();
+    // The long-press already opened the menu and consumed the gesture. Suppress
+    // the compatibility click so it doesn't immediately dismiss the menu.
+    if (longPressFiredRef.current) {
+      longPressFiredRef.current = false;
+      e.evt.preventDefault();
+      touchStartRef.current = null;
+      setMarquee(null);
+      return;
+    }
     if (pencilingRef.current) {
       finishPencil();
       return;
