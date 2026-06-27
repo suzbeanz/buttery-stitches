@@ -4,6 +4,7 @@ import {
   Eye,
   EyeOff,
   Trash2,
+  Pencil,
   PaintBucket,
   AlignJustify,
   Minus,
@@ -190,6 +191,16 @@ export default function LayerPanel() {
                 {/* Secondary actions reveal on hover/focus. `hidden` (not opacity-0) so they
                     take ZERO width at rest and the name actually fills the row. */}
                 <span className="hidden shrink-0 items-center group-hover:flex focus-within:flex [@media(pointer:coarse)]:flex">
+                  {/* Touch has no double-click, so rename also has an explicit
+                      button (it doubles as a discoverable affordance on desktop). */}
+                  <button
+                    data-tip="Rename"
+                    aria-label="Rename"
+                    onClick={() => startRename(o.id, o.name)}
+                    className="tap-target grid h-8 w-6 place-items-center rounded text-navy/55 hover:bg-butter-300/60 hover:text-navy"
+                  >
+                    <Pencil size={14} />
+                  </button>
                   <button
                     data-tip="Move up (stitch earlier)"
                     aria-label="Move up"
