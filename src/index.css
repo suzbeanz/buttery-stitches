@@ -331,6 +331,12 @@ body::after {
       min-height: 2.75rem;
       min-width: 2.75rem;
     }
+    /* Text fields, dropdowns and the number steppers share the same comfortable
+       hit height on a finger so a whole properties row is easy to tap. */
+    .input,
+    .select {
+      min-height: 2.75rem;
+    }
   }
 
   /* The display wordmark — condensed press caps with a touch of tracking. */

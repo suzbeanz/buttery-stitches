@@ -796,7 +796,7 @@ function ThreadColors() {
                 onChange={(e) =>
                   updateColor(c.id, { rgb: hexToRgb(e.target.value) })
                 }
-                className="h-5 w-5 shrink-0 cursor-pointer rounded border border-navy/30 bg-transparent p-0"
+                className="tap-target h-5 w-5 shrink-0 cursor-pointer rounded border border-navy/30 bg-transparent p-0"
                 title={`Change color for ${c.name ?? "thread"}`}
                 aria-label={`Change color for ${c.name ?? "thread"}`}
               />
@@ -809,7 +809,7 @@ function ThreadColors() {
               <button
                 onClick={() => setActiveColorId(c.id)}
                 title="Use for new objects"
-                className={`rounded-sm px-1.5 py-0.5 font-label text-[10px] font-semibold uppercase tracking-wide ${
+                className={`tap-target rounded-sm px-1.5 py-0.5 font-label text-[10px] font-semibold uppercase tracking-wide ${
                   activeColorId === c.id
                     ? "bg-ink text-cream"
                     : "text-ink/60 hover:bg-butter-300/60"
@@ -850,7 +850,7 @@ function ThreadColors() {
                               ? "Delete your active thread"
                               : "Delete thread"
                     }
-                    className={`grid h-6 w-6 shrink-0 place-items-center rounded-sm disabled:opacity-25 disabled:hover:bg-transparent ${
+                    className={`tap-target grid h-6 w-6 shrink-0 place-items-center rounded-sm disabled:opacity-25 disabled:hover:bg-transparent ${
                       pending
                         ? "bg-stamp/15 text-stamp"
                         : "text-ink/45 hover:bg-stamp/10 hover:text-stamp disabled:hover:text-ink/45"
@@ -1018,7 +1018,7 @@ function NumberField({
           type="button"
           aria-label={`Decrease ${label}`}
           onClick={() => stepBy(-1)}
-          className="grid w-7 shrink-0 place-items-center rounded-sm border-2 border-ink/70 text-ink hover:bg-butter-200"
+          className="tap-target grid w-7 shrink-0 place-items-center rounded-sm border-2 border-ink/70 text-ink hover:bg-butter-200"
         >
           <Minus size={14} />
         </button>
@@ -1039,7 +1039,7 @@ function NumberField({
           type="button"
           aria-label={`Increase ${label}`}
           onClick={() => stepBy(1)}
-          className="grid w-7 shrink-0 place-items-center rounded-sm border-2 border-ink/70 text-ink hover:bg-butter-200"
+          className="tap-target grid w-7 shrink-0 place-items-center rounded-sm border-2 border-ink/70 text-ink hover:bg-butter-200"
         >
           <Plus size={14} />
         </button>
