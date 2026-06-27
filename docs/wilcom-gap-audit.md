@@ -32,6 +32,32 @@ finger at #1 and #2.
 
 ---
 
+## STATUS — all five leapfrogs now implemented & benchmarked
+
+The five openings above went from claims to measured implementations (see the
+roadmap section for the per-item detail and PRs):
+
+| # | Leapfrog | Implementation | Measured |
+|---|---|---|---|
+| 1 | Directional field | `engine/field.ts` — harmonic-sweep isolines, default for curved bands | curved fill follows the form |
+| 2 | Global routing | `engine/index.ts` — NN + Or-opt + per-object direction | scatter travel −32%, lines −35% |
+| 3 | Physical pull-comp | `bench/distortion.ts:precompensate` | landed-vs-target 0.26 → **0.02 mm** |
+| 4 | Coverage guarantee | sharp thread-footprint metric + curvature-aware/contour spacing | curved 87→95%, contour 94→96% |
+| 5 | Simulation-in-the-loop | `bench/distortion.ts` mass-spring fabric model | `pullIn(mm)` predicts ~0.2 mm on a solid fill |
+
+**Current benchmark** (`npm run bench`, 13 designs): flat fills ~99% coverage, curved
+95%, contour 96%, lettering 96%; travel ≤6% on scattered work; predicted pull-in
+0.006–0.26 mm scaling with shape solidity.
+
+**The frontier is no longer code — it's calibration.** The pull model's two constants
+(`PULL_STRAIN`, `BACKING`) are physically plausible but not yet fit to a real
+sew-out. Default-on predictive compensation (warping exported `.dst/.pes`) is gated
+on (a) calibrating those from a test stitch-out and (b) reconciling with the engine's
+existing heuristic `pullComp`. That, plus a 2-thread fabric mesh for cross-stitch
+gathering, is the next real milestone.
+
+---
+
 ## Capability matrix
 
 ### Fills — **parity, with two measurable holes**
