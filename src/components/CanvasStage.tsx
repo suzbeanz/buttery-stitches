@@ -7,6 +7,8 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
+  Spline,
+  Trash2,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -116,6 +118,7 @@ export default function CanvasStage() {
   const setCursor = useEditorStore((s) => s.setCursor);
   const clearDraft = useEditorStore((s) => s.clearDraft);
   const smooth = useEditorStore((s) => s.smooth);
+  const selectedNode = useEditorStore((s) => s.selectedNode);
   const guidesEnabled = useEditorStore((s) => s.guidesEnabled); // workspace gridlines
 
   // Viewport zoom (1 = fit-to-workspace) and pan (px), shared by edit + stitch.
@@ -521,6 +524,48 @@ export default function CanvasStage() {
     };
   }, []);
 
+  // Toggle the focused node between a smooth curve and a sharp corner. Shared by
+  // the keyboard ('c') and the on-screen node bar (the touch path). Returns true
+  // if it acted on a node-backed object.
+  function toggleSelectedNodeSmooth(): boolean {
+    const node = useEditorStore.getState().selectedNode;
+    const obj = node && useProjectStore.getState().project.objects.find((o) => o.id === node.objectId);
+    if (!obj || !obj.nodes?.[node!.ring]) return false;
+    const nodes = obj.nodes.map((r, i) => (i === node!.ring ? toggleNodeSmooth(r, node!.point) : r));
+    updateObject(obj.id, { nodes, paths: pathsFromNodes(nodes, obj.type === "fill") });
+    return true;
+  }
+
+  // Delete the focused node (node-backed or legacy polyline), keeping the ring
+  // above its minimum point count. Shared by the keyboard and the node bar.
+  function deleteSelectedNode(): boolean {
+    const node = useEditorStore.getState().selectedNode;
+    if (!node) return false;
+    const obj = useProjectStore.getState().project.objects.find((o) => o.id === node.objectId);
+    if (obj) {
+      const closed = obj.type === "fill";
+      const min = closed ? 3 : 2;
+      if (obj.nodes?.[node.ring]) {
+        // Node-backed object: drop the control node, re-densify.
+        if (obj.nodes[node.ring].length > min) {
+          const nodes = obj.nodes.map((r, i) => (i === node.ring ? deleteNode(r, node.point) : r));
+          updateObject(obj.id, { nodes, paths: pathsFromNodes(nodes, closed) });
+        }
+      } else {
+        // Legacy polyline: drop the raw vertex.
+        const ring = obj.paths[node.ring];
+        if (ring && ring.length > min) {
+          const paths = obj.paths.map((p, i) =>
+            i === node.ring ? p.filter((_, j) => j !== node.point) : p,
+          );
+          updateObject(obj.id, { paths });
+        }
+      }
+    }
+    useEditorStore.getState().setSelectedNode(null);
+    return true;
+  }
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const el = document.activeElement;
@@ -535,44 +580,11 @@ export default function CanvasStage() {
         useEditorStore.getState().setSatinRailA(null);
         useEditorStore.getState().setSelectedNode(null);
       } else if ((e.key === "c" || e.key === "C") && tool === "node") {
-        // Toggle the focused node between a smooth curve and a sharp corner.
-        const node = useEditorStore.getState().selectedNode;
-        const obj = node && useProjectStore.getState().project.objects.find((o) => o.id === node.objectId);
-        if (obj && obj.nodes?.[node.ring]) {
-          e.preventDefault();
-          const nodes = obj.nodes.map((r, i) => (i === node.ring ? toggleNodeSmooth(r, node.point) : r));
-          updateObject(obj.id, { nodes, paths: pathsFromNodes(nodes, obj.type === "fill") });
-        }
+        if (toggleSelectedNodeSmooth()) e.preventDefault();
       } else if (e.key === "Delete" || e.key === "Backspace") {
-        const node = useEditorStore.getState().selectedNode;
-        if (tool === "node" && node) {
+        if (tool === "node" && useEditorStore.getState().selectedNode) {
           e.preventDefault();
-          const obj = useProjectStore
-            .getState()
-            .project.objects.find((o) => o.id === node.objectId);
-          if (obj) {
-            const closed = obj.type === "fill";
-            const min = closed ? 3 : 2;
-            if (obj.nodes?.[node.ring]) {
-              // Node-backed object: drop the control node, re-densify.
-              if (obj.nodes[node.ring].length > min) {
-                const nodes = obj.nodes.map((r, i) =>
-                  i === node.ring ? deleteNode(r, node.point) : r,
-                );
-                updateObject(obj.id, { nodes, paths: pathsFromNodes(nodes, closed) });
-              }
-            } else {
-              // Legacy polyline: drop the raw vertex.
-              const ring = obj.paths[node.ring];
-              if (ring && ring.length > min) {
-                const paths = obj.paths.map((p, i) =>
-                  i === node.ring ? p.filter((_, j) => j !== node.point) : p,
-                );
-                updateObject(obj.id, { paths });
-              }
-            }
-          }
-          useEditorStore.getState().setSelectedNode(null);
+          deleteSelectedNode();
         } else if (tool === "select" && selectedIds.length) {
           e.preventDefault();
           useProjectStore.getState().removeObjects(selectedIds);
@@ -1514,6 +1526,35 @@ export default function CanvasStage() {
             <Rect x={0} y={0} width={RULER} height={RULER} fill={C.butterDeep} />
           </Layer>
         </Stage>
+      )}
+
+      {/* Node action bar — the touch path for a selected node's keyboard-only
+          actions (toggle smooth/corner, delete). Appears only while editing
+          points with a node focused; also a discoverable affordance on desktop. */}
+      {viewMode === "edit" && tool === "node" && selectedNode && (
+        <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-sm border-2 border-ink bg-cream p-1 shadow-press-sm">
+          <button
+            onClick={() => toggleSelectedNodeSmooth()}
+            data-tip="Smooth / corner (C)"
+            aria-label="Toggle smooth or corner"
+            aria-keyshortcuts="C"
+            className="tap-target flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-sm text-ink-deep hover:bg-butter-200"
+          >
+            <Spline size={16} />
+            <span className="font-label text-[11px] font-semibold uppercase tracking-wide">Smooth</span>
+          </button>
+          <div className="h-6 w-px bg-ink/15" />
+          <button
+            onClick={() => deleteSelectedNode()}
+            data-tip="Delete point (⌫)"
+            aria-label="Delete point"
+            aria-keyshortcuts="Delete"
+            className="tap-target flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-sm text-stamp hover:bg-stamp/10"
+          >
+            <Trash2 size={16} />
+            <span className="font-label text-[11px] font-semibold uppercase tracking-wide">Delete</span>
+          </button>
+        </div>
       )}
 
       {/* Zoom controls — work in both edit and stitch view. */}
