@@ -1,4 +1,5 @@
 import { getPyodide, type LoadStage, type PyodideInterface } from "../pyodide/loader";
+import { encodeDst } from "./native/dst";
 import embroideryPy from "./embroidery.py?raw";
 import type { Project, ThreadColor } from "../../types/project";
 import { mmToTenths } from "../units";
@@ -169,10 +170,25 @@ export interface ExportOptions {
 // would clobber each other's plan. Serialize them through a single chain.
 let exportChain: Promise<unknown> = Promise.resolve();
 
+/** True if a plan contains an appliqué STOP (the native DST writer can't yet
+ *  encode it, so those plans take the Python path). */
+function planHasStop(plan: StitchPlan): boolean {
+  return plan.blocks.some((b) => b.cmds.some((c) => c[0] === "stop"));
+}
+
 export async function exportToBytes(
   plan: StitchPlan,
   { format, pesVersion = 1, onStage }: ExportOptions,
 ): Promise<Uint8Array> {
+  // Native, runtime-free path for DST (universal format). No Pyodide download —
+  // works on memory-constrained mobile browsers where the Python runtime fails.
+  // Validated sew-equivalent to pyembroidery (scripts/oracle-dst.ts). STOPs fall
+  // through to Python until the native writer encodes them.
+  if (format === "dst" && !planHasStop(plan)) {
+    onStage?.("ready");
+    return encodeDst(splitPlanForFormat(plan, "dst"));
+  }
+
   const run = exportChain.then(async () => {
     const pyodide = await getPyodide(onStage);
     await ensurePython(pyodide);
