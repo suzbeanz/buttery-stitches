@@ -22,6 +22,7 @@ import { useEditorStore } from "../store/editorStore";
 import { cloneObject } from "../lib/objects";
 import { splitRegionComponents } from "../lib/regions";
 import { toast } from "../store/toastStore";
+import { clampMenu } from "./contextMenuLayout";
 
 /** Paste/duplicate offset (mm) so copies don't land exactly on the original. */
 const OFFSET_MM = 3;
@@ -119,9 +120,10 @@ export default function ContextMenu({
     { label: "Delete", icon: Trash2, shortcut: "⌫", disabled: n === 0, danger: true, run: wrap(() => ps.removeObjects(selectedIds)) },
   ];
 
-  // Clamp so the menu stays on-screen near the right/bottom edges.
-  const left = Math.min(x, window.innerWidth - 208);
-  const top = Math.min(y, window.innerHeight - 360);
+  // Clamp so the menu stays on-screen near every edge (the container also scrolls
+  // via max-height below as a backstop on short screens).
+  const coarse = typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
+  const { left, top, maxHeight } = clampMenu(x, y, items.length, window.innerWidth, window.innerHeight, coarse);
 
   return (
     <>
@@ -138,8 +140,8 @@ export default function ContextMenu({
       <div
         role="menu"
         aria-label="Object actions"
-        className="anim-press-in fixed z-50 w-52 rounded-sm border-2 border-ink bg-cream p-1 shadow-press"
-        style={{ left, top }}
+        className="anim-press-in fixed z-50 w-52 overflow-y-auto rounded-sm border-2 border-ink bg-cream p-1 shadow-press"
+        style={{ left, top, maxHeight }}
       >
         {items.map((it, i) =>
           it === "sep" ? (
@@ -150,7 +152,7 @@ export default function ContextMenu({
               role="menuitem"
               disabled={it.disabled}
               onClick={it.run}
-              className={`flex w-full items-center gap-2.5 rounded-sm px-2 py-1.5 text-left text-sm disabled:opacity-30 ${
+              className={`flex w-full items-center gap-2.5 rounded-sm px-2 py-1.5 text-left text-sm [@media(pointer:coarse)]:py-2.5 disabled:opacity-30 ${
                 it.danger ? "text-stamp hover:bg-stamp/10" : "text-navy hover:bg-butter-200"
               } disabled:hover:bg-transparent`}
             >
