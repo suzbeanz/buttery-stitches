@@ -137,7 +137,11 @@ export default function ExportMenu({
           <div
             role="menu"
             aria-label="Export options"
-            className="anim-press-in absolute left-0 z-20 mt-1 max-h-[70vh] w-72 max-w-[90vw] overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-2.5 text-char shadow-press"
+            // On a phone the bar's export button sits near the right edge, so a
+            // left-anchored popover ran off-screen (the DST/JEF/VP3 column was
+            // clipped). Pin it on-screen as a centered sheet on narrow screens;
+            // keep the inline popover from the `sm` breakpoint up.
+            className="anim-press-in fixed inset-x-2 top-14 z-20 mx-auto max-h-[78dvh] w-auto max-w-sm overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-2.5 text-char shadow-press sm:absolute sm:inset-x-auto sm:left-0 sm:top-auto sm:mx-0 sm:mt-1 sm:max-h-[70vh] sm:w-72 sm:max-w-[90vw]"
           >
           {empty ? (
             <p className="px-1 py-2 font-body text-[12px] text-char/60">
