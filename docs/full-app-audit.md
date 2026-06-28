@@ -1,7 +1,7 @@
 # Full-app audit — end-to-end synthetic user testing
 
 **Goal:** prove an open-source, browser-based digitizer can do everything the
-expensive desktop tools (Wilcom, Hatch) do — and match their output quality —
+expensive desktop tools (the leading commercial digitizers) do — and match their output quality —
 across the entire feature surface, validated end to end.
 
 **Method:** drive the real code paths the way a user would (build objects with the
@@ -57,9 +57,9 @@ broad tatami fill    pes 39453B  …                                            
 
 (`colors=0` for DST/EXP is correct — those formats are colorless by spec.)
 
-## Capability scorecard vs Wilcom / Hatch
+## Capability scorecard vs the leading commercial digitizers
 
-| Capability | Wilcom / Hatch | buttery-stitches |
+| Capability | Commercial digitizers | buttery-stitches |
 | --- | :---: | :---: |
 | Auto-digitize from an image | ✅ | ✅ |
 | Tatami / satin / running | ✅ | ✅ |
@@ -78,13 +78,13 @@ broad tatami fill    pes 39453B  …                                            
 | Thread-catalog matching | ✅ | ✅ |
 | Production worksheet | ✅ | ✅ |
 | Export PES / DST / JEF / EXP / VP3 | ✅ | ✅ |
-| Stitch simulator / TrueView | ✅ | ✅ |
+| Stitch simulator / realistic-render | ✅ | ✅ |
 | Runs in a browser, nothing to install | ❌ | ✅ |
-| **Price** | ~$100s/yr (Hatch) – ~$thousands (Wilcom) | **Free / open source** |
+| **Price** | ~$100s/yr (entry tier) – ~$thousands (flagship) | **Free / open source** |
 
-## Output quality vs professional files (Wilcom-authored references)
+## Output quality vs professional files (commercially-authored references)
 
-| Metric | Pro (Wilcom) | Ours (clean art) |
+| Metric | Pro (commercial) | Ours (clean art) |
 | --- | --- | --- |
 | Longest stitch | 5.0–7.0 mm | ≤ 5.0 mm |
 | Trims per 1k stitches | 0.2–2.3 | 1–5 |

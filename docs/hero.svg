@@ -72,14 +72,14 @@
   <g stroke-linecap="round" stroke-linejoin="round" fill="none">
     <!-- stem (running) -->
     <path d="M600 470 L600 360" stroke="#2c8a4a" stroke-width="3" stroke-dasharray="7 4"/>
-    <!-- leaves (fill hatch) -->
+    <!-- leaves (fill lines) -->
     <path d="M600 420 q-50 -10 -78 -44 q44 -6 78 24 z" fill="#2c8a4a" opacity="0.85"/>
     <path d="M600 400 q50 -10 78 -44 q-44 -6 -78 24 z" fill="#2c8a4a" opacity="0.85"/>
     <!-- petals (satin columns) -->
     <path d="M540 360 q10 -90 60 -110 q-6 70 -22 110 z" fill="#c8141e"/>
     <path d="M660 360 q-10 -90 -60 -110 q6 70 22 110 z" fill="#e0a93b"/>
     <path d="M560 360 q40 -60 80 0 q-40 26 -80 0 z" fill="#16234A"/>
-    <!-- satin hatch lines on the navy petal -->
+    <!-- satin texture lines on the navy petal -->
     <g stroke="#FFFDF3" stroke-width="1" opacity="0.5">
       <line x1="566" y1="352" x2="568" y2="336"/><line x1="582" y1="358" x2="586" y2="334"/>
       <line x1="600" y1="360" x2="600" y2="332"/><line x1="618" y1="358" x2="614" y2="334"/>

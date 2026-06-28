@@ -551,7 +551,7 @@ function StepBtn({
 
 /** A live preview of the kept regions sewn by the REAL engine — the same stitches
  *  the canvas and simulator produce (bold bean outlines, satin columns, tatami
- *  fills), drawn with the shared TrueView painter so "what you see is what you'll
+ *  fills), drawn with the shared realistic-thread painter so "what you see is what you'll
  *  get". Fits the design to the box and re-renders as colors/styles change. A veil
  *  dims it while a fresh trace is in flight. */
 function DigitizePreview({

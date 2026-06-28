@@ -88,7 +88,7 @@ interface EditorState {
   snapEnabled: boolean;
   /** draw alignment guide lines while dragging (default on). */
   guidesEnabled: boolean;
-  /** realistic (TrueView) thread shading in stitch view. */
+  /** realistic thread shading in stitch view. */
   realistic: boolean;
   /** deep copies of objects held for paste (transient; not undone). */
   clipboard: EmbObject[];

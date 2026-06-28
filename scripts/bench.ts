@@ -6,7 +6,7 @@ import { parseFont } from "../src/lib/text/fonts";
 /**
  * Benchmark runner: score every corpus design and print the scoreboard, then
  * write bench/baseline.json so future runs can be diffed (a metric moving the
- * wrong way is a regression; the right way is progress toward beating Wilcom).
+ * wrong way is a regression; the right way is progress toward beating the leading commercial tools).
  *
  *   npm run bench
  */

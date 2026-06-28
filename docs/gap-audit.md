@@ -1,4 +1,4 @@
-# Surpassing Wilcom — Capability-Gap Audit
+# Surpassing the commercial leaders — Capability-Gap Audit
 
 Status: living document. Companion to the benchmark harness (`bench/`, `npm run bench`).
 Grounded in a full read of `src/lib/engine/`, `src/lib/trace/`, `src/lib/text/`,
@@ -7,23 +7,23 @@ evidence; the goal is a **prioritized, measurable** path — not a feature wishl
 
 ## How to read this
 
-Each area lists what *this* engine does (with a file anchor), what Wilcom does, the
+Each area lists what *this* engine does (with a file anchor), what the commercial leaders do, the
 gap, and **the benchmark metric that proves the gap closed**. A gap with no metric is
-flagged `needs metric` — we don't claim to beat Wilcom on anything we can't measure.
+flagged `needs metric` — we don't claim to beat the leaders on anything we can't measure.
 
 Three kinds of gap, kept distinct because they have very different cost:
-- **Math** — where a solved problem beats Wilcom's heuristics. *This is the moat.*
+- **Math** — where a solved problem beats their heuristics. *This is the moat.*
 - **Content** — fonts, thread catalogs, specialty stitch types. Work, not insight.
 - **UX/Polish** — surfacing/looks. Cheap, high perceived value.
 
 ## Verdict (TL;DR)
 
-**The fundamentals are already at math-parity with Wilcom**, and in a few places use
-literally the same method (PCA + 16-angle fewest-fragments grain — Wilcom's own
+**The fundamentals are already at math-parity with the commercial leaders**, and in a few places use
+literally the same method (PCA + 16-angle fewest-fragments grain — the standard
 auto-digitize rule — `fill.ts:296`; medial-axis satin with width-model pull comp;
 concavity-aware boustrophedon tatami with geodesic routing). This is not a toy.
 
-Wilcom's remaining leads are mostly **content and polish**, not algorithmic
+Their remaining leads are mostly **content and polish**, not algorithmic
 superiority — closeable by work. The genuine algorithmic openings, where "pure math"
 can *surpass* rather than match, are five: **(1)** directional guidance fields,
 **(2)** global stitch routing, **(3)** a physical pull-compensation model, **(4)**
@@ -61,7 +61,7 @@ gathering, is the next real milestone.
 ## Capability matrix
 
 ### Fills — **parity, with two measurable holes**
-| Capability | This engine | Wilcom | Gap | Metric |
+| Capability | This engine | Commercial leaders | Gap | Metric |
 |---|---|---|---|---|
 | Tatami, concavity-aware | Boustrophedon cells + geodesic (Dijkstra) connectors, ¼-brick + jitter stagger (`fill.ts:463,876`) | Same class | none | `coverage`, `lenCV` ✓ |
 | Contour / echo | Distance-transform iso-contours, spiral order (`contour.ts:120`) | Contour/spiral | none | `coverage` ✓ |
@@ -80,26 +80,26 @@ foam satin** (content). Metric: `short%`, `lenCV`; raised satin `needs metric`.
 
 ### Underlay — **parity**
 Center-run / edge-walk / zigzag tiered by width+weight for satin; edge+perpendicular
-parallel pass for fill, concavity-aware (`underlay.ts:79,139`). Wilcom exposes more
+parallel pass for fill, concavity-aware (`underlay.ts:79,139`). The commercial tools expose more
 named presets; the coverage is equivalent. Underlay *quality* is currently unmeasured →
 `needs metric` (a registration/distortion proxy, see #5).
 
 ### Stitch direction / grain — **parity (same algorithm)**
 PCA principal axis + 16-candidate fewest-fragments search + grain tiebreak
 (`fill.ts:296`), one coherent angle per object, manual `directionDeg` + painted
-`flowPath` overrides. This *is* Wilcom's method. The leapfrog is to go **beyond** it
+`flowPath` overrides. This *is* the industry-standard method. The leapfrog is to go **beyond** it
 (a solved field, below), not to catch up.
 
 ### Compensation & fabric — **parity in model, gap in fidelity**
 Width-dependent pull comp `clamp(0.1+0.12·w)` + push trim, fabric/thread multipliers
-(`satin.ts:148`, `profile.ts`). Wilcom uses richer experience tables. Both are
+(`satin.ts:148`, `profile.ts`). The commercial tools use richer experience tables. Both are
 *heuristic*; neither predicts distortion from first principles → the physical-model
 opening (#3). Metric: `needs metric` (predicted-vs-target distortion).
 
 ### Routing / sequencing — **good, but greedy (the big math opening)**
 Per-region travel order + run order via nearest-neighbor **+ 2-opt**, A* buried-travel
 on a coverage raster, trim-vs-slash by coverage test (`index.ts:189,1185,1064`). Solid,
-but explicitly **greedy + local search, not global** (`index.ts` notes). Wilcom’s
+but explicitly **greedy + local search, not global** (`index.ts` notes). Their
 auto-sequence is also heuristic — so a real optimizer can *beat both*. Metric:
 `travel(mm)`, `travel%`, `jumps`, `trims` — currently flattered by a single-region
 corpus; **broaden the corpus to expose it**.
@@ -112,13 +112,13 @@ cross-stitch, candlewick, chenille, sequins, ripple/spiral. Pure content. `needs
 K-means++ saliency-aware quantize, majority denoise + island consolidation,
 imagetracer contours, Douglas-Peucker, shape recognition (circle/ellipse/rect/polygon)
 + idealization (regularize repeats, unify circles), stroke-vs-fill + medial satin-vs-
-tatami, OCR→clean lettering via tesseract (`trace/*`). Comparable to Wilcom’s
+tatami, OCR→clean lettering via tesseract (`trace/*`). Comparable to the commercial tools’
 auto-digitize for logos/line-art. Photo→stitch realism is where commercial tools (and
 ML) still lead. Metric: `needs metric` (trace fidelity vs source raster).
 
 ### Lettering — **good core; content gap**
 opentype.js, 13 curated faces, multi-line, arch/circle/path layout, authored-centerline
-junction handling for the flagship (Oswald, 64 glyphs) (`text/*`). Missing vs Wilcom:
+junction handling for the flagship (Oswald, 64 glyphs) (`text/*`). Missing vs the commercial tools:
 large font library, true monogramming, pairwise kerning tables, baseline/envelope
 effects. Mostly **content + UX**. `needs metric`.
 
@@ -136,20 +136,20 @@ deeper QA the benchmark adds (coverage, travel%, lenCV). UX + `needs metric`.
 Paint-bucket, satin/satin-2, pencil/brush, shapes, appliqué, cut, measure, direction-
 paint, flow-spine, node reshape (smooth/corner), weld/merge/split/outline/align
 (`CanvasStage.tsx`, `nodes.ts`, `PropertiesPanel.tsx`). Preview is a layered-2D
-“TrueView” (fuzz + lit core + fiber strands), per-stitch scrub (`render-stitches.ts`).
+“realistic-render” (fuzz + lit core + fiber strands), per-stitch scrub (`render-stitches.ts`).
 Missing: numeric angle entry, Bézier handles, true 3D/physical thread sim. UX + #5.
 
 ---
 
-## Where we already match or beat Wilcom
+## Where we already match or beat the commercial leaders
 - **Grain math is identical** (PCA + fewest-fragments) — parity by construction.
 - **Concavity handling** (boustrophedon + geodesic, never-slash guarantees) is
   first-class and *self-validating* (`hasExposedSegment`), which many tools don’t do.
 - **Routing already does 2-opt + A* buried travel** — ahead of basic greedy tools.
 - **Determinism**: same input → same stitches, which makes the benchmark *possible*.
-  A reproducible engine is a strategic asset Wilcom’s stochastic fills don’t have.
+  A reproducible engine is a strategic asset their stochastic fills don’t have.
 
-## Where Wilcom leads — and whether it’s a moat
+## Where the commercial leaders lead — and whether it’s a moat
 - **Content** (fonts, brand thread catalogs, specialty stitches, 3D foam): *not a moat*
   — backlog, ship opportunistically. No math advantage to be had.
 - **Polish** (auto-hoop-split, density heatmap, monogram UI, numeric angle): cheap UX
@@ -158,8 +158,8 @@ Missing: numeric angle entry, Bézier handles, true 3D/physical thread sim. UX +
   sim realism): *these are where math decides the winner.* Target them deliberately.
 
 ## The leapfrog thesis (pure math)
-Wilcom is decades of heuristics + lookup tables. We are already at parity on the
-fundamentals, **with a reproducible engine and a metric harness** — the two things Wilcom
+The commercial leaders are decades of heuristics + lookup tables. We are already at parity on the
+fundamentals, **with a reproducible engine and a metric harness** — the two things they
 can’t easily retrofit. So we don’t win by re-implementing their feature list; we win by
 replacing heuristics with **solved problems** on the five fronts below, each scored.
 
@@ -248,11 +248,11 @@ The harness measures economy/efficiency/coverage today. To score the roadmap we 
 - ~~Accurate fill-coverage~~ **(done)** — thread-footprint raster; revealed real under-coverage on curved/contour/small fills.
 - **Trace-fidelity** metric: stitched raster vs source image (auto-digitize quality).
 - **Distortion/registration** metric from the simulator (#3, #5) — the one that finally
-  scores “does it sew out true,” which is ultimately how you beat Wilcom on a hoop.
+  scores “does it sew out true,” which is ultimately how you beat the commercial leaders on a hoop.
 
 ---
 
-*Bottom line: stop trying to out-feature Wilcom. We’re already even on the math that
+*Bottom line: stop trying to out-feature the commercial leaders. We’re already even on the math that
 matters and ahead on reproducibility + measurement. Win by turning five heuristics into
 solved, scored problems — starting with the directional field the benchmark is already
 asking for.*

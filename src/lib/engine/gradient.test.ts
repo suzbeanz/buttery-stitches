@@ -22,7 +22,7 @@ describe("multi-blend fill", () => {
   });
 });
 
-/** Gradient/ombré fill ramps row spacing across the shape (a Wilcom-style effect). */
+/** Gradient/ombré fill ramps row spacing across the shape (a professional-style effect). */
 describe("gradient fill", () => {
   const sq: Path = [
     { x: 0, y: 0 },

@@ -2,7 +2,7 @@ import type { Project } from "../../types/project";
 import type { EngineStitch } from "./index";
 
 /**
- * Design info / production estimate (Wilcom's "design info" + estimator), derived
+ * Design info / production estimate (the "design info" + estimator), derived
  * purely from the generated stitch stream. Used by the Check panel so the user
  * sees what they're about to run before exporting.
  */

@@ -2,7 +2,7 @@
 
 A map of the stitch engine for contributors — what turns vector objects into a
 machine stitch file, and where the recent math-first subsystems live. Pair it with
-the benchmark (`bench/`, `npm run bench`) and the [Wilcom gap audit](./wilcom-gap-audit.md).
+the benchmark (`bench/`, `npm run bench`) and the [capability gap audit](./gap-audit.md).
 
 ## Pipeline at a glance
 
@@ -23,7 +23,7 @@ preview can never disagree with the file.
 
 ## Fills (`engine/fill.ts`, `field.ts`, `contour.ts`, `turning.ts`)
 
-- **Grain angle** — PCA principal axis + Wilcom's 16-angle "fewest-fragments" search,
+- **Grain angle** — PCA principal axis + a 16-angle "fewest-fragments" search,
   one coherent angle per object (`autoFillAngleForRegions`).
 - **Tatami** — concavity-aware boustrophedon, geodesic (Dijkstra) connectors that
   never slash a notch, ¼-brick + jitter stagger.
@@ -81,5 +81,5 @@ surfaces warnings; `info.ts` estimates stitches/thread/runtime.
 `npm run bench` scores a deterministic corpus on stitch economy, travel %, segment
 evenness (`lenCV`, `short%`), accurate **thread-footprint coverage**, and predicted
 **pull-in**, writing `bench/baseline.json` for diffing. This is the scoreboard the
-whole "surpass Wilcom" effort is measured on — a metric moving the wrong way is a
+whole "surpass the commercial tools" effort is measured on — a metric moving the wrong way is a
 regression; the right way is progress.
