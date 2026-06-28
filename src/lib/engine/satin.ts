@@ -84,6 +84,13 @@ export interface SatinOptions {
 /** Largest column width before a satin stitch should really be a fill. */
 export const SATIN_MAX_WIDTH = 7;
 
+/** Smallest width (mm) a satin column can actually sew. Below this the two rails
+ *  fall in nearly the same needle holes — the column sews skinny, leaves no cover,
+ *  and shreds thread. Throws narrower than this are widened out to it (per side),
+ *  so a thin spot fills solid instead of breaking. Columns thin along their whole
+ *  length are routed to a running/bean line upstream by the type classifier. */
+export const MIN_SEWABLE_SATIN_WIDTH = 1.0;
+
 /** Row-gap floor (mm) for auto-spacing — matches the engine's machine-safety
  *  density floor, so tightening wide columns never bunches thread. */
 const SATIN_DENSITY_FLOOR = 0.36;
@@ -228,7 +235,13 @@ export function satinColumn(
   const wl: Point[] = [];
   const wr: Point[] = [];
   for (const i of idx) {
-    const [l, r] = pullComp > 0 ? widen(lp[i], rp[i], pullComp) : [lp[i], rp[i]];
+    // Pull comp widens by `pullComp`; below the sewable floor, widen further so the
+    // throw lands at least MIN_SEWABLE_SATIN_WIDTH across (no effect on wide columns,
+    // where the floor term is negative). `widen` no-ops on a degenerate (~0) width,
+    // so a true taper tip isn't blunted — only thin-but-real spots fill out.
+    const w = distance(lp[i], rp[i]);
+    const add = Math.max(pullComp, MIN_SEWABLE_SATIN_WIDTH - w);
+    const [l, r] = add > 0 ? widen(lp[i], rp[i], add) : [lp[i], rp[i]];
     wl.push(l);
     wr.push(r);
   }
