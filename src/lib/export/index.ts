@@ -1,5 +1,6 @@
 import { getPyodide, type LoadStage, type PyodideInterface } from "../pyodide/loader";
 import { encodeDst } from "./native/dst";
+import { encodePes } from "./native/pes";
 import embroideryPy from "./embroidery.py?raw";
 import type { Project, ThreadColor } from "../../types/project";
 import { mmToTenths } from "../units";
@@ -187,6 +188,15 @@ export async function exportToBytes(
   if (format === "dst" && !planHasStop(plan)) {
     onStage?.("ready");
     return encodeDst(splitPlanForFormat(plan, "dst"));
+  }
+
+  // Native PES version 1 — the format the user's Brother machine reads. Same
+  // motivation as DST: no Pyodide download on memory-constrained phones.
+  // Validated byte-identical to pyembroidery's write_pes(...,{"version":1})
+  // (scripts/oracle-pes.ts). v6 and STOP-bearing plans stay on the Python path.
+  if (format === "pes" && pesVersion === 1 && !planHasStop(plan)) {
+    onStage?.("ready");
+    return encodePes(splitPlanForFormat(plan, "pes"));
   }
 
   const run = exportChain.then(async () => {
