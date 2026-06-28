@@ -7,7 +7,7 @@ import type { StitchPlan } from "../index";
  * the simplest to encode: a 512-byte ASCII header followed by 3-byte stitch
  * records. Each record encodes a relative (dx, dy) move in 1/10 mm via balanced
  * ternary (digit weights 1, 3, 9, 27, 81 → range ±121) plus jump/color-change
- * flag bits. Coordinates are already in 1/10 mm in the {@link StitchPlan}; DST's
+ * flag bits. The {@linkcode StitchPlan} coordinates are already in 1/10 mm; DST's
  * Y axis points up, so we negate dy.
  *
  * Validated byte-for-byte against pyembroidery's `write_dst` (the oracle) — see

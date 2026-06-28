@@ -29,7 +29,7 @@ posterized result (with a warning). That's on purpose.
   Curve it onto a **circle** or along a **path** for badges and arches.
 - **Draw by hand.** Running, satin, and fill tools, with a **Curve** mode for
   smooth lines instead of stiff polygons.
-- **See real thread.** A "TrueView" 3D mode renders each stitch as lit, fuzzy
+- **See real thread.** A "realistic-render" 3D mode renders each stitch as lit, fuzzy
   floss — soft fibers and a downy halo — so the preview reads like the real
   stitch-out, not flat vector color.
 - **Edit like vectors.** Move, scale, rotate, drag individual nodes, reorder the
@@ -83,7 +83,7 @@ reads the *shape* of each region and picks the stitch a hand digitizer would:
   perpendicular to the shape's medial spine) instead of one flat angle, the way a
   hand digitizer would. Round, straight, notched, or fragmented shapes keep the
   fixed-angle fill; turning fill bows out cleanly (never slashes) when it doesn't fit.
-- **Fewest-fragments fill angle** (the method in Wilcom's auto-digitize ):
+- **Fewest-fragments fill angle** (the method used by professional auto-digitizers):
   the tatami angle is the one whose rows break the least across concavities, so a
   U fills as unbroken columns and an E's rows run across its prongs — fewer starts,
   stops, and travels. Convex and gently-organic shapes keep their natural grain.

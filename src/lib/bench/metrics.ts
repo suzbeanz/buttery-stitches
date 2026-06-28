@@ -8,7 +8,7 @@ import { simulateDistortion } from "./distortion";
  *
  * Everything here is a PURE function of the compiled stitch stream (and, for
  * coverage, the source fill geometry). The point is to make "is the engine
- * getting better / beating Wilcom" a number on a shared corpus instead of an
+ * getting better / beating the leading commercial tools" a number on a shared corpus instead of an
  * opinion: stitch economy, travel/trim efficiency, penetration-spacing
  * uniformity, and how completely the fills actually cover their regions.
  *

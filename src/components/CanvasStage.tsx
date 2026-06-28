@@ -1893,7 +1893,7 @@ function StitchView({
           // so the live simulator and the digitize-dialog preview render stitches
           // identically (one source of truth). Each stitch is a round-capped
           // capsule — overlapping capsules read as solid satin/tatami — and in
-          // TrueView each thread is a shaded, lit, fuzzy tube. The shape is
+          // In realistic view, each thread is a shaded, lit, fuzzy tube. The shape is
           // visual-only (listening false), so bypassing Konva's hit tracing here
           // is safe.
           const native = (ctx as unknown as { _context: CanvasRenderingContext2D })._context;

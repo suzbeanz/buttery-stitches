@@ -37,7 +37,7 @@ architecture. Hard contracts we must preserve:
 
 ## 1. The master numeric reference (researched defaults)
 
-> Sourced from Wilcom/Hatch docs & blogs, Ink/Stitch, Embroidery Legacy, Madeira,
+> Sourced from leading commercial digitizer docs & blogs, open-source digitizers, Embroidery Legacy, Madeira,
 > mySewnet, EduTech wiki, DST/Tajima format specs, plus corroborating digitizing
 > guides. Values flagged **[contested]** vary by source/use‑case and ship as
 > tunable defaults, not gospel.
@@ -77,7 +77,7 @@ architecture. Hard contracts we must preserve:
 
 ### 1.4 Push–pull compensation
 - **Pull** (across width) makes columns narrower → widen rails. **Push** (along stitches) makes column **ends** overshoot → shorten ends.
-- Rule of thumb (per‑side widen): `~0.15 mm @ 2 mm column → ~0.30 mm @ 7 mm` (≈ linear). Define **per‑side** (Ink/Stitch model), not total. **[contested: per‑side vs total]**
+- Rule of thumb (per‑side widen): `~0.15 mm @ 2 mm column → ~0.30 mm @ 7 mm` (≈ linear). Define **per‑side** (open-source digitizer model), not total. **[contested: per‑side vs total]**
 - Fabric starting points: **woven `0.17–0.20 mm`**, **knit/piqué `0.35–0.40 mm`**, **fleece `0.40 mm`**, sheer lower, leather low.
 
 ### 1.5 Max stitch length & splitting (format‑aware)
@@ -88,7 +88,7 @@ architecture. Hard contracts we must preserve:
 ### 1.6 Tatami fill detail
 - Stagger/offset **`0.25` (1/4 brick) = 4‑row repeat**; add seeded randomness to kill moiré/split‑lines.
 - Fill **angle default 45°**; align to shape flow; **adjacent regions must differ** (≥ ~20–45°). Auto from 16‑angle grid minimizing fragments.
-- **Straight tatami** for blocky/large; **turning/contour fill** for curved/organic (Wilcom "Complex Turning" = multiple angles).
+- **Straight tatami** for blocky/large; **turning/contour fill** for curved/organic (the "Complex Turning" technique = multiple angles).
 - Holes/islands: even‑odd clip scanlines against all boundaries; route travels as **underpath inside the shape**.
 
 ### 1.7 Lettering minimums
@@ -188,11 +188,11 @@ architecture. Hard contracts we must preserve:
 - `npm run typecheck && npm run lint && npx vitest run && npm run build` green every phase.
 
 ## 7. Risks & decisions to lock
-- **Pull comp per‑side vs total:** adopt **per‑side** (Ink/Stitch) consistently; document.
+- **Pull comp per‑side vs total:** adopt **per‑side** (open-source digitizer convention) consistently; document.
 - **Satin max:** make **fabric/use‑case driven** (7 wearable default, up to 10–12 for stable/decorative).
 - **Randomization vs determinism:** seed everything; tests assert determinism.
 - **Performance:** turning fill + medial are heavy; keep memoization; cap grid sizes (existing 4M‑cell guard).
-- **Source confidence:** primary Wilcom/Hatch docs were 403 to fetch; numbers are corroborated across sources but ship as tunable defaults.
+- **Source confidence:** primary commercial-tool docs were 403 to fetch; numbers are corroborated across sources but ship as tunable defaults.
 
 ## 8. Recommended sequencing
 A → B → D → C → E → F. (Foundations first; satin + underlay give the biggest
@@ -217,7 +217,7 @@ columns vs. pro practice — Phase B should scale spacing with width toward thes
 ### 9.2 Short stitches on satin curves/corners (Phase B)
 - Trigger: when inner‑rail stitch length collapses (curvature), i.e. inner advance ≪ outer.
 - Geometry: shorten **every other** inner‑edge stitch so its penetration lands **~1/2 across** the column (vary 1/3–2/3 on consecutive shorts so they don't ridge).
-- Params (Ink/Stitch model): `shortStitchDistance` (length below which a stitch is "short") and `shortStitchInset` (fraction of width to pull in). Practical engine trigger: per‑stitch angular change ≳ 5–10°.
+- Params (open-source digitizer model): `shortStitchDistance` (length below which a stitch is "short") and `shortStitchInset` (fraction of width to pull in). Practical engine trigger: per‑stitch angular change ≳ 5–10°.
 
 ### 9.3 Corners (Phase B)
 - Total turn ≈ 90° → **miter** (taper to a point, widen out the other side).
@@ -241,6 +241,6 @@ columns vs. pro practice — Phase B should scale spacing with width toward thes
 - Stitch largest areas first, details last; group colors; minimize hoop traverses.
 
 ### 9.6 Sourcing caveat
-Primary Wilcom/Hatch docs returned HTTP 403 during research; all numbers are
+Primary commercial-tool docs returned HTTP 403 during research; all numbers are
 corroborated across multiple independent sources but ship as **tunable defaults**,
 to be confirmed by stitch‑out. Determinism is preserved by seeding any randomization.

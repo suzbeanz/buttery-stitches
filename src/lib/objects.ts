@@ -125,7 +125,7 @@ export function minPointsFor(type: StitchType): number {
 }
 
 /**
- * Build a satin column from two user-drawn rails (Wilcom's "Input B"). railB is
+ * Build a satin column from two user-drawn rails (the classic "Input B" method). railB is
  * flipped if it runs opposite to railA, so corresponding points pair up and the
  * column doesn't twist into a bow-tie. Rails are kept verbatim, so the width can
  * vary freely along the column (calligraphic strokes, tapered borders).

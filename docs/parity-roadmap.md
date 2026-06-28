@@ -1,14 +1,14 @@
-# Wilcom-parity roadmap — "all the professionalism of Wilcom"
+# Parity roadmap — "all the professionalism of the leading commercial suite"
 
 Grounded in the two articles the user shared (identical content). They credit
-Wilcom's leadership to **six concrete pillars**. Out of scope by the user's call:
+the market leader's success to **six concrete pillars**. Out of scope by the user's call:
 **sending designs to machines** (Wi-Fi/network) — we only export files, as today.
 Also out of scope: multi-decoration (screen print, cutting, chenille, Coloreel)
 and 3D puff/foam, unless asked.
 
 ## The article's 6 pillars → where we stand
 
-| # | Wilcom pillar (article) | Our equivalent today | Status |
+| # | Commercial-suite pillar (article) | Our equivalent today | Status |
 |---|---|---|---|
 | 1 | **EMB format** — a rich native format that stays fully editable, switch properties per design/fabric | `.embproj` (objects + vectors + params + now editable nodes) | ✅ have — strengthen |
 | 2 | **Quick Design Resize** — resize with per-stitch min/max safeguards; filters bad stitches; keeps quality | Vector objects regenerate stitches at any size; machine-safety floors in engine | ⚠️ partial — **build the resize UX + safeguards + imported-stitch recalc** |
@@ -19,11 +19,11 @@ and 3D puff/foam, unless asked.
 
 **Takeaway:** we already match 4 of the 6 (1, 3, 5, 6). The two real gaps are
 **#2 Quick Resize** and **#4 lettering depth**. The rest of "professionalism" is
-the broader Wilcom feature surface below.
+the broader commercial feature surface below.
 
-## Beyond the article (the rest of full Wilcom professionalism)
+## Beyond the article (the rest of full commercial-grade professionalism)
 
-- **Realistic preview** (Wilcom "TrueView") — photoreal thread rendering, not just
+- **Realistic preview** (the "realistic-render"-style mode) — photoreal thread rendering, not just
   a stitch-redraw player.
 - **Thread/color brand libraries** — Madeira/Isacord/etc. charts, nearest-thread
   matching, color reduction on import/trace.
@@ -71,18 +71,18 @@ the broader Wilcom feature surface below.
 
 5. **Thread brand libraries**: Madeira/Isacord/etc. palettes, nearest-thread match,
    and color reduction on trace/import. *Verify: pure matching tests.*
-6. **Decorative fills & motif runs** (Wilcom "design elements"): motif fill,
+6. **Decorative fills & motif runs** (the "design elements" category): motif fill,
    pattern fill, gradient/density-gradient fill, carving stamp, radial/spiral;
    motif/e-stitch outlines. *Verify: engine coverage/longest-stitch probes.*
 7. **Design Info & validation depth**: density heat-map, stitch + runtime estimate,
    hoop-fit, thread-break risk. *Verify: pure-metric tests.*
 
 ### Phase 3 — polish & scale
-> **Status:** ✅ Realistic TrueView preview (tube-shaded thread, "3D" toggle);
+> **Status:** ✅ Realistic realistic-render preview (tube-shaded thread, "3D" toggle);
 > ✅ batch export (all formats → one .zip); ✅ expanded hoop library (8 common
 > machine sizes). Remaining: design templates, multi-hoop splitting, a design
 > organizer/library, and deeper performance work for very large designs.
-8. **Realistic preview** (TrueView-style thread shading). ✅
+8. **Realistic preview** (realistic-render-style thread shading). ✅
 9. **Templates & hooping** — hoop library ✅; multi-hoop + design templates remain.
 10. **Batch export** ✅ (.zip of all formats); design organizer/library remains.
 11. **Performance at scale** — stitch preview is a single canvas Shape already;
@@ -92,7 +92,7 @@ the broader Wilcom feature surface below.
 
 We test headlessly: pure-function unit tests, **CPython `pyembroidery`** export
 checks across all five formats, and metric probes (trims+jumps/1000, coverage,
-longest stitch, density). Inherently visual items — TrueView rendering, the *look*
+longest stitch, density). Inherently visual items — realistic-render rendering, the *look*
 of lettering and decorative fills — need the user's eye on the deployed build; the
 plan calls those out so we tune by sew-out, not by guess.
 

@@ -58,7 +58,7 @@ export interface DrawStitchesOptions {
   py: (y: number) => number;
   /** Thread thickness in px at the current zoom. */
   threadPx: number;
-  /** TrueView lit/fuzzy thread vs. a flat single stroke. */
+  /** Realistic lit/fuzzy thread vs. a flat single stroke. */
   realistic: boolean;
 }
 

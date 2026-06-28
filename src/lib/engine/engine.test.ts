@@ -586,7 +586,7 @@ describe("principalAxis & autoFillAngle (smart tatami angle)", () => {
     expect(autoFillAngleForRegions([[rotRect(18, 18, 0)], [rotRect(20, 20, 0)]])).toBeCloseTo(45, 5);
   });
 
-  // Wilcom's "fewest fragments" rule: of the candidate scan angles, pick the one
+  // The "fewest fragments" rule: of the candidate scan angles, pick the one
   // whose rows break the LEAST across concavities — overriding the naive grain
   // when a single grain angle would shred the shape into many starts/stops.
   it("turns the grain to avoid fragmenting a concave shape (U fills as columns)", () => {

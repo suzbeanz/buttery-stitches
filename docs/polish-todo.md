@@ -1,6 +1,6 @@
 # Buttery Stitches — polish & quality running list
 
-Working toward a Hatch-by-Wilcom-level, open-source embroidery digitizer. This is
+Working toward a professional-grade, open-source embroidery digitizer. This is
 the living audit/polish list: check items off as they land.
 
 ## Brand & style guide (2026-06-15)

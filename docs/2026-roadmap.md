@@ -1,8 +1,8 @@
-# QC/QA verification + roadmap to compete with Wilcom EmbroideryStudio 2026
+# QC/QA verification + roadmap to compete with the leading commercial suite (2026)
 
 ## Part 1 — QC/QA verification (this pass)
 
-Wilcom is, as the brief says, a **CAD/CAM compiler**: design intent (`.EMB`) is
+The market-leading suite is, as the brief says, a **CAD/CAM compiler**: design intent (`.EMB`) is
 kept separate from machine output (`.DST`/`.PES`), and a stitch engine compiles
 the former into the latter. We verified our pipeline the same way a compiler is
 verified — gates + end-to-end "programs" + real output inspection.
@@ -14,8 +14,8 @@ digitizer, monogrammer (arched + multiline lettering), appliqué maker, decorati
 artist (gradient/motif/carve), resizer, color manager, production check. Every
 flow asserts the premium invariants: **no stitch > 9 mm**, sane trims+jumps/1000,
 real stitches produced, hoop fit, and — critically — that **resizing recalculates
-stitches** (4× area ⇒ >2.5× stitches at the same density), Wilcom's "dynamic
-parameterization." All pass.
+stitches** (4× area ⇒ >2.5× stitches at the same density), the "dynamic
+parameterization" technique. All pass.
 
 **Real machine-file validation** (CPython `pyembroidery`): 3 personas ×
 5 formats = **15 files**, all valid — non-empty, readable, sane stitch counts,
@@ -25,9 +25,9 @@ longest stitch ≤ 4.2 mm (well under every format's 12.1/12.7 mm cap), and appl
 **Verdict:** the core "compiler" is correct and safe across formats. Gaps below
 are about *breadth of design intent*, not output integrity.
 
-## Part 2 — Wilcom 2026 architecture → where we stand
+## Part 2 — 2026 commercial-suite architecture → where we stand
 
-| Wilcom pillar (from the brief) | Buttery Stitches today | Status |
+| Commercial-suite pillar (from the brief) | Buttery Stitches today | Status |
 |---|---|---|
 | Object data model, intent vs output (`.EMB` ≠ `.DST`) | `.embproj` (objects, vectors, editable nodes, params) ≠ exported files | ✅ |
 | Stitch-generation engine ("compiler") | `generateDesign` → plan → pyembroidery | ✅ |
@@ -80,6 +80,6 @@ are about *breadth of design intent*, not output integrity.
 
 ## How we keep verifying
 Headless: pure unit tests, the synthetic-user suite, and CPython `pyembroidery`
-export validation across all five formats. Inherently visual work (TrueView,
+export validation across all five formats. Inherently visual work (realistic-render,
 blends, lettering, carving) is flagged for sew-out confirmation by eye — we tune
 those by sample-out, not by guess.

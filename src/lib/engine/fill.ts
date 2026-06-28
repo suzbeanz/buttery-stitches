@@ -269,7 +269,7 @@ const ELONGATION_THRESHOLD = 1.3;
 /** Fill angle (°) for roundish shapes — off-axis so rows don't band on edges. */
 const ROUND_FILL_ANGLE = 45;
 
-/** Candidate scan angles tried by the fewest-fragments search (Wilcom uses 16). */
+/** Candidate scan angles tried by the fewest-fragments search (16 is standard). */
 const ANGLE_STEPS = 16;
 /** Row spacing (mm) for the fragment search — coarse; only relative counts matter. */
 const FRAG_ROW_MM = 2.0;
@@ -285,7 +285,7 @@ function grainToFillAngle(
 
 /**
  * ONE coherent fill angle for an entire multi-region object. Two criteria, in
- * order: (1) Wilcom's "fewest fragments" rule — of the candidate scan angles, the
+ * order: (1) the "fewest fragments" rule — of the candidate scan angles, the
  * one whose rows BREAK the least across concavities wins, because every break is a
  * start/stop/travel; (2) for the many angles that tie (every convex shape splits
  * zero rows at every angle), the shape's dominant GRAIN decides — elongated shapes
@@ -314,7 +314,7 @@ export function autoFillAngleForRegions(regions: Path[][], offsetDeg = 0): numbe
   // round shapes take 45°. Kept EXACT so convex/organic shapes are unchanged.
   const grain = grainToFillAngle(angleDeg, elongation, 0);
 
-  // Candidate scan angles: 16 even steps (Wilcom uses 16) plus the exact grain.
+  // Candidate scan angles: 16 even steps (16 is the standard count) plus the exact grain.
   const candidates = [grain];
   for (let k = 0; k < ANGLE_STEPS; k++) candidates.push((k * 180) / ANGLE_STEPS);
   const scored = candidates.map((a) => ({ a, splits: fillSplitsAt(oriented, a) }));
@@ -353,7 +353,7 @@ function angularDistMod180(a: number, b: number): number {
 /**
  * Concavity SPLITS when the (pre-oriented) regions are scanned at `angleDeg`:
  * Σ over rows of (spans − 1). Zero for any convex shape at every angle; positive
- * where rows break across a notch/hole. Minimizing this is Wilcom's fewest-fragments
+ * where rows break across a notch/hole. Minimizing this is the fewest-fragments
  * criterion — fewer breaks ⇒ fewer starts, stops, and travels. Rows are sampled
  * coarsely (relative counts are all that matter) to keep the 17-angle search cheap.
  */
@@ -1228,7 +1228,7 @@ export interface MotifFillOptions {
 }
 
 /**
- * Motif fill (Wilcom "design element"): tile a decorative motif across the
+ * Motif fill (a "design element"): tile a decorative motif across the
  * region in a brick grid, clipped to the shape (a motif is placed when its
  * center lies inside). Returns one run per placed motif stroke; the assembler
  * connects them with travels. Decorative + open, so no underlay/tatami coverage.

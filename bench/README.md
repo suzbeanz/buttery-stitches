@@ -1,7 +1,7 @@
 # Stitch-engine benchmark
 
 The objective scoreboard for the digitizing engine. The goal is to make "are we
-beating Wilcom yet?" a **number on a shared corpus**, not an opinion — so every
+beating the leading commercial digitizers yet?" a **number on a shared corpus**, not an opinion — so every
 engine change can be scored and no quality/efficiency dimension can silently
 regress.
 
@@ -36,7 +36,7 @@ Deterministic geometry + ids so a metric delta means an engine change, not noise
 
 ## Reading it / where to push next
 
-This is step **(b)** of the "surpass Wilcom" plan — measure first. Early signals
+This is step **(b)** of the "surpass the commercial tools" plan — measure first. Early signals
 the baseline already surfaces:
 
 - `crescent-turning` covers **97.6%**, not 100% — the turning fill leaves small

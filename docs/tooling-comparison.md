@@ -1,12 +1,12 @@
-# Tooling vs. Hatch / Wilcom — where we stand
+# Tooling vs. the leading commercial digitizers — where we stand
 
-An honest map of our digitizing toolset against the pro packages (Wilcom
-Hatch / EmbroideryStudio). Goal: know exactly which tools we have, which are
+An honest map of our digitizing toolset against the pro packages (the
+industry-standard commercial suites). Goal: know exactly which tools we have, which are
 "good enough," and which real gaps remain to *truly* compete.
 
 ## What we have (core digitizing — ~80% of everyday work)
 
-| Capability | Wilcom/Hatch | Buttery Stitches | Status |
+| Capability | Commercial digitizers | Buttery Stitches | Status |
 |---|---|---|---|
 | Running / walk stitch | Run (open object) | Line tool + Pencil (freehand) | ✅ |
 | Satin column | Satin / Input A | Satin (centerline) | ✅ |

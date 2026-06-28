@@ -1,7 +1,7 @@
 # What real PES files teach us (stitch-quality benchmark)
 
 Measured from 7 professionally-digitized PES files (A Day At Sea, Hot Dog ×2,
-Brewster 1–3, hl_…) plus the Wilcom EmbroideryStudio production worksheet for
+Brewster 1–3, hl_…) plus an industry-standard production worksheet for
 "Hot Dog 100". These are the targets our engine must hit. Analyzed with
 `pyembroidery` (script in git history / `/tmp/analyze*.py`).
 
