@@ -56,6 +56,11 @@ export interface DesignOptions {
 
 /** Amplitude (mm) of a tie/lock stitch — a tiny zig back and forth. */
 const TIE_AMPLITUDE = 0.8;
+/** Smallest a tie tap may be (mm). A lock that bites only as far as a dense
+ *  neighbour (~0.3 mm on tight fill/satin) punches nearly the anchor's own hole
+ *  three times over → thread pile-up → machine JAM. So on a short neighbour we
+ *  still throw a full segment along the run direction rather than collapsing in. */
+const TIE_MIN_BITE = 0.5;
 /** Number of penetrations in one tie/lock cluster. */
 const TIE_COUNT = 3;
 /** Stitch length (mm) for a travel run connecting nearby same-color shapes. */
@@ -105,8 +110,9 @@ function tieStitches(anchor: Point, toward: Point): Point[] {
   // Aim the tie along the run direction; fall back to +x for a degenerate point.
   const ux = len > 1e-6 ? dx / len : 1;
   const uy = len > 1e-6 ? dy / len : 0;
-  // Bite no further than the real neighbor stitch, so the lock hides under it.
-  const bite = Math.min(TIE_AMPLITUDE, len > 1e-6 ? len : TIE_AMPLITUDE);
+  // Aim to hide under the real neighbor stitch, but never bite so short that the
+  // taps pile sub-needle penetrations on the anchor (the jam): clamp to a safe band.
+  const bite = Math.max(TIE_MIN_BITE, Math.min(TIE_AMPLITUDE, len > 1e-6 ? len : TIE_AMPLITUDE));
   const near: Point = { x: anchor.x + ux * bite, y: anchor.y + uy * bite };
 
   const out: Point[] = [];
@@ -1501,7 +1507,7 @@ export function generateDesign(
     pushTie(out, prevPoint, toward, { id: lastObj.id, colorId: lastObj.colorId });
   }
 
-  return capStitchLength(collapseCoincident(out));
+  return capStitchLength(enforceMinSpacing(collapseCoincident(out)));
 }
 
 /** Longest a single drawn stitch may be (mm). Professional output keeps every
@@ -1565,6 +1571,44 @@ function collapseCoincident(design: EngineStitch[]): EngineStitch[] {
     ) {
       continue;
     }
+    out.push(s);
+  }
+  return out;
+}
+
+/** Final safety gate (mm): two consecutive real penetrations in one contiguous
+ *  same-colour run may never sit closer than this. Sub-needle spacing re-punches a
+ *  thread-packed hole → pile-up → JAM/needle break. This runs over the ASSEMBLED
+ *  stream — after ties, travel connectors, and length splits — the one place that
+ *  catches shorts those insertion passes re-introduce (per-object filtering can't).
+ *  Set AT the satin floor (0.3 mm, {@link SATIN_MIN_STITCH}) so it never clips
+ *  legitimate fill/satin detail — it exists to kill the near-coincident double
+ *  punches (the ~0.07 mm pair that collapse-coincident's 0.05 mm just misses) and
+ *  any clustered taps, not single short stitches a tight curve genuinely needs. */
+const MIN_PENETRATION_SPACING = 0.3;
+
+/**
+ * Drop any interior penetration that lands closer than {@link MIN_PENETRATION_SPACING}
+ * to the previous KEPT one within a contiguous same-colour, non-jump run. The first
+ * point of a run and the last point before any boundary (jump / trim / stop / colour
+ * change) are always kept, so coverage, registration, and endpoints are preserved —
+ * only the dangerous in-between pile-ups are thinned.
+ */
+function enforceMinSpacing(design: EngineStitch[], minMm = MIN_PENETRATION_SPACING): EngineStitch[] {
+  const isBoundary = (e?: EngineStitch) => !e || !!e.jump || !!e.trim || !!e.stop;
+  const out: EngineStitch[] = [];
+  for (let i = 0; i < design.length; i++) {
+    const s = design[i];
+    const prev = out[out.length - 1];
+    const next = design[i + 1];
+    const interior =
+      prev &&
+      !isBoundary(prev) &&
+      !isBoundary(s) &&
+      !isBoundary(next) && // never drop the last real point before a boundary
+      prev.colorId === s.colorId &&
+      Math.hypot(s.x - prev.x, s.y - prev.y) < minMm;
+    if (interior) continue;
     out.push(s);
   }
   return out;
