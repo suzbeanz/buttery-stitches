@@ -1647,7 +1647,7 @@ export default function CanvasStage() {
                 setStartDismissed(true);
                 toast("Loaded the calibration swatch — export it and stitch a test", "success");
               }}
-              className="mt-3 font-body text-xs text-navy/70 underline decoration-dotted underline-offset-2 hover:text-navy"
+              className="mt-3 font-body text-xs text-navy underline decoration-dotted underline-offset-2 hover:text-ink-deep"
             >
               Or load the calibration test swatch
             </button>
