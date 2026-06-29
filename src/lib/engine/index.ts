@@ -1507,7 +1507,7 @@ export function generateDesign(
     pushTie(out, prevPoint, toward, { id: lastObj.id, colorId: lastObj.colorId });
   }
 
-  return capStitchLength(enforceMinSpacing(collapseCoincident(out)));
+  return capStitchLength(levelInnerTurns(enforceMinSpacing(collapseCoincident(out))));
 }
 
 /** Longest a single drawn stitch may be (mm). Professional output keeps every
@@ -1609,6 +1609,55 @@ function enforceMinSpacing(design: EngineStitch[], minMm = MIN_PENETRATION_SPACI
       prev.colorId === s.colorId &&
       Math.hypot(s.x - prev.x, s.y - prev.y) < minMm;
     if (interior) continue;
+    out.push(s);
+  }
+  return out;
+}
+
+/** Inner-curve cluster floor (mm). At a tight turn the inside radius bunches
+ *  penetrations closer than the general floor; leveling them to here removes the
+ *  little ridge/thread-build on the inner edge a hand digitizer smooths away. */
+const INNER_TURN_FLOOR = 0.5;
+/** A bend sharper than this cosine (~107°) between consecutive segments is a hard
+ *  inner turn (a fill row-end, a satin apex) — not a gentle curve. */
+const INNER_TURN_COS = -0.3;
+
+/**
+ * Short-stitch leveling on the INSIDE of tight turns, over the assembled stream —
+ * the shared-invariant version of what the satin module does per-column, now also
+ * covering fills/contour/field/travel. Drop an interior penetration only where the
+ * path bends hard back (sharp turn) AND both adjacent segments are shorter than
+ * {@link INNER_TURN_FLOOR}: that's an inner-radius cluster, not a straight dense
+ * run (satin throws / fill rows bend little, so they're left alone). Endpoints
+ * before a jump/trim/stop/colour change are always kept.
+ */
+export function levelInnerTurns(design: EngineStitch[], minMm = INNER_TURN_FLOOR): EngineStitch[] {
+  const isBoundary = (e?: EngineStitch) => !e || !!e.jump || !!e.trim || !!e.stop;
+  const out: EngineStitch[] = [];
+  for (let i = 0; i < design.length; i++) {
+    const s = design[i];
+    const prev = out[out.length - 1];
+    const next = design[i + 1];
+    if (
+      prev &&
+      next &&
+      !isBoundary(prev) &&
+      !isBoundary(s) &&
+      !isBoundary(next) &&
+      prev.colorId === s.colorId &&
+      s.colorId === next.colorId
+    ) {
+      const ax = s.x - prev.x;
+      const ay = s.y - prev.y;
+      const bx = next.x - s.x;
+      const by = next.y - s.y;
+      const la = Math.hypot(ax, ay);
+      const lb = Math.hypot(bx, by);
+      if (la > 1e-6 && lb > 1e-6 && la < minMm && lb < minMm) {
+        const cos = (ax * bx + ay * by) / (la * lb);
+        if (cos < INNER_TURN_COS) continue; // sharp turn + short segments → level it out
+      }
+    }
     out.push(s);
   }
   return out;
