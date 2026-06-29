@@ -47,6 +47,7 @@ import { smoothPath } from "../lib/smooth";
 import { computeTicksRange } from "../lib/ruler";
 import { mmToInch } from "../lib/units";
 import ContextMenu from "./ContextMenu";
+import { buildTestSwatch } from "../lib/samples/swatch";
 import { designFor, orientByDepth } from "../lib/engine";
 import { designToSegments, needleAt } from "../lib/engine/render";
 import { drawStitches } from "../lib/render-stitches";
@@ -98,6 +99,7 @@ function projectOnSegment(p: Point, a: Point, b: Point): { point: Point; dist: n
 
 export default function CanvasStage() {
   const project = useProjectStore((s) => s.project);
+  const setProject = useProjectStore((s) => s.setProject);
   const selectedIds = useProjectStore((s) => s.selectedIds);
   const setSelection = useProjectStore((s) => s.setSelection);
   const updateObject = useProjectStore((s) => s.updateObject);
@@ -1638,7 +1640,18 @@ export default function CanvasStage() {
                 }}
               />
             </div>
-            <p className="mt-3 text-xs text-navy/80">
+            <button
+              onClick={() => {
+                setProject(buildTestSwatch());
+                useProjectStore.temporal.getState().clear();
+                setStartDismissed(true);
+                toast("Loaded the calibration swatch — export it and stitch a test", "success");
+              }}
+              className="mt-3 font-body text-xs text-navy/70 underline decoration-dotted underline-offset-2 hover:text-navy"
+            >
+              Or load the calibration test swatch
+            </button>
+            <p className="mt-2 text-xs text-navy/80">
               New here? Press <b>?</b> any time for help.
             </p>
           </div>
