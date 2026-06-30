@@ -83,40 +83,11 @@ export function planFromDesign(
     current!.cmds.push(s.jump ? ["j", x, y] : ["s", x, y]);
   });
 
-  // Center the design on its own bounding box (origin = 0,0). The engine lays a
-  // design out in raw hoop coordinates (e.g. 0–100mm), so without this the whole
-  // design sits in the +x/+y quadrant ~half a hoop off the origin. The machine
-  // positions from those coordinates (the PEC stitch stream is relative, anchored
-  // at the design's absolute start), so an un-centered design sews parked in a
-  // corner — and runs off the hoop edge. Centering here fixes every format (PES,
-  // DST, …) at once; the encoders are left untouched so they stay byte-identical
-  // to pyembroidery for a given (now centered) input.
-  return { blocks: centerBlocks(blocks) };
-}
-
-/** Translate every coordinate-bearing command so the design's bounding box is
- *  centered on the origin. Trims/stops carry no coordinate and pass through. */
-export function centerBlocks(blocks: PlanBlock[]): PlanBlock[] {
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const b of blocks) {
-    for (const c of b.cmds) {
-      if (c[0] !== "s" && c[0] !== "j") continue;
-      const x = c[1];
-      const y = c[2];
-      if (x < minX) minX = x;
-      if (y < minY) minY = y;
-      if (x > maxX) maxX = x;
-      if (y > maxY) maxY = y;
-    }
-  }
-  if (!Number.isFinite(minX)) return blocks; // no coordinate commands
-  const cx = Math.round((minX + maxX) / 2);
-  const cy = Math.round((minY + maxY) / 2);
-  if (cx === 0 && cy === 0) return blocks;
-  return blocks.map((b) => ({
-    rgb: b.rgb,
-    cmds: b.cmds.map((c) => (c[0] === "s" || c[0] === "j" ? [c[0], c[1] - cx, c[2] - cy] : c)),
-  }));
+  // Coordinates are kept in the design's raw hoop space (all positive). Do NOT
+  // recenter on the origin: the machine's coordinate origin is a hoop corner and
+  // it clamps negative coordinates to the edge, so an origin-centered design sews
+  // out corrupted (only the +x/+y quadrant survives, the rest piles on the edge).
+  return { blocks };
 }
 
 /**
