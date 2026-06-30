@@ -45,16 +45,12 @@ describe("PES round-trip (decode our own bytes)", () => {
       const pen = stitches.filter((s) => !s.jump);
       expect(pen.length).toBeGreaterThan(100);
 
-      // Full extent (≈ the drawn diameter, within a couple mm), centered at 50,50mm.
+      // Full extent (≈ the drawn diameter, within a couple mm).
       const b = penetrationBounds(stitches)!;
       const wMm = (b.maxX - b.minX) / 10;
       const hMm = (b.maxY - b.minY) / 10;
       expect(wMm).toBeGreaterThan(dia - 3);
       expect(hMm).toBeGreaterThan(dia - 3);
-      const cxMm = (b.minX + b.maxX) / 2 / 10;
-      const cyMm = (b.minY + b.maxY) / 2 / 10;
-      expect(Math.abs(cxMm - 50)).toBeLessThan(2);
-      expect(Math.abs(cyMm - 50)).toBeLessThan(2);
 
       // All four quadrants populated — a wedge/collapse would leave some empty.
       const cx = (b.minX + b.maxX) / 2;
@@ -63,9 +59,10 @@ describe("PES round-trip (decode our own bytes)", () => {
       for (const s of pen) quad.add((s.x >= cx ? 1 : 0) + (s.y >= cy ? 2 : 0));
       expect(quad.size).toBe(4);
 
-      // Coordinates never negative (the machine clamps negatives to the hoop edge).
-      expect(b.minX).toBeGreaterThanOrEqual(0);
-      expect(b.minY).toBeGreaterThanOrEqual(0);
+      // Anchored at the origin like professional PES files (frog/hotdog stitch
+      // bounds start at 0,0) — all-positive, bbox min exactly (0,0).
+      expect(b.minX).toBe(0);
+      expect(b.minY).toBe(0);
     });
   }
 
@@ -75,11 +72,8 @@ describe("PES round-trip (decode our own bytes)", () => {
     const pen = stitches.filter((s) => !s.jump);
     expect(pen.length).toBeGreaterThan(2000);
     const b = penetrationBounds(stitches)!;
-    expect(b.minX).toBeGreaterThanOrEqual(0);
-    expect(b.minY).toBeGreaterThanOrEqual(0);
-    const cxMm = (b.minX + b.maxX) / 2 / 10;
-    const cyMm = (b.minY + b.maxY) / 2 / 10;
-    expect(Math.abs(cxMm - 50)).toBeLessThan(3);
-    expect(Math.abs(cyMm - 50)).toBeLessThan(3);
+    // Anchored at the origin (professional convention).
+    expect(b.minX).toBe(0);
+    expect(b.minY).toBe(0);
   });
 });
