@@ -52,9 +52,9 @@ describe("calibration test swatch", () => {
 
   it("carries the known-dimension reference shapes for calibration", () => {
     const names = project.objects.map((o) => o.name);
-    expect(names).toContain("Circle 18mm");
-    expect(names).toContain("Square 18mm");
+    expect(names).toContain("Circle 24mm");
+    expect(names).toContain("Square 24mm");
     expect(names.some((n) => n.startsWith("Satin 1mm"))).toBe(true);
-    expect(names.some((n) => n.startsWith("Satin 5mm"))).toBe(true);
+    expect(names.some((n) => n.startsWith("Satin 7mm"))).toBe(true);
   });
 });
