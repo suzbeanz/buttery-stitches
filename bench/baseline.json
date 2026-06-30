@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-06-30T01:27:49.821Z",
+  "generatedAt": "2026-06-30T02:36:45.078Z",
   "summary": {
     "designs": 13,
-    "totalStitches": 17151,
+    "totalStitches": 17159,
     "totalTravelMm": 708.9,
     "meanTravelPct": "4.6%",
     "meanFillCoverage": "94.6%"
@@ -179,28 +179,28 @@
     {
       "name": "golf-green",
       "metrics": {
-        "stitches": 1765,
+        "stitches": 1773,
         "jumps": 1,
         "trims": 1,
         "colors": 1,
-        "threadLengthMm": 5386.810454616813,
-        "runtimeMin": 2.5547619047619046,
+        "threadLengthMm": 5403.075173198497,
+        "runtimeMin": 2.566190476190476,
         "widthMm": 73.88206044389912,
         "heightMm": 25.418935595679713,
         "withinHoop": true,
         "travelMm": 57.98568146100063,
-        "travelRatio": 0.010649743353434516,
+        "travelRatio": 0.01061802514277532,
         "stitchLen": {
           "min": 0.5025297432929714,
-          "mean": 3.055479554518892,
+          "mean": 3.0508611932233154,
           "median": 3.999999999999994,
           "p95": 4.000000000000008,
           "max": 4.333051532377968,
-          "cv": 0.3731333644177016,
-          "shortPct": 0.03970504821327283
+          "cv": 0.3736431141021996,
+          "shortPct": 0.039525691699604744
         },
-        "fillCoverage": 0.9853436393139428,
-        "pullInMm": 0.12861452786493266,
+        "fillCoverage": 0.9855704639436079,
+        "pullInMm": 0.12879503804139966,
         "distortMaxMm": 0.7454108223531865
       }
     },

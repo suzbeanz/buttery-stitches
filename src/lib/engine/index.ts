@@ -898,11 +898,16 @@ export function generateObjectRuns(
       // row-ends are capped and the silhouette (and its end-caps) read crisp. (Skip
       // for line-art — the ribbon already follows the edges; retracing the whole
       // network boundary only adds travel.)
+      // The boundary of a concave shape (a C-band's mouth) or a holed shape (a
+      // ring's counter) breaks into disjoint edge pieces; the hop BETWEEN them can
+      // cross bare fabric. Forbid a bare travel here exactly as the fill rows do, so
+      // that hop buries under the same-colour fill or trims instead of slashing a
+      // float across the open ground — the loose edge thread the swatch sewed.
       const edgeRuns = lineArtFill ? [] : orderByNearest(fillEdgeRuns(region, EDGE_RUN_STITCH_MM), cursor);
       for (const run of edgeRuns) {
         for (const sub of splitLongTravels(run, travelMax)) {
           const r = dropShortStitches(sub);
-          addRun(runs, r, false, regionIdx);
+          addRun(runs, r, false, regionIdx, noBare);
           if (r.length) cursor = r[r.length - 1];
         }
       }
