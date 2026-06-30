@@ -19,8 +19,12 @@ import { simulateDistortion } from "./distortion";
 
 /** A stitched segment shorter than this (mm) is a needle-stress / lint risk. */
 export const SHORT_STITCH_MM = 0.8;
-/** Assumed laid-thread width (mm) for the coverage raster (≈ 40wt polyneon). */
-export const THREAD_WIDTH_MM = 0.4;
+/** Effective laid-thread coverage width (mm). 40wt embroidery thread is nominally
+ *  ~0.4 mm, but on real fabric it sinks into the weave and the visible covering
+ *  width is closer to ~0.3 mm — a stabilized muslin sew-out showed clear gaps where
+ *  the 0.4 mm assumption predicted full coverage. Modeling the honest ~0.3 mm makes
+ *  the metric match the machine, so density is tuned to reality, not optimism. */
+export const THREAD_WIDTH_MM = 0.3;
 /** Coverage raster cell (mm). Fine enough to resolve the gap a row pitch wider
  *  than the thread leaves (so the metric can actually see over-/under-stitching),
  *  cheap enough to run over the corpus. */

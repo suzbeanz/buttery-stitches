@@ -1,291 +1,291 @@
 {
-  "generatedAt": "2026-06-29T01:28:12.939Z",
+  "generatedAt": "2026-06-30T01:27:49.821Z",
   "summary": {
     "designs": 13,
-    "totalStitches": 14420,
-    "totalTravelMm": 699.5,
-    "meanTravelPct": "4.8%",
-    "meanFillCoverage": "96.6%"
+    "totalStitches": 17151,
+    "totalTravelMm": 708.9,
+    "meanTravelPct": "4.6%",
+    "meanFillCoverage": "94.6%"
   },
   "results": [
     {
       "name": "rect-fill",
       "metrics": {
-        "stitches": 960,
+        "stitches": 1180,
         "jumps": 0,
         "trims": 0,
         "colors": 1,
-        "threadLengthMm": 3007.608566821796,
-        "runtimeMin": 1.3714285714285714,
+        "threadLengthMm": 3814.6851662409263,
+        "runtimeMin": 1.6857142857142857,
         "widthMm": 40.400000000000006,
-        "heightMm": 23.599999999999916,
+        "heightMm": 23.699999999999775,
         "withinHoop": true,
         "travelMm": 0,
         "travelRatio": 0,
         "stitchLen": {
-          "min": 0.5054209587593519,
-          "mean": 3.136192457582686,
+          "min": 0.5000000000000029,
+          "mean": 3.2355260103824626,
           "median": 4,
           "p95": 4,
-          "max": 4.019950248448352,
-          "cv": 0.34461232416076426,
-          "shortPct": 0.02502606882168926
+          "max": 4.011234224026312,
+          "cv": 0.32867264702524557,
+          "shortPct": 0.024597116200169637
         },
-        "fillCoverage": 0.9896616541353384,
-        "pullInMm": 0.21985362567017383,
-        "distortMaxMm": 0.6938341232039322
+        "fillCoverage": 0.9865870786516854,
+        "pullInMm": 0.23094009172156088,
+        "distortMaxMm": 0.6964612639417374
       }
     },
     {
       "name": "disc-fill-tatami",
       "metrics": {
-        "stitches": 1045,
+        "stitches": 1274,
         "jumps": 0,
         "trims": 0,
         "colors": 1,
-        "threadLengthMm": 3187.263114740764,
-        "runtimeMin": 1.4928571428571429,
-        "widthMm": 36.26590006178901,
-        "heightMm": 36.26590006178901,
+        "threadLengthMm": 4039.156301493418,
+        "runtimeMin": 1.82,
+        "widthMm": 36.24295810699685,
+        "heightMm": 36.24603329622982,
         "withinHoop": true,
         "travelMm": 0,
         "travelRatio": 0,
         "stitchLen": {
-          "min": 0.5054209587593586,
-          "mean": 3.052934017950923,
-          "median": 3.9999999999999925,
+          "min": 0.433981966663431,
+          "mean": 3.1729428919822587,
+          "median": 3.999999999999997,
           "p95": 4.000000000000007,
-          "max": 4.2580825916960245,
-          "cv": 0.37069709117936106,
-          "shortPct": 0.040229885057471264
+          "max": 4.38698201510059,
+          "cv": 0.3445122498120333,
+          "shortPct": 0.03220738413197172
         },
-        "fillCoverage": 0.9881115784812929,
-        "pullInMm": 0.1936637706424737,
-        "distortMaxMm": 0.6699030175312018
+        "fillCoverage": 0.9798105020809351,
+        "pullInMm": 0.1973732217827006,
+        "distortMaxMm": 0.6771770165503104
       }
     },
     {
       "name": "disc-fill-contour",
       "metrics": {
-        "stitches": 1318,
+        "stitches": 1712,
         "jumps": 0,
         "trims": 0,
         "colors": 1,
-        "threadLengthMm": 3466.4128939403686,
-        "runtimeMin": 1.8828571428571428,
-        "widthMm": 35.640000014305116,
-        "heightMm": 35.52,
+        "threadLengthMm": 4395.600896030247,
+        "runtimeMin": 2.4457142857142857,
+        "widthMm": 35.64000000000001,
+        "heightMm": 35.64000000000001,
         "withinHoop": true,
         "travelMm": 0,
         "travelRatio": 0,
         "stitchLen": {
-          "min": 0.3438664800126362,
-          "mean": 2.632052311268314,
-          "median": 2.953435200542346,
-          "p95": 2.9847764614137824,
-          "max": 3.295993305227161,
-          "cv": 0.2810122474987639,
-          "shortPct": 0.07137433561123765
+          "min": 0.3195307879826684,
+          "mean": 2.5690244862830194,
+          "median": 2.955820252143772,
+          "p95": 3,
+          "max": 3.296712324663538,
+          "cv": 0.30954923187423483,
+          "shortPct": 0.08182349503214495
         },
-        "fillCoverage": 0.9628957272526013,
-        "pullInMm": 0.2545343653014772,
-        "distortMaxMm": 0.5245597926023661
+        "fillCoverage": 0.9547728681484106,
+        "pullInMm": 0.22972815479556388,
+        "distortMaxMm": 0.6149520185072815
       }
     },
     {
       "name": "ring-fill",
       "metrics": {
-        "stitches": 1427,
+        "stitches": 1707,
         "jumps": 0,
         "trims": 0,
         "colors": 1,
-        "threadLengthMm": 4170.6053384886045,
-        "runtimeMin": 2.0385714285714287,
-        "widthMm": 44.26213502830331,
-        "heightMm": 44.26213502830331,
+        "threadLengthMm": 5188.792927084132,
+        "runtimeMin": 2.4385714285714286,
+        "widthMm": 44.25571286031129,
+        "heightMm": 44.26875728348968,
         "withinHoop": true,
         "travelMm": 0,
         "travelRatio": 0,
         "stitchLen": {
-          "min": 0.37262869715304203,
-          "mean": 2.924688175658204,
-          "median": 3.283483140071936,
+          "min": 0.40200851094886236,
+          "mean": 3.041496440260332,
+          "median": 3.9999999999999925,
           "p95": 4.000000000000007,
-          "max": 4.446560860963075,
-          "cv": 0.39274771704170885,
-          "shortPct": 0.05329593267882188
+          "max": 4.442221499926572,
+          "cv": 0.3706878987624239,
+          "shortPct": 0.04044548651817116
         },
-        "fillCoverage": 0.9784333962062707,
-        "pullInMm": 0.10347765320668527,
-        "distortMaxMm": 0.7012067163986919
+        "fillCoverage": 0.9660486138296737,
+        "pullInMm": 0.1016063977713572,
+        "distortMaxMm": 0.6809914469185245
       }
     },
     {
       "name": "crescent-turning",
       "metrics": {
-        "stitches": 1505,
+        "stitches": 1820,
         "jumps": 0,
         "trims": 0,
         "colors": 1,
-        "threadLengthMm": 4396.098405615193,
-        "runtimeMin": 2.15,
-        "widthMm": 74.30092750274899,
-        "heightMm": 30.99693035323324,
+        "threadLengthMm": 5517.223445165016,
+        "runtimeMin": 2.6,
+        "widthMm": 74.28534594709929,
+        "heightMm": 30.995245111253425,
         "withinHoop": true,
         "travelMm": 0,
         "travelRatio": 0,
         "stitchLen": {
-          "min": 0.3401830168546808,
-          "mean": 2.922937769690951,
-          "median": 3.482800266666571,
-          "p95": 3.749611296586322,
-          "max": 4.237909442058355,
-          "cv": 0.31842741936823393,
-          "shortPct": 0.04853723404255319
+          "min": 0.31521831654914284,
+          "mean": 3.0331079962424496,
+          "median": 3.495492117565606,
+          "p95": 3.7967657036776736,
+          "max": 4.200246580430704,
+          "cv": 0.28647026645630036,
+          "shortPct": 0.03188565145684442
         },
-        "fillCoverage": 0.9502113574732812,
-        "pullInMm": 0.04231690842230154,
-        "distortMaxMm": 0.6087234236887061
+        "fillCoverage": 0.9281226940029118,
+        "pullInMm": 0.04118319673866319,
+        "distortMaxMm": 0.5871711037935441
       }
     },
     {
       "name": "crescent-field",
       "metrics": {
-        "stitches": 1505,
+        "stitches": 1820,
         "jumps": 0,
         "trims": 0,
         "colors": 1,
-        "threadLengthMm": 4396.098405615193,
-        "runtimeMin": 2.15,
-        "widthMm": 74.30092750274899,
-        "heightMm": 30.99693035323324,
+        "threadLengthMm": 5517.223445165016,
+        "runtimeMin": 2.6,
+        "widthMm": 74.28534594709929,
+        "heightMm": 30.995245111253425,
         "withinHoop": true,
         "travelMm": 0,
         "travelRatio": 0,
         "stitchLen": {
-          "min": 0.3401830168546808,
-          "mean": 2.922937769690951,
-          "median": 3.482800266666571,
-          "p95": 3.749611296586322,
-          "max": 4.237909442058355,
-          "cv": 0.31842741936823393,
-          "shortPct": 0.04853723404255319
+          "min": 0.31521831654914284,
+          "mean": 3.0331079962424496,
+          "median": 3.495492117565606,
+          "p95": 3.7967657036776736,
+          "max": 4.200246580430704,
+          "cv": 0.28647026645630036,
+          "shortPct": 0.03188565145684442
         },
-        "fillCoverage": 0.9502113574732812,
-        "pullInMm": 0.04231690842230154,
-        "distortMaxMm": 0.6087234236887061
+        "fillCoverage": 0.9281226940029118,
+        "pullInMm": 0.04118319673866319,
+        "distortMaxMm": 0.5871711037935441
       }
     },
     {
       "name": "golf-green",
       "metrics": {
-        "stitches": 1482,
+        "stitches": 1765,
         "jumps": 1,
         "trims": 1,
         "colors": 1,
-        "threadLengthMm": 4342.556967093498,
-        "runtimeMin": 2.15047619047619,
-        "widthMm": 73.86538999890192,
-        "heightMm": 25.365718429875976,
+        "threadLengthMm": 5386.810454616813,
+        "runtimeMin": 2.5547619047619046,
+        "widthMm": 73.88206044389912,
+        "heightMm": 25.418935595679713,
         "withinHoop": true,
         "travelMm": 57.98568146100063,
-        "travelRatio": 0.013176938866857231,
+        "travelRatio": 0.010649743353434516,
         "stitchLen": {
-          "min": 0.32842712474619,
-          "mean": 2.934160112901014,
-          "median": 3.5800990356522444,
+          "min": 0.5025297432929714,
+          "mean": 3.055479554518892,
+          "median": 3.999999999999994,
           "p95": 4.000000000000008,
-          "max": 4.476714915653714,
-          "cv": 0.39432817695187805,
-          "shortPct": 0.04256756756756757
+          "max": 4.333051532377968,
+          "cv": 0.3731333644177016,
+          "shortPct": 0.03970504821327283
         },
-        "fillCoverage": 0.988806426263861,
-        "pullInMm": 0.1258280643031942,
-        "distortMaxMm": 0.7633047969715681
+        "fillCoverage": 0.9853436393139428,
+        "pullInMm": 0.12861452786493266,
+        "distortMaxMm": 0.7454108223531865
       }
     },
     {
       "name": "two-discs-routing",
       "metrics": {
-        "stitches": 1013,
+        "stitches": 1215,
         "jumps": 1,
         "trims": 1,
         "colors": 1,
-        "threadLengthMm": 2923.5290111414197,
-        "runtimeMin": 1.4804761904761905,
-        "widthMm": 68.26607880477144,
-        "heightMm": 24.266078804771453,
+        "threadLengthMm": 3677.1362378770386,
+        "runtimeMin": 1.7690476190476192,
+        "widthMm": 68.25168084645838,
+        "heightMm": 24.27338533742555,
         "withinHoop": true,
-        "travelMm": 23.479185155859962,
-        "travelRatio": 0.007967125841509366,
+        "travelMm": 23.75265397590426,
+        "travelRatio": 0.0064180943200410154,
         "stitchLen": {
-          "min": 0.5054209587593536,
-          "mean": 2.891720090149771,
-          "median": 3.2669827278557886,
+          "min": 0.5036097872492945,
+          "mean": 3.0314396025367167,
+          "median": 3.995760626531253,
           "p95": 4.000000000000007,
-          "max": 4.315239162933641,
-          "cv": 0.4069987212508051,
-          "shortPct": 0.05440158259149357
+          "max": 4.395210406825073,
+          "cv": 0.3729388344709712,
+          "shortPct": 0.03215169002473207
         },
-        "fillCoverage": 0.9772812196397878,
-        "pullInMm": 0.042126856968249554,
-        "distortMaxMm": 0.6841895391172587
+        "fillCoverage": 0.9656520872770749,
+        "pullInMm": 0.042706069237071896,
+        "distortMaxMm": 0.5652280295224839
       }
     },
     {
       "name": "satin-band",
       "metrics": {
-        "stitches": 760,
+        "stitches": 744,
         "jumps": 2,
         "trims": 2,
         "colors": 1,
-        "threadLengthMm": 1691.0849647175417,
-        "runtimeMin": 1.1523809523809523,
-        "widthMm": 56.38509825153142,
-        "heightMm": 21.750334787119254,
+        "threadLengthMm": 1855.0602551199263,
+        "runtimeMin": 1.1295238095238096,
+        "widthMm": 56.42127279630775,
+        "heightMm": 21.752246648786674,
         "withinHoop": true,
         "travelMm": 99.29697468600507,
-        "travelRatio": 0.055461336210241914,
+        "travelRatio": 0.05080799619006465,
         "stitchLen": {
-          "min": 0.3095462935418814,
-          "mean": 2.233929940181696,
-          "median": 3.0986106741332224,
-          "p95": 3.100278978728277,
+          "min": 0.3345731666788948,
+          "mean": 2.503455135114611,
+          "median": 3.0989147834088846,
+          "p95": 3.1074080985720536,
           "max": 4.8024965639156125,
-          "cv": 0.5695719791962691,
-          "shortPct": 0.27212681638044917
+          "cv": 0.4519473753641317,
+          "shortPct": 0.17273954116059378
         },
         "fillCoverage": null,
-        "pullInMm": 0.02657379379446698,
-        "distortMaxMm": 0.42890585949571136
+        "pullInMm": 0.027507858246690275,
+        "distortMaxMm": 0.431229226635938
       }
     },
     {
       "name": "scatter-dots",
       "metrics": {
-        "stitches": 1049,
+        "stitches": 1229,
         "jumps": 9,
         "trims": 9,
         "colors": 1,
-        "threadLengthMm": 2306.367568232212,
-        "runtimeMin": 1.7985714285714287,
-        "widthMm": 76.2577706561626,
-        "heightMm": 70.255179657203,
+        "threadLengthMm": 2838.2053169958044,
+        "runtimeMin": 2.0557142857142856,
+        "widthMm": 76.26876630630962,
+        "heightMm": 70.25483751846915,
         "withinHoop": true,
-        "travelMm": 150.60605842234128,
-        "travelRatio": 0.061297385038441954,
+        "travelMm": 150.24687434255569,
+        "travelRatio": 0.05027581661772161,
         "stitchLen": {
           "min": 0.30349334316103227,
-          "mean": 2.2197955420906688,
-          "median": 2.0000000000000036,
+          "mean": 2.32830624856095,
+          "median": 2.0488746505405295,
           "p95": 4.000000000000003,
-          "max": 4.030318564590672,
-          "cv": 0.520035554443374,
-          "shortPct": 0.15206929740134745
+          "max": 4.395511611504615,
+          "cv": 0.4991681589974067,
+          "shortPct": 0.11566858080393766
         },
-        "fillCoverage": 0.9521204346513734,
-        "pullInMm": 0.012752976515272267,
-        "distortMaxMm": 0.40043182719256504
+        "fillCoverage": 0.9039019792648445,
+        "pullInMm": 0.011633610396113393,
+        "distortMaxMm": 0.2779225677865423
       }
     },
     {
@@ -319,57 +319,57 @@
     {
       "name": "multiregion-grid",
       "metrics": {
-        "stitches": 1257,
+        "stitches": 1510,
         "jumps": 9,
         "trims": 9,
         "colors": 1,
-        "threadLengthMm": 2905.105963853147,
-        "runtimeMin": 2.0957142857142856,
+        "threadLengthMm": 3562.933789444571,
+        "runtimeMin": 2.457142857142857,
         "widthMm": 76.39231411216132,
         "heightMm": 70.07803612880645,
         "withinHoop": true,
-        "travelMm": 152.66203132677984,
-        "travelRatio": 0.0499259693892495,
+        "travelMm": 162.46941307567153,
+        "travelRatio": 0.043611229239766756,
         "stitchLen": {
-          "min": 0.5054209587593436,
-          "mean": 2.329675993466833,
-          "median": 2.04887465054053,
+          "min": 0.4598710960901212,
+          "mean": 2.3752891929630504,
+          "median": 2.1077740590175362,
           "p95": 4.000000000000001,
-          "max": 4.241922193554022,
-          "cv": 0.4828783732646862,
-          "shortPct": 0.09141940657578188
+          "max": 4.070743253191228,
+          "cv": 0.48399361322972256,
+          "shortPct": 0.09266666666666666
         },
-        "fillCoverage": 0.938038710469004,
-        "pullInMm": 0.014043184030540843,
-        "distortMaxMm": 0.4336042573027843
+        "fillCoverage": 0.9297110037378066,
+        "pullInMm": 0.013928680852810483,
+        "distortMaxMm": 0.4722735317689207
       }
     },
     {
       "name": "lettering-STITCH",
       "metrics": {
-        "stitches": 959,
+        "stitches": 1035,
         "jumps": 5,
         "trims": 5,
         "colors": 1,
-        "threadLengthMm": 1576.6015518564473,
-        "runtimeMin": 1.5366666666666668,
-        "widthMm": 45.0949246317505,
-        "heightMm": 14.326946891441708,
+        "threadLengthMm": 1716.597244910195,
+        "runtimeMin": 1.6452380952380954,
+        "widthMm": 45.09757446208398,
+        "heightMm": 14.329450666203535,
         "withinHoop": true,
-        "travelMm": 66.13972645576433,
-        "travelRatio": 0.04026180344339904,
+        "travelMm": 65.87441053887517,
+        "travelRatio": 0.036956778716505864,
         "stitchLen": {
-          "min": 0.3079866455327333,
-          "mean": 1.654356297855668,
+          "min": 0.30000000000000426,
+          "mean": 1.6682188969000973,
           "median": 2,
           "p95": 2.8898795180723056,
-          "max": 3.2971199871826187,
-          "cv": 0.6260533384061598,
-          "shortPct": 0.37985309548793283
+          "max": 3.323999987182617,
+          "cv": 0.6328182720732038,
+          "shortPct": 0.36443148688046645
         },
-        "fillCoverage": 0.9550520871275588,
-        "pullInMm": 0.013371437434586055,
-        "distortMaxMm": 0.36527490820130115
+        "fillCoverage": 0.8728554812445478,
+        "pullInMm": 0.012720983247072482,
+        "distortMaxMm": 0.31942546732921245
       }
     }
   ]

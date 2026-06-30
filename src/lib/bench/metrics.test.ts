@@ -64,7 +64,7 @@ function rectFillProject(): Project {
           { x: 70, y: 62 },
           { x: 30, y: 62 },
         ]],
-        params: { ...DEFAULT_PARAMS, fillStyle: "tatami", density: 0.4 },
+        params: { ...DEFAULT_PARAMS, fillStyle: "tatami" },
         visible: true,
       },
     ],

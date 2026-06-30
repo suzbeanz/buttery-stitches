@@ -83,33 +83,33 @@ const SCATTER_CENTERS: [number, number][] = [
 
 export const CORPUS: { name: string; project: Project }[] = [
   // Flat solid fills — the baseline tatami path.
-  project("rect-fill", [fillObject("rect", [rect(30, 38, 40, 24)], { fillStyle: "tatami", density: 0.4 })]),
-  project("disc-fill-tatami", [fillObject("disc", [circle(50, 50, 18)], { fillStyle: "tatami", density: 0.4 })]),
-  project("disc-fill-contour", [fillObject("disc", [circle(50, 50, 18)], { fillStyle: "contour", density: 0.4 })]),
+  project("rect-fill", [fillObject("rect", [rect(30, 38, 40, 24)], { fillStyle: "tatami", density: 0.3 })]),
+  project("disc-fill-tatami", [fillObject("disc", [circle(50, 50, 18)], { fillStyle: "tatami", density: 0.3 })]),
+  project("disc-fill-contour", [fillObject("disc", [circle(50, 50, 18)], { fillStyle: "contour", density: 0.3 })]),
   // Concavity: an annulus (fill with a hole) — rows must skip the hole, not slash it.
   project("ring-fill", [
-    fillObject("ring", [circle(50, 50, 22), circle(50, 50, 9, 48, true)], { fillStyle: "tatami", density: 0.4 }),
+    fillObject("ring", [circle(50, 50, 22), circle(50, 50, 9, 48, true)], { fillStyle: "tatami", density: 0.3 }),
   ]),
   // Curved band — should engage the turning fill (rows follow the arc).
   project("crescent-turning", [
     fillObject("crescent", [[...arc(50, 55, 40, 200 * D, 340 * D, 60), ...arc(50, 55, 26, 340 * D, 200 * D, 60)]], {
       fillStyle: "tatami",
-      density: 0.4,
+      density: 0.3,
     }),
   ]),
   // Same crescent via the guidance-field fill — direct A/B against turning above.
   project("crescent-field", [
     fillObject("crescent", [[...arc(50, 55, 40, 200 * D, 340 * D, 60), ...arc(50, 55, 26, 340 * D, 200 * D, 60)]], {
       fillStyle: "field",
-      density: 0.4,
+      density: 0.3,
     }),
   ]),
   // Real auto-traced concave silhouette (ellipse + ball hole + flagpole notch).
-  project("golf-green", [fillObject("golf", golfGreenRegion, { fillStyle: "tatami", density: 0.4 })]),
+  project("golf-green", [fillObject("golf", golfGreenRegion, { fillStyle: "tatami", density: 0.3 })]),
   // Multi-object routing: two discs apart — exercises inter-object travel/sequencing.
   project("two-discs-routing", [
-    fillObject("disc-a", [circle(28, 50, 12)], { fillStyle: "tatami", density: 0.4 }),
-    fillObject("disc-b", [circle(72, 50, 12)], { fillStyle: "tatami", density: 0.4 }),
+    fillObject("disc-a", [circle(28, 50, 12)], { fillStyle: "tatami", density: 0.3 }),
+    fillObject("disc-b", [circle(72, 50, 12)], { fillStyle: "tatami", density: 0.3 }),
   ]),
   // A satin band — the column path with curvature compensation.
   project(
@@ -123,7 +123,7 @@ export const CORPUS: { name: string; project: Project }[] = [
   project(
     "scatter-dots",
     SCATTER_CENTERS.map(([cx, cy], i) =>
-      fillObject(`dot-${i}`, [circle(cx, cy, 4)], { fillStyle: "tatami", density: 0.4 }),
+      fillObject(`dot-${i}`, [circle(cx, cy, 4)], { fillStyle: "tatami", density: 0.3 }),
     ),
   ),
   // Reversal-aware routing: scattered running lines (freely reversible) — the
@@ -144,7 +144,7 @@ export const CORPUS: { name: string; project: Project }[] = [
     fillObject(
       "grid",
       SCATTER_CENTERS.map(([cx, cy]) => rect(cx - 4, cy - 4, 8, 8)),
-      { fillStyle: "tatami", density: 0.4 },
+      { fillStyle: "tatami", density: 0.3 },
     ),
   ]),
 ];
