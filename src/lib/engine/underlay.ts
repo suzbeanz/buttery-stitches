@@ -88,7 +88,14 @@ export function columnUnderlay(
   const runs: Path[] = [runningStitch(centerline, UNDERLAY_STITCH)];
   if (weight === "light") return runs;
 
-  const railWidth = widthMm - 2 * SATIN_EDGE_INSET; // rails just inside the edges
+  // A thin/mid column (2–3 mm) qualifies for the edge walk, but the curve-safe
+  // 0.6 mm inset leaves ~0.6 mm of each border with no underlay foundation, so the
+  // outer satin stitches sink into bare fabric and read soft (the 2 mm rung on the
+  // sew-out). Pull the edge walk closer to the rail on narrow columns (the tighter
+  // inset only risks folding on WIDE curved columns, which keep 0.6). 1 mm stays
+  // center-run only — its rails still cross.
+  const edgeInset = widthMm < 3 ? 0.4 : SATIN_EDGE_INSET;
+  const railWidth = widthMm - 2 * edgeInset; // rails just inside the edges
   const wantEdge = railWidth > 0.5 && (widthMm >= SATIN_EDGE_WIDTH || weight === "heavy");
   const wantZig = railWidth > 0.5 && (widthMm >= SATIN_ZIGZAG_WIDTH || weight === "heavy");
 
