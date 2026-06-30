@@ -33,6 +33,26 @@ describe("guidanceFieldFill", () => {
     expect(bins.size).toBeGreaterThanOrEqual(3);
   });
 
+  it("rejects a tight band whose field shatters into hop-heavy stubs (the swatch C-band nest)", () => {
+    // The calibration swatch's small C-band: cBand(78,84,12,5). Its isolines
+    // fragment into dozens of short runs, so chaining them spends ~32% of the
+    // laid thread on exposed inter-run hops — that sewed out as a bird-nest.
+    // The connector-quality gate must reject it so the caller draws clean tatami.
+    const a0 = (-130 * Math.PI) / 180;
+    const a1 = (130 * Math.PI) / 180;
+    const n = 28;
+    const outer: { x: number; y: number }[] = [];
+    const inner: { x: number; y: number }[] = [];
+    for (let i = 0; i <= n; i++) {
+      const a = a0 + ((a1 - a0) * i) / n;
+      outer.push({ x: 78 + 12 * Math.cos(a), y: 84 + 12 * Math.sin(a) });
+      inner.push({ x: 78 + 5 * Math.cos(a), y: 84 + 5 * Math.sin(a) });
+    }
+    inner.reverse();
+    const cband: Path = [...outer, ...inner, outer[0]];
+    expect(guidanceFieldFill([cband], { density: 0.3, angle: 0, stitchLength: 3, pullCompMm: 0 })).toBeNull();
+  });
+
   it("declines a shape too small to seat a field (caller falls back to tatami)", () => {
     const tiny: Path = [
       { x: 0, y: 0 },
