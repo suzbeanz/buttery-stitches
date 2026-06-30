@@ -45,6 +45,12 @@ describe("columnUnderlay tiers by width", () => {
     expect(columnUnderlay(centerline, 3, "standard")).toHaveLength(3);
   });
 
+  it("a 2 mm column earns the edge-walk too (thin/mid satin gets a crisp edge foundation)", () => {
+    // A center run alone left the thin/mid ladder rungs reading rough on a sew-out.
+    // From ~2 mm up the inset rails clear, so the edge walk lays a border foundation.
+    expect(columnUnderlay(centerline, 2, "standard")).toHaveLength(3);
+  });
+
   it("a wide column adds a zig-zag pass on top of the edge-walk", () => {
     // width ≥ 4 mm: center + edge-walk (×2) + zig-zag = 4 runs.
     expect(columnUnderlay(centerline, 4, "standard")).toHaveLength(4);
