@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { packRgb, planFromDesign, planStitchCount, friendlyExportError, centerBlocks } from "./index";
+import { packRgb, planFromDesign, planStitchCount, friendlyExportError } from "./index";
 import type { EngineStitch } from "../engine";
 import { mmToTenths } from "../units";
 
@@ -14,7 +14,7 @@ describe("export plan", () => {
     expect(packRgb({ id: "c", rgb: [255, 255, 255] })).toBe(0xffffff);
   });
 
-  it("blocks a single-color design, converts mm to 1/10 mm, and centers on origin", () => {
+  it("blocks a single-color design and converts mm to 1/10 mm (raw positive coords)", () => {
     const design: EngineStitch[] = [
       { x: 0, y: 0, colorId: "a", objectId: "o" },
       { x: 2.5, y: 0, colorId: "a", objectId: "o" },
@@ -22,42 +22,28 @@ describe("export plan", () => {
     const plan = planFromDesign(design, colors);
     expect(plan.blocks).toHaveLength(1);
     expect(plan.blocks[0].rgb).toBe(0x2050c0);
-    // The design is recentered on its bbox: x spans 0..25 (1/10 mm), center 13,
-    // so the two stitches land at -13 and 12 — still mmToTenths(2.5)=25 apart.
+    // Coordinates stay in the design's raw hoop space — never recentered on the
+    // origin (negative coords corrupt the machine sew-out by clamping to the edge).
     expect(plan.blocks[0].cmds).toEqual([
-      ["s", -13, 0],
-      ["s", 12, 0],
+      ["s", 0, 0],
+      ["s", mmToTenths(2.5), 0],
     ]);
-    const [, x0] = plan.blocks[0].cmds[0] as ["s", number, number];
-    const [, x1] = plan.blocks[0].cmds[1] as ["s", number, number];
-    expect(x1 - x0).toBe(mmToTenths(2.5));
   });
 
-  it("centers an off-center design on the origin (no corner-parking on the machine)", () => {
-    // A design laid out in raw hoop coords (40..60 mm) must export centered, or
-    // the machine sews it parked ~half a hoop into a corner.
+  it("never emits a negative coordinate (machine clamps negatives to the hoop edge)", () => {
+    // A design laid out in raw hoop coords stays positive through the plan, so the
+    // machine places it inside the hoop instead of clamping the negative quadrants.
     const design: EngineStitch[] = [
       { x: 40, y: 40, colorId: "a", objectId: "o" },
       { x: 60, y: 60, colorId: "a", objectId: "o" },
     ];
     const plan = planFromDesign(design, colors);
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const c of plan.blocks.flatMap((b) => b.cmds)) {
       if (c[0] === "s" || c[0] === "j") {
-        minX = Math.min(minX, c[1]); maxX = Math.max(maxX, c[1]);
-        minY = Math.min(minY, c[2]); maxY = Math.max(maxY, c[2]);
+        expect(c[1]).toBeGreaterThanOrEqual(0);
+        expect(c[2]).toBeGreaterThanOrEqual(0);
       }
     }
-    // bbox center within a rounding unit of (0,0).
-    expect(Math.abs(minX + maxX)).toBeLessThanOrEqual(1);
-    expect(Math.abs(minY + maxY)).toBeLessThanOrEqual(1);
-    // extent preserved (20mm = 200 1/10mm each axis).
-    expect(maxX - minX).toBe(mmToTenths(20));
-  });
-
-  it("centerBlocks leaves an already-centered design unchanged (oracle inputs)", () => {
-    const blocks = [{ rgb: 0x2050c0, cmds: [["s", -100, -100], ["s", 100, 100]] as const }];
-    expect(centerBlocks(blocks as never)).toEqual(blocks);
   });
 
   it("starts a new block on a color change", () => {
