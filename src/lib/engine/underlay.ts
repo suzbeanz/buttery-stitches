@@ -35,9 +35,12 @@ const EDGE_INSET = 0.5;
  *  straight runs but 0.6–0.7 mm through curves; we use the curve-safe value so
  *  the inset rails don't fold on tight serpentine columns. */
 const SATIN_EDGE_INSET = 0.6;
-/** Column width (mm) that earns an edge-walk underlay (center-run only below it;
- *  edge run becomes important from ~2.5–3 mm up). */
-const SATIN_EDGE_WIDTH = 2.5;
+/** Column width (mm) that earns an edge-walk underlay (center-run only below it).
+ *  Set at ~2 mm: the thin/mid satin rungs read "rough" on a sew-out with only a
+ *  center run under them — the edge walk lays a foundation just inside each rail
+ *  so the column's borders set crisp instead of sinking ragged into soft fabric.
+ *  Below ~2 mm the inset rails would cross, so those keep the center run alone. */
+const SATIN_EDGE_WIDTH = 2.0;
 /** Column width (mm) that earns a zig-zag underlay (≥4 mm). */
 const SATIN_ZIGZAG_WIDTH = 4;
 
@@ -69,7 +72,7 @@ function zigzag(left: Path, right: Path, spacing: number): Path {
  * Underlay for one satin stroke given its centerline and width, returned as
  * separate runs (the caller jumps between them). Tiered by width and weight:
  *   light             → centerline run only
- *   standard, ≥2.5 mm → + edge-walk (a run ~0.35 mm inside each rail)
+ *   standard, ≥2 mm   → + edge-walk (a run just inside each rail)
  *   ≥4 mm or heavy    → + a zig-zag across the column
  *
  * Ordering matters: the zig-zag is laid BEFORE the edge walk. If the edge run
