@@ -28,6 +28,10 @@ const SOLVE_EPS = 1e-4; // max per-cell change to declare convergence
  *  become the Dirichlet end caps (u=0 / u=1). */
 const CAP_FRAC = 0.12;
 const MIN_FIELD_EXTENT_MM = 10; // below this a field fill isn't worth it
+// Max share of laid thread the inter-run hops may consume before a field result
+// is judged a fragmented nest and rejected for tatami fallback. A well-formed
+// curved band runs ~0.10; the bird-nesting swatch C-band ran ~0.32.
+const FIELD_MAX_CONNECTOR_FRAC = 0.2;
 
 interface Field {
   g: Grid;
@@ -412,5 +416,21 @@ export function guidanceFieldFill(rings: Path[], opts: FillOptions): Path[] | nu
   const areaMm2 = insideCells * f.g.cellMm * f.g.cellMm;
   const laid = runs.reduce((s, r) => s + polylineLen(r), 0);
   if (areaMm2 > 0 && laid < 0.7 * (areaMm2 / density)) return null;
+
+  // Connector-quality gate — the real bird-nest guard. A clean field breaks into
+  // runs only at genuine concavities, so the serpentine's inter-run hops stay a
+  // small slice of the laid thread (~10% on a well-formed curved band). A
+  // fragmented solve shatters a band's isolines into dozens of stubs; chaining
+  // them forces hop after hop (~32% on the swatch C-band that sewed as a nest).
+  // Those hops become exposed floats the assembler can't hide. When the hop
+  // budget dominates, reject so the caller keeps the clean tatami runs instead.
+  let connector = 0;
+  for (let i = 1; i < runs.length; i++) {
+    const prev = runs[i - 1];
+    const cur = runs[i];
+    const pe = prev[prev.length - 1];
+    connector += Math.min(dist(pe, cur[0]), dist(pe, cur[cur.length - 1]));
+  }
+  if (laid > 0 && connector > FIELD_MAX_CONNECTOR_FRAC * laid) return null;
   return runs;
 }
