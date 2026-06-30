@@ -83,11 +83,32 @@ export function planFromDesign(
     current!.cmds.push(s.jump ? ["j", x, y] : ["s", x, y]);
   });
 
-  // Coordinates are kept in the design's raw hoop space (all positive). Do NOT
-  // recenter on the origin: the machine's coordinate origin is a hoop corner and
-  // it clamps negative coordinates to the edge, so an origin-centered design sews
-  // out corrupted (only the +x/+y quadrant survives, the rest piles on the edge).
-  return { blocks };
+  // Anchor the design at the origin (bounding-box MIN → 0,0) so the stitch stream
+  // occupies [0..w]×[0..h], all-positive. This matches what professional PES files
+  // do (verified against reference frog/hotdog files, whose stitch bounds start at
+  // (0,0)); the machine then positions/centers it the same way it does those. This
+  // is NOT origin-CENTERING (which subtracts the centre and yields negative coords
+  // the machine clamps to the hoop edge) — it subtracts the MIN, so min is exactly 0.
+  return { blocks: anchorBlocks(blocks) };
+}
+
+/** Translate every coordinate-bearing command so the design's bounding-box MIN is
+ *  at (0,0) — the all-positive, origin-anchored layout professional PES files use.
+ *  Trims/stops carry no coordinate and pass through. */
+export function anchorBlocks(blocks: PlanBlock[]): PlanBlock[] {
+  let minX = Infinity, minY = Infinity;
+  for (const b of blocks) {
+    for (const c of b.cmds) {
+      if (c[0] !== "s" && c[0] !== "j") continue;
+      if (c[1] < minX) minX = c[1];
+      if (c[2] < minY) minY = c[2];
+    }
+  }
+  if (!Number.isFinite(minX) || (minX === 0 && minY === 0)) return blocks;
+  return blocks.map((b) => ({
+    rgb: b.rgb,
+    cmds: b.cmds.map((c) => (c[0] === "s" || c[0] === "j" ? [c[0], c[1] - minX, c[2] - minY] : c)),
+  }));
 }
 
 /**

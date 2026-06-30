@@ -30,20 +30,28 @@ describe("export plan", () => {
     ]);
   });
 
-  it("never emits a negative coordinate (machine clamps negatives to the hoop edge)", () => {
-    // A design laid out in raw hoop coords stays positive through the plan, so the
-    // machine places it inside the hoop instead of clamping the negative quadrants.
+  it("anchors the design at (0,0) like professional PES files (bbox min = origin)", () => {
+    // A design authored at hoop-center coords (40..60mm) must export anchored at the
+    // origin: stitch bounds [0..w], all-positive, min exactly (0,0) — the convention
+    // the reference frog/hotdog files use and the machine positions correctly.
     const design: EngineStitch[] = [
       { x: 40, y: 40, colorId: "a", objectId: "o" },
       { x: 60, y: 60, colorId: "a", objectId: "o" },
     ];
     const plan = planFromDesign(design, colors);
+    let minX = Infinity, minY = Infinity;
     for (const c of plan.blocks.flatMap((b) => b.cmds)) {
       if (c[0] === "s" || c[0] === "j") {
         expect(c[1]).toBeGreaterThanOrEqual(0);
         expect(c[2]).toBeGreaterThanOrEqual(0);
+        minX = Math.min(minX, c[1]);
+        minY = Math.min(minY, c[2]);
       }
     }
+    expect(minX).toBe(0);
+    expect(minY).toBe(0);
+    // extent preserved (20mm = 200 1/10mm).
+    expect(Math.max(...plan.blocks.flatMap((b) => b.cmds).filter((c) => c[0] === "s").map((c) => (c as ["s", number, number])[1]))).toBe(mmToTenths(20));
   });
 
   it("starts a new block on a color change", () => {
