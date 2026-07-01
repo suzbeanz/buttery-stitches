@@ -14,6 +14,7 @@
     "test:watch": "vitest",
     "e2e": "playwright test",
     "bench": "vite-node scripts/bench.ts",
+    "digitize:quality": "vite-node scripts/digitize-quality.ts",
     "derisk": "node scripts/derisk-pyodide.mjs",
     "typecheck": "tsc --noEmit"
   },
