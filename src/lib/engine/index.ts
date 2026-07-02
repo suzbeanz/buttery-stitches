@@ -585,6 +585,17 @@ export function generateObjectRuns(
   fabric: FabricProfile = fabricProfile(undefined),
 ): StitchRun[] {
   const p = resolveParams(object.type, object.params);
+  // Professional size scaling, measured from a 9-size reference series of one
+  // design (25→120mm): fill stitch length grows with the object's size and
+  // saturates at the 4mm default — ~2.1mm at 25mm, ~2.9 at 50, ~3.9 at 80+ —
+  // while ROW SPACING stays constant (the pros' apparent density thinning is
+  // entirely the stitch length growing). A fixed 4mm at every size made small
+  // designs read coarse. Only applies while the user hasn't set an explicit
+  // fill stitch length; their value always wins.
+  const fillStitchLength =
+    object.params.fillStitchLength !== undefined
+      ? p.fillStitchLength
+      : adaptiveFillStitchLength(object.paths, p.fillStitchLength);
   // Hard machine-safety floor on row spacing: no matter what the user (or the
   // fabric multiplier) asks for, never pack rows tighter than this — denser than
   // ~0.3 mm just builds a ridge of thread that jams the needle. The validator
@@ -715,7 +726,7 @@ export function generateObjectRuns(
       const { a, b } = multiBlendFill(region, {
         density,
         angle: fillAngle,
-        stitchLength: p.fillStitchLength,
+        stitchLength: fillStitchLength,
         pullCompMm: pullComp,
       });
       for (const [path, colId] of [
@@ -784,14 +795,14 @@ export function generateObjectRuns(
       const echo = contourFill(region, { density });
       tops = echo.length
         ? echo
-        : tatamiConcaveRuns(region, { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp });
+        : tatamiConcaveRuns(region, { density, angle: fillAngle, stitchLength: fillStitchLength, pullCompMm: pullComp });
       if (echo.length) contourSpiral = true;
       else tatamiNoBareTravel = true;
     } else if (p.fillStyle === "field") {
       // Guidance-field fill: rows follow a solved harmonic direction field that
       // sweeps the form cap-to-cap (generalises turning/flow). Falls back to the
       // concavity-aware tatami when the shape can't seat a clean field.
-      const fopts = { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp };
+      const fopts = { density, angle: fillAngle, stitchLength: fillStitchLength, pullCompMm: pullComp };
       tops = guidanceFieldFill(region, fopts) ?? tatamiConcaveRuns(region, fopts);
       tatamiNoBareTravel = true;
     } else if (motifMode) {
@@ -802,7 +813,7 @@ export function generateObjectRuns(
       // penetrations along a relief groove — both read across the WHOLE shape, so
       // they use the single-serpentine tatami rather than per-cell decomposition.
       const gradient = p.fillStyle === "gradient" ? GRADIENT_FILL_MUL : undefined;
-      let top = tatamiFill(region, { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp, gradient });
+      let top = tatamiFill(region, { density, angle: fillAngle, stitchLength: fillStitchLength, pullCompMm: pullComp, gradient });
       if (p.carve && p.carve !== "none") {
         const curves = motifFill(region, { motifId: p.carve, sizeMm: p.motifSizeMm, angle: tatamiAngle });
         top = carvePoints(top, curves, CARVE_GROOVE_MM);
@@ -816,7 +827,7 @@ export function generateObjectRuns(
       // of letters, a scattered mark — a per-letter turning direction reads as a
       // patchwork (and can fan an odd diagonal across a letter), so those fill with
       // the object's one shared tatami grain instead.
-      const fillOpts = { density, angle: fillAngle, stitchLength: p.fillStitchLength, pullCompMm: pullComp };
+      const fillOpts = { density, angle: fillAngle, stitchLength: fillStitchLength, pullCompMm: pullComp };
       // Precedence: a painted FLOW CURVE wins (the user drew the grain); else a
       // painted straight Direction (handled via the angle, so skip turning/flow);
       // else the AUTO flows — a clean single-spine band turns (turningFill), a
@@ -855,7 +866,7 @@ export function generateObjectRuns(
         const fill = tatamiFill([patch], {
           density,
           angle: tatamiAngle,
-          stitchLength: p.fillStitchLength,
+          stitchLength: fillStitchLength,
           pullCompMm: pullComp,
         });
         for (const sub of orderByNearest(splitLongTravels(fill, travelMax), cursor)) {
@@ -914,6 +925,27 @@ export function generateObjectRuns(
     }
   });
   return runs;
+}
+
+/**
+ * Size-adaptive fill stitch length (mm): linear-to-cap fit of the professional
+ * multi-size reference series — stitchLen ≈ 1.3 + size/30, clamped to
+ * [2mm, base]. `size` is the object's larger bbox dimension; a small element
+ * inside a big design still gets the short stitches a digitizer would use.
+ */
+export function adaptiveFillStitchLength(paths: Path[], baseMm: number): number {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const ring of paths) {
+    for (const pt of ring) {
+      if (pt.x < minX) minX = pt.x;
+      if (pt.y < minY) minY = pt.y;
+      if (pt.x > maxX) maxX = pt.x;
+      if (pt.y > maxY) maxY = pt.y;
+    }
+  }
+  if (!Number.isFinite(minX)) return baseMm;
+  const sizeMm = Math.max(maxX - minX, maxY - minY);
+  return Math.min(baseMm, Math.max(2, 1.3 + sizeMm / 30));
 }
 
 /** Satin cover width (mm) laid over an appliqué edge to finish the raw fabric. */
