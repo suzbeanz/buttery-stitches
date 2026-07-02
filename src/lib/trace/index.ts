@@ -7,7 +7,13 @@ import { douglasPeucker } from "./simplify";
 import { polygonArea, polygonPerimeter } from "./classify";
 import { recognizeShape } from "./recognize";
 import { idealizeDesign } from "./idealize";
-import { quantizeImage, borderBackgroundColor, borderIsTransparent, borderIsSolidOpaque } from "./quantize";
+import {
+  quantizeImage,
+  borderBackgroundColor,
+  borderIsTransparent,
+  borderIsSolidOpaque,
+  removeInnerBackdrop,
+} from "./quantize";
 
 export * from "./simplify";
 export * from "./classify";
@@ -363,11 +369,34 @@ export function imageDataToObjects(
   // into mud. Give the background its own slot (N+1) so all N requested colours stay
   // distinct; the background colour is then removed below, leaving N foreground ones.
   const transparentBg = borderIsTransparent(imageData);
-  const opaqueBg = !transparentBg && opts.removeBackground !== false && borderIsSolidOpaque(imageData);
-  const flat = quantizeImage(imageData, opaqueBg ? numberOfColors + 1 : numberOfColors);
-  // Detect the background from the (now palette-flat) border unless the caller
-  // already supplied one.
-  const backgroundRgb = opts.backgroundRgb ?? borderBackgroundColor(flat) ?? undefined;
+  // Clipart is often a subject on a solid CARD that itself floats on transparent
+  // margins. The border is transparent, so the opaque-background path never runs —
+  // strip the card at the raster level instead, or "Remove background" silently
+  // keeps a giant card-coloured fill AND the card eats a palette slot.
+  let source = imageData;
+  let cardRgb: [number, number, number] | undefined;
+  if (transparentBg && opts.removeBackground !== false) {
+    const stripped = removeInnerBackdrop(imageData);
+    if (stripped) {
+      source = stripped.image as ImageData;
+      cardRgb = [
+        Math.round(stripped.card[0]),
+        Math.round(stripped.card[1]),
+        Math.round(stripped.card[2]),
+      ];
+    }
+  }
+  // Dominance is lenient (0.35): the background only needs to be the border's main
+  // colour, not almost all of it — a subject that reaches the image edge (a mound
+  // that runs off the left border) must not cancel the background's slot.
+  const opaqueBg = !transparentBg && opts.removeBackground !== false && borderIsSolidOpaque(source, 0.35);
+  const flat = quantizeImage(source, opaqueBg ? numberOfColors + 1 : numberOfColors);
+  // The background colour: caller-supplied, else a stripped card's colour, else
+  // detected from the (now palette-flat) border. The card takes precedence over
+  // border detection — after stripping, the border is mostly transparent and its
+  // few remaining opaque pixels are the SUBJECT touching the edge (a pole tip),
+  // which must not be declared the background.
+  const backgroundRgb = opts.backgroundRgb ?? cardRgb ?? borderBackgroundColor(flat) ?? undefined;
   // Hand ImageTracer OUR palette so it traces against our (saliency-aware k-means)
   // colors instead of re-quantizing the image with its own population-based pass —
   // which would drop small high-contrast features (a pet's eyes, nose, mouth) that
@@ -401,7 +430,10 @@ export function imageDataToObjects(
     minAreaMm2: preset.minAreaMm2,
     ...opts,
     backgroundRgb,
-    removeBackground: transparentBg ? false : opts.removeBackground,
+    // A stripped card's colour still counts as the background downstream, so the
+    // sliver-drop erases the anti-alias halo the card left around the subject
+    // (interior blobs of that colour — the white ball — survive, as always).
+    removeBackground: transparentBg ? cardRgb !== undefined : opts.removeBackground,
   });
 }
 
