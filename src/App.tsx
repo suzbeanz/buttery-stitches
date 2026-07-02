@@ -378,7 +378,9 @@ function useGlobalShortcuts(setShowHelp: (fn: (v: boolean) => boolean) => void) 
       }
 
       // Re-order the selection in the stitch sequence ( [ = earlier, ] = later ).
-      if (e.key === "[" || e.key === "]") {
+      // Edit view only — stitch view is read-only, and reordering there changed
+      // the design invisibly behind the simulation.
+      if ((e.key === "[" || e.key === "]") && editor.viewMode === "edit") {
         const ps = useProjectStore.getState();
         if (ps.selectedIds.length) {
           ps.moveOrder(ps.selectedIds, e.key === "[" ? "earlier" : "later");

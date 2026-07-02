@@ -65,13 +65,17 @@ export default function ExportMenu({
   }, [open]);
 
   // Recompute the design only while the menu is open.
-  const { design, stitches, changes, warnings } = useMemo(() => {
-    if (!open) return { design: [], stitches: 0, changes: 0, warnings: [] };
+  const { design, stitches, changes, colorCount, warnings } = useMemo(() => {
+    if (!open) return { design: [], stitches: 0, changes: 0, colorCount: 0, warnings: [] };
     const d = designFor(project);
     return {
       design: d,
       stitches: countStitches(d),
       changes: countColorChanges(d),
+      // Distinct thread colors — NOT color blocks. A color sewn in two separate
+      // blocks (red circle + red crescent) is one color but two thread blocks;
+      // the old "changes + 1" label showed "7 colors" on a 6-color design.
+      colorCount: new Set(d.map((s) => s.colorId)).size,
       warnings: validateDesign(d, project),
     };
   }, [open, project]);
@@ -152,7 +156,8 @@ export default function ExportMenu({
               <div className="flex items-center justify-between px-1 pb-2 font-mono text-[11px] text-char/70">
                 <span>{stitches.toLocaleString()} stitches</span>
                 <span>
-                  {changes + 1} color{changes === 0 ? "" : "s"}
+                  {colorCount} color{colorCount === 1 ? "" : "s"}
+                  {changes + 1 > colorCount ? ` · ${changes + 1} blocks` : ""}
                 </span>
               </div>
 

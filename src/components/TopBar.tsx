@@ -97,6 +97,17 @@ export default function TopBar({
   const [showText, setShowText] = useState(false);
   const [showShapes, setShowShapes] = useState(false);
   const [showMore, setShowMore] = useState(false);
+  useEffect(() => {
+    if (!showShapes && !showMore) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowShapes(false);
+        setShowMore(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showShapes, showMore]);
   const [showCheck, setShowCheck] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const activeColorId = useEditorStore((s) => s.activeColorId);
@@ -363,6 +374,7 @@ export default function TopBar({
           label="Add a shape — pick one, then drag it out"
           onClick={() => setShowShapes((v) => !v)}
           active={showShapes}
+          popup
         >
           <Shapes size={18} />
         </BarButton>
@@ -412,7 +424,7 @@ export default function TopBar({
 
       {/* Overflow menu — only on narrow screens, so the bar stays one row. */}
       <div className="relative lg:hidden">
-        <BarButton label="More actions" onClick={() => setShowMore((v) => !v)} active={showMore}>
+        <BarButton label="More actions" onClick={() => setShowMore((v) => !v)} active={showMore} popup>
           <MoreHorizontal size={18} />
         </BarButton>
         {showMore && (
@@ -569,6 +581,7 @@ function BarButton({
   disabled,
   active,
   align,
+  popup,
 }: {
   children: React.ReactNode;
   /** accessible name + tooltip for the icon button. */
@@ -578,6 +591,9 @@ function BarButton({
   active?: boolean;
   /** anchor the tooltip to a side so corner buttons don't run off-screen. */
   align?: "start" | "end";
+  /** This button opens a popover/menu: announce haspopup + expanded instead of
+   *  pressed (a menu trigger is not a toggle-state button to AT). */
+  popup?: boolean;
 }) {
   return (
     <button
@@ -586,7 +602,9 @@ function BarButton({
       data-tip={label}
       data-tip-align={align}
       aria-label={label}
-      aria-pressed={active}
+      aria-pressed={popup ? undefined : active}
+      aria-haspopup={popup ? "menu" : undefined}
+      aria-expanded={popup ? active : undefined}
       className={`tap-target grid h-9 w-9 shrink-0 place-items-center rounded-lg text-butter-100 transition-transform hover:bg-butter-200/15 active:translate-y-px active:bg-butter-200/25 disabled:cursor-not-allowed disabled:text-butter-200/40 disabled:hover:bg-transparent ${
         active ? "bg-butter-200/15 text-butter-200" : ""
       }`}

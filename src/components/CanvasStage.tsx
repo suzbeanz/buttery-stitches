@@ -613,6 +613,10 @@ export default function CanvasStage() {
     function onKey(e: KeyboardEvent) {
       const el = document.activeElement;
       if (el && ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)) return;
+      // Same modal guard as App's global shortcuts: with a dialog open,
+      // Delete/Escape must act on the dialog, not silently edit the canvas
+      // behind it (Delete was deleting the selection under an open dialog).
+      if (document.querySelector('[aria-modal="true"]')) return;
       if (e.key === "Enter") finishDraft();
       else if (e.key === "Escape") {
         clearDraft();

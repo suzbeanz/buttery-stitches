@@ -13,6 +13,7 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
       ["S", "Satin"],
       ["F", "Fill"],
       ["B", "Pencil"],
+      ["—", "Cut, Direction, Column, Brush, Appliqué & Curve live in the tool rail"],
     ],
   },
   {
@@ -23,6 +24,8 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
       ["⌘/Ctrl D", "Duplicate"],
       ["⌘/Ctrl G", "Group"],
       ["⌘/Ctrl ⇧ G", "Ungroup"],
+      ["⌘/Ctrl Y", "Redo (also ⌘⇧Z)"],
+      ["⌥ + arrows", "Nudge finely (0.25 mm)"],
       ["Arrows", "Nudge (⇧ = 5 mm)"],
       ["[ / ]", "Sew earlier / later"],
     ],
