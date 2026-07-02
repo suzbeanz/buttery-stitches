@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   SlidersHorizontal,
   AlignStartVertical,
@@ -69,6 +69,19 @@ export default function PropertiesPanel() {
     () => objects.filter((o) => selectedIds.includes(o.id)),
     [objects, selectedIds],
   );
+
+  // Selecting an object from nothing jumps to its properties — the tab is
+  // otherwise sticky, so picking an object while parked on Design/Threads
+  // showed the wrong pane. Only the empty→selected transition switches (and
+  // Arrange is left alone), so it never fights the user mid-workflow.
+  const prevSelCount = useRef(selectedIds.length);
+  useEffect(() => {
+    if (selectedIds.length > 0 && prevSelCount.current === 0 && tab !== "arrange") {
+      setTab("object");
+    }
+    prevSelCount.current = selectedIds.length;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedIds]);
 
   return (
     <aside
