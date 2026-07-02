@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { generateObjectRuns } from "./index";
+import { generateDesign, generateObjectRuns } from "./index";
+import { createEmptyProject } from "../project";
 import { makeObjectFromPaths } from "../objects";
 import type { Path } from "../../types/project";
 
@@ -46,5 +47,20 @@ describe("auto satin for narrow plain fills", () => {
     const runs = generateObjectRuns(o);
     const body = runs.filter((r) => !r.underlay).flatMap((r) => r.pts);
     expect(acrossFraction(body, 3)).toBeLessThan(0.2); // lengthwise rows, not satin throws
+  });
+});
+
+describe("no mid-color thread drags", () => {
+  it("walks the underlay→body connector of a long column instead of jumping", () => {
+    // A 3mm × 70mm column: the underlay ends at one end and the satin body
+    // starts back at the other — a ~70mm same-color connector. Emitted as a
+    // "trim" jump, a home machine (no mid-color cutter) DRAGS a loose thread
+    // down the whole design; the connector must be a stitched travel, buried
+    // under the satin sewn right after. Jumps may only appear at the very
+    // start of the design (initial positioning).
+    const o = makeObjectFromPaths("fill", [rect(3, 70)], "c1");
+    const design = generateDesign({ ...createEmptyProject(), objects: [o] });
+    const midJumps = design.filter((s, i) => i > 0 && (s.jump || s.trim));
+    expect(midJumps).toEqual([]);
   });
 });
