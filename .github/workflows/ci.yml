@@ -53,3 +53,21 @@ jobs:
       # (see lighthouserc.json) so scores are reported on every PR without
       # blocking; promote categories to "error" once baselines are confirmed.
       - run: npx --yes @lhci/cli@0.14.x autorun
+
+  # Native PES/DST writers vs the pyembroidery reference (Pyodide in node).
+  # This is the real oracle that pins the encoders to the reference library;
+  # previously it only ran when someone remembered to invoke it locally, so
+  # encoder drift could land unnoticed. Runs on main pushes (not every PR —
+  # it downloads wheels from PyPI and takes a couple of minutes).
+  oracle:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node scripts/oracle-pes.mjs
+      - run: node scripts/oracle-dst.mjs
