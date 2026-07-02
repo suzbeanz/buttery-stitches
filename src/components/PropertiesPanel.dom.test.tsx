@@ -112,7 +112,7 @@ describe("PropertiesPanel", () => {
 
     // Pick the outline color (the second project color, "Red") via the swatch dropdown.
     fireEvent.click(screen.getByRole("button", { name: /^Outline color:/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Red" }));
+    fireEvent.click(screen.getByRole("option", { name: "Red" }));
     void outlineColorId;
 
     fireEvent.click(screen.getByText(/Add satin outline/i));
