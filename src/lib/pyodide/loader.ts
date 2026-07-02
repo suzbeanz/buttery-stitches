@@ -4,15 +4,24 @@
  * CDN by default — override `PYODIDE_INDEX_URL` (or self-host the files) for a
  * fully offline / air-gapped deployment.
  *
- * Once loaded we `micropip.install("pyembroidery")`. pyembroidery is a pure
- * Python wheel, so it loads under Pyodide with no native dependencies — this
- * was de-risked before the rest of the app was built (see the Phase 1 notes).
+ * pyembroidery is installed from a SELF-HOSTED wheel bundled in `public/wheels/`
+ * (pure Python, no native deps — de-risked before the rest of the app was
+ * built). Installing from PyPI would need pypi.org/files.pythonhosted.org in
+ * the CSP `connect-src` — origins the deployed meta-CSP deliberately excludes —
+ * and an unpinned `micropip.install("pyembroidery")` could drift from the
+ * 1.5.1 semantics the native writers were validated against. Self-hosting
+ * keeps the "no third-party origins beyond the Pyodide CDN" privacy promise
+ * AND pins the exact version.
  */
 
 // Pin to the version we validated. Keep in sync with the `pyodide` devDep used
 // for the Node de-risk test.
 export const PYODIDE_VERSION = "0.27.7";
 const DEFAULT_INDEX_URL = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
+
+/** The bundled pyembroidery wheel, served from the app's own origin (public/).
+ *  Keep the version in the filename in sync with the oracle scripts' pin. */
+export const PYEMBROIDERY_WHEEL = "wheels/pyembroidery-1.5.1-py2.py3-none-any.whl";
 
 // Minimal shape of the bits of the Pyodide API we use.
 export interface PyodideInterface {
@@ -91,8 +100,14 @@ export function getPyodide(
       await pyodide.loadPackage("micropip");
 
       onStage?.("installing-pyembroidery");
+      // Absolute same-origin URL for the bundled wheel; BASE_URL keeps sub-path
+      // deployments (BASE_PATH override) working.
+      const wheelUrl = new URL(
+        `${import.meta.env.BASE_URL}${PYEMBROIDERY_WHEEL}`,
+        window.location.href,
+      ).href;
       await pyodide.runPythonAsync(
-        `import micropip\nawait micropip.install("pyembroidery")`,
+        `import micropip\nawait micropip.install("${wheelUrl}")`,
       );
 
       onStage?.("ready");

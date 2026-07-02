@@ -61,6 +61,17 @@ def import_design(data, fmt):
         raise ValueError("Unsupported format: %s" % fmt)
 
     pattern = reader(io.BytesIO(bytes(data)))
+
+    # A real design tops out around ~100k stitches; a malformed/crafted file can
+    # decode to millions and exhaust the WASM heap while we build runs + JSON.
+    # Fail loud and friendly instead.
+    MAX_STITCHES = 500_000
+    if len(pattern.stitches) > MAX_STITCHES:
+        raise ValueError(
+            "This file decodes to %d stitches (limit %d) - it may be corrupt."
+            % (len(pattern.stitches), MAX_STITCHES)
+        )
+
     threads = [_thread_rgb(t) for t in pattern.threadlist]
 
     blocks = []
