@@ -291,22 +291,40 @@ export function removeInnerBackdrop(img: RasterImage): { image: RasterImage; car
   for (let i = 3; i < img.data.length; i += 4) if (img.data[i] >= ALPHA_CUTOFF) baseline++;
   if (baseline === 0) return null;
   // Peel iteratively: a downloaded card frequently wears a thin FRAME (a border
-  // line, screenshot edge shading, JPEG edge darkening). Round 1 strips the frame,
-  // round 2 the card behind it, further rounds any anti-alias ribbon between the
-  // two. The rectangularity gate inside stripCardOnce ends the loop the moment the
-  // remaining opaque region is the subject's (non-rectangular) silhouette.
+  // line, screenshot edge shading, JPEG edge darkening). Early rounds strip such
+  // frames — each a thin sliver of the opaque area — and the first LARGE strip is
+  // the card itself, where the peeling must STOP: whatever sits behind the card
+  // is the subject, and a rectangular subject layer (a green field with marks on
+  // it) would otherwise read as "another card" and be eaten too.
   let out: { image: RasterImage; card: RGB } | null = null;
   for (let round = 0; round < 5; round++) {
     const next = stripCardOnce(out?.image ?? img, baseline);
     if (!next) break;
-    out = next;
+    out = { image: next.image, card: next.card };
+    // Frame or card? A frame is a thin RING: its area over the region's bbox
+    // perimeter is a few pixels of thickness. The first strip thicker than that
+    // is the card — stop there.
+    const thickness = next.stripped / Math.max(1, 2 * (next.bboxW + next.bboxH));
+    if (thickness > Math.max(CARD_FRAME_MAX_THICKNESS_PX, 0.02 * Math.min(next.bboxW, next.bboxH))) {
+      break; // that was the card
+    }
   }
   return out;
 }
 
+/** A stripped ring at most this thick (px, scaled up on large images) is a FRAME
+ *  line — peeling continues to the card behind it. The first thicker strip is
+ *  the card itself, where peeling stops: whatever lies behind the card is the
+ *  subject, and a rectangular subject layer (a green field with marks on it)
+ *  must not be eaten as "another card". */
+const CARD_FRAME_MAX_THICKNESS_PX = 3;
+
 /** One peel of {@link removeInnerBackdrop}: strip the single dominant colour met
  *  at the transparency boundary, if the layout still reads as a card. */
-function stripCardOnce(img: RasterImage, baselineOpaque: number): { image: RasterImage; card: RGB } | null {
+function stripCardOnce(
+  img: RasterImage,
+  baselineOpaque: number,
+): { image: RasterImage; card: RGB; stripped: number; bboxW: number; bboxH: number } | null {
   const { width, height, data } = img;
   const total = width * height;
   const isTransparent = (i: number) => data[i * 4 + 3] < ALPHA_CUTOFF;
@@ -436,7 +454,7 @@ function stripCardOnce(img: RasterImage, baselineOpaque: number): { image: Raste
   // Nothing stripped, or (almost) EVERYTHING stripped — a solid rectangle is the
   // subject itself, not a card. Leave the image alone in both cases.
   if (stripped === 0 || opaqueCount - stripped < CARD_MIN_SUBJECT * baselineOpaque) return null;
-  return { image: { width, height, data: out }, card };
+  return { image: { width, height, data: out }, card, stripped, bboxW: maxX - minX + 1, bboxH: maxY - minY + 1 };
 }
 
 /** Nearest palette color to (r,g,b) by squared Euclidean distance. */
