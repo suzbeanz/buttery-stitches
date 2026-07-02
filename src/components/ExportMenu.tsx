@@ -177,7 +177,7 @@ export default function ExportMenu({
                 <select
                   value={pesVersion}
                   onChange={(e) => setPesVersion(Number(e.target.value) as PesVersion)}
-                  className="ml-2 rounded-sm border-2 border-ink/70 bg-white px-1 py-0.5 font-body text-xs text-char"
+                  className="select-sm ml-2 font-body"
                 >
                   {PES_VERSIONS.map((v) => (
                     <option key={v} value={v}>
@@ -194,7 +194,7 @@ export default function ExportMenu({
                     key={f}
                     disabled={busy}
                     onClick={() => doExport(f)}
-                    className="tap-target rounded-sm border-2 border-ink bg-cream px-2 py-1.5 font-label text-xs font-semibold uppercase tracking-wide text-ink shadow-press-sm transition-transform hover:bg-ink hover:text-cream active:translate-y-[2px] active:shadow-none disabled:opacity-50"
+                    className="tap-target rounded-sm border-2 border-ink bg-cream px-2 py-1.5 font-label text-xs font-semibold uppercase tracking-wide text-ink shadow-press-sm transition-transform hover:bg-ink hover:text-cream active:translate-y-[2px] active:shadow-none disabled:opacity-40"
                   >
                     {f}
                   </button>
@@ -204,7 +204,7 @@ export default function ExportMenu({
               <button
                 disabled={busy}
                 onClick={doExportAll}
-                className="tap-target mt-1.5 w-full rounded-sm border-2 border-ink bg-ink px-2 py-1.5 font-label text-xs font-semibold uppercase tracking-wide text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none disabled:opacity-50"
+                className="tap-target mt-1.5 w-full rounded-sm border-2 border-ink bg-ink px-2 py-1.5 font-label text-xs font-semibold uppercase tracking-wide text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none disabled:opacity-40"
               >
                 All formats (.zip)
               </button>

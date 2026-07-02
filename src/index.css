@@ -312,6 +312,14 @@ body::after {
     background-position: right 8px center;
   }
 
+  /* Compact inline variant of .select for toolbars/menus (no w-full). */
+  .select-sm {
+    @apply appearance-none rounded-sm border-2 border-ink/70 bg-white py-0.5 pl-2 pr-6 text-xs text-char outline-none focus:border-ink;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23173A7A' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 6px center;
+  }
+
   /* Hide the native number spinners (we provide branded −/+ steppers instead). */
   .no-spin {
     -moz-appearance: textfield;

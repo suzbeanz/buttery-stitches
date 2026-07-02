@@ -170,7 +170,7 @@ export default function PropertiesPanel() {
                   onClick={() => smoothObjects([selected[0].id])}
                   disabled={selected[0].type === "satin"}
                   data-tip="Round corners into flowing curves"
-                  className="tap-target flex w-full items-center justify-center gap-1.5 rounded-sm border border-ink/25 bg-cream py-1.5 text-sm text-ink-deep hover:bg-butter-200 disabled:opacity-30 disabled:hover:bg-cream"
+                  className="tap-target flex w-full items-center justify-center gap-1.5 rounded-sm border border-ink/25 bg-cream py-1.5 text-sm text-ink-deep hover:bg-butter-200 disabled:opacity-40 disabled:hover:bg-cream"
                 >
                   <Spline size={15} /> Smooth lines &amp; curves
                 </button>
@@ -202,7 +202,7 @@ function ArrangeBtn({
       disabled={disabled}
       data-tip={label}
       aria-label={label}
-      className="tap-target grid h-8 flex-1 place-items-center rounded-sm border border-ink/25 bg-cream text-ink-deep hover:bg-butter-200 disabled:opacity-30 disabled:hover:bg-cream"
+      className="tap-target grid h-8 flex-1 place-items-center rounded-sm border border-ink/25 bg-cream text-ink-deep hover:bg-butter-200 disabled:opacity-40 disabled:hover:bg-cream"
     >
       {children}
     </button>
@@ -259,7 +259,7 @@ function ArrangeSection() {
 
   return (
     <div className="flex flex-col gap-2 border-b border-navy/25 p-3 text-sm">
-      <span className="font-label text-xs font-semibold uppercase tracking-[0.14em] text-ink-deep">
+      <span className="font-label text-xs font-semibold uppercase tracking-[0.1em] text-ink-deep">
         Arrange
       </span>
 
@@ -656,7 +656,7 @@ function ObjectProperties({
       )}
 
       <div className="mt-1 flex items-center justify-between rounded-sm border border-ink/15 bg-butter-200/50 px-2 py-1 text-navy/80">
-        <span className="font-label text-[11px] font-semibold uppercase tracking-[0.12em]">
+        <span className="font-label text-[11px] font-semibold uppercase tracking-[0.1em]">
           Stitches
         </span>
         <span className="font-mono text-xs tabular-nums">
@@ -746,7 +746,7 @@ function OutlineControl({ fill }: { fill: EmbObject }) {
 
       <button
         onClick={addOutline}
-        className="rounded-sm border-2 border-ink bg-ink px-3 py-1.5 font-label text-xs font-semibold uppercase tracking-[0.12em] text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none"
+        className="rounded-sm border-2 border-ink bg-ink px-3 py-1.5 font-label text-xs font-semibold uppercase tracking-[0.1em] text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none"
       >
         Add satin outline
       </button>
@@ -782,7 +782,7 @@ function ThreadColors() {
   return (
     <div className="p-3">
       <div className="mb-2 flex items-center justify-between">
-        <span className="font-label text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-deep">
+        <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-deep">
           Threads
         </span>
         <button
@@ -866,7 +866,7 @@ function ThreadColors() {
                               ? "Delete your active thread"
                               : "Delete thread"
                     }
-                    className={`tap-target grid h-6 w-6 shrink-0 place-items-center rounded-sm disabled:opacity-25 disabled:hover:bg-transparent ${
+                    className={`tap-target grid h-6 w-6 shrink-0 place-items-center rounded-sm disabled:opacity-40 disabled:hover:bg-transparent ${
                       pending
                         ? "bg-stamp/15 text-stamp"
                         : "text-ink/45 hover:bg-stamp/10 hover:text-stamp disabled:hover:text-ink/45"
@@ -884,13 +884,13 @@ function ThreadColors() {
                 value={c.brand ?? ""}
                 placeholder="Brand"
                 onCommit={(brand) => updateColor(c.id, { brand })}
-                className="min-w-0 flex-1 rounded border border-navy/25 bg-butter-50/60 px-1 py-0.5 text-[11px] text-navy outline-none placeholder:text-navy/30"
+                className="min-w-0 flex-1 rounded border border-navy/25 bg-butter-50/60 px-1 py-0.5 text-[11px] text-navy outline-none focus:border-ink placeholder:text-navy/30"
               />
               <CommitInput
                 value={c.code ?? ""}
                 placeholder="Code"
                 onCommit={(code) => updateColor(c.id, { code })}
-                className="w-16 rounded border border-navy/25 bg-butter-50/60 px-1 py-0.5 text-[11px] text-navy outline-none placeholder:text-navy/30"
+                className="w-16 rounded border border-navy/25 bg-butter-50/60 px-1 py-0.5 text-[11px] text-navy outline-none focus:border-ink placeholder:text-navy/30"
               />
             </div>
           </li>

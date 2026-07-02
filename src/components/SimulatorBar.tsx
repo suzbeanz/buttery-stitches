@@ -119,7 +119,7 @@ export default function SimulatorBar() {
           <select
             value={simSpeed}
             onChange={(e) => setSimSpeed(Number(e.target.value))}
-            className="rounded-sm border-2 border-ink bg-cream px-1.5 py-0.5 font-label text-xs font-semibold uppercase tracking-wide text-ink"
+            className="select-sm bg-cream font-label font-semibold uppercase tracking-wide text-ink"
             aria-label="Playback speed"
           >
             {SPEEDS.map((s) => (

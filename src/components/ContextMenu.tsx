@@ -152,7 +152,7 @@ export default function ContextMenu({
               role="menuitem"
               disabled={it.disabled}
               onClick={it.run}
-              className={`flex w-full items-center gap-2.5 rounded-sm px-2 py-1.5 text-left text-sm [@media(pointer:coarse)]:py-2.5 disabled:opacity-30 ${
+              className={`flex w-full items-center gap-2.5 rounded-sm px-2 py-1.5 text-left text-sm [@media(pointer:coarse)]:py-2.5 disabled:opacity-40 ${
                 it.danger ? "text-stamp hover:bg-stamp/10" : "text-navy hover:bg-butter-200"
               } disabled:hover:bg-transparent`}
             >

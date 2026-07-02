@@ -168,7 +168,7 @@ export default function LayerPanel() {
                       e.stopPropagation();
                     }}
                     onClick={(e) => e.stopPropagation()}
-                    className="min-w-0 flex-1 rounded-sm border border-ink/40 bg-white px-1 py-0.5 text-navy outline-none"
+                    className="input min-w-0 flex-1 px-1 py-0.5 text-sm"
                   />
                 ) : (
                   <button
@@ -218,7 +218,7 @@ export default function LayerPanel() {
                     aria-label="Move up"
                     disabled={index === 0}
                     onClick={() => moveOrder([o.id], "earlier")}
-                    className="tap-target grid h-8 w-6 place-items-center rounded text-navy/55 hover:bg-butter-300/60 hover:text-navy disabled:opacity-25 disabled:hover:bg-transparent"
+                    className="tap-target grid h-8 w-6 place-items-center rounded text-navy/55 hover:bg-butter-300/60 hover:text-navy disabled:opacity-40 disabled:hover:bg-transparent"
                   >
                     <ChevronUp size={15} />
                   </button>
@@ -227,7 +227,7 @@ export default function LayerPanel() {
                     aria-label="Move down"
                     disabled={index === objects.length - 1}
                     onClick={() => moveOrder([o.id], "later")}
-                    className="tap-target grid h-8 w-6 place-items-center rounded text-navy/55 hover:bg-butter-300/60 hover:text-navy disabled:opacity-25 disabled:hover:bg-transparent"
+                    className="tap-target grid h-8 w-6 place-items-center rounded text-navy/55 hover:bg-butter-300/60 hover:text-navy disabled:opacity-40 disabled:hover:bg-transparent"
                   >
                     <ChevronDown size={15} />
                   </button>
