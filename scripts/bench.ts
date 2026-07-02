@@ -46,6 +46,10 @@ const table = results.map(({ name, metrics: m }) => ({
   "short%": pct(m.stitchLen.shortPct),
   coverage: m.fillCoverage == null ? "—" : pct(m.fillCoverage),
   "pullIn(mm)": round(m.pullInMm, 3),
+  // Professional-pattern metrics (see PRO_PATTERN_TARGETS): trims/1000 ≈0.2-0.4
+  // in reference files; sharpTurn% 25-36% on curvy shapes.
+  "trims/1k": round(m.trimsPer1000, 1),
+  "sharpTurn%": pct(m.sharpTurnPct),
 }));
 
 console.table(table);

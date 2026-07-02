@@ -47,7 +47,11 @@ export interface BenchMetrics extends DesignInfo {
   travelMm: number;
   /** travel ÷ (travel + thread): the share of needle motion that lays no thread. Lower is better. */
   travelRatio: number;
-  /** distribution of real stitched-segment lengths (mm). */
+  /** distribution of real stitched-segment lengths (mm), EXCLUDING deliberate
+   *  row-pitch advances (a satin zig-zag's along-rail step, a serpentine's row
+   *  turnaround — see {@link isRowAdvance}). Those are the row spacing working
+   *  as designed; counting them made satin-heavy designs read as 30%+ "short
+   *  stitches" when the real needle-stress shorts were ~3%. */
   stitchLen: StitchLenStats;
   /** thread coverage of the fill regions in [0,1] (covered area ÷ region area), or
    *  null when the design has no fill objects. Higher is better (1 = full coverage). */
@@ -58,7 +62,30 @@ export interface BenchMetrics extends DesignInfo {
   pullInMm: number;
   /** predicted worst single-point displacement (mm) from the same simulation. */
   distortMaxMm: number;
+  /** trims per 1000 penetrations. Professional PES files run ~0.2-0.4 (they
+   *  connect within a colour and cut only at colour changes); every trim leaves
+   *  two thread tails. Lower is better. */
+  trimsPer1000: number;
+  /** jumps per 1000 penetrations (companion to trims). Lower is better. */
+  jumpsPer1000: number;
+  /** inside-curve short-stitching: fraction of consecutive stitch triples that
+   *  turn sharply (cos < -0.3). Professional files measured 0.25-0.36 on organic
+   *  shapes — they pack short stitches on the inside of curves so curved edges
+   *  read smooth. Meaningful relative to how curvy the design is. */
+  sharpTurnPct: number;
 }
+
+/** Professional PES pattern targets, measured by decoding reference files that
+ *  sew cleanly on a home machine (numbers only; the designs aren't committed).
+ *  The scoreboard the engine tunes toward. */
+export const PRO_PATTERN_TARGETS = {
+  /** references ran ~0.2-0.4 trims per 1000 penetrations. */
+  trimsPer1000Max: 2,
+  /** reference body fill stitch median (mm). */
+  stitchMedianMm: 3.9,
+  /** references measured 0.25 (geometric) to 0.36 (organic) sharp-turn ratio. */
+  sharpTurnPct: 0.25,
+} as const;
 
 /** True when a stitch is a real needle penetration (not a jump/trim/stop marker). */
 function isReal(s: EngineStitch): boolean {
@@ -77,6 +104,39 @@ export function stitchSegmentLengths(design: EngineStitch[]): number[] {
     prev = s;
   }
   return out;
+}
+
+/**
+ * True when segment i is a deliberate ROW-PITCH advance, not a stitch in its own
+ * right: both neighbouring segments are much longer, so this short one is the
+ * along-rail step of a satin zig-zag (throw, advance, throw) or the turnaround
+ * of a fill serpentine (row, step, row). That step IS the row spacing working as
+ * designed; jam-safety (sub-0.3mm crowding) is enforced by the engine's own
+ * gates. Counting advances as "short stitches" made satin lettering read 33%
+ * short / CV 0.6 when the real needle-stress shorts were ~3% / CV 0.27.
+ */
+export function isRowAdvance(lengths: number[], i: number): boolean {
+  const prev = lengths[i - 1];
+  const next = lengths[i + 1];
+  return prev !== undefined && next !== undefined && prev > lengths[i] * 2.5 && next > lengths[i] * 2.5;
+}
+
+/** Fraction of consecutive stitch triples that turn sharply (cos < -0.3) — the
+ *  professional inside-curve short-stitching signature. */
+export function sharpTurnFraction(design: EngineStitch[]): number {
+  let sharp = 0;
+  let total = 0;
+  for (let i = 1; i < design.length - 1; i++) {
+    const a = design[i - 1], s = design[i], b = design[i + 1];
+    if (!isReal(a) || !isReal(s) || !isReal(b)) continue;
+    if (a.colorId !== s.colorId || s.colorId !== b.colorId) continue;
+    const ax = s.x - a.x, ay = s.y - a.y, bx = b.x - s.x, by = b.y - s.y;
+    const la = Math.hypot(ax, ay), lb = Math.hypot(bx, by);
+    if (la < 1e-6 || lb < 1e-6) continue;
+    total++;
+    if ((ax * bx + ay * by) / (la * lb) < -0.3) sharp++;
+  }
+  return total > 0 ? sharp / total : 0;
 }
 
 /** Total travel distance (mm) carried by jump moves. */
@@ -225,10 +285,15 @@ export function benchMetrics(project: Project): BenchMetrics {
   const design = designFor(project);
   const info = designInfo(design, project);
   const travelMm = travelLengthMm(design);
-  const stitchLen = summarizeLengths(stitchSegmentLengths(design));
+  const segs = stitchSegmentLengths(design);
+  // Row-pitch advances (satin zig-zag steps, serpentine turnarounds) are the row
+  // spacing working as designed — exclude them so shortPct/CV measure genuine
+  // needle-stress shorts and spacing evenness, not the fill style.
+  const stitchLen = summarizeLengths(segs.filter((_, i) => !isRowAdvance(segs, i)));
   const travelRatio =
     travelMm + info.threadLengthMm > 0 ? travelMm / (travelMm + info.threadLengthMm) : 0;
   const distort = simulateDistortion(design);
+  const pen = Math.max(1, info.stitches);
   return {
     ...info,
     travelMm,
@@ -237,6 +302,9 @@ export function benchMetrics(project: Project): BenchMetrics {
     fillCoverage: fillCoverage(project, design),
     pullInMm: distort.pullInMm,
     distortMaxMm: distort.maxMm,
+    trimsPer1000: (info.trims * 1000) / pen,
+    jumpsPer1000: (info.jumps * 1000) / pen,
+    sharpTurnPct: sharpTurnFraction(design),
   };
 }
 
