@@ -58,6 +58,7 @@ const AutoDigitizeDialog = lazy(() => import("./AutoDigitizeDialog"));
 // Lazy-loaded: pulls in opentype.js + bundled fonts only when adding text.
 const TextDialog = lazy(() => import("./TextDialog"));
 import type { AddTextResult } from "./TextDialog";
+import ErrorBoundary from "./ErrorBoundary";
 
 /** Turn a clean-up report into a plain-language summary for the toast. */
 function cleanupMessage(r: CleanupReport): string {
@@ -504,27 +505,33 @@ export default function TopBar({
       )}
 
       {imageFile && (
-        <Suspense fallback={null}>
-          <AutoDigitizeDialog
-            file={imageFile}
-            hoop={project.hoop}
-            hasExistingWork={project.objects.length > 0}
-            onApply={applyDigitized}
-            onClose={() => setImageFile(null)}
-          />
-        </Suspense>
+        // Own boundary: a dialog crash (e.g. a pathological trace input) must not
+        // take down the editor behind it.
+        <ErrorBoundary>
+          <Suspense fallback={null}>
+            <AutoDigitizeDialog
+              file={imageFile}
+              hoop={project.hoop}
+              hasExistingWork={project.objects.length > 0}
+              onApply={applyDigitized}
+              onClose={() => setImageFile(null)}
+            />
+          </Suspense>
+        </ErrorBoundary>
       )}
 
       {showText && (
-        <Suspense fallback={null}>
-          <TextDialog
-            hoop={project.hoop}
-            colors={project.colors}
-            followPath={followPath}
-            onAdd={applyText}
-            onClose={() => setShowText(false)}
-          />
-        </Suspense>
+        <ErrorBoundary>
+          <Suspense fallback={null}>
+            <TextDialog
+              hoop={project.hoop}
+              colors={project.colors}
+              followPath={followPath}
+              onAdd={applyText}
+              onClose={() => setShowText(false)}
+            />
+          </Suspense>
+        </ErrorBoundary>
       )}
 
       {editingTextObject && (

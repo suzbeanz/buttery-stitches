@@ -3,6 +3,7 @@ import TopBar from "./components/TopBar";
 import LayerPanel from "./components/LayerPanel";
 import ToolRail from "./components/ToolRail";
 import CanvasStage from "./components/CanvasStage";
+import ErrorBoundary from "./components/ErrorBoundary";
 import SimulatorBar from "./components/SimulatorBar";
 import ReviewBar from "./components/ReviewBar";
 import PropertiesPanel from "./components/PropertiesPanel";
@@ -193,7 +194,11 @@ function Studio({ onHome, saveStatus }: { onHome: () => void; saveStatus: SaveSt
 
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="relative flex min-h-0 flex-1 flex-col">
-            <CanvasStage />
+            {/* Own boundary: a canvas render error must not blank the panels/topbar —
+                the project state survives and the fallback offers reload/report. */}
+            <ErrorBoundary>
+              <CanvasStage />
+            </ErrorBoundary>
             <ReviewBar />
           </div>
           <SimulatorBar />
