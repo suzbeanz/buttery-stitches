@@ -1590,7 +1590,7 @@ function collapseCoincident(design: EngineStitch[]): EngineStitch[] {
  *  legitimate fill/satin detail — it exists to kill the near-coincident double
  *  punches (the ~0.07 mm pair that collapse-coincident's 0.05 mm just misses) and
  *  any clustered taps, not single short stitches a tight curve genuinely needs. */
-const MIN_PENETRATION_SPACING = 0.3;
+export const MIN_PENETRATION_SPACING = 0.3;
 
 /**
  * Drop any interior penetration that lands closer than {@link MIN_PENETRATION_SPACING}

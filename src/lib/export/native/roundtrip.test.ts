@@ -76,4 +76,25 @@ describe("PES round-trip (decode our own bytes)", () => {
     expect(b.minX).toBe(0);
     expect(b.minY).toBe(0);
   });
+
+  it("holds the jam-safety floor in the DECODED bytes (post-rounding min spacing)", () => {
+    // The engine enforces >=0.3mm in the mm domain, but independent coordinate
+    // rounding to 1/10mm can compress a floor-hugging pair below it in the file.
+    // The plan-layer gate re-enforces the floor after rounding; verify on the
+    // actual bytes the machine reads: no INTERIOR consecutive penetration pair
+    // (both neighbors real stitches — run endpoints are deliberately preserved)
+    // sits closer than 3 tenths.
+    const bytes = encodePes(splitPlanForFormat(planFromProject(buildTestSwatch()), "pes"));
+    const stitches = decodePecStitches(bytes);
+    let violations = 0;
+    for (let i = 1; i < stitches.length - 1; i++) {
+      const prev = stitches[i - 1];
+      const cur = stitches[i];
+      const next = stitches[i + 1];
+      if (prev.jump || cur.jump || next.jump) continue; // boundaries exempt
+      const d = Math.hypot(cur.x - prev.x, cur.y - prev.y);
+      if (d < 3) violations++;
+    }
+    expect(violations).toBe(0);
+  });
 });
