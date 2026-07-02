@@ -21,6 +21,15 @@ import type { EngineStitch } from "../engine";
  * First-order: it captures the dominant ALONG-stitch pull (satin narrowing, row
  * end pull-in). Cross-stitch fabric gathering (a 2D mesh) is a later slice. The
  * two constants are calibratable from a test sew-out.
+ *
+ * CALIBRATED against a physical sew-out (July 2026): the quality-calibration
+ * swatch — tatami squares 10/20/30 mm, circles 15/25 mm, a 40 mm run line, and
+ * satin STITCH lettering at 12/8 mm — sewn on hooped woven cotton at 40 wt
+ * measured DEAD-ON nominal in both axes (±0.5 mm ruler resolution), with letter
+ * terminals at full density. The engine's built-in allowances already cancel net
+ * pull on the woven profile, so PREDICTIVE COMPENSATION STAYS OFF there: this
+ * model remains a bench/visualization metric. Re-calibrate on stretch knits or
+ * fleece before wiring compensation into the pipeline for those profiles.
  */
 
 /** Thread contraction: a stitch's rest length is (1 − strain) × its drawn length. */
