@@ -774,13 +774,26 @@ function buildColumn(
       if (ahead <= localHalf * 1.4 + cellMm) {
         const ext = ahead - cellMm * 0.5;
         if (ext > cellMm * 0.5) {
-          const p = { x: dense[i0].x + ux * ext, y: dense[i0].y + uy * ext };
-          if (atStart) {
-            dense.unshift(p);
-            halves.unshift(halves[0]);
-          } else {
-            dense.push(p);
-            halves.push(halves[halves.length - 1]);
+          // Extend with a CHAIN at the column's own sampling step, not a single
+          // far tip point. One point left a single long end segment, so the
+          // throw selector placed ONE over-wide row across the whole cap
+          // (pitch opened 0.38 → 0.65–1.0 mm at measured glyph terminals — a
+          // bare band at every stroke end). Chained samples keep cap rows at
+          // normal pitch right through the terminal.
+          const end = { x: dense[i0].x, y: dense[i0].y };
+          const h0 = atStart ? halves[0] : halves[halves.length - 1];
+          const step = Math.max(0.05, density / 4);
+          const n = Math.max(1, Math.ceil(ext / step));
+          for (let k = 1; k <= n; k++) {
+            const d = (ext * k) / n;
+            const p = { x: end.x + ux * d, y: end.y + uy * d };
+            if (atStart) {
+              dense.unshift(p); // increasing d unshifts → the tip lands at index 0
+              halves.unshift(h0);
+            } else {
+              dense.push(p);
+              halves.push(h0);
+            }
           }
         }
       }

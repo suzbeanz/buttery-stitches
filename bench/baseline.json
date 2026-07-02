@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-06-30T23:38:41.573Z",
+  "generatedAt": "2026-07-02T04:10:17.472Z",
   "summary": {
     "designs": 13,
-    "totalStitches": 17258,
+    "totalStitches": 17299,
     "totalTravelMm": 708.7,
     "meanTravelPct": "4.5%",
-    "meanFillCoverage": "94.8%"
+    "meanFillCoverage": "95%"
   },
   "results": [
     {
@@ -347,29 +347,29 @@
     {
       "name": "lettering-STITCH",
       "metrics": {
-        "stitches": 1134,
+        "stitches": 1175,
         "jumps": 5,
         "trims": 5,
         "colors": 1,
-        "threadLengthMm": 1907.1353338929437,
-        "runtimeMin": 1.7866666666666668,
+        "threadLengthMm": 1960.5236959696927,
+        "runtimeMin": 1.8452380952380953,
         "widthMm": 45.09757446208398,
         "heightMm": 14.329450666203535,
         "withinHoop": true,
-        "travelMm": 65.65082254722456,
-        "travelRatio": 0.033278225484757784,
+        "travelMm": 65.65534865904473,
+        "travelRatio": 0.03240352763152526,
         "stitchLen": {
           "min": 0.30000000000000426,
-          "mean": 1.6907228137348844,
-          "median": 1.9999703557218227,
+          "mean": 1.677094692873993,
+          "median": 1.9998149325966585,
           "p95": 2.8898795180723056,
           "max": 3.323999987182617,
-          "cv": 0.6003660157441087,
-          "shortPct": 0.3404255319148936
+          "cv": 0.612053345037531,
+          "shortPct": 0.33532934131736525
         },
-        "fillCoverage": 0.900479790636813,
-        "pullInMm": 0.016019037470810744,
-        "distortMaxMm": 0.383414941908407
+        "fillCoverage": 0.9243966269264321,
+        "pullInMm": 0.01565810898739081,
+        "distortMaxMm": 0.3854705364322197
       }
     }
   ]
