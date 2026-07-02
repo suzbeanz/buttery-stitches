@@ -36,7 +36,18 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.retry.outputs.page_url }}
     steps:
+      # GitHub Pages intermittently rejects or strands deployments ("Deployment
+      # failed, try again later" / stuck at deployment_queued), which leaves the
+      # live site stale until the next merge. Retry once after a pause before
+      # calling the run failed.
       - id: deployment
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+      - name: Wait before retrying a flaky Pages deployment
+        if: steps.deployment.outcome == 'failure'
+        run: sleep 120
+      - id: retry
+        if: steps.deployment.outcome == 'failure'
         uses: actions/deploy-pages@v4
