@@ -66,8 +66,12 @@ const TIE_COUNT = 3;
 /** Stitch length (mm) for a travel run connecting nearby same-color shapes. */
 const TRAVEL_STITCH = 2.5;
 /** Longest same-color gap (mm) we'll sew as a hidden travel UNDER later coverage
- *  rather than trim. Beyond this, a trim is cheaper than the extra thread. */
-const MAX_COVERED_TRAVEL = 40;
+ *  rather than trim. Generous — home machines cannot cut mid-color (a "trim"
+ *  jump just DRAGS a loose thread across the design; the sew-out that exposed
+ *  this had a 62mm drag down a satin pole), while a covered travel is stitched
+ *  flat and disappears under the later pass. Professional files bury travels of
+ *  any length rather than jump; the cap only bounds truly pathological walks. */
+const MAX_COVERED_TRAVEL = 150;
 /** Longest EXPOSED (un-hidden) same-color gap still bridged with a stitched
  *  travel rather than trimmed. Kept small so touching elements connect but
  *  anything that would show as a thread slash across open fabric is cut. */
@@ -1278,7 +1282,10 @@ export function generateDesign(
   // covers the path. The straight test above stays exact — this only kicks in
   // where a straight bridge would show.
   const COVERAGE_CELL = 1.0; // mm
-  const ROUTE_CAP = 60; // mm: longest buried detour worth sewing to dodge a trim
+  // mm: longest buried detour worth sewing to dodge a trim. Generous for the
+  // same reason as MAX_COVERED_TRAVEL — a mid-color "trim" is a loose drag on
+  // home machines, so nearly any covered detour beats it.
+  const ROUTE_CAP = 150;
   type Grid = { minX: number; minY: number; w: number; h: number; g: Uint8Array };
   const covByColor = new Map<string, Grid | null>();
   function coverage(colorId: string): Grid | null {
