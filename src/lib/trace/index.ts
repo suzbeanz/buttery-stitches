@@ -457,32 +457,33 @@ export function estimateColorComplexity(imageData: ImageData): number {
 
 /**
  * Suggest a sensible starting thread-color count for an image, graded between
- * `min` and `max` (not the old binary "logo→4 / photo→8"). We bucket sampled
- * pixels into the same 4-bit-per-channel space, then count how many of the most
- * frequent buckets it takes to cover ~92% of the (opaque) pixels — i.e. the
- * DOMINANT colors, ignoring anti-alias fringe and sparse noise. A flat 3-color
- * logo lands near 3; a busy illustration lands higher; a photo saturates at `max`.
+ * `min` and `max`. A card behind transparent margins is stripped first, so the
+ * backdrop neither counts as a colour nor swamps the shares (a white card is
+ * most of the pixels, and every real colour's share shrinks under it). Sampled
+ * pixels are bucketed coarsely (3 bits/channel, so anti-alias fringe lands in
+ * its parents' buckets) and a bucket counts as a thread-worthy colour when it
+ * covers ≥1.5% of the subject. Counting DISTINCT meaningful colours — not area
+ * coverage — is what keeps a small feature (a gold pole, a dark hole) counted
+ * even when one big colour dominates the pixels.
  */
 export function suggestColorCount(imageData: ImageData, min = 2, max = 12): number {
-  const { data } = imageData;
+  let img: { data: Uint8ClampedArray | number[] } = imageData;
+  if (borderIsTransparent(imageData)) {
+    const stripped = removeInnerBackdrop(imageData);
+    if (stripped) img = stripped.image;
+  }
+  const data = img.data as Uint8ClampedArray;
   const counts = new Map<number, number>();
   const step = Math.max(4, Math.floor(data.length / 4 / 4000)) * 4;
   let total = 0;
   for (let i = 0; i + 3 < data.length; i += step) {
     if (data[i + 3] < 8) continue; // skip transparent
-    const key = ((data[i] >> 4) << 8) | ((data[i + 1] >> 4) << 4) | (data[i + 2] >> 4);
+    const key = ((data[i] >> 5) << 10) | ((data[i + 1] >> 5) << 5) | (data[i + 2] >> 5);
     counts.set(key, (counts.get(key) ?? 0) + 1);
     total++;
   }
   if (total === 0) return min;
-  const freqs = [...counts.values()].sort((a, b) => b - a);
-  const target = total * 0.92;
-  let acc = 0;
   let n = 0;
-  for (const f of freqs) {
-    acc += f;
-    n++;
-    if (acc >= target) break;
-  }
+  for (const f of counts.values()) if (f / total >= 0.015) n++;
   return Math.max(min, Math.min(max, n));
 }

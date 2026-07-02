@@ -592,3 +592,28 @@ describe("imageDataToObjects — clipart on a card (the downloaded-image layouts
     expect(oranges.length).toBe(0);
   });
 });
+
+describe("suggestColorCount — clipart on a card", () => {
+  it("counts the subject's colors, not the card, and keeps small features", () => {
+    // Transparent margins around a white card holding four colors: a big green
+    // field plus a small red mark, a small gold bar, and a dark spot. The card
+    // must not count as a color OR dilute the small features out of the count.
+    const w = 160, h = 80;
+    const data = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        let c: number[] | null = null;
+        if (x >= 40 && x < 120) {
+          c = [255, 255, 255]; // the card
+          if (x >= 50 && x < 110 && y >= 20 && y < 70) c = [50, 150, 60]; // green field
+          if (x >= 55 && x < 70 && y >= 25 && y < 35) c = [220, 40, 40]; // red mark
+          if (x >= 90 && x < 105 && y >= 25 && y < 32) c = [230, 170, 50]; // gold bar
+          if (x >= 70 && x < 80 && y >= 50 && y < 60) c = [25, 60, 30]; // dark spot
+        }
+        if (c) { data[i] = c[0]; data[i + 1] = c[1]; data[i + 2] = c[2]; data[i + 3] = 255; }
+      }
+    const img = { width: w, height: h, data } as unknown as ImageData;
+    expect(suggestColorCount(img)).toBe(4);
+  });
+});

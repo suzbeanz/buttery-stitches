@@ -234,6 +234,25 @@ describe("removeInnerBackdrop", () => {
     expect(removeInnerBackdrop(img)).toBeNull();
   });
 
+  it("stops peeling at the card: a rectangular subject layer behind it survives", () => {
+    // White card on transparent margins; ON the card a rectangular green field
+    // with a red mark inside. Stripping must take the card and STOP — the green
+    // field is the subject (it is rectangular and dominates the new boundary,
+    // but the card was the first LARGE strip).
+    const img = image(60, 40, (x, y) => {
+      if (x < 15 || x >= 45) return [0, 0, 0, 0];
+      if (x >= 22 && x < 26 && y >= 16 && y < 20) return [220, 40, 40, 255]; // red mark
+      if (x >= 19 && x < 41 && y >= 8 && y < 32) return [40, 160, 60, 255]; // green field
+      return [255, 255, 255, 255]; // the card
+    });
+    const res = removeInnerBackdrop(img);
+    expect(res).not.toBeNull();
+    const { image: out } = res!;
+    expect(at(out, 16, 3).a).toBe(0); // card stripped
+    expect(at(out, 20, 10).a).toBe(255); // green field survives
+    expect(at(out, 23, 17).a).toBe(255); // red mark survives
+  });
+
   it("leaves a solid one-colour rectangle alone — it IS the subject, not a card", () => {
     const img = image(60, 40, (x) => (x < 15 || x >= 45 ? [0, 0, 0, 0] : [40, 80, 200, 255]));
     expect(removeInnerBackdrop(img)).toBeNull();
