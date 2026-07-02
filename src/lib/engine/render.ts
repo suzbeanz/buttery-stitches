@@ -38,6 +38,45 @@ export function designToSegments(
   return segs;
 }
 
+/**
+ * Incrementally extend a previous {@link designToSegments} result to a larger
+ * `upTo` — the playback fast-path. The simulator advances `upTo` every animation
+ * frame; re-walking the whole design from 0 allocated a fresh segment list per
+ * frame (O(n) per frame, O(n²) per playback, GC churn at 50k+ stitches).
+ *
+ * MUTATES `prev.segs` (appends points/segments in place) and returns it — the
+ * caller owns the cache and must rebuild via designToSegments whenever the
+ * design changes or `upTo` moves backwards (scrubbing left). Equivalence with a
+ * fresh full walk is pinned by tests.
+ */
+export function extendSegments(
+  design: EngineStitch[],
+  prev: { upTo: number; segs: RenderSegment[] },
+  upTo: number,
+): { upTo: number; segs: RenderSegment[] } {
+  const from = Math.max(0, Math.min(Math.floor(prev.upTo), design.length));
+  const n = Math.max(0, Math.min(Math.floor(upTo), design.length));
+  const segs = prev.segs;
+  // Resume state: the open segment is the last one, unless the boundary event
+  // (a jump) closed it — replaying design[from-1] tells us which.
+  let cur: RenderSegment | null = segs.length > 0 ? segs[segs.length - 1] : null;
+  if (from > 0 && design[from - 1]?.jump) cur = null;
+  for (let i = from; i < n; i++) {
+    const s = design[i];
+    if (s.jump) {
+      cur = null;
+      continue;
+    }
+    if (!cur || cur.colorId !== s.colorId || cur.underlay !== !!s.underlay) {
+      cur = { colorId: s.colorId, underlay: !!s.underlay, points: [] };
+      segs.push(cur);
+    }
+    cur.points.push({ x: s.x, y: s.y });
+  }
+  prev.upTo = n;
+  return prev;
+}
+
 /** The needle position after `upTo` events (the last real penetration). */
 export function needleAt(design: EngineStitch[], upTo: number): Point | null {
   // Floor `upTo` (fractional during playback) so `i` is always an integer index;

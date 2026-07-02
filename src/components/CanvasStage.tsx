@@ -49,7 +49,7 @@ import { mmToInch } from "../lib/units";
 import ContextMenu from "./ContextMenu";
 import { buildTestSwatch } from "../lib/samples/swatch";
 import { designFor, orientByDepth } from "../lib/engine";
-import { designToSegments, needleAt } from "../lib/engine/render";
+import { extendSegments, designToSegments, type RenderSegment, needleAt } from "../lib/engine/render";
 import { drawStitches } from "../lib/render-stitches";
 
 /**
@@ -1907,6 +1907,11 @@ function DraftPreview({
 /** Read-only render of the assembled stitches, up to the simulator cursor.
  * Subscribes to `simIndex` itself so playback re-renders only this view, not the
  * whole (hidden) edit layer. */
+/** Above this stitch count the realistic (fuzzy-thread) render auto-falls back
+ *  to the flat thread render during playback — beyond it the multi-pass fiber
+ *  strokes drop the simulator below 60fps. */
+const REALISTIC_MAX_STITCHES = 20000;
+
 function StitchView({
   design,
   colorById,
@@ -1920,8 +1925,27 @@ function StitchView({
 }) {
   const upTo = useEditorStore((s) => s.simIndex);
   const realistic = useEditorStore((s) => s.realistic);
-  const segs = useMemo(() => designToSegments(design, upTo), [design, upTo]);
+  // Playback advances upTo every animation frame; a full re-segmentation per
+  // frame is O(n) allocations (O(n²) per playback — GC churn at 50k stitches).
+  // Keep an incremental cache and EXTEND it while upTo moves forward; rebuild
+  // only when the design changes or the user scrubs backwards.
+  const segCache = useRef<{ design: typeof design; upTo: number; segs: RenderSegment[] } | null>(null);
+  const segs = useMemo(() => {
+    const c = segCache.current;
+    if (!c || c.design !== design || Math.floor(upTo) < c.upTo) {
+      segCache.current = { design, upTo: Math.floor(Math.max(0, Math.min(upTo, design.length))), segs: designToSegments(design, upTo) };
+      return segCache.current.segs;
+    }
+    extendSegments(design, c, upTo);
+    // The array is mutated in place; return a stable reference (the Shape's
+    // sceneFunc reads it fresh each draw, so identity doesn't matter here).
+    return c.segs;
+  }, [design, upTo]);
   const needle = useMemo(() => needleAt(design, upTo), [design, upTo]);
+  // Realistic mode strokes each segment ~4x plus two per-vertex fiber passes —
+  // beautiful up to a point, sub-60fps past it. Auto-fall back to the flat
+  // thread render on very large designs so playback stays smooth.
+  const effectiveRealistic = realistic && design.length <= REALISTIC_MAX_STITCHES;
   // Render the whole preview as ONE custom canvas Shape rather than hundreds of
   // <Line> nodes: during playback simIndex changes every frame, and reconciling
   // hundreds of Konva nodes per frame is both slow and fragile (it was crashing
@@ -1956,7 +1980,7 @@ function StitchView({
           // visual-only (listening false), so bypassing Konva's hit tracing here
           // is safe.
           const native = (ctx as unknown as { _context: CanvasRenderingContext2D })._context;
-          drawStitches(native, segs, { colorById, px, py, threadPx, realistic });
+          drawStitches(native, segs, { colorById, px, py, threadPx, realistic: effectiveRealistic });
         }}
       />
       {needle && (
