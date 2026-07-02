@@ -103,3 +103,49 @@ describe("smart-shape recognition", () => {
     expect(recognizeShape(blob, 0.6)).toBeNull();
   });
 });
+
+describe("narrow / asymmetric shapes (a traced flag pole)", () => {
+  /** A 3 mm-wide bar, ~63 mm tall, slightly tapered at the foot (asymmetric — the
+   *  centroid sits below the middle) with mildly wobbly traced edges. */
+  const bar = (): Path => {
+    const ring: Path = [];
+    for (let i = 0; i <= 20; i++) ring.push({ x: 3 + Math.sin(i) * 0.15, y: (i / 20) * 63 });
+    ring.push({ x: 2.2, y: 63.4 }, { x: 0.8, y: 63.4 }); // tapered foot
+    for (let i = 20; i >= 0; i--) ring.push({ x: 0 + Math.sin(i * 1.3) * 0.15, y: (i / 20) * 63 });
+    ring.push({ x: 1.5, y: -0.4 }); // slightly domed head
+    return ring;
+  };
+
+  it("never snaps to a primitive that overshoots the artwork", () => {
+    // The old symmetric-about-the-centroid fit turned this bar into a cigar
+    // ellipse poking ~5 mm above the artwork (a flag pole sticking through the
+    // sky). Whatever the recognizer decides, the result must stay inside the
+    // source's bounds (small tolerance for rounding).
+    const r = recognizeShape(bar(), 1.0);
+    if (r) {
+      const ys = r.ring.map((p) => p.y);
+      const xs = r.ring.map((p) => p.x);
+      expect(Math.min(...ys)).toBeGreaterThan(-1);
+      expect(Math.max(...ys)).toBeLessThan(64.4);
+      expect(Math.min(...xs)).toBeGreaterThan(-1);
+      expect(Math.max(...xs)).toBeLessThan(4.2);
+    }
+  });
+
+  it("still recognizes an asymmetrically-traced true ellipse, centred correctly", () => {
+    // A clean ellipse whose ring SAMPLING is denser on one side (as traces are);
+    // midrange-centred fitting must recover the true centre and extents.
+    const ring: Path = [];
+    for (let i = 0; i < 80; i++) {
+      const t = (i / 80) ** 1.35 * 2 * Math.PI; // uneven parametrisation
+      ring.push({ x: 20 + 14 * Math.cos(t), y: 10 + 6 * Math.sin(t) });
+    }
+    const r = recognizeShape(ring, 0.8);
+    expect(r?.kind).toBe("ellipse");
+    const xs = r!.ring.map((p) => p.x), ys = r!.ring.map((p) => p.y);
+    expect(Math.min(...xs)).toBeCloseTo(6, 0);
+    expect(Math.max(...xs)).toBeCloseTo(34, 0);
+    expect(Math.min(...ys)).toBeCloseTo(4, 0);
+    expect(Math.max(...ys)).toBeCloseTo(16, 0);
+  });
+});
