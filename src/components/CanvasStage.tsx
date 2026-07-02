@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   X,
   Image as ImageIcon,
@@ -108,8 +108,11 @@ export default function CanvasStage() {
 
   const tool = useEditorStore((s) => s.tool);
   const shapeKind = useEditorStore((s) => s.shapeKind);
-  const draft = useEditorStore((s) => s.draft);
-  const cursorMm = useEditorStore((s) => s.cursorMm);
+  // Subscribe only to EMPTINESS, not the point list: the pencil/point tools grow
+  // the draft on every ~0.8mm of cursor travel, and a full CanvasStage render per
+  // point re-rendered every object on the canvas. The live rubber-band preview
+  // subscribes to the full draft + cursor itself (LiveDraftPreview below).
+  const draftEmpty = useEditorStore((s) => s.draft.length === 0);
   const satinRailA = useEditorStore((s) => s.satinRailA);
   const rulerUnit = useEditorStore((s) => s.rulerUnit);
   const fabricColor = useEditorStore((s) => s.fabricColor);
@@ -239,12 +242,14 @@ export default function CanvasStage() {
   const openW = hoopW + HOOP_MARGIN * 2;
   const openH = hoopH + HOOP_MARGIN * 2;
 
-  const px = (xMm: number) => originX + xMm * scale;
-  const py = (yMm: number) => originY + yMm * scale;
-  const toMm = (sx: number, sy: number): Point => ({
+  // Stable per pan/zoom state so memoized objects skip re-renders on unrelated
+  // updates (a cursor move must not re-render the whole object list).
+  const px = useCallback((xMm: number) => originX + xMm * scale, [originX, scale]);
+  const py = useCallback((yMm: number) => originY + yMm * scale, [originY, scale]);
+  const toMm = useCallback((sx: number, sy: number): Point => ({
     x: (sx - originX) / scale,
     y: (sy - originY) / scale,
-  });
+  }), [originX, originY, scale]);
 
   // Re-zoom so the mm point currently under (anchorX, anchorY) px stays put.
   function zoomToAnchor(nextZoom: number, anchorX: number, anchorY: number) {
@@ -300,6 +305,39 @@ export default function CanvasStage() {
   // --- selection / transform plumbing ---
   const nodeRefs = useRef(new Map<string, Konva.Group>());
   const trRef = useRef<Konva.Transformer>(null);
+
+  // Stable, id-taking handlers so the memoized ObjectShape children keep the
+  // same prop identities across renders (fresh state is read via getState()).
+  const handleRegisterNode = useCallback((id: string, n: Konva.Group | null) => {
+    if (n) nodeRefs.current.set(id, n);
+    else nodeRefs.current.delete(id);
+  }, []);
+  const handleSelect = useCallback((id: string, additive: boolean) => {
+    const store = useProjectStore.getState();
+    if (!additive) return store.setSelection([id]);
+    const cur = store.selectedIds;
+    store.setSelection(cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
+  }, []);
+  const handleCommitPaths = useCallback((id: string, paths: Path[], satinCenterlines?: Path[]) => {
+    useProjectStore.getState().updateObject(id, { paths, satinCenterlines });
+  }, []);
+  const handleCommitNodes = useCallback((id: string, nodes: NodePath[]) => {
+    const o = useProjectStore.getState().project.objects.find((x) => x.id === id);
+    useProjectStore.getState().updateObject(id, { nodes, paths: pathsFromNodes(nodes, o?.type === "fill") });
+  }, []);
+  const handleMoveSelected = useCallback((dxMm: number, dyMm: number) => {
+    const store = useProjectStore.getState();
+    store.moveObjects(store.selectedIds, dxMm, dyMm);
+  }, []);
+  const handleMultiDrag = useCallback((id: string, dxPx: number, dyPx: number) => {
+    // Move every OTHER selected object's node by the live drag offset (or back
+    // to 0 on release), so the group tracks the cursor together.
+    for (const sid of useProjectStore.getState().selectedIds) {
+      if (sid === id) continue;
+      nodeRefs.current.get(sid)?.position({ x: dxPx, y: dyPx });
+    }
+  }, []);
+  const hoopMm = useMemo(() => ({ wMm: hoop.wMm, hMm: hoop.hMm }), [hoop.wMm, hoop.hMm]);
   // Right-click context menu: screen position, or null when closed.
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
 
@@ -334,7 +372,7 @@ export default function CanvasStage() {
   function finishDraft() {
     // Two-rail satin: first finish captures edge A, the second builds the column.
     if (tool === "satin2") {
-      const rail = dedupePath(draft);
+      const rail = dedupePath(useEditorStore.getState().draft);
       if (rail.length < 2) {
         clearDraft();
         return;
@@ -356,7 +394,7 @@ export default function CanvasStage() {
     }
     // Appliqué: a closed outline stitched as placement → cover (params.applique).
     if (tool === "applique") {
-      let ring = dedupePath(draft);
+      let ring = dedupePath(useEditorStore.getState().draft);
       if (ring.length >= 4 && distance(ring[0], ring[ring.length - 1]) < JOIN_SNAP_MM) {
         ring = ring.slice(0, -1);
       }
@@ -376,7 +414,7 @@ export default function CanvasStage() {
       return;
     }
     if (!isDrawTool(tool)) return;
-    let cleaned = dedupePath(draft); // drop double-click / stationary dupes
+    let cleaned = dedupePath(useEditorStore.getState().draft); // drop double-click / stationary dupes
     // Smart snap-join: when closing a fill polygon, if the last point lands near
     // the first, drop it so the closing edge meets cleanly instead of leaving a
     // tiny overlapping sliver.
@@ -599,7 +637,7 @@ export default function CanvasStage() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tool, draft, selectedIds, activeColorId, smooth]);
+  }, [tool, draftEmpty, selectedIds, activeColorId, smooth]);
 
   // Drop the ruler segment when you leave the Measure tool.
   useEffect(() => {
@@ -1275,44 +1313,19 @@ export default function CanvasStage() {
                       object={o}
                       tool={tool}
                       selected={selectedIds.includes(o.id)}
+                      multiSelected={selectedIds.length > 1}
                       color={colorById.get(o.colorId)}
                       px={px}
                       py={py}
                       toMm={toMm}
-                      registerNode={(n) => {
-                        if (n) nodeRefs.current.set(o.id, n);
-                        else nodeRefs.current.delete(o.id);
-                      }}
-                      onSelect={(additive) => {
-                        if (!additive) return setSelection([o.id]);
-                        const cur = useProjectStore.getState().selectedIds;
-                        setSelection(
-                          cur.includes(o.id)
-                            ? cur.filter((id) => id !== o.id)
-                            : [...cur, o.id],
-                        );
-                      }}
-                      onCommitPaths={(paths, satinCenterlines) =>
-                        updateObject(o.id, { paths, satinCenterlines })
-                      }
-                      onCommitNodes={(nodes) =>
-                        updateObject(o.id, { nodes, paths: pathsFromNodes(nodes, o.type === "fill") })
-                      }
-                      selectedIds={selectedIds}
-                      onMoveSelected={(dx, dy) =>
-                        useProjectStore.getState().moveObjects(selectedIds, dx, dy)
-                      }
-                      onMultiDrag={(dxPx, dyPx) => {
-                        // Move every OTHER selected object's node by the live drag
-                        // offset (or back to 0 on release), so the group tracks
-                        // the cursor together.
-                        for (const id of selectedIds) {
-                          if (id === o.id) continue;
-                          nodeRefs.current.get(id)?.position({ x: dxPx, y: dyPx });
-                        }
-                      }}
-                      hoopMm={{ wMm: hoop.wMm, hMm: hoop.hMm }}
-                      targets={objectBounds.filter((x) => x.id !== o.id).map((x) => x.b)}
+                      registerNode={handleRegisterNode}
+                      onSelect={handleSelect}
+                      onCommitPaths={handleCommitPaths}
+                      onCommitNodes={handleCommitNodes}
+                      onMoveSelected={handleMoveSelected}
+                      onMultiDrag={handleMultiDrag}
+                      hoopMm={hoopMm}
+                      allBounds={objectBounds}
                       onGuides={setGuides}
                     />
                   ))}
@@ -1460,10 +1473,9 @@ export default function CanvasStage() {
                   />
                 )}
 
-                {(drawing || freehand) && draft.length > 0 && (
-                  <DraftPreview
-                    draft={draft}
-                    cursor={freehand ? null : cursorMm}
+                {(drawing || freehand) && (
+                  <LiveDraftPreview
+                    freehand={freehand}
                     closed={tool === "fill" || tool === "brush" || tool === "applique"}
                     smooth={smooth || freehand}
                     px={px}
@@ -1592,7 +1604,7 @@ export default function CanvasStage() {
 
       {viewMode === "edit" &&
         project.objects.length === 0 &&
-        draft.length === 0 &&
+        draftEmpty &&
         !startDismissed && (
         // Tapping the empty area dismisses the hint; the X button gives the keyboard path.
         // eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
@@ -1813,6 +1825,37 @@ function shapePreviewRings(kind: ShapeKind, start: Point, end: Point): Path[] {
   return translatePaths(shapeRings(kind, { width: w, height: h }), c.x, c.y);
 }
 
+/** Self-subscribing wrapper for the draw-tool rubber band. It — not CanvasStage —
+ *  subscribes to the per-mousemove draft/cursor state, so live drawing re-renders
+ *  ONLY this preview instead of every object on the canvas. */
+function LiveDraftPreview({
+  freehand,
+  closed,
+  smooth,
+  px,
+  py,
+}: {
+  freehand: boolean;
+  closed: boolean;
+  smooth: boolean;
+  px: (x: number) => number;
+  py: (y: number) => number;
+}) {
+  const draft = useEditorStore((s) => s.draft);
+  const cursorMm = useEditorStore((s) => s.cursorMm);
+  if (draft.length === 0) return null;
+  return (
+    <DraftPreview
+      draft={draft}
+      cursor={freehand ? null : cursorMm}
+      closed={closed}
+      smooth={smooth}
+      px={px}
+      py={py}
+    />
+  );
+}
+
 function DraftPreview({
   draft,
   cursor,
@@ -1962,10 +2005,14 @@ function insertPointOnRing(ring: Path, at: Point, closed: boolean): Path | null 
   return out;
 }
 
-function ObjectShape({
+/** Memoized: with stable id-taking handlers from CanvasStage, an unrelated
+ *  update (another object's edit, a selection toggle elsewhere) skips
+ *  re-rendering this object entirely. */
+const ObjectShape = memo(function ObjectShape({
   object,
   tool,
   selected,
+  multiSelected,
   color,
   px,
   py,
@@ -1974,34 +2021,39 @@ function ObjectShape({
   onSelect,
   onCommitPaths,
   onCommitNodes,
-  selectedIds,
   onMoveSelected,
   onMultiDrag,
   hoopMm,
-  targets,
+  allBounds,
   onGuides,
 }: {
   object: EmbObject;
   tool: string;
   selected: boolean;
+  /** more than one object is selected (drag moves the whole selection). */
+  multiSelected: boolean;
   color?: ThreadColor;
   px: (x: number) => number;
   py: (y: number) => number;
   toMm: (sx: number, sy: number) => Point;
-  registerNode: (node: Konva.Group | null) => void;
-  onSelect: (additive: boolean) => void;
-  onCommitPaths: (paths: Path[], satinCenterlines?: Path[]) => void;
-  onCommitNodes: (nodes: NodePath[]) => void;
-  selectedIds: string[];
+  registerNode: (id: string, node: Konva.Group | null) => void;
+  onSelect: (id: string, additive: boolean) => void;
+  onCommitPaths: (id: string, paths: Path[], satinCenterlines?: Path[]) => void;
+  onCommitNodes: (id: string, nodes: NodePath[]) => void;
   onMoveSelected: (dxMm: number, dyMm: number) => void;
   /** Drag every OTHER selected object's node to this px offset (0,0 to reset). */
-  onMultiDrag: (dxPx: number, dyPx: number) => void;
+  onMultiDrag: (id: string, dxPx: number, dyPx: number) => void;
   hoopMm: { wMm: number; hMm: number };
-  targets: Bounds[];
+  /** every object's bounds; own id is filtered out for snap targets. */
+  allBounds: { id: string; b: Bounds }[];
   onGuides: (g: { x: number[]; y: number[] }) => void;
 }) {
   // Part of a multi-selection: dragging moves every selected object together.
-  const multi = selected && selectedIds.length > 1;
+  const multi = selected && multiSelected;
+  const targets = useMemo(
+    () => allBounds.filter((x) => x.id !== object.id).map((x) => x.b),
+    [allBounds, object.id],
+  );
   const snapEnabled = useEditorStore((s) => s.snapEnabled);
   // px per mm — for converting a snap offset (mm) back to canvas pixels.
   const scalePx = px(1) - px(0);
@@ -2040,15 +2092,15 @@ function ObjectShape({
 
   return (
     <Group
-      ref={registerNode}
+      ref={(n) => registerNode(object.id, n)}
       draggable={movable}
       onMouseDown={
         selectable
           ? (e) => {
               // Shift-click toggles this object in/out of the selection.
-              if (e.evt.shiftKey) onSelect(true);
+              if (e.evt.shiftKey) onSelect(object.id, true);
               // A fresh click selects just this one (so it can then be dragged).
-              else if (!selected) onSelect(false);
+              else if (!selected) onSelect(object.id, false);
               // Already selected, no shift: KEEP the selection so a multi-object
               // drag isn't collapsed to one. A plain click that doesn't drag
               // narrows to this object via onClick below.
@@ -2059,11 +2111,11 @@ function ObjectShape({
         selectable
           ? (e) => {
               // Click (not a drag) on a member of a multi-selection → narrow to it.
-              if (!e.evt.shiftKey && selected && selectedIds.length > 1) onSelect(false);
+              if (!e.evt.shiftKey && selected && multiSelected) onSelect(object.id, false);
             }
           : undefined
       }
-      onTap={selectable ? () => onSelect(false) : undefined}
+      onTap={selectable ? () => onSelect(object.id, false) : undefined}
       onDblClick={
         object.text ? () => useEditorStore.getState().setEditingTextId(object.id) : undefined
       }
@@ -2075,7 +2127,7 @@ function ObjectShape({
           // Moving a group: drag every other selected object's node by the same
           // offset live (skip per-object snapping) so the whole selection tracks
           // the cursor, not just the one under it.
-          onMultiDrag(e.target.x(), e.target.y());
+          onMultiDrag(object.id, e.target.x(), e.target.y());
           e.target.getLayer()?.batchDraw();
           return;
         }
@@ -2116,13 +2168,14 @@ function ObjectShape({
         const dxMm = b.x - a.x;
         const dyMm = b.y - a.y;
         if (multi) {
-          onMultiDrag(0, 0); // snap sibling nodes back; the store move repositions all
+          onMultiDrag(object.id, 0, 0); // snap sibling nodes back; the store move repositions all
           onMoveSelected(dxMm, dyMm);
         } else if (nodeRings) {
           // Keep the editable nodes in step with the move (don't drop the curve).
-          onCommitNodes(translateNodes(nodeRings, dxMm, dyMm));
+          onCommitNodes(object.id, translateNodes(nodeRings, dxMm, dyMm));
         } else {
           onCommitPaths(
+            object.id,
             translatePaths(object.paths, dxMm, dyMm),
             object.satinCenterlines ? translatePaths(object.satinCenterlines, dxMm, dyMm) : undefined,
           );
@@ -2138,7 +2191,7 @@ function ObjectShape({
           const movedNodes = applyMatrix(pxNodes, m).map((r, ri) =>
             r.map((p, pi) => ({ ...toMm(p.x, p.y), smooth: nodeRings[ri][pi].smooth })),
           );
-          onCommitNodes(movedNodes);
+          onCommitNodes(object.id, movedNodes);
           return;
         }
         const pxPaths = object.paths.map((path) =>
@@ -2155,7 +2208,7 @@ function ObjectShape({
               m,
             ).map((path) => path.map((p) => toMm(p.x, p.y)))
           : undefined;
-        onCommitPaths(movedMm, movedCenters);
+        onCommitPaths(object.id, movedMm, movedCenters);
       }}
     >
       {/* Fill objects get a translucent body drawn with the nonzero rule (rings
@@ -2229,10 +2282,10 @@ function ObjectShape({
                   const at = toMm(pos.x, pos.y);
                   if (nodeRings) {
                     const nodes = nodeRings.map((r, i) => (i === pi ? insertNode(r, at, closedRings) : r));
-                    onCommitNodes(nodes);
+                    onCommitNodes(object.id, nodes);
                   } else {
                     const ring = insertPointOnRing(object.paths[pi], at, object.type === "fill");
-                    if (ring) onCommitPaths(object.paths.map((pp, i) => (i === pi ? ring : pp)));
+                    if (ring) onCommitPaths(object.id, object.paths.map((pp, i) => (i === pi ? ring : pp)));
                   }
                 }
               : undefined
@@ -2258,7 +2311,7 @@ function ObjectShape({
             };
             const commit = (e: Konva.KonvaEventObject<DragEvent>) => {
               const m = toMm(e.target.x(), e.target.y());
-              onCommitNodes(nodeRings.map((r, ri) => (ri === pi ? moveNode(r, ti, m) : r)));
+              onCommitNodes(object.id, nodeRings.map((r, ri) => (ri === pi ? moveNode(r, ti, m) : r)));
               setLivePaths(null);
             };
             const common = {
@@ -2271,7 +2324,7 @@ function ObjectShape({
               onClick: select,
               onTap: select,
               onDblClick: () =>
-                onCommitNodes(nodeRings.map((r, ri) => (ri === pi ? toggleNodeSmooth(r, ti) : r))),
+                onCommitNodes(object.id, nodeRings.map((r, ri) => (ri === pi ? toggleNodeSmooth(r, ti) : r))),
               onDragStart: select,
               onDragMove: liveMove,
               onDragEnd: commit,
@@ -2331,7 +2384,7 @@ function ObjectShape({
                 });
               }}
               onDragEnd={() => {
-                if (livePaths) onCommitPaths(livePaths);
+                if (livePaths) onCommitPaths(object.id, livePaths);
                 setLivePaths(null);
               }}
             />
@@ -2340,4 +2393,4 @@ function ObjectShape({
         )}
     </Group>
   );
-}
+});
