@@ -239,9 +239,12 @@ export async function exportToBytes(
       `export_bytes(__plan_json, __fmt, __pes_version)`,
     )) as { toJs: () => Uint8Array; destroy: () => void };
 
-    const bytes = result.toJs();
-    result.destroy();
-    return bytes;
+    // destroy() in finally so the PyProxy can't leak if toJs() throws.
+    try {
+      return result.toJs();
+    } finally {
+      result.destroy();
+    }
   });
   // Keep the chain alive even if this export rejects, so a failure doesn't
   // permanently wedge later exports.
@@ -278,6 +281,12 @@ export interface ImportedPlan {
   blocks: { rgb: number; runs: [number, number][][] }[];
 }
 
+/** Hard ceiling on an imported file's size. Real embroidery files are well under
+ *  1 MB (the largest commercial designs run a few hundred KB); a crafted
+ *  multi-megabyte file could exhaust the WASM heap / crash the tab while
+ *  pyembroidery expands it into stitch lists. 16 MB is generous headroom. */
+export const MAX_IMPORT_BYTES = 16 * 1024 * 1024;
+
 /** Read an embroidery file's bytes into an {@link ImportedPlan} via pyembroidery.
  *  Serialized through the same chain as exports so they never clobber globals. */
 export async function importDesignBytes(
@@ -285,6 +294,11 @@ export async function importDesignBytes(
   format: EmbFormat,
   onStage?: (stage: LoadStage) => void,
 ): Promise<ImportedPlan> {
+  if (bytes.byteLength > MAX_IMPORT_BYTES) {
+    throw new Error(
+      `This file is ${(bytes.byteLength / 1024 / 1024).toFixed(1)} MB — embroidery files are far smaller. It may be corrupt or not an embroidery file.`,
+    );
+  }
   const run = exportChain.then(async () => {
     const pyodide = await getPyodide(onStage);
     await ensurePython(pyodide);
