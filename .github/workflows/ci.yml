@@ -69,5 +69,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Each oracle is TWO stages: the .ts half (vite-node — pyodide can't
+      # resolve under it) emits our encoder's bytes to /tmp, then the .mjs half
+      # (plain node + Pyodide) generates pyembroidery's and compares.
+      - run: npx vite-node scripts/oracle-pes.ts
       - run: node scripts/oracle-pes.mjs
+      - run: npx vite-node scripts/oracle-dst.ts
       - run: node scripts/oracle-dst.mjs
