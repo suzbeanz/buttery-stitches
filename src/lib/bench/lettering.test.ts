@@ -27,10 +27,11 @@ describe("lettering (satin, real font)", () => {
     expect(design.length).toBeGreaterThan(200);
     const m = benchMetrics(project);
     // The satin lettering should cover its glyphs and not strand them. Under the
-    // honest 0.3mm-thread metric, thin curved satin reads ~0.87 (satin line density
-    // is a separate follow-up); the bar still pins "mostly covered, not stranded".
+    // honest 0.3mm-thread metric this reads ~0.92 now that terminal caps keep
+    // full row pitch (medial extendEnd chains its extension samples); the
+    // remaining gap is the deliberate 0.3mm thread model on ~0.38mm satin pitch.
     expect(m.fillCoverage).not.toBeNull();
-    expect(m.fillCoverage!).toBeGreaterThan(0.85);
+    expect(m.fillCoverage!).toBeGreaterThan(0.9);
     expect(m.travelRatio).toBeLessThan(0.12);
     // Roughly one trim per inter-glyph gap — not a trim storm.
     expect(m.trims).toBeLessThanOrEqual(8);
