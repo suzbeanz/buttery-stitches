@@ -94,7 +94,7 @@ export default function DesignPanel() {
 
   return (
     <div className="flex flex-col gap-3 border-b border-navy/25 p-3 text-sm">
-      <div className="font-label text-xs font-semibold uppercase tracking-[0.14em] text-ink-deep">
+      <div className="font-label text-xs font-semibold uppercase tracking-[0.1em] text-ink-deep">
         Design
       </div>
 
@@ -104,7 +104,7 @@ export default function DesignPanel() {
         <select
           value={presetIndex === -1 ? "custom" : presetIndex}
           onChange={(e) => onHoopPreset(e.target.value)}
-          className="input"
+          className="select"
         >
           {HOOP_PRESETS.map((h, i) => (
             <option key={h.name} value={i}>
@@ -176,7 +176,7 @@ export default function DesignPanel() {
           </label>
           <button
             onClick={() => updateProject({ objects: fitToHoop(objects, hoop) })}
-            className="rounded-sm border-2 border-ink bg-ink px-3 py-1.5 font-label text-xs font-semibold uppercase tracking-[0.12em] text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none"
+            className="rounded-sm border-2 border-ink bg-ink px-3 py-1.5 font-label text-xs font-semibold uppercase tracking-[0.1em] text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none"
           >
             Fit to hoop
           </button>
@@ -261,7 +261,7 @@ function ThreadsSection() {
         ))}
       </ul>
 
-      <select value={chartId} onChange={(e) => setChartId(e.target.value)} className="input">
+      <select value={chartId} onChange={(e) => setChartId(e.target.value)} className="select">
         {THREAD_CHARTS.map((ch) => (
           <option key={ch.id} value={ch.id}>{ch.name}</option>
         ))}
@@ -282,7 +282,7 @@ function ThreadsSection() {
             max={colors.length}
             value={reduceN}
             onChange={(e) => setReduceN(Number(e.target.value) || 1)}
-            className="input"
+            className="input no-spin"
           />
         </label>
         <button
@@ -323,7 +323,7 @@ function FabricTypePicker() {
       <select
         value={fabric}
         onChange={(e) => updateProject({ fabric: e.target.value as FabricType })}
-        className="input"
+        className="select"
       >
         {(Object.keys(FABRICS) as FabricType[]).map((id) => (
           <option key={id} value={id}>
@@ -352,7 +352,7 @@ function ThreadWeightPicker() {
       <select
         value={weight}
         onChange={(e) => updateProject({ threadWeight: Number(e.target.value) as ThreadWeight })}
-        className="input"
+        className="select"
       >
         {THREAD_WEIGHTS.map((t) => (
           <option key={t.value} value={t.value}>
