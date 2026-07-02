@@ -357,12 +357,15 @@ function ObjectProperties({
   const p = object.params;
 
   // Live stitch count for the selected object (recomputed only when it changes).
+  // null = the engine THREW for this object — show that honestly instead of a
+  // plausible-looking 0 that masks a real failure.
   const stitchCount = useMemo(() => {
     try {
       const { underlay, main } = generateObjectStitches(object);
       return underlay.length + main.length;
-    } catch {
-      return 0;
+    } catch (err) {
+      console.error("Stitch generation failed for object", object.id, err);
+      return null;
     }
   }, [object]);
 
@@ -644,7 +647,7 @@ function ObjectProperties({
           Stitches
         </span>
         <span className="font-mono text-xs tabular-nums">
-          {stitchCount.toLocaleString()}
+          {stitchCount === null ? "error" : stitchCount.toLocaleString()}
         </span>
       </div>
     </div>

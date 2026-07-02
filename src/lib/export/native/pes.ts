@@ -12,13 +12,15 @@ import type { StitchPlan, PlanCmd } from "../index";
  * palette, a u24 pointer to the stitch stream, three thumbnail bitmaps, and the
  * relative-move stitch stream itself.
  *
- * This is a byte-for-byte re-implementation of pyembroidery 1.5.1's
- * `write_pes(pattern, f, {"version": 1})` for the exact pattern our plan→pattern
- * mapping produces (see src/lib/export/embroidery.py: between colour blocks a
- * TRIM then COLOR_CHANGE; END at the finish). It is validated against
- * pyembroidery as an oracle (scripts/oracle-pes.ts / .mjs), so the file it
- * produces is the same one the Python path produced — without the runtime
- * download that fails on memory-constrained phones.
+ * This re-implements pyembroidery 1.5.1's `write_pes(pattern, f, {"version": 1})`
+ * for the exact pattern our plan→pattern mapping produces (see
+ * src/lib/export/embroidery.py: between colour blocks a TRIM then COLOR_CHANGE;
+ * END at the finish). It is validated against pyembroidery as an oracle
+ * (scripts/oracle-pes.ts / .mjs) — the gate is FUNCTIONAL equivalence (decoded
+ * stitch penetrations + thread colors match; the oracle's plans have also been
+ * byte-identical, but jumps/thumbnails are not part of the gate). The machine
+ * sews the same design the Python path produced — without the runtime download
+ * that fails on memory-constrained phones.
  *
  * Conventions mirror the DST writer (src/lib/export/native/dst.ts): we build the
  * pattern's command stream once, then emit bytes; helper names track

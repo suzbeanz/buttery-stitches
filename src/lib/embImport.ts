@@ -2,6 +2,7 @@ import type { EmbObject, ThreadColor } from "../types/project";
 import type { ImportedPlan } from "./export";
 import { newId } from "./id";
 import { makeObjectFromPaths } from "./objects";
+import { tenthsToMm } from "./units";
 
 /**
  * Turn a design read from an embroidery file (an {@link ImportedPlan}) into
@@ -27,7 +28,7 @@ export function buildImportedObjects(
     let used = false;
     block.runs.forEach((run) => {
       // pyembroidery units are 1/10 mm; the app works in mm.
-      const pts = run.map(([x, y]) => ({ x: x / 10, y: y / 10 }));
+      const pts = run.map(([x, y]) => ({ x: tenthsToMm(x), y: tenthsToMm(y) }));
       if (pts.length < 2) return;
       const obj = makeObjectFromPaths("running", [pts], color.id, `${baseName} ${bi + 1}`);
       obj.params = { raw: true };
