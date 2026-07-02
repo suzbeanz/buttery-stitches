@@ -131,3 +131,32 @@ describe("friendlyExportError", () => {
     expect(friendlyExportError(new Error("a\n\n  the real reason  "))).toBe("the real reason");
   });
 });
+
+describe("post-rounding jam-safety floor (enforceMinSpacingTenths via planFromDesign)", () => {
+  it("drops an interior penetration that rounding pushed under the 0.3mm floor", () => {
+    // The engine's mm-domain gate allows a pair AT 0.3mm; independent ±0.05mm
+    // rounding can land them 0.2mm (2 tenths) apart in the file. The plan-layer
+    // gate must thin that pile-up.
+    const design: EngineStitch[] = [
+      { x: 0, y: 0, colorId: "a", objectId: "o" },
+      { x: 0.2, y: 0, colorId: "a", objectId: "o" }, // 2 tenths from prev — interior
+      { x: 5, y: 0, colorId: "a", objectId: "o" },
+    ];
+    const plan = planFromDesign(design, colors);
+    const stitches = plan.blocks[0].cmds.filter((c) => c[0] === "s");
+    expect(stitches).toHaveLength(2); // middle dropped
+    expect(stitches[1]).toEqual(["s", 50, 0]);
+  });
+
+  it("never drops the last real point before a boundary (endpoints preserved)", () => {
+    const design: EngineStitch[] = [
+      { x: 0, y: 0, colorId: "a", objectId: "o" },
+      { x: 0.2, y: 0, colorId: "a", objectId: "o" }, // close, but LAST before the jump
+      { x: 10, y: 0, colorId: "a", objectId: "o", jump: true },
+      { x: 10, y: 0, colorId: "a", objectId: "o" },
+    ];
+    const plan = planFromDesign(design, colors);
+    const stitches = plan.blocks[0].cmds.filter((c) => c[0] === "s");
+    expect(stitches).toHaveLength(3); // nothing dropped
+  });
+});

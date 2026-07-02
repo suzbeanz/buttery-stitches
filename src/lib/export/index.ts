@@ -4,7 +4,7 @@ import { encodePes } from "./native/pes";
 import embroideryPy from "./embroidery.py?raw";
 import type { Project, ThreadColor } from "../../types/project";
 import { mmToTenths } from "../units";
-import { designFor, type EngineStitch } from "../engine";
+import { designFor, MIN_PENETRATION_SPACING, type EngineStitch } from "../engine";
 import { zipStore } from "../zip";
 
 /**
@@ -89,7 +89,47 @@ export function planFromDesign(
   // (0,0)); the machine then positions/centers it the same way it does those. This
   // is NOT origin-CENTERING (which subtracts the centre and yields negative coords
   // the machine clamps to the hoop edge) — it subtracts the MIN, so min is exactly 0.
-  return { blocks: anchorBlocks(blocks) };
+  // Then re-enforce the jam-safety floor in the ROUNDED domain: the engine's
+  // enforceMinSpacing ran in mm, but each endpoint just rounded independently by
+  // up to ±0.05 mm, so a pair sitting right at the 0.3 mm floor can land 0.2 mm
+  // apart in the file. This is the last gate before bytes.
+  return { blocks: enforceMinSpacingTenths(anchorBlocks(blocks)) };
+}
+
+/** Jam-safety floor in file units (1/10 mm) — same floor as the engine's
+ *  final mm-domain gate. */
+const MIN_SPACING_TENTHS = mmToTenths(MIN_PENETRATION_SPACING);
+
+/**
+ * Tenths-domain re-run of the engine's `enforceMinSpacing`, with identical
+ * semantics: within a contiguous stitch run (no jump/trim/stop between), drop an
+ * INTERIOR penetration that lands closer than the floor to the previous kept
+ * one. The first point of a run and the last point before any boundary are
+ * always kept — coverage and endpoints are preserved; only rounding-created
+ * pile-ups (double punches → thread nest → needle break) are thinned.
+ */
+export function enforceMinSpacingTenths(blocks: PlanBlock[]): PlanBlock[] {
+  return blocks.map((b) => {
+    const cmds: PlanCmd[] = [];
+    for (let i = 0; i < b.cmds.length; i++) {
+      const c = b.cmds[i];
+      if (c[0] !== "s") {
+        cmds.push(c); // jumps/trims/stops are boundaries and always kept
+        continue;
+      }
+      const prev = cmds[cmds.length - 1];
+      const next = b.cmds[i + 1];
+      const interior =
+        prev !== undefined &&
+        prev[0] === "s" && // previous kept event is a real penetration
+        next !== undefined &&
+        next[0] === "s" && // never drop the last real point before a boundary
+        Math.hypot(c[1] - prev[1], c[2] - prev[2]) < MIN_SPACING_TENTHS;
+      if (interior) continue;
+      cmds.push(c);
+    }
+    return { rgb: b.rgb, cmds };
+  });
 }
 
 /** Translate every coordinate-bearing command so the design's bounding-box MIN is
