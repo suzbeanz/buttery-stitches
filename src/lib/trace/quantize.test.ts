@@ -4,6 +4,7 @@ import {
   medianCut,
   kmeansPalette,
   borderBackgroundColor,
+  removeInnerBackdrop,
   type RGB,
   type RasterImage,
 } from "./quantize";
@@ -171,5 +172,70 @@ describe("borderBackgroundColor", () => {
   it("returns null for a fully transparent border", () => {
     const img = image(8, 8, () => [0, 0, 0, 0]);
     expect(borderBackgroundColor(img)).toBeNull();
+  });
+});
+
+describe("removeInnerBackdrop", () => {
+  const at = (img: RasterImage, x: number, y: number) => {
+    const o = (y * img.width + x) * 4;
+    return { r: img.data[o], g: img.data[o + 1], b: img.data[o + 2], a: img.data[o + 3] };
+  };
+
+  /** Clipart-on-a-card: transparent margins, a white card, a green rect subject
+   *  with a white island inside it (the classic white-ball-on-a-green). */
+  const cardScene = (x: number, y: number): [number, number, number, number] => {
+    if (x < 15 || x >= 45) return [0, 0, 0, 0]; // transparent margins
+    if (x >= 28 && x < 32 && y >= 18 && y < 22) return [255, 255, 255, 255]; // island
+    if (x >= 20 && x < 40 && y >= 10 && y < 30) return [40, 160, 60, 255]; // subject
+    return [255, 255, 255, 255]; // the card
+  };
+
+  it("strips the card, keeps the subject AND its same-colour interior island", () => {
+    const res = removeInnerBackdrop(image(60, 40, cardScene));
+    expect(res).not.toBeNull();
+    const { image: out, card } = res!;
+    expect(card[0]).toBeGreaterThan(250); // the card was the white
+    expect(at(out, 17, 2).a).toBe(0); // card pixel → transparent
+    expect(at(out, 25, 20).a).toBe(255); // subject survives
+    expect(at(out, 30, 20).a).toBe(255); // interior white island survives
+    expect(at(out, 5, 5).a).toBe(0); // margins stay transparent
+  });
+
+  it("peels a thin frame line first, then the card behind it", () => {
+    const framed = image(60, 40, (x, y) => {
+      const c = cardScene(x, y);
+      if (c[3] === 0) return c;
+      // a 2px grey border line around the card, as downloaded images often have
+      if (x < 17 || x >= 43 || y < 2 || y >= 38) return [128, 128, 128, 255];
+      return c;
+    });
+    const res = removeInnerBackdrop(framed);
+    expect(res).not.toBeNull();
+    const { image: out } = res!;
+    expect(at(out, 16, 20).a).toBe(0); // frame stripped
+    expect(at(out, 20, 20).a).toBe(255); // subject survives (x=20 is subject)
+    expect(at(out, 25, 5).a).toBe(0); // card behind the frame stripped too
+  });
+
+  it("never strips a transparent-PNG logo's own outer colour", () => {
+    // A green disc on transparency — the subject itself meets the transparent
+    // border, and its silhouette is not rectangular.
+    const logo = image(60, 60, (x, y) => {
+      const dx = x - 30, dy = y - 30;
+      return dx * dx + dy * dy <= 400 ? [40, 160, 60, 255] : [0, 0, 0, 0];
+    });
+    expect(removeInnerBackdrop(logo)).toBeNull();
+  });
+
+  it("returns null for an opaque border (the opaque-background path handles it)", () => {
+    const img = image(40, 40, (x, y) =>
+      x >= 10 && x < 30 && y >= 10 && y < 30 ? [200, 40, 40, 255] : [255, 255, 255, 255],
+    );
+    expect(removeInnerBackdrop(img)).toBeNull();
+  });
+
+  it("leaves a solid one-colour rectangle alone — it IS the subject, not a card", () => {
+    const img = image(60, 40, (x) => (x < 15 || x >= 45 ? [0, 0, 0, 0] : [40, 80, 200, 255]));
+    expect(removeInnerBackdrop(img)).toBeNull();
   });
 });

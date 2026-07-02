@@ -247,6 +247,198 @@ export function borderIsSolidOpaque(img: RasterImage, dominance = 0.6): boolean 
   return opaque > 0 && bestN / opaque >= dominance;
 }
 
+/** How dominant one colour must be along the transparency boundary to count as a
+ *  card (a solid backdrop the subject sits on) rather than the subject itself.
+ *  Lenient — a subject that runs off the card's edge shows up on the boundary
+ *  too (the golf mound reaching both sides of its card); the rectangularity
+ *  test below is what actually rules out stripping a logo's own colour. */
+const CARD_DOMINANCE = 0.5;
+/** A card layout is RECTANGULAR: the opaque region fills (almost all of) its own
+ *  bounding box. A transparent-PNG logo's silhouette does not — and its outer
+ *  colour must never be stripped as if it were a backdrop. */
+const CARD_RECT_FILL = 0.97;
+/** Abort if stripping would leave less than this fraction of the opaque pixels —
+ *  a solid one-colour rectangle IS the subject (a flag, a colour swatch), not a
+ *  card with a subject on it. */
+const CARD_MIN_SUBJECT = 0.02;
+/** Colour tolerance (squared RGB distance) for growing the card region — wide
+ *  enough to take the card's anti-alias fringe and compression noise with it,
+ *  narrow enough not to leak into a genuinely different subject colour. */
+const CARD_TOL2 = 60 * 60;
+
+/**
+ * Downloaded clipart often sits on a solid CARD — a white rectangle that itself
+ * floats on a transparent canvas (transparent margins around it). "Remove
+ * background" must strip that card too: the border is transparent, so the
+ * opaque-background path never runs, and without this the card is kept as a
+ * giant background-coloured fill AND eats a palette slot (merging real colours
+ * — a red flag and yellow pole quantized together turn orange).
+ *
+ * Flood the transparent region in from the image border and tally the opaque
+ * colours met at its boundary. If ONE colour dominates that boundary it is a
+ * card, not the subject's silhouette: flood again through pixels near that
+ * colour and turn them transparent. Interior islands of the same colour (a
+ * white ball inside a green) are not connected to the boundary and survive —
+ * the same connectivity rule the opaque-background path uses. Returns a new
+ * image plus the card's colour (so the caller can treat it as the background —
+ * dropping the anti-alias halo the card leaves around the subject), or null when
+ * there is no card (a normal transparent-PNG logo, or an opaque border).
+ */
+export function removeInnerBackdrop(img: RasterImage): { image: RasterImage; card: RGB } | null {
+  if (img.width < 2 || img.height < 2) return null;
+  // Baseline: never let the peeling loop eat the whole subject.
+  let baseline = 0;
+  for (let i = 3; i < img.data.length; i += 4) if (img.data[i] >= ALPHA_CUTOFF) baseline++;
+  if (baseline === 0) return null;
+  // Peel iteratively: a downloaded card frequently wears a thin FRAME (a border
+  // line, screenshot edge shading, JPEG edge darkening). Round 1 strips the frame,
+  // round 2 the card behind it, further rounds any anti-alias ribbon between the
+  // two. The rectangularity gate inside stripCardOnce ends the loop the moment the
+  // remaining opaque region is the subject's (non-rectangular) silhouette.
+  let out: { image: RasterImage; card: RGB } | null = null;
+  for (let round = 0; round < 5; round++) {
+    const next = stripCardOnce(out?.image ?? img, baseline);
+    if (!next) break;
+    out = next;
+  }
+  return out;
+}
+
+/** One peel of {@link removeInnerBackdrop}: strip the single dominant colour met
+ *  at the transparency boundary, if the layout still reads as a card. */
+function stripCardOnce(img: RasterImage, baselineOpaque: number): { image: RasterImage; card: RGB } | null {
+  const { width, height, data } = img;
+  const total = width * height;
+  const isTransparent = (i: number) => data[i * 4 + 3] < ALPHA_CUTOFF;
+
+  // Rectangularity gate: the opaque region must fill its own bounding box.
+  let minX = width, maxX = -1, minY = height, maxY = -1, opaqueCount = 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (isTransparent(y * width + x)) continue;
+      opaqueCount++;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  if (opaqueCount === 0) return null;
+  const bboxArea = (maxX - minX + 1) * (maxY - minY + 1);
+  if (opaqueCount < CARD_RECT_FILL * bboxArea) return null; // not a card layout
+
+  // --- flood 1: the border-connected transparent region ---
+  const seen = new Uint8Array(total); // 1 = transparent region, 2 = card
+  const stack: number[] = [];
+  for (let x = 0; x < width; x++) {
+    for (const i of [x, (height - 1) * width + x]) {
+      if (isTransparent(i) && !seen[i]) { seen[i] = 1; stack.push(i); }
+    }
+  }
+  for (let y = 0; y < height; y++) {
+    for (const i of [y * width, y * width + width - 1]) {
+      if (isTransparent(i) && !seen[i]) { seen[i] = 1; stack.push(i); }
+    }
+  }
+  if (stack.length === 0) return null; // opaque border — not this case
+  // Boundary tally: bucket the opaque colours met at the transparent region's
+  // edge (5 bits/channel so anti-aliased near-duplicates count together).
+  const bucketN = new Map<number, number>();
+  const bucketSum = new Map<number, [number, number, number]>();
+  let boundary = 0;
+  const visitOpaqueNeighbor = (i: number) => {
+    const o = i * 4;
+    boundary++;
+    const key = ((data[o] >> 3) << 10) | ((data[o + 1] >> 3) << 5) | (data[o + 2] >> 3);
+    bucketN.set(key, (bucketN.get(key) ?? 0) + 1);
+    const s = bucketSum.get(key) ?? [0, 0, 0];
+    s[0] += data[o]; s[1] += data[o + 1]; s[2] += data[o + 2];
+    bucketSum.set(key, s);
+  };
+  while (stack.length) {
+    const i = stack.pop()!;
+    const x = i % width, y = (i / width) | 0;
+    const nb = [
+      x > 0 ? i - 1 : -1,
+      x < width - 1 ? i + 1 : -1,
+      y > 0 ? i - width : -1,
+      y < height - 1 ? i + width : -1,
+    ];
+    for (const ni of nb) {
+      if (ni < 0 || seen[ni]) continue;
+      if (isTransparent(ni)) { seen[ni] = 1; stack.push(ni); }
+      else visitOpaqueNeighbor(ni);
+    }
+  }
+  if (boundary === 0) return null;
+  let cardKey = -1;
+  let cardN = 0;
+  for (const [key, n] of bucketN) {
+    if (n > cardN) { cardN = n; cardKey = key; }
+  }
+  if (cardKey < 0) return null;
+  // 5-bit buckets split one flat colour that straddles a bucket edge (grey 163 vs
+  // 168) — merge every bucket whose colour sits within the card tolerance of the
+  // top one before judging dominance, so the judgement is about COLOURS, not bins.
+  const topSum = bucketSum.get(cardKey)!;
+  const top: RGB = [topSum[0] / cardN, topSum[1] / cardN, topSum[2] / cardN];
+  let mergedN = 0;
+  const merged: [number, number, number] = [0, 0, 0];
+  for (const [key, n] of bucketN) {
+    const s = bucketSum.get(key)!;
+    const d2 = (s[0] / n - top[0]) ** 2 + (s[1] / n - top[1]) ** 2 + (s[2] / n - top[2]) ** 2;
+    if (d2 > CARD_TOL2) continue;
+    mergedN += n;
+    merged[0] += s[0]; merged[1] += s[1]; merged[2] += s[2];
+  }
+  // No dominant boundary colour → the subject itself meets the transparency
+  // (an ordinary transparent-PNG logo). Nothing to strip.
+  if (mergedN / boundary < CARD_DOMINANCE) return null;
+  const card: RGB = [merged[0] / mergedN, merged[1] / mergedN, merged[2] / mergedN];
+
+  // --- flood 2: grow the card colour in from the transparency boundary ---
+  const nearCard = (i: number) => {
+    const o = i * 4;
+    return (data[o] - card[0]) ** 2 + (data[o + 1] - card[1]) ** 2 + (data[o + 2] - card[2]) ** 2 <= CARD_TOL2;
+  };
+  for (let i = 0; i < total; i++) {
+    if (seen[i] !== 1) continue;
+    const x = i % width, y = (i / width) | 0;
+    const nb = [
+      x > 0 ? i - 1 : -1,
+      x < width - 1 ? i + 1 : -1,
+      y > 0 ? i - width : -1,
+      y < height - 1 ? i + width : -1,
+    ];
+    for (const ni of nb) {
+      if (ni >= 0 && !seen[ni] && !isTransparent(ni) && nearCard(ni)) { seen[ni] = 2; stack.push(ni); }
+    }
+  }
+  while (stack.length) {
+    const i = stack.pop()!;
+    const x = i % width, y = (i / width) | 0;
+    const nb = [
+      x > 0 ? i - 1 : -1,
+      x < width - 1 ? i + 1 : -1,
+      y > 0 ? i - width : -1,
+      y < height - 1 ? i + width : -1,
+    ];
+    for (const ni of nb) {
+      if (ni >= 0 && !seen[ni] && !isTransparent(ni) && nearCard(ni)) { seen[ni] = 2; stack.push(ni); }
+    }
+  }
+
+  const out = new Uint8ClampedArray(data);
+  let stripped = 0;
+  for (let i = 0; i < total; i++) {
+    if (seen[i] === 2) { out[i * 4 + 3] = 0; stripped++; }
+  }
+  // Nothing stripped, or (almost) EVERYTHING stripped — a solid rectangle is the
+  // subject itself, not a card. Leave the image alone in both cases.
+  if (stripped === 0 || opaqueCount - stripped < CARD_MIN_SUBJECT * baselineOpaque) return null;
+  return { image: { width, height, data: out }, card };
+}
+
 /** Nearest palette color to (r,g,b) by squared Euclidean distance. */
 /** Index of the palette color closest (squared RGB distance) to (r,g,b). */
 function nearestIndex(palette: RGB[], r: number, g: number, b: number): number {

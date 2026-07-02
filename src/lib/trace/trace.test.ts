@@ -507,3 +507,88 @@ describe("imageDataToObjects (real imagetracerjs)", () => {
     expect(hasCream).toBe(true);
   });
 });
+
+describe("imageDataToObjects — clipart on a card (the downloaded-image layouts)", () => {
+  /** RGBA painter (the shared helper above is opaque-only). */
+  function rgbaImage(
+    w: number,
+    h: number,
+    paint: (x: number, y: number) => [number, number, number, number],
+  ): ImageData {
+    const data = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        const [r, g, b, a] = paint(x, y);
+        data[i] = r;
+        data[i + 1] = g;
+        data[i + 2] = b;
+        data[i + 3] = a;
+      }
+    return { width: w, height: h, data } as unknown as ImageData;
+  }
+
+  /** The golf-flag layout: red flag + yellow pole + green mound + white ball,
+   *  on a white card with transparent margins (a typical downloaded clipart). */
+  function golfOnCard(x: number, y: number): [number, number, number, number] {
+    if (x < 40 || x >= 120) return [0, 0, 0, 0]; // transparent margins
+    const inEllipse = (cx: number, cy: number, rx: number, ry: number) => {
+      const dx = (x - cx) / rx, dy = (y - cy) / ry;
+      return dx * dx + dy * dy <= 1;
+    };
+    if (inEllipse(95, 58, 6, 6)) return [255, 255, 255, 255]; // ball on the green
+    if (x >= 62 && x < 66 && y >= 10 && y < 60) return [250, 200, 40, 255]; // pole
+    if (x >= 66 && x < 66 + 28 && y >= 10 && y < 30 && (x - 66) < 28 - Math.abs(y - 20) * 2.8)
+      return [225, 40, 45, 255]; // flag
+    if (inEllipse(80, 60, 35, 14)) return [45, 160, 65, 255]; // green mound
+    return [255, 255, 255, 255]; // the white card
+  }
+
+  it("strips the card: red and yellow stay distinct (no orange), no giant card fill, ball survives", () => {
+    const img = rgbaImage(160, 80, golfOnCard);
+    const { colors, objects } = imageDataToObjects(img, 4, { mmPerPx: 0.5, removeBackground: true });
+    // The card must not eat a palette slot: red and yellow survive as SEPARATE
+    // colors — nothing lands in the orange gap between them.
+    const reds = colors.filter((c) => c.rgb[0] > 180 && c.rgb[1] < 110);
+    const yellows = colors.filter((c) => c.rgb[0] > 180 && c.rgb[1] > 150 && c.rgb[2] < 120);
+    const oranges = colors.filter((c) => c.rgb[0] > 180 && c.rgb[1] >= 110 && c.rgb[1] <= 150);
+    expect(reds.length).toBe(1);
+    expect(yellows.length).toBe(1);
+    expect(oranges.length).toBe(0);
+    // The card itself (80×80 px = 40×40 mm = 1600 mm²) must be gone: whatever
+    // whites remain (the ball) are small.
+    const whiteIds = new Set(
+      colors.filter((c) => c.rgb[0] > 200 && c.rgb[1] > 190 && c.rgb[2] > 160).map((c) => c.id),
+    );
+    const whiteArea = objects
+      .filter((o) => whiteIds.has(o.colorId))
+      .reduce((s, o) => s + o.paths.reduce((t, p) => t + Math.abs(polygonArea(p)), 0), 0);
+    expect(whiteArea).toBeGreaterThan(2); // the ball is there…
+    expect(whiteArea).toBeLessThan(120); // …and it is NOT the card
+  });
+
+  it("keeps the background's palette slot when the subject touches the image border", () => {
+    // Opaque white background; the green mound runs off the left, right AND bottom
+    // edges, so white is only ~half the border — the background must still get its
+    // own +1 quantization slot, or red and yellow merge to orange.
+    // The golf scene on an opaque white page, with the mound stretched off the
+    // left/right/bottom borders.
+    const withMound = rgbaImage(160, 80, (x, y) => {
+      const dx = (x - 80) / 90, dy = (y - 66) / 22;
+      if (dx * dx + dy * dy <= 1) {
+        const inner = golfOnCard(x, y);
+        if (inner[3] === 255 && !(inner[0] === 255 && inner[1] === 255)) return inner;
+        return [45, 160, 65, 255];
+      }
+      const [r, g, b, a] = golfOnCard(x, y);
+      return a === 0 ? [255, 255, 255, 255] : [r, g, b, a];
+    });
+    const { colors } = imageDataToObjects(withMound, 4, { mmPerPx: 0.5, removeBackground: true });
+    const reds = colors.filter((c) => c.rgb[0] > 180 && c.rgb[1] < 110);
+    const yellows = colors.filter((c) => c.rgb[0] > 180 && c.rgb[1] > 150 && c.rgb[2] < 120);
+    const oranges = colors.filter((c) => c.rgb[0] > 180 && c.rgb[1] >= 110 && c.rgb[1] <= 150);
+    expect(reds.length).toBe(1);
+    expect(yellows.length).toBe(1);
+    expect(oranges.length).toBe(0);
+  });
+});
