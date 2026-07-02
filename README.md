@@ -278,6 +278,9 @@ run from any static host or sub-path too.
 ## License
 
 MIT — see [LICENSE](LICENSE). Built on some lovely open-source work:
-`pyembroidery` (MIT), `imagetracerjs` (Unlicense), `opentype.js` (MIT), Konva
-(MIT), Zustand + zundo (MIT), and the bundled fonts (SIL OFL 1.1). See
+`pyembroidery` (MIT), Pyodide (MPL-2.0, fetched at runtime), `imagetracerjs`
+(Unlicense), `opentype.js` (MIT), Konva (MIT), Zustand + zundo (MIT), and the
+bundled fonts (SIL OFL 1.1 / Apache 2.0 — license texts ship alongside the
+font files). Full details in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). See
 [CONTRIBUTING.md](CONTRIBUTING.md) if you'd like to poke at it.
