@@ -10,9 +10,10 @@ import type { StitchPlan } from "../index";
  * flag bits. The {@linkcode StitchPlan} coordinates are already in 1/10 mm; DST's
  * Y axis points up, so we negate dy.
  *
- * Validated byte-for-byte against pyembroidery's `write_dst` (the oracle) — see
- * scripts/oracle-dst.ts — so the file is provably the same one the Python path
- * produced, just without the 10 MB runtime download.
+ * Validated FUNCTIONALLY EQUIVALENT to pyembroidery's `write_dst` (the oracle,
+ * scripts/oracle-dst.ts): the gate compares decoded stitch penetrations + thread
+ * colors, not raw bytes (headers may differ cosmetically). The machine sews the
+ * same design the Python path produced, without the 10 MB runtime download.
  */
 
 const HEADER_SIZE = 512;

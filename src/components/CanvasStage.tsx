@@ -278,16 +278,19 @@ export default function CanvasStage() {
 
   // Keyboard zoom (⌘/Ctrl +/−/0) is dispatched from the global shortcut handler in
   // App as a window event, since the viewport transform lives here in the stage.
+  // Subscribe ONCE (this component re-renders on every cursor move); the ref keeps
+  // the handler seeing the current zoom closures without listener churn.
+  const zoomCmdRef = useRef<(cmd: "in" | "out" | "fit") => void>(() => {});
+  zoomCmdRef.current = (cmd) => {
+    if (cmd === "in") zoomIn();
+    else if (cmd === "out") zoomOut();
+    else resetView();
+  };
   useEffect(() => {
-    const onZoom = (e: Event) => {
-      const cmd = (e as CustomEvent<"in" | "out" | "fit">).detail;
-      if (cmd === "in") zoomIn();
-      else if (cmd === "out") zoomOut();
-      else resetView();
-    };
+    const onZoom = (e: Event) => zoomCmdRef.current((e as CustomEvent<"in" | "out" | "fit">).detail);
     window.addEventListener("bs:zoom", onZoom);
     return () => window.removeEventListener("bs:zoom", onZoom);
-  });
+  }, []);
 
   const colorById = useMemo(
     () => new Map<string, ThreadColor>(project.colors.map((c) => [c.id, c])),

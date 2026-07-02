@@ -12,7 +12,7 @@ import type {
 import { createEmptyProject } from "../lib/project";
 import { translatePaths } from "../lib/geometry";
 import { expandGroups, pathsFromNodes, isClosedType } from "../lib/objects";
-import { densifyRing } from "../lib/nodes";
+import { densifyRing, translateNodes } from "../lib/nodes";
 import { smoothPath, smoothRingKeepingCorners } from "../lib/smooth";
 import { mergeRegionPaths, splitRegionComponents, weldToNeighbors } from "../lib/regions";
 import { newId } from "../lib/id";
@@ -219,6 +219,10 @@ export const useProjectStore = create<ProjectState>()(
                       satinCenterlines: o.satinCenterlines
                         ? translatePaths(o.satinCenterlines, dxMm, dyMm)
                         : undefined,
+                      // Keep the parallel node representation in sync — a select-tool
+                      // drag that moved paths but not nodes left the node-tool handles
+                      // at the old spot, and editing one snapped geometry back.
+                      nodes: o.nodes ? translateNodes(o.nodes, dxMm, dyMm) : undefined,
                     }
                   : o,
               ),

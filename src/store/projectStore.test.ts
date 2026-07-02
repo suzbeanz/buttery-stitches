@@ -322,3 +322,26 @@ describe("projectStore.mergeObjects / splitRegion", () => {
     expect(useProjectStore.getState().project.objects[0].paths).toBe(before);
   });
 });
+
+describe("projectStore.moveObjects", () => {
+  beforeEach(() => {
+    useProjectStore.setState({ project: createEmptyProject(), selectedIds: [] });
+    useProjectStore.temporal.getState().clear();
+  });
+
+  it("translates the node representation along with the paths (no desync)", () => {
+    // A node-backed object: dragging it with the select tool must move nodes AND
+    // paths together, or the node tool later shows handles at the old spot and
+    // editing one snaps the geometry back.
+    const colorId = useProjectStore.getState().project.colors[0].id;
+    const obj = makeNodeObject("running", line, colorId, false);
+    useProjectStore.getState().addObject(obj);
+
+    useProjectStore.getState().moveObjects([obj.id], 5, 7);
+
+    const moved = useProjectStore.getState().project.objects[0];
+    expect(moved.paths[0][0]).toEqual({ x: 5, y: 7 });
+    expect(moved.nodes?.[0][0]).toMatchObject({ x: 5, y: 7 });
+    expect(moved.nodes?.[0][1]).toMatchObject({ x: 15, y: 7 });
+  });
+});
