@@ -147,25 +147,46 @@ export function recognizeShape(ring: Path, tolMm = 0.6): Recognized | null {
   }
 
   // Principal frame + the shape's oriented bounding box (half-extents a, b).
+  // The box is centred on the PROJECTION MIDRANGE, not the centroid: an
+  // asymmetric outline (a pole that tapers where it meets the ground) has its
+  // centroid pulled toward the heavy end, and a primitive fitted symmetrically
+  // about the centroid overshoots the light end by the asymmetry — a snapped
+  // "ellipse" sticking millimetres above the artwork.
   const rot = principalAngle(samples, c);
   const cs = Math.cos(-rot);
   const sn = Math.sin(-rot);
-  let a = 0;
-  let b = 0;
+  let loU = Infinity, hiU = -Infinity, loV = Infinity, hiV = -Infinity;
   for (const p of samples) {
     const dx = p.x - c.x;
     const dy = p.y - c.y;
-    a = Math.max(a, Math.abs(dx * cs - dy * sn));
-    b = Math.max(b, Math.abs(dx * sn + dy * cs));
+    const u = dx * cs - dy * sn;
+    const v = dx * sn + dy * cs;
+    if (u < loU) loU = u;
+    if (u > hiU) hiU = u;
+    if (v < loV) loV = v;
+    if (v > hiV) hiV = v;
   }
+  const a = (hiU - loU) / 2;
+  const b = (hiV - loV) / 2;
+  // Midrange centre, mapped back to design space (inverse of the -rot rotation).
+  const mu = (loU + hiU) / 2;
+  const mv = (loV + hiV) / 2;
+  const cb: Point = { x: c.x + mu * cs + mv * sn, y: c.y - mu * sn + mv * cs };
   if (a < 0.5 || b < 0.5) return null;
   const boxArea = 4 * a * b;
   const fillRatio = area / boxArea; // 1.0 = fills its box (rectangle), 0.785 = ellipse
 
+  // Fit tolerances must never exceed a fraction of the MINOR half-extent: on a
+  // narrow shape (a 3 mm-wide flag pole) an absolute mm tolerance is wider than
+  // the shape itself, so EVERY long candidate "fits" — a bar snaps to a cigar
+  // ellipse whose pointed ends overshoot the artwork by millimetres. The same
+  // relative-cap idea the polygon branch uses below.
+  const minor = Math.min(a, b);
+
   // --- Rectangle: nearly fills its oriented bounding box. ---
   if (fillRatio > 0.9) {
-    const rect = makeRect(c, a, b, rot);
-    if (fitsWithin(samples, rect, tolMm * 2)) {
+    const rect = makeRect(cb, a, b, rot);
+    if (fitsWithin(samples, rect, Math.min(tolMm * 2, minor * 0.6))) {
       return { kind: "rectangle", ring: rect, angleDeg: (rot * 180) / Math.PI };
     }
   }
@@ -211,8 +232,8 @@ export function recognizeShape(ring: Path, tolMm = 0.6): Recognized | null {
 
   // --- Ellipse: fills ~π/4 of its box and clearly non-circular. ---
   if (fillRatio > 0.7 && fillRatio < 0.86 && (a / b > 1.08 || b / a > 1.08)) {
-    const ell = makeEllipse(c, a, b, rot);
-    if (fitsWithin(samples, ell, tolMm * 1.6)) {
+    const ell = makeEllipse(cb, a, b, rot);
+    if (fitsWithin(samples, ell, Math.min(tolMm * 1.6, minor * 0.35))) {
       return { kind: "ellipse", ring: ell, angleDeg: (rot * 180) / Math.PI };
     }
   }

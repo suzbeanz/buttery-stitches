@@ -15,7 +15,7 @@ import { contourFill } from "./contour";
 import { medialColumns, columnsFromCenterlines, satinCoverage, residualRegions, type SatinColumn } from "./medial";
 import { turningFill, flowFill, flowAlong } from "./turning";
 import { guidanceFieldFill } from "./field";
-import { isSmallRoundFill } from "./classify";
+import { isSmallRoundFill, meanStrokeWidthMm } from "./classify";
 import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
 import { dropShortStitches, splitLongTravels } from "./resample";
 
@@ -365,6 +365,12 @@ function orderByTravel(pts: Point[]): number[] {
  */
 const MAX_SATIN_STROKE_MM = 6;
 
+/** AUTO fill style tries satin when the region's mean stroke width is at or
+ *  under this (mm) — narrow columns (poles, stems, bars) read far cleaner as
+ *  satin across than as a few lengthwise tatami cords. Kept under
+ *  MAX_SATIN_STROKE_MM so the medial gates stay the final word. */
+const AUTO_SATIN_MAX_WIDTH_MM = 4;
+
 /**
  * Medial-axis satin columns for a region, but only if they'd actually look good:
  * the strokes must be narrow enough to satin cleanly AND the satin must cover
@@ -686,10 +692,18 @@ export function generateObjectRuns(
     const w = b.maxX - b.minX, h = b.maxY - b.minY;
     return p.flowPath.map(([nx, ny]) => ({ x: b.minX + nx * w, y: b.minY + ny * h }));
   })();
+  // AUTO fill style (user left the default): a NARROW region — a flag pole, a
+  // stem, a border bar — also tries satin columns. Tatami on a 3 mm column lays
+  // a handful of LENGTHWISE cords that read loose and bandy; a professional
+  // digitizer always satins across a column that narrow. The acceptableSatin
+  // gates (median stroke width, coverage) still decide; a region they reject
+  // falls back to tatami exactly as before. An explicit fillStyle wins.
+  const autoStyle = object.params.fillStyle === undefined;
   regions.forEach((region, regionIdx) => {
-    const columns = satin
-      ? acceptableSatin(region, density, fabric.pullMul, authoredForRegion(object, region))
-      : [];
+    const columns =
+      satin || (autoStyle && meanStrokeWidthMm(region) <= AUTO_SATIN_MAX_WIDTH_MM)
+        ? acceptableSatin(region, density, fabric.pullMul, authoredForRegion(object, region))
+        : [];
     const usingSatin = columns.length > 0;
     const contour = !usingSatin && p.fillStyle === "contour";
     const travelMax = usingSatin ? 8 : 6;
