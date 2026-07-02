@@ -232,7 +232,10 @@ function Studio({ onHome, saveStatus }: { onHome: () => void; saveStatus: SaveSt
  *  Initialized synchronously from the media query so the very first paint is
  *  correct — otherwise a phone briefly renders both panels inline and crushes
  *  the canvas to nothing before the effect can correct it. */
-const NARROW_QUERY = "(max-width: 1023px)";
+// Below this, the side panels become overlay drawers. 1279 (not 1023): at
+// 1024-1279px the fixed chrome (layers 240 + rail + properties 256) left a
+// ~416px canvas — the worst screen in the app. Panels overlay there instead.
+const NARROW_QUERY = "(max-width: 1279px)";
 function useIsNarrow(): boolean {
   const [narrow, setNarrow] = useState(
     () => typeof window !== "undefined" && !!window.matchMedia?.(NARROW_QUERY).matches,

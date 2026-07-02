@@ -112,7 +112,7 @@ export default function SimulatorBar() {
             aria-label="Scrub stitches"
           />
 
-          <span className="w-28 text-right font-mono text-xs tabular-nums text-ink-deep">
+          <span className="hidden w-28 text-right font-mono text-xs tabular-nums text-ink-deep sm:inline">
             {shown.toLocaleString()} / {simTotal.toLocaleString()}
           </span>
 
@@ -142,7 +142,9 @@ export default function SimulatorBar() {
           </button>
         </>
       ) : (
-        <span className="text-xs text-navy/80">
+        // Educational only — hidden on small screens where it wrapped the bar
+        // to 2-3 rows and collided with toasts (the P shortcut stays in Help).
+        <span className="hidden text-xs text-navy/80 md:inline">
           Switch to <b>Stitch view</b> to watch the design redraw stitch by stitch — or press <kbd className="rounded border border-navy/25 px-1 font-mono text-[10px]">P</kbd>.
         </span>
       )}
