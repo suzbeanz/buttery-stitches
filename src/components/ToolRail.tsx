@@ -52,7 +52,10 @@ export default function ToolRail() {
     // horizontal scrollbar. The compact two-column layout fits the kit without it.
     <aside
       aria-label="Drawing tools"
-      className="flex w-28 shrink-0 flex-col gap-0.5 overflow-visible border-r-2 border-ink bg-cream py-1.5"
+      // Narrow screens get a single icon column (w-14) — the fixed two-column
+      // rail was 28% of a phone's width. Labels return at lg alongside the
+      // two-column grid; every button keeps its aria-label + tooltip.
+      className="flex w-14 shrink-0 flex-col gap-0.5 overflow-visible border-r-2 border-ink bg-cream py-1.5 lg:w-28"
     >
       {locked && (
         <div className="mx-1.5 mb-1 rounded-sm bg-butter-200 px-1 py-1 text-center font-label text-[9px] font-semibold uppercase leading-tight tracking-wide text-ink/70">
@@ -177,7 +180,7 @@ function Group({ label, children }: { label: string; children: ReactNode }) {
         {label}
       </div>
       {/* Two columns so the whole kit fits at a glance without scrolling. */}
-      <div className="grid grid-cols-2 gap-1">{children}</div>
+      <div className="grid grid-cols-1 gap-1 lg:grid-cols-2">{children}</div>
     </div>
   );
 }
@@ -256,7 +259,7 @@ function RailBtn({
         </kbd>
       )}
       {children}
-      <span className="font-label text-[9px] font-semibold uppercase tracking-wide">
+      <span className="hidden font-label text-[9px] font-semibold uppercase tracking-wide lg:block">
         {label}
       </span>
     </button>

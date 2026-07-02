@@ -188,9 +188,21 @@ export default function LayerPanel() {
                 >
                   {o.visible ? <Eye size={15} /> : <EyeOff size={15} />}
                 </button>
-                {/* Secondary actions reveal on hover/focus. `hidden` (not opacity-0) so they
-                    take ZERO width at rest and the name actually fills the row. */}
-                <span className="hidden shrink-0 items-center group-hover:flex focus-within:flex [@media(pointer:coarse)]:flex">
+                {/* Secondary actions reveal on hover/keyboard-focus as an OVERLAY
+                    anchored right, with the row background — a flex sibling ate the
+                    240px row and left the name ~6px. The name keeps its full width
+                    and truncates under the overlay. group-focus-within (not
+                    focus-within on this hidden span — display:none is unfocusable,
+                    so that selector could never fire) reveals them for keyboard
+                    users tabbing to the eye button. Coarse pointers have no hover:
+                    they keep the always-on cluster, same overlay treatment. */}
+                <span
+                  className={`absolute inset-y-0 right-9 hidden shrink-0 items-center pl-1 group-hover:flex group-focus-within:flex [@media(pointer:coarse)]:flex ${
+                    selected
+                      ? "bg-butter-300 shadow-[-10px_0_8px_-4px_rgba(238,213,133,0.95)]"
+                      : "bg-butter-200 shadow-[-10px_0_8px_-4px_rgba(243,232,188,0.95)]"
+                  }`}
+                >
                   {/* Touch has no double-click, so rename also has an explicit
                       button (it doubles as a discoverable affordance on desktop). */}
                   <button
