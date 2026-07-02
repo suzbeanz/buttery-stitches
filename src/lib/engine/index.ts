@@ -371,6 +371,11 @@ const MAX_SATIN_STROKE_MM = 6;
  *  MAX_SATIN_STROKE_MM so the medial gates stay the final word. */
 const AUTO_SATIN_MAX_WIDTH_MM = 4;
 
+/** Minimum bare-patch area (mm²) worth covering behind a turned/field/flow fill.
+ *  Smaller than satin's inter-row speck floor because a pennant/leaf TIP is only
+ *  a couple of mm² yet is the shape's most visible feature. */
+const TIP_PATCH_MIN_MM2 = 0.5;
+
 /**
  * Medial-axis satin columns for a region, but only if they'd actually look good:
  * the strokes must be narrow enough to satin cleanly AND the satin must cover
@@ -861,6 +866,17 @@ export function generateObjectRuns(
           ? (guidanceFieldFill(region, fillOpts) ?? autoTurn)
           : (autoSingle ? flowFill(region, fillOpts) : null));
       tops = turned ?? tatamiConcaveRuns(region, fillOpts);
+      // A turned/field/flow fill can leave a POINTED TIP bare: where the shape
+      // narrows below the row spacing (a pennant's point, a leaf's tip), the last
+      // row stops short and the extreme tip never gets thread. Patch what the
+      // rows missed — the same residual-patch guarantee satin fills already have.
+      if (turned) {
+        // Lower area floor than satin's junction patching: a bare TIP is small
+        // (a couple of mm²) but sits at the shape's most visible feature.
+        for (const patch of residualRegions(region, turned, 0.3, TIP_PATCH_MIN_MM2)) {
+          tops.push(tatamiFill([patch], fillOpts));
+        }
+      }
       tatamiNoBareTravel = true;
     }
 

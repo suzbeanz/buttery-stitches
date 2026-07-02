@@ -981,7 +981,7 @@ export function satinCoverage(rings: Path[], runs: Path[], cellMm = 0.5): number
  * OPEN the leftover so the thin slivers between satin rows don't count, then trace
  * what remains. Returns `[]` when satin covered everything.
  */
-export function residualRegions(rings: Path[], sewn: Path[], cellMm = 0.3): Path[] {
+export function residualRegions(rings: Path[], sewn: Path[], cellMm = 0.3, minAreaMm2?: number): Path[] {
   const oriented = orientByDepth(rings);
   const grid = rasterize(oriented, cellMm);
   if (!grid) return [];
@@ -1025,7 +1025,9 @@ export function residualRegions(rings: Path[], sewn: Path[], cellMm = 0.3): Path
   for (let i = 0; i < w * h; i++) if (mask[i]) { any = true; break; }
   if (!any) return [];
 
-  const minArea = Math.max(2.2, (3 * cellMm) ** 2); // ignore inter-row specks
+  // Default floor ignores inter-row specks; a caller chasing bare TIPS (a
+  // pennant's point beyond a turned fill's last row) may lower it.
+  const minArea = minAreaMm2 ?? Math.max(2.2, (3 * cellMm) ** 2);
   return marchingSquares(mask, w, h)
     .map((ring) => simplify(ring.map((p) => ({ x: ox + p.x * cellMm, y: oy + p.y * cellMm })), cellMm * 0.9))
     .filter((r) => r.length >= 3 && Math.abs(polygonArea(r)) >= minArea);
