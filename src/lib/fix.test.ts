@@ -18,12 +18,12 @@ const broadFill: Path = [
 ];
 
 describe("fixObjectStitches", () => {
-  it("makes a narrow fill satin and a broad fill tatami", () => {
+  it("makes a narrow fill satin and leaves a broad fill to the engine auto", () => {
     expect(fixObjectStitches(makeObjectFromPaths("fill", [strokeFill], "c1")).params.fillStyle).toBe("satin");
-    expect(fixObjectStitches(makeObjectFromPaths("fill", [broadFill], "c1")).params.fillStyle).toBe("tatami");
+    expect(fixObjectStitches(makeObjectFromPaths("fill", [broadFill], "c1")).params.fillStyle).toBeUndefined();
   });
 
-  it("fills a thin (non-round) frame band as contour but a blob-with-a-hole as tatami", () => {
+  it("fills a thin (non-round) frame band as contour but leaves a blob-with-a-hole unset", () => {
     const sq = (h: number): Path => [
       { x: 50 - h, y: 50 - h },
       { x: 50 + h, y: 50 - h },
@@ -39,10 +39,10 @@ describe("fixObjectStitches", () => {
     // Big square with only a small hole punched in it (a bun with the sausage
     // showing through): the wall is wide → flat tatami, not concentric rings.
     const blob = fixObjectStitches(makeObjectFromPaths("fill", [sq(50), sq(8)], "c1"));
-    expect(blob.params.fillStyle).toBe("tatami");
+    expect(blob.params.fillStyle).toBeUndefined();
   });
 
-  it("fills a MULTI-region object (a word of letters) as tatami, not ringy contour", () => {
+  it("leaves a MULTI-region object (a word of letters) unset, not ringy contour", () => {
     // Two separate frame bands in one object — stand-ins for two letters with
     // counters. Each alone would contour, but echoed per region a word comes out
     // ringy/boxy, so a multi-shape object fills solid tatami instead.
@@ -55,13 +55,13 @@ describe("fixObjectStitches", () => {
     const word = fixObjectStitches(
       makeObjectFromPaths("fill", [sq(30, 16), sq(30, 11), sq(80, 16), sq(80, 11)], "c1"),
     );
-    expect(word.params.fillStyle).toBe("tatami");
+    expect(word.params.fillStyle).toBeUndefined();
     // A single band of the same proportions still contours (a lone badge ring).
     const one = fixObjectStitches(makeObjectFromPaths("fill", [sq(50, 16), sq(50, 11)], "c1"));
     expect(one.params.fillStyle).toBe("contour");
   });
 
-  it("fills a jagged organic band as tatami, not contour (no topographic scribble)", () => {
+  it("leaves a jagged organic band unset, not contour (no topographic scribble)", () => {
     // A traced photo/fur region: a wildly jagged outline (very low circularity)
     // that wraps a hole. The thin-wall test alone would call it a band → contour,
     // turning fur into topographic-map loops. The circularity gate keeps it tatami.
@@ -72,7 +72,7 @@ describe("fixObjectStitches", () => {
         return { x: 50 + r * Math.cos(a), y: 50 + r * Math.sin(a) };
       });
     const organic = fixObjectStitches(makeObjectFromPaths("fill", [star(40, 16), star(10, 4)], "c1"));
-    expect(organic.params.fillStyle).toBe("tatami");
+    expect(organic.params.fillStyle).toBeUndefined();
   });
 
   it("keeps text as satin", () => {
@@ -176,7 +176,13 @@ describe("fixStitches", () => {
     const a = makeObjectFromPaths("fill", [broadFill], "red");
     a.params = { density: 0.05 };
     const b = makeObjectFromPaths("fill", [broadFill], "blue");
-    const c = makeObjectFromPaths("fill", [broadFill], "red");
+    // A NARROW fill gets its style assigned (→ satin); broad fills stay unset
+    // for the engine's auto fill, so they no longer count as a style change.
+    const c = makeObjectFromPaths(
+      "fill",
+      [[{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 2, y: 30 }, { x: 0, y: 30 }]],
+      "red",
+    );
     p.objects = [a, b, c];
     const { report } = fixStitchesWithReport(p);
     expect(report.reordered).toBe(true); // the two reds get grouped together

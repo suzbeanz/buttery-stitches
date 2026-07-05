@@ -1,6 +1,6 @@
 import type { EmbObject, Project } from "../types/project";
 import { classifyRegion, isSmallRoundFill } from "./engine/classify";
-import { recognizeShape } from "./trace/recognize";
+
 import { knockdown, seamTrap } from "./boolean";
 import { polygonArea, polygonPerimeter } from "./trace/classify";
 import { pathsBounds } from "./geometry";
@@ -72,9 +72,9 @@ function isSpeck(o: EmbObject): boolean {
  *    (a bun with the sausage showing through), → TATAMI. Concentric contour rows
  *    on a big irregular blob read as topographic striping; flat tatami at one
  *    grain reads as a clean solid, the way a pro digitizer fills it. */
-function broadFillStyle(rings: EmbObject["paths"]): "tatami" | "contour" {
+function broadFillStyle(rings: EmbObject["paths"]): "contour" | undefined {
   const usable = rings.filter((r) => r.length >= 3);
-  if (usable.length === 0) return "tatami";
+  if (usable.length === 0) return undefined;
   // Concentric contour only reads well on ONE clean ring/curved band (a badge
   // border, a single 'O'). A multi-region object — a word's worth of letters, a
   // multi-blob mark — echoed per region comes out ringy and boxy (nested rectangles
@@ -84,18 +84,23 @@ function broadFillStyle(rings: EmbObject["paths"]): "tatami" | "contour" {
   const outers = usable.filter(
     (r) => !usable.some((o) => o !== r && polygonArea(o) > polygonArea(r) && inRing(centroidOf(r), o)),
   );
-  if (outers.length >= 2) return "tatami";
+  if (outers.length >= 2) return undefined;
   // Use the LARGEST ring as the outer boundary (traced rings aren't area-sorted).
   const outer = usable.reduce((a, b) => (polygonArea(b) > polygonArea(a) ? b : a));
   // Contour rows only read as smooth concentric rings on a BIG shape. On a small
   // feature (an eye, a nose, a dot) the handful of rings spiral into the centre
   // and look like a scribbled swirl — so anything below this size fills solid.
   const outerDia = 2 * Math.sqrt(polygonArea(outer) / Math.PI); // equivalent diameter
-  if (outerDia < CONTOUR_MIN_DIAMETER_MM) return "tatami";
-  const rec = recognizeShape(outer, 1.0);
-  if (rec && (rec.kind === "circle" || rec.kind === "ellipse")) return "contour";
+  if (outerDia < CONTOUR_MIN_DIAMETER_MM) return undefined;
+  // A true RING/BAND (frame, "O", washer) genuinely wants rows that follow the
+  // band. A SOLID round shape does NOT: a physical sew-out of a contoured solid
+  // ellipse came back as a topographic swirl with a centre seam and fabric
+  // showing between rings, while every professional reference fills solids as
+  // flat one-grain tatami. Solid shapes are left UNSET so the engine's gated
+  // auto fill (tatami / turning / satin, each self-validating on coverage)
+  // makes the call.
   if (isThinBand(usable, outer)) return "contour"; // a frame / ring band
-  return "tatami";
+  return undefined;
 }
 
 /** Below this equivalent diameter (mm) a round shape fills solid (tatami), not
@@ -121,7 +126,14 @@ function isThinBand(rings: EmbObject["paths"], outer: EmbObject["paths"][number]
   if (outerPer <= 0) return false;
   const circularity = (4 * Math.PI * outerArea) / (outerPer * outerPer);
   if (circularity < 0.4) return false; // jagged/organic outline → not a clean band
-  const netArea = outerArea - holes.reduce((s, h) => s + polygonArea(h), 0);
+  const holesArea = holes.reduce((s, h) => s + polygonArea(h), 0);
+  // A true band's HOLE is most of its interior (a frame, an "O", a washer). A
+  // big blob with a few small features carved out (a golf green with the ball
+  // and cup as holes) has a small hole fraction — but those carve-outs inflate
+  // the perimeter enough to sneak the wall-width ratio under the bar, and the
+  // blob sews as a topographic contour swirl. Require a genuinely open middle.
+  if (holesArea / outerArea < 0.35) return false;
+  const netArea = outerArea - holesArea;
   if (netArea <= 0) return false;
   const totalPer = outerPer + holes.reduce((s, h) => s + polygonPerimeter(h), 0);
   if (totalPer <= 0) return false;
