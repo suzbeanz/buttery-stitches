@@ -15,7 +15,7 @@ import { contourFill } from "./contour";
 import { medialColumns, columnsFromCenterlines, satinCoverage, residualRegions, type SatinColumn } from "./medial";
 import { turningFill, flowFill, flowAlong } from "./turning";
 import { guidanceFieldFill } from "./field";
-import { isSmallRoundFill, meanStrokeWidthMm } from "./classify";
+import { isSmallRoundFill, meanStrokeWidthMm, isBroadlyThick } from "./classify";
 import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
 import { dropShortStitches, splitLongTravels } from "./resample";
 
@@ -384,6 +384,12 @@ const TIP_PATCH_MIN_MM2 = 0.5;
  *  it falls back to tatami (residual patching handles small tips; this catches
  *  wholesale failures). */
 const MIN_TURNED_COVERAGE = 0.85;
+
+/** AUTO turning/flow requires the region to be thin nearly everywhere: no
+ *  substantial interior farther than this (mm) from an edge. A crescent's
+ *  12mm wall passes; a solid 33mm-wide ellipse is broadly thick and fills as
+ *  flat tatami instead. */
+const BAND_MAX_HALF_WIDTH_MM = 8;
 
 /**
  * Medial-axis satin columns for a region, but only if they'd actually look good:
@@ -862,7 +868,16 @@ export function generateObjectRuns(
       // branchy/organic shape flows along its limbs (flowFill); else concavity-aware
       // tatami. Every path declines (→ null) and self-validates to never slash.
       const userFlow = flowSpineMm ? flowAlong(region, flowSpineMm, fillOpts) : null;
-      const autoSingle = !manualDirection && !flowSpineMm && regions.length === 1;
+      // AUTO turning/flow is for BAND-LIKE shapes (a crescent, a leaf, a
+      // banner): thin nearly everywhere, so rows that follow the form read as
+      // intentional. A broad solid (a plain ellipse — especially one that just
+      // went hole-free via feature stacking) must NOT turn: its curved sweeps
+      // read as a swirl, where flat one-grain tatami reads as a clean solid
+      // the way every professional reference fills it. Judged by INSCRIBED
+      // thickness (isBroadlyThick), which a boundary notch can't fool the way
+      // it inflates perimeter-based mean width.
+      const bandLike = !isBroadlyThick(region, BAND_MAX_HALF_WIDTH_MM);
+      const autoSingle = !manualDirection && !flowSpineMm && regions.length === 1 && bandLike;
       // A clean single-spine band (banner, leaf, crescent) turns. The guidance FIELD
       // is the promoted default there — it sweeps the form cap-to-cap and beats the
       // spine-march on coverage + long-stitch count (bench: crescent-field) — with

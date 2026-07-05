@@ -2,6 +2,7 @@ import type { EmbObject, Project } from "../types/project";
 import { classifyRegion, isSmallRoundFill } from "./engine/classify";
 
 import { knockdown, seamTrap } from "./boolean";
+import { STACK_MAX_FEATURE_MM2 } from "./trace/stack";
 import { polygonArea, polygonPerimeter } from "./trace/classify";
 import { pathsBounds } from "./geometry";
 
@@ -297,14 +298,19 @@ export function fixStitchesWithReport(project: Project): { project: Project; rep
 function knockdownPass(objects: EmbObject[], trapMm = 0.35): EmbObject[] {
   // Only BROAD solid fills on top knock down what's beneath — thin lettering and
   // satin details sit on top, and carving their shapes out of a background just
-  // adds complex travel for no gain (and no real buildup).
+  // adds complex travel for no gain (and no real buildup). SMALL features (a
+  // ball, a hole, an eye) also stay stacked: the trace deliberately fills the
+  // parent solid beneath them (stack-don't-carve, the professional layering
+  // rule), and knocking them back out would recreate the very color-boundary
+  // seams the stacking removed.
   const causesKnockdown = (h: EmbObject) =>
     h.type === "fill" &&
     !h.params.applique &&
     !h.text &&
     h.params.fillStyle !== "satin" &&
     h.params.fillStyle !== "motif" &&
-    h.paths.length > 0;
+    h.paths.length > 0 &&
+    h.paths.reduce((s, r) => s + Math.abs(polygonArea(r)), 0) > STACK_MAX_FEATURE_MM2;
   return objects.map((o, i) => {
     if (o.type !== "fill" || o.params.applique || o.paths.length === 0) return o;
     const higher = objects.slice(i + 1).filter(causesKnockdown).map((h) => h.paths);
