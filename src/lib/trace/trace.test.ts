@@ -617,3 +617,37 @@ describe("suggestColorCount — clipart on a card", () => {
     expect(suggestColorCount(img)).toBe(4);
   });
 });
+
+describe("screenshot edge artifacts", () => {
+  function image(w: number, h: number, paint: (x: number, y: number) => number[]): ImageData {
+    const data = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        const [r, g, b] = paint(x, y);
+        data[i] = r;
+        data[i + 1] = g;
+        data[i + 2] = b;
+        data[i + 3] = 255;
+      }
+    return { width: w, height: h, data } as unknown as ImageData;
+  }
+
+  it("drops a thin line RUNNING ALONG the image border, keeps one merely touching it", () => {
+    // A screenshot border line down the right edge + a real vertical stroke that
+    // touches the top border. The frame line is a capture artifact → dropped;
+    // the subject stroke stays.
+    const img = image(120, 120, (x, y) => {
+      if (x >= 117) return [120, 120, 120]; // frame line along the right edge
+      if (x >= 40 && x < 44 && y < 90) return [30, 30, 34]; // real stroke touching top
+      return [255, 255, 255];
+    });
+    const { colors, objects } = imageDataToObjects(img, 3, { mmPerPx: 0.5, removeBackground: true });
+    // The dark stroke survives…
+    const darkId = colors.find((c) => c.rgb[0] < 90)?.id;
+    expect(objects.some((o) => o.colorId === darkId)).toBe(true);
+    // …and nothing lives at the right edge anymore (the frame line is gone).
+    const maxX = Math.max(...objects.flatMap((o) => o.paths.flat().map((p) => p.x)));
+    expect(maxX).toBeLessThan(55);
+  });
+});

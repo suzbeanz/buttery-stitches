@@ -78,9 +78,21 @@ export function medianCut(colors: RGB[], numColors: number): RGB[] {
   return boxes.map(averageColor);
 }
 
-/** Squared RGB distance. */
+/** Chroma weight for the clustering metric. Pale hues (a light-blue window
+ *  against white) differ almost entirely in CHROMA; plain RGB euclidean
+ *  underweights that and merges them, while shades of one hue (a red and its
+ *  darkened edge) differ mostly in LUMA and should still merge readily. */
+const CHROMA_WEIGHT = 5;
+
+/** Perceptual-ish squared distance: luma + weighted chroma (YCbCr-style).
+ *  Linear in RGB, so cluster means computed in RGB are also means under this
+ *  metric — Lloyd iterations stay valid. */
 function dist2(a: RGB, r: number, g: number, b: number): number {
-  return (a[0] - r) ** 2 + (a[1] - g) ** 2 + (a[2] - b) ** 2;
+  const y1 = 0.299 * a[0] + 0.587 * a[1] + 0.114 * a[2];
+  const y2 = 0.299 * r + 0.587 * g + 0.114 * b;
+  const cb1 = a[2] - y1, cb2 = b - y2;
+  const cr1 = a[0] - y1, cr2 = r - y2;
+  return (y1 - y2) ** 2 + CHROMA_WEIGHT * ((cb1 - cb2) ** 2 + (cr1 - cr2) ** 2);
 }
 
 /**
@@ -457,14 +469,129 @@ function stripCardOnce(
   return { image: { width, height, data: out }, card, stripped, bboxW: maxX - minX + 1, bboxH: maxY - minY + 1 };
 }
 
-/** Nearest palette color to (r,g,b) by squared Euclidean distance. */
-/** Index of the palette color closest (squared RGB distance) to (r,g,b). */
+/** How close (squared RGB) a sliver's colour must sit to the SEGMENT between
+ *  its two neighbours' colours to count as their anti-alias blend. */
+const BLEND_SEGMENT_MAX_DIST2 = 60 * 60;
+
+/** Squared distance from colour c to the segment a→b in RGB space. */
+function distToSegment2(c: RGB, a: RGB, b: RGB): number {
+  const abx = b[0] - a[0], aby = b[1] - a[1], abz = b[2] - a[2];
+  const acx = c[0] - a[0], acy = c[1] - a[1], acz = c[2] - a[2];
+  const len2 = abx * abx + aby * aby + abz * abz;
+  const t = len2 > 0 ? Math.max(0, Math.min(1, (acx * abx + acy * aby + acz * abz) / len2)) : 0;
+  const dx = acx - abx * t, dy = acy - aby * t, dz = acz - abz * t;
+  return dx * dx + dy * dy + dz * dz;
+}
+
+/**
+ * Dissolve thin blend-band components (see the call site) in place. Each band's
+ * pixels flow to whichever of its two bordering colours they touch, growing both
+ * sides inward until the band is consumed — so the boundary lands mid-band, the
+ * same place the source's edge actually is.
+ */
+function dissolveBlendSlivers(
+  labels: Int16Array,
+  width: number,
+  height: number,
+  palette: RGB[],
+  maxThickPx: number,
+): void {
+  const total = width * height;
+  const comp = new Int32Array(total).fill(-1);
+  const compPixels: number[][] = [];
+  const stack: number[] = [];
+  for (let start = 0; start < total; start++) {
+    if (labels[start] < 0 || comp[start] !== -1) continue;
+    const id = compPixels.length;
+    const val = labels[start];
+    const pixels: number[] = [];
+    comp[start] = id;
+    stack.length = 0;
+    stack.push(start);
+    while (stack.length) {
+      const k = stack.pop()!;
+      pixels.push(k);
+      const kx = k % width;
+      const ky = (k / width) | 0;
+      if (kx > 0 && comp[k - 1] === -1 && labels[k - 1] === val) { comp[k - 1] = id; stack.push(k - 1); }
+      if (kx < width - 1 && comp[k + 1] === -1 && labels[k + 1] === val) { comp[k + 1] = id; stack.push(k + 1); }
+      if (ky > 0 && comp[k - width] === -1 && labels[k - width] === val) { comp[k - width] = id; stack.push(k - width); }
+      if (ky < height - 1 && comp[k + width] === -1 && labels[k + width] === val) { comp[k + width] = id; stack.push(k + width); }
+    }
+    compPixels.push(pixels);
+  }
+
+  const tally = new Map<number, number>();
+  for (const pixels of compPixels) {
+    const myLabel = labels[pixels[0]];
+    // Perimeter (pixel edges facing outside the component) + neighbour tally.
+    tally.clear();
+    let perim = 0;
+    for (const k of pixels) {
+      const kx = k % width;
+      const ky = (k / width) | 0;
+      const nb = [
+        kx > 0 ? k - 1 : -1,
+        kx < width - 1 ? k + 1 : -1,
+        ky > 0 ? k - width : -1,
+        ky < height - 1 ? k + width : -1,
+      ];
+      for (const ni of nb) {
+        const nl = ni < 0 ? -2 : labels[ni];
+        if (nl === myLabel && ni >= 0 && comp[ni] === comp[k]) continue; // interior edge
+        perim++;
+        if (nl >= 0 && nl !== myLabel) tally.set(nl, (tally.get(nl) ?? 0) + 1);
+      }
+    }
+    if (perim === 0) continue;
+    const thickness = (2 * pixels.length) / perim; // ≈ mean band width in px
+    if (thickness > maxThickPx) continue; // a real feature, not a blend band
+    const neighbors = [...tally.entries()].sort((a, b) => b[1] - a[1]);
+    if (neighbors.length < 2) continue; // one-sided → not a between-colours band
+    const [[A, cntA], [B, cntB]] = neighbors;
+    const totalN = neighbors.reduce((s, [, c]) => s + c, 0);
+    if ((cntA + cntB) / totalN < 0.85) continue; // touches many colours → a junction, keep
+    if (Math.min(cntA, cntB) / totalN < 0.15) continue; // essentially one-sided
+    if (distToSegment2(palette[myLabel], palette[A], palette[B]) > BLEND_SEGMENT_MAX_DIST2) continue;
+
+    // Consume the band from both sides: pixels adjacent to A become A, adjacent
+    // to B become B, repeating until the band is gone (ties resolve by order).
+    let frontier = pixels;
+    let guard = 0;
+    while (frontier.length && guard++ < 64) {
+      const next: number[] = [];
+      const assign: Array<[number, number]> = [];
+      for (const k of frontier) {
+        const kx = k % width;
+        const ky = (k / width) | 0;
+        let to = -1;
+        for (const ni of [
+          kx > 0 ? k - 1 : -1,
+          kx < width - 1 ? k + 1 : -1,
+          ky > 0 ? k - width : -1,
+          ky < height - 1 ? k + width : -1,
+        ]) {
+          if (ni < 0) continue;
+          if (labels[ni] === A || labels[ni] === B) { to = labels[ni]; break; }
+        }
+        if (to >= 0) assign.push([k, to]);
+        else next.push(k);
+      }
+      if (assign.length === 0) break; // enclosed remainder; leave it
+      for (const [k, to] of assign) labels[k] = to;
+      frontier = next;
+    }
+  }
+}
+
+/** Index of the palette color closest to (r,g,b) — same perceptual metric as
+ *  the clustering, or pixels would assign to different clusters than the ones
+ *  k-means built around them. */
 function nearestIndex(palette: RGB[], r: number, g: number, b: number): number {
   let best = 0;
   let bd = Infinity;
   for (let i = 0; i < palette.length; i++) {
-    const c = palette[i];
-    const d = (c[0] - r) ** 2 + (c[1] - g) ** 2 + (c[2] - b) ** 2;
+    const d = dist2(palette[i], r, g, b);
     if (d < bd) {
       bd = d;
       best = i;
@@ -478,7 +605,11 @@ function nearestIndex(palette: RGB[], r: number, g: number, b: number): number {
  * nearest palette color; transparent pixels are left transparent. Returns a NEW
  * buffer plus the palette.
  */
-export function quantizeImage(img: RasterImage, numColors: number): QuantizedImage {
+export function quantizeImage(
+  img: RasterImage,
+  numColors: number,
+  opts: { blendSliverMaxPx?: number } = {},
+): QuantizedImage {
   const { width, height, data } = img;
   const n = Math.max(2, Math.min(64, Math.floor(numColors)));
   const total = width * height;
@@ -519,6 +650,17 @@ export function quantizeImage(img: RasterImage, numColors: number): QuantizedIma
     // merging the fragments (coverage stays solid) instead of leaving holes — so
     // the trace lands as a handful of broad regions, the way a pro would build it.
     consolidateRegions(labels, width, height, palette);
+    // Finally, dissolve ANTI-ALIAS BLEND BANDS. Where two colours meet, the
+    // source's edge smoothing produces a thin ribbon of intermediate colour
+    // (grey between black linework and white, grey-green between a green mound
+    // and a white page). k-means gives that ribbon its own cluster, and it then
+    // sews as a real line of nonsense-coloured thread hugging every boundary.
+    // A component is a blend band when it is THIN, bordered almost entirely by
+    // exactly TWO other colours, and its own colour lies on the segment between
+    // theirs — then its pixels flow to whichever side they touch. A genuine
+    // intermediate-coloured FEATURE (a grey hubcap disc) is blobby, not thin,
+    // and survives.
+    dissolveBlendSlivers(labels, width, height, palette, opts.blendSliverMaxPx ?? 4);
   }
 
   const out = new Uint8ClampedArray(data.length);
@@ -665,14 +807,17 @@ function consolidateRegions(labels: Int16Array, width: number, height: number, p
     if (count.size === 0) continue; // island fills the whole opaque area — leave it
     // Pick the most-bordering neighbour whose COLOR is close to this island's —
     // a high-contrast island (dark eye on light fur) has no near neighbour, so it
-    // is kept; a shading fleck melts into the similar color hugging it.
+    // is kept; a shading fleck melts into the similar color hugging it. Uses the
+    // same perceptual (chroma-weighted) metric as the clustering: under plain
+    // RGB, a small saturated feature (a dark-red beacon dome) sits just inside
+    // the radius of the black outline around it and gets swallowed, while the
+    // weighted metric keeps hue-distinct features and still merges true shading.
     const mine = palette[labels[pixels[0]]];
     let best = -1;
     let bestN = -1;
     for (const [l, c] of count) {
-      const o = palette[l];
-      const d2 = (o[0] - mine[0]) ** 2 + (o[1] - mine[1]) ** 2 + (o[2] - mine[2]) ** 2;
-      if (d2 <= CONSOLIDATE_MERGE_DIST2 && c > bestN) { bestN = c; best = l; }
+      const d = dist2(palette[l], mine[0], mine[1], mine[2]);
+      if (d <= CONSOLIDATE_MERGE_DIST2 && c > bestN) { bestN = c; best = l; }
     }
     if (best < 0) continue; // no similar-enough surround → keep this feature
     for (const k of pixels) labels[k] = best; // grow the surrounding color over it

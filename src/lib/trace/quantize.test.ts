@@ -258,3 +258,49 @@ describe("removeInnerBackdrop", () => {
     expect(removeInnerBackdrop(img)).toBeNull();
   });
 });
+
+describe("blend-sliver dissolution", () => {
+  it("dissolves a thin anti-alias band between two colours", () => {
+    // Black region | 2px mid-grey blend band | white region. The grey is exactly
+    // the AA ribbon a source's edge smoothing produces; it must flow into its
+    // two sides instead of surviving as its own colour.
+    const img = image(90, 90, (x) => {
+      if (x < 40) return [20, 20, 20, 255];
+      if (x < 43) return [138, 138, 138, 255];
+      return [250, 250, 250, 255];
+    });
+    const q = quantizeImage(img, 3);
+    expect(distinctColors(q).size).toBeLessThanOrEqual(2);
+  });
+
+  it("keeps a blobby intermediate-coloured FEATURE (a grey hubcap)", () => {
+    // Same grey, but as a 20×20 disc inside the white — a real feature, thick,
+    // must survive even though its colour sits between black and white.
+    const img = image(90, 90, (x, y) => {
+      if (x < 30) return [20, 20, 20, 255];
+      if ((x - 60) ** 2 + (y - 45) ** 2 <= 100) return [138, 138, 138, 255];
+      return [250, 250, 250, 255];
+    });
+    const q = quantizeImage(img, 3);
+    const grey = [...distinctColors(q)].some((c) => {
+      const [r, g, b] = c.split(",").map(Number);
+      return r > 90 && r < 190 && Math.abs(r - g) < 25 && Math.abs(g - b) < 25;
+    });
+    expect(grey).toBe(true);
+  });
+});
+
+describe("perceptual (chroma-weighted) clustering", () => {
+  it("keeps a pale-blue region distinct from white (window glass on a page)", () => {
+    // Light blue (191,226,252) vs white: nearly equal luma, clearly different
+    // chroma. Plain RGB euclidean merges them; the weighted metric must not.
+    const samples: RGB[] = [];
+    for (let i = 0; i < 700; i++) samples.push([250, 250, 250]);
+    for (let i = 0; i < 80; i++) samples.push([191, 226, 252]);
+    for (let i = 0; i < 180; i++) samples.push([210, 30, 35]);
+    for (let i = 0; i < 120; i++) samples.push([10, 10, 12]);
+    const pal = kmeansPalette(samples, 4);
+    const paleBlue = pal.some((c) => c[2] > 235 && c[2] - c[0] > 30);
+    expect(paleBlue).toBe(true);
+  });
+});

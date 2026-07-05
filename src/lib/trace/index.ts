@@ -127,6 +127,26 @@ function touchesBorder(pts: Point[], w: number, h: number): boolean {
   return false;
 }
 
+/** Does a thin region RUN ALONG one image edge (most of its points hugging a
+ *  single border)? Screenshots and re-saved images carry 1–2px frame lines and
+ *  edge shading that trace as a long stroke pinned to the border — an artifact
+ *  of the capture, never part of the subject. A real subject element merely
+ *  TOUCHING the edge (a pole reaching the top) fails this: only a small
+ *  fraction of its points hug any one border. */
+function hugsImageEdge(pts: Point[], w: number, h: number): boolean {
+  // The ENTIRE region must live inside a narrow band against one edge (its far
+  // side included — a 3px frame line's inner side still sits within the band).
+  const band = Math.max(4, Math.min(w, h) * 0.03);
+  let maxL = 0, maxR = 0, maxT = 0, maxB = 0;
+  for (const p of pts) {
+    maxL = Math.max(maxL, p.x);
+    maxR = Math.max(maxR, w - p.x);
+    maxT = Math.max(maxT, p.y);
+    maxB = Math.max(maxB, h - p.y);
+  }
+  return maxL <= band || maxR <= band || maxT <= band || maxB <= band;
+}
+
 /** Straightening tolerance (mm) for the ring-cleanup pass. The tracer leaves a small
  *  (~0.2–0.5 mm) smooth bow on edges that are meant to be straight; re-simplifying a
  *  non-primitive ring at this tolerance collapses the bow to a true straight line while
@@ -297,6 +317,9 @@ export function tracedataToObjects(
       // genuine same-as-background feature (a white ball on a white page) is blobby,
       // not a sliver, so it fails this test and survives.
       if (isNearBackground && isStroke) return;
+      // A thin stroke pinned along one image border is a capture artifact (a
+      // screenshot frame line, resize edge shading) — never subject linework.
+      if (isStroke && hugsImageEdge(pxOuter, td.width, td.height)) return;
       const rings = [clean(rawOuter), ...rawHoles.map(clean)];
       if (isStroke) {
         strokeRings.push(...rings);
@@ -546,7 +569,11 @@ export function imageDataToObjects(
   // colour, not almost all of it — a subject that reaches the image edge (a mound
   // that runs off the left border) must not cancel the background's slot.
   const opaqueBg = !transparentBg && opts.removeBackground !== false && borderIsSolidOpaque(source, 0.35);
-  const flat = quantizeImage(source, opaqueBg ? numberOfColors + 1 : numberOfColors);
+  // Blend-band thickness scales with the upscale factor (bilinear turns a 1px
+  // AA ribbon into a factor-px one).
+  const flat = quantizeImage(source, opaqueBg ? numberOfColors + 1 : numberOfColors, {
+    blendSliverMaxPx: 2 + 2 * factor,
+  });
   // The background colour: caller-supplied, else a stripped card's colour, else
   // detected from the (now palette-flat) border. The card takes precedence over
   // border detection — after stripping, the border is mostly transparent and its
