@@ -12,6 +12,12 @@ import { marchingSquares, simplify } from "../paintbucket";
 const MAX_THROW_MM = 7;
 /** Shortest stroke (mm) worth satining; below this it is thinning noise. */
 const MIN_BRANCH_MM = 2;
+/** Straight-snap: a non-loop branch at least this long whose points all sit
+ *  within the deviation below of its end-to-end chord is replaced by the exact
+ *  chord — traced ladder rails and rungs sew dead straight instead of carrying
+ *  the trace's wobble into the satin. */
+const STRAIGHT_SNAP_MIN_MM = 2.5;
+const STRAIGHT_SNAP_MAX_DEV_MM = 0.6;
 /** Above this many skeleton branches a region is a big auto-digitized blob, not
  *  lettering — skip the pairwise junction miter there (costly, less needed). */
 const MITER_MAX_BRANCHES = 16;
@@ -489,7 +495,7 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
   const branches = traceSkeleton(skel, grid.w, grid.h);
 
   // Pass 1 — clean centerline per skeleton branch.
-  const prepped: { center: Path; loop: boolean }[] = [];
+  const prepped: { center: Path; loop: boolean; straight: boolean }[] = [];
   for (const branch of branches) {
     if (branch.length < 2) continue;
     const loop = isLoop(branch);
@@ -505,9 +511,29 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
     if (polylineLength(raw) < MIN_BRANCH_MM) continue;
 
     // Clean the centerline: drop the pixel staircase, then smooth it.
-    const center = smoothPath(douglasPeucker(raw, cellMm * 1.2), { maxSegmentMm: 0.8 });
+    let center = smoothPath(douglasPeucker(raw, cellMm * 1.2), { maxSegmentMm: 0.8 });
     if (center.length < 2) continue;
-    prepped.push({ center, loop });
+    // STRAIGHT-SNAP: a branch whose every point lies within a trace-noise bow
+    // of its own end-to-end chord IS a straight stroke (a ladder rail segment,
+    // a rung, a window bar) — replace it with the exact chord so the satin lies
+    // dead straight. Endpoints are preserved, so junction meeting points don't
+    // move; loops and genuinely curved branches (which bow far past the
+    // tolerance) are untouched.
+    if (!loop && center.length > 2) {
+      const a = center[0];
+      const b = center[center.length - 1];
+      const chord = Math.hypot(b.x - a.x, b.y - a.y);
+      if (chord >= STRAIGHT_SNAP_MIN_MM) {
+        let maxDev = 0;
+        for (const p of center) {
+          const t = Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / (chord * chord)));
+          maxDev = Math.max(maxDev, Math.hypot(p.x - (a.x + (b.x - a.x) * t), p.y - (a.y + (b.y - a.y) * t)));
+          if (maxDev > STRAIGHT_SNAP_MAX_DEV_MM) break;
+        }
+        if (maxDev <= STRAIGHT_SNAP_MAX_DEV_MM) center = [a, b];
+      }
+    }
+    prepped.push({ center, loop, straight: center.length === 2 });
   }
 
   // Pass 2 — build longest-first, each MITERED against the longer strokes (the
@@ -521,8 +547,8 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
   const columns: SatinColumn[] = [];
   const higher: Path[] = [];
   for (const i of order) {
-    const { center, loop } = prepped[i];
-    const col = buildColumn(center, loop, oriented, grid, dt, cellMm, opts, true, true, miter ? higher.slice() : []);
+    const { center, loop, straight } = prepped[i];
+    const col = buildColumn(center, loop, oriented, grid, dt, cellMm, opts, true, true, miter ? higher.slice() : [], straight);
     if (col) columns.push(col);
     if (miter) higher.push(douglasPeucker(center, 0.5));
   }
@@ -673,6 +699,7 @@ function buildColumn(
   trimJunctions: boolean,
   dropStubs: boolean,
   siblings: Path[] = [],
+  straightBar = false,
 ): SatinColumn | null {
   // Densely sample the centerline, build both rails, then place throws with
   // DENSITY COMPENSATION: advance until whichever rail (the outer one on a
@@ -702,6 +729,14 @@ function buildColumn(
   const dtHalves = halves.map((h) => Math.max(0, h - OVERSHOOT_MM)).sort((a, b) => a - b);
   const medHalfDt = dtHalves[dtHalves.length >> 1] ?? 0;
   const widthCap = medHalfDt > 0 ? medHalfDt * 1.4 : Infinity;
+  // A STRAIGHT-SNAPPED auto branch is a straight BAR (a ladder rail, a rung, a
+  // window mullion): its true width is constant, and the per-sample DT widths
+  // only carry the trace's boundary noise into the rails. Flatten to the
+  // median so both rails come out dead straight and parallel. (Authored font
+  // strokes never take this path — their width variation is deliberate.)
+  if (straightBar && medHalfDt > 0) {
+    halves = halves.map(() => medHalfDt + OVERSHOOT_MM);
+  }
 
   // Drop junction-stub branches: the little segment at the very center of a Y
   // (a meeting R's stem, bowl and leg) is short and as wide as it is long, not a
