@@ -77,7 +77,21 @@ export default function ExportMenu({
       // blocks (red circle + red crescent) is one color but two thread blocks;
       // the old "changes + 1" label showed "7 colors" on a 6-color design.
       colorCount: new Set(d.map((s) => s.colorId)).size,
-      warnings: validateDesign(d, project),
+      warnings: [
+        // The trace only runs at import time and persists with the project, so
+        // a stored design keeps its ORIGINAL digitization forever. When that
+        // vintage predates the running app, say so — the fix is re-importing
+        // the image, and no amount of re-exporting will apply new trace logic.
+        ...(project.digitizedBuild && project.digitizedBuild !== buildTag()
+          ? [
+              {
+                level: "warn" as const,
+                message: `This design was digitized by an older version (build ${project.digitizedBuild}). Re-import the image to apply the latest digitizer improvements.`,
+              },
+            ]
+          : []),
+        ...validateDesign(d, project),
+      ],
     };
   }, [open, project]);
 

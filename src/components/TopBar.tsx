@@ -37,6 +37,7 @@ import { newId } from "../lib/id";
 import type { Project } from "../types/project";
 import type { SaveStatus } from "../App";
 import { toast } from "../store/toastStore";
+import { buildTag } from "../lib/version";
 import { importDesignBytes, EMB_FORMATS, type EmbFormat } from "../lib/export";
 import { buildImportedObjects } from "../lib/embImport";
 import ExportMenu from "./ExportMenu";
@@ -229,8 +230,11 @@ export default function TopBar({
   }
 
   function applyDigitized(p: Project) {
-    // Tracked (not cleared) so an accidental replace can be undone.
-    setProject(p);
+    // Tracked (not cleared) so an accidental replace can be undone. Stamp the
+    // digitizer vintage: the trace only runs at import time and persists with
+    // the project, so exports must be able to tell when a stored design
+    // predates the current digitizer.
+    setProject({ ...p, digitizedBuild: buildTag() });
     setImageFile(null);
     goEdit();
     // Walk the user through each freshly-traced region (confirm type, keep/skip).
