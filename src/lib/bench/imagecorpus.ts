@@ -244,5 +244,54 @@ export function corpusImages(): CorpusImage[] {
     }),
   });
 
+  // 9. Tiny anti-aliased icon (a favicon-sized logo on transparency) — must
+  // upscale before tracing: at hoop scale every pixel is ~0.7mm, and without
+  // upscaling the clean curves come out as lumpy blobs and blend halos.
+  out.push({
+    name: "tiny-icon",
+    stresses: "low-res AA source: upscale keeps curves smooth, invents no halo colors",
+    colors: 4,
+    mmPerPx: 0.7,
+    expectColors: [2, 4],
+    removeBackground: true,
+    mustKeep: [
+      { name: "red", test: reds },
+      { name: "blue", test: blues },
+    ],
+    image: (() => {
+      // Render at 8× then box-downsample to 96px for genuine anti-aliased edges.
+      const hi = build(768, 768, (x, y) => {
+        if (inEllipse(x, y, 384, 320, 240, 240) && !inEllipse(x, y, 384, 320, 120, 120))
+          return x < 384 ? [210, 40, 40, 255] : [40, 70, 200, 255];
+        if (x >= 200 && x < 560 && y >= 600 && y < 680) return [210, 40, 40, 255];
+        return [0, 0, 0, 0];
+      });
+      const w = 96;
+      const f = 8;
+      const data = new Uint8ClampedArray(w * w * 4);
+      for (let y = 0; y < w; y++)
+        for (let x = 0; x < w; x++) {
+          let r = 0, g = 0, b = 0, a = 0;
+          for (let sy = 0; sy < f; sy++)
+            for (let sx = 0; sx < f; sx++) {
+              const o = ((y * f + sy) * 768 + x * f + sx) * 4;
+              const av = hi.data[o + 3] / 255;
+              r += hi.data[o] * av;
+              g += hi.data[o + 1] * av;
+              b += hi.data[o + 2] * av;
+              a += av;
+            }
+          const o = (y * w + x) * 4;
+          if (a > 0) {
+            data[o] = r / a;
+            data[o + 1] = g / a;
+            data[o + 2] = b / a;
+          }
+          data[o + 3] = (a / (f * f)) * 255;
+        }
+      return { width: w, height: w, data };
+    })(),
+  });
+
   return out;
 }

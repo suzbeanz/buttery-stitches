@@ -230,10 +230,13 @@ export function recognizeShape(ring: Path, tolMm = 0.6): Recognized | null {
     }
   }
 
-  // --- Ellipse: fills ~π/4 of its box and clearly non-circular. ---
+  // --- Ellipse: fills ~π/4 of its box and clearly non-circular. The p90 gate
+  // rejects the near-miss family (a stadium/rounded bar reads as an ellipse on
+  // mean distance but its straight sides deviate >1mm). ---
   if (fillRatio > 0.7 && fillRatio < 0.86 && (a / b > 1.08 || b / a > 1.08)) {
     const ell = makeEllipse(cb, a, b, rot);
-    if (fitsWithin(samples, ell, Math.min(tolMm * 1.6, minor * 0.35))) {
+    const cap = Math.min(tolMm * 1.6, minor * 0.35);
+    if (fitsWithin(samples, ell, cap, cap * 0.9)) {
       return { kind: "ellipse", ring: ell, angleDeg: (rot * 180) / Math.PI };
     }
   }
@@ -251,8 +254,15 @@ export function recognizeShape(ring: Path, tolMm = 0.6): Recognized | null {
   return null;
 }
 
-/** Mean nearest-vertex distance from each sample to the candidate ring ≤ tol. */
-function fitsWithin(samples: Path, candidate: Path, tol: number): boolean {
+/** Mean nearest-vertex distance from each sample to the candidate ring ≤ tol —
+ *  and, when `tolP90` is given, the 90th-percentile distance too. The mean
+ *  alone forgives a SYSTEMATIC misfit spread thinly around the ring: a
+ *  stadium-shaped bar (straight sides, round caps) "fits" an ellipse on mean
+ *  distance because only the mid-sides deviate — but those deviations run over
+ *  a millimetre, and the snapped ellipse bulges visibly past the artwork. A
+ *  true primitive fits everywhere, so its p90 stays near zero. */
+function fitsWithin(samples: Path, candidate: Path, tol: number, tolP90?: number): boolean {
+  const dists: number[] = [];
   let sum = 0;
   for (const p of samples) {
     let best = Infinity;
@@ -262,8 +272,14 @@ function fitsWithin(samples: Path, candidate: Path, tol: number): boolean {
       best = Math.min(best, pointToSeg(p, a, b));
     }
     sum += best;
+    dists.push(best);
   }
-  return sum / samples.length <= tol;
+  if (sum / samples.length > tol) return false;
+  if (tolP90 !== undefined) {
+    dists.sort((x, y) => x - y);
+    if (dists[Math.floor(dists.length * 0.9)] > tolP90) return false;
+  }
+  return true;
 }
 
 function pointToSeg(p: Point, a: Point, b: Point): number {

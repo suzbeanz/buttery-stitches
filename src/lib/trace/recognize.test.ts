@@ -149,3 +149,35 @@ describe("narrow / asymmetric shapes (a traced flag pole)", () => {
     expect(Math.max(...ys)).toBeCloseTo(16, 0);
   });
 });
+
+describe("stadium (rounded bar) vs ellipse", () => {
+  /** A 30×12 stadium: straight sides, semicircular caps. On MEAN fit distance
+   *  it reads as an ellipse (only the mid-sides deviate), but the snapped
+   *  ellipse bulges >1mm past the artwork — the p90 gate must reject it. */
+  const stadium = (): Path => {
+    const ring: Path = [];
+    const r = 6;
+    for (let i = 0; i <= 12; i++) {
+      const a = -Math.PI / 2 + (i / 12) * Math.PI;
+      ring.push({ x: 9 + r * Math.cos(a), y: r * Math.sin(a) });
+    }
+    for (let i = 0; i <= 12; i++) {
+      const a = Math.PI / 2 + (i / 12) * Math.PI;
+      ring.push({ x: -9 + r * Math.cos(a), y: r * Math.sin(a) });
+    }
+    return ring;
+  };
+
+  it("never snaps a stadium to an ellipse", () => {
+    const rec = recognizeShape(stadium(), 1.0);
+    expect(rec?.kind).not.toBe("ellipse");
+  });
+
+  it("still snaps a genuine traced ellipse (small noise)", () => {
+    const ring = sampled(64, (t) => ({
+      x: 15 * Math.cos(t * 2 * Math.PI) + Math.sin(t * 40) * 0.1,
+      y: 6 * Math.sin(t * 2 * Math.PI) + Math.cos(t * 34) * 0.1,
+    }));
+    expect(recognizeShape(ring, 0.8)?.kind).toBe("ellipse");
+  });
+});
