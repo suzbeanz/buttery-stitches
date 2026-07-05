@@ -15,6 +15,7 @@ import {
   removeInnerBackdrop,
 } from "./quantize";
 import { underlapObjects } from "./underlap";
+import { stackSmallFeatures } from "./stack";
 
 export * from "./simplify";
 export * from "./classify";
@@ -164,6 +165,10 @@ export function tracedataToObjects(
   // real part of the subject. If nothing in the palette resembles the
   // background colour, there is nothing left to remove.
   const BG_MATCH_MAX_DIST2 = 90 * 90;
+  // Looser bound for dropping thin HALO slivers of a near-background shade (an
+  // anti-alias blend hugging the subject's outline). Whole regions are never
+  // deleted at this distance — only stroke-classified slivers.
+  const BG_HALO_MAX_DIST2 = 150 * 150;
   let bgIndex = -1;
   if (removeBackground) {
     const bg = opts.backgroundRgb;
@@ -200,9 +205,24 @@ export function tracedataToObjects(
     // foreground object the SAME colour as the background — a white ball on a white
     // page — survives; only the actual background region (the one touching the
     // image border) is dropped below, per region.
-    const isBackground = ci === bgIndex;
+    // Background-ness is judged by colour DISTANCE, not palette index alone:
+    // k-means routinely splits the background's anti-alias halo into extra
+    // shades, and if only the nearest one is treated as background the others
+    // survive as a pale fringe sewn around the subject. Two tolerances: strict
+    // for deleting whole border-touching REGIONS (high stakes), loose for the
+    // thin STROKE slivers — a halo shade is a blend of background and subject
+    // (a grey-green ring between a white page and a green mound), so it sits
+    // farther from the background than any real region should, while genuine
+    // outline linework is high-contrast and stays far outside even the loose
+    // bound.
     const pal = td.palette[ci];
     if (!pal || pal.a === 0) return;
+    const bg = opts.backgroundRgb;
+    const bgDist2 = bg
+      ? (pal.r - bg[0]) ** 2 + (pal.g - bg[1]) ** 2 + (pal.b - bg[2]) ** 2
+      : Infinity;
+    const isBackground = ci === bgIndex || (bgIndex >= 0 && bgDist2 <= BG_MATCH_MAX_DIST2);
+    const isNearBackground = isBackground || (bgIndex >= 0 && bgDist2 <= BG_HALO_MAX_DIST2);
 
     const colorId = newId("color");
     const color: ThreadColor = {
@@ -276,7 +296,7 @@ export function tracedataToObjects(
       // background-colored thread where there should be bare fabric, so drop it. A
       // genuine same-as-background feature (a white ball on a white page) is blobby,
       // not a sliver, so it fails this test and survives.
-      if (isBackground && isStroke) return;
+      if (isNearBackground && isStroke) return;
       const rings = [clean(rawOuter), ...rawHoles.map(clean)];
       if (isStroke) {
         strokeRings.push(...rings);
@@ -312,8 +332,10 @@ export function tracedataToObjects(
   const objects = built.map((b) => b.object);
   const ordered = opts.idealize === false ? objects : idealizeDesign(objects);
   // Gap-proof the color boundaries LAST — after idealization, or a re-snapped
-  // primitive would undo the expansion.
-  return { colors, objects: opts.underlap === false ? ordered : underlapObjects(ordered) };
+  // primitive would undo the expansion. Stacking runs first (a filled hole
+  // needs no underlap), then the remaining boundaries get the underlap.
+  if (opts.underlap === false) return { colors, objects: ordered };
+  return { colors, objects: underlapObjects(stackSmallFeatures(ordered)) };
 }
 
 /** A traced region thinner than this (mean width, mm) is line-art (a stroke), not

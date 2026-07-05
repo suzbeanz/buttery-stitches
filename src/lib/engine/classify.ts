@@ -82,7 +82,7 @@ function distSqToSeg(p: Point, a: Point, b: Point): number {
  * and is satined, while a frilly-edged blob — fat almost everywhere despite a tiny
  * perimeter-derived mean width — is correctly caught as tatami.
  */
-function isBroadlyThick(rings: Path[], radiusMm: number): boolean {
+export function isBroadlyThick(rings: Path[], radiusMm: number): boolean {
   const outer = rings.find((r) => r.length >= 3);
   if (!outer) return false;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
