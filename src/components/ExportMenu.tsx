@@ -16,6 +16,7 @@ import {
 } from "../lib/export";
 import { designFor, countStitches, countColorChanges } from "../lib/engine";
 import { validateDesign } from "../lib/engine/validate";
+import { buildTag } from "../lib/version";
 
 /**
  * Export menu. Runs the stitch engine on the current project, shows a quick
@@ -87,13 +88,13 @@ export default function ExportMenu({
     setError(null);
     try {
       const plan = planFromDesign(design, project.colors);
-      await exportAndDownload(plan, "buttery-stitches", {
+      await exportAndDownload(plan, `buttery-stitches-${buildTag()}`, {
         format,
         pesVersion,
         onStage: setStage,
       });
       setOpen(false);
-      toast(`Exported buttery-stitches.${format} to your downloads`, "success");
+      toast(`Exported buttery-stitches-${buildTag()}.${format} to your downloads`, "success");
     } catch (err) {
       const msg = friendlyExportError(err);
       setError(msg);
@@ -109,7 +110,7 @@ export default function ExportMenu({
     try {
       const plan = planFromDesign(design, project.colors);
       const zip = await exportBundle(plan, EMB_FORMATS, { pesVersion, onStage: setStage });
-      downloadBytes(zip, "buttery-stitches.zip", "application/zip");
+      downloadBytes(zip, `buttery-stitches-${buildTag()}.zip`, "application/zip");
       setOpen(false);
       toast(`Exported all ${EMB_FORMATS.length} formats as a .zip`, "success");
     } catch (err) {
@@ -211,6 +212,7 @@ export default function ExportMenu({
 
               <p className="mt-2.5 px-1 font-body text-[10px] text-char/70">
                 The first export takes a few seconds to get ready, then it's instant.
+                <span className="float-right text-char/40">build {buildTag()}</span>
               </p>
             </>
           )}
