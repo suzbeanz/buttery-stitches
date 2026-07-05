@@ -9,6 +9,15 @@ declare const __BUILD_ID__: string;
 export const BUILD_ID: string =
   typeof __BUILD_ID__ === "string" ? __BUILD_ID__ : "dev";
 
+/** Short human tag for the running build ("k3x9q2" style) — stamped into
+ *  export filenames and shown in the export menu, so any file or screenshot
+ *  identifies exactly which deploy produced it. */
+export function buildTag(): string {
+  if (BUILD_ID === "dev") return "dev";
+  const n = Number(BUILD_ID);
+  return Number.isFinite(n) ? n.toString(36) : BUILD_ID.slice(0, 8);
+}
+
 const RELOAD_GUARD = "bs:reloaded-for";
 
 /** The deployed id from version.json, fetched past any cache, or null. */
@@ -51,4 +60,8 @@ export function startVersionWatch(): void {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") void checkOnce();
   });
+  // A tab that stays focused never fires visibilitychange — a studio session
+  // left open through a deploy kept running old code indefinitely (and its
+  // exports carried yesterday's bugs). A slow periodic check closes that hole.
+  setInterval(() => void checkOnce(), 15 * 60 * 1000);
 }
