@@ -212,6 +212,10 @@ export interface Project {
   fabric?: FabricType;
   /** thread weight (default 40wt); bends row density to keep coverage. */
   threadWeight?: ThreadWeight;
+  /** build tag of the auto-digitizer that traced this design (set when an
+   *  image is imported). Lets the app warn when a stored design predates the
+   *  current digitizer — re-exporting never re-traces. */
+  digitizedBuild?: string;
   colors: ThreadColor[];
   /** ORDER = stitch sequence. The first object is stitched first. */
   objects: EmbObject[];
