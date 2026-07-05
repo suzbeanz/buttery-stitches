@@ -4,6 +4,13 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  # Self-heal: Pages intermittently rejects deployments for stretches longer
+  # than any in-run retry can ride out, which strands the site on an old build
+  # until the next merge. A periodic redeploy caps that staleness at a few
+  # hours. Deploys are idempotent — republishing the same build is a no-op
+  # visually and costs a couple of runner-minutes.
+  schedule:
+    - cron: "23 */6 * * *"
 
 # Allow the workflow to publish to GitHub Pages.
 permissions:
@@ -36,18 +43,26 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url || steps.retry.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.retry.outputs.page_url || steps.retry2.outputs.page_url }}
     steps:
       # GitHub Pages intermittently rejects or strands deployments ("Deployment
-      # failed, try again later" / stuck at deployment_queued), which leaves the
-      # live site stale until the next merge. Retry once after a pause before
-      # calling the run failed.
+      # failed, try again later" / stuck at deployment_queued). A 2-minute retry
+      # proved shorter than their bad stretches, so back off harder: two retries
+      # at 5 and 10 minutes before calling the run failed (and the scheduled
+      # redeploy above catches anything that outlasts even that).
       - id: deployment
         uses: actions/deploy-pages@v4
         continue-on-error: true
-      - name: Wait before retrying a flaky Pages deployment
+      - name: Wait before first retry
         if: steps.deployment.outcome == 'failure'
-        run: sleep 120
+        run: sleep 300
       - id: retry
         if: steps.deployment.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+      - name: Wait before second retry
+        if: steps.deployment.outcome == 'failure' && steps.retry.outcome == 'failure'
+        run: sleep 600
+      - id: retry2
+        if: steps.deployment.outcome == 'failure' && steps.retry.outcome == 'failure'
         uses: actions/deploy-pages@v4
