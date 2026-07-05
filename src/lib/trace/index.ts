@@ -154,11 +154,17 @@ export function tracedataToObjects(
   // Identify the background. Prefer the border color (robust: a big subject
   // isn't the background) by matching it to the nearest palette layer; otherwise
   // fall back to the largest-area color.
+  // The nearest-palette match must actually be CLOSE: when a stripped card left
+  // no card-coloured pixels at all, "nearest to white" is whatever random hue
+  // happens to be lightest (a yellow pole), and marking it background deletes a
+  // real part of the subject. If nothing in the palette resembles the
+  // background colour, there is nothing left to remove.
+  const BG_MATCH_MAX_DIST2 = 90 * 90;
   let bgIndex = -1;
   if (removeBackground) {
     const bg = opts.backgroundRgb;
     if (bg) {
-      let bd = Infinity;
+      let bd = BG_MATCH_MAX_DIST2;
       td.palette.forEach((p, ci) => {
         if (p.a === 0) return;
         const d = (p.r - bg[0]) ** 2 + (p.g - bg[1]) ** 2 + (p.b - bg[2]) ** 2;
