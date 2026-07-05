@@ -14,6 +14,7 @@ import {
   borderIsSolidOpaque,
   removeInnerBackdrop,
 } from "./quantize";
+import { underlapObjects } from "./underlap";
 
 export * from "./simplify";
 export * from "./classify";
@@ -70,6 +71,9 @@ export interface DigitizeOptions {
   /** apply design-level idealization (regularize even/uniform repeats like a ladder's
    *  rungs into one canonical shape at a single pitch). Default on. */
   idealize?: boolean;
+  /** extend earlier-sewn regions under later neighbours so color boundaries
+   *  can't open bare-fabric gaps when the thread pulls. Default on. */
+  underlap?: boolean;
 }
 
 /** Detail level for auto-digitize: bolder & cleaner ↔ finer & busier. */
@@ -306,7 +310,10 @@ export function tracedataToObjects(
   // outlines and detail land crisply ON TOP of the fills instead of being buried.
   built.sort((a, b) => Number(a.stroke) - Number(b.stroke) || b.area - a.area);
   const objects = built.map((b) => b.object);
-  return { colors, objects: opts.idealize === false ? objects : idealizeDesign(objects) };
+  const ordered = opts.idealize === false ? objects : idealizeDesign(objects);
+  // Gap-proof the color boundaries LAST — after idealization, or a re-snapped
+  // primitive would undo the expansion.
+  return { colors, objects: opts.underlap === false ? ordered : underlapObjects(ordered) };
 }
 
 /** A traced region thinner than this (mean width, mm) is line-art (a stroke), not
