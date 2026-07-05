@@ -16,6 +16,7 @@ import {
 } from "./quantize";
 import { underlapObjects } from "./underlap";
 import { stackSmallFeatures } from "./stack";
+import { nameForRgb } from "./colorname";
 
 export * from "./simplify";
 export * from "./classify";
@@ -220,6 +221,24 @@ export function tracedataToObjects(
   const colors: ThreadColor[] = [];
   const built: { object: EmbObject; area: number; stroke: boolean }[] = [];
 
+  // Human hue names for the palette ("Red", "Light Blue", "Black") so the
+  // dialog's color list reads at a glance; duplicates get a counter. The
+  // transparent slot is skipped so it can't claim a name a real color needs.
+  const paletteNames: string[] = [];
+  {
+    const used = new Map<string, number>();
+    for (const p of td.palette) {
+      if (!p || p.a === 0) {
+        paletteNames.push("");
+        continue;
+      }
+      const base = nameForRgb([p.r, p.g, p.b]);
+      const n = (used.get(base) ?? 0) + 1;
+      used.set(base, n);
+      paletteNames.push(n === 1 ? base : `${base} ${n}`);
+    }
+  }
+
   td.layers.forEach((layer, ci) => {
     // The background COLOUR is kept as a layer (don't skip it wholesale) so that a
     // foreground object the SAME colour as the background — a white ball on a white
@@ -248,7 +267,7 @@ export function tracedataToObjects(
     const color: ThreadColor = {
       id: colorId,
       rgb: [pal.r, pal.g, pal.b],
-      name: `Color ${ci + 1}`,
+      name: paletteNames[ci] || `Color ${ci + 1}`,
     };
 
     // Separate each colour's regions into SOLID blobs and thin LINE-ART. Bold
