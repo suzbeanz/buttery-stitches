@@ -380,6 +380,11 @@ const AUTO_SATIN_MAX_WIDTH_MM = 4;
  *  a couple of mm² yet is the shape's most visible feature. */
 const TIP_PATCH_MIN_MM2 = 0.5;
 
+/** A turned/field/flow fill must cover at least this fraction of its region or
+ *  it falls back to tatami (residual patching handles small tips; this catches
+ *  wholesale failures). */
+const MIN_TURNED_COVERAGE = 0.85;
+
 /**
  * Medial-axis satin columns for a region, but only if they'd actually look good:
  * the strokes must be narrow enough to satin cleanly AND the satin must cover
@@ -864,11 +869,16 @@ export function generateObjectRuns(
       // turningFill kept as the fallback when the field declines (it self-validates
       // coverage). A branchy/organic shape still flows along its limbs (flowFill).
       const autoTurn = autoSingle ? turningFill(region, fillOpts) : null;
-      const turned =
+      let turned =
         userFlow ??
         (autoTurn
           ? (guidanceFieldFill(region, fillOpts) ?? autoTurn)
           : (autoSingle ? flowFill(region, fillOpts) : null));
+      // HARD coverage gate on every fancy fill: a turned/field/flow output that
+      // leaves real bare area (a pathological ring — e.g. one deformed by the
+      // color-underlap pass — can fool a fill's own self-validation) falls back
+      // to the concavity-aware tatami, which always covers.
+      if (turned && satinCoverage(region, turned) < MIN_TURNED_COVERAGE) turned = null;
       tops = turned ?? tatamiConcaveRuns(region, fillOpts);
       // A turned/field/flow fill can leave a POINTED TIP bare: where the shape
       // narrows below the row spacing (a pennant's point, a leaf's tip), the last
