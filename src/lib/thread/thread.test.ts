@@ -125,3 +125,37 @@ describe("fringe color consolidation", () => {
     expect(out.colors).toHaveLength(2); // a+b collapse, c survives
   });
 });
+
+describe("consolidateFringeColors respects the colour budget", () => {
+  it("never fringe-merges below minColors", () => {
+    // Five distinct-ish colours, several small: unbounded fringe merging used
+    // to collapse a requested-5 palette to 2-3, eating real features (a dark
+    // red beacon dome). With minColors it may collapse true duplicates but
+    // must stop trimming at the budget.
+    const mk = (id: string, rgb: [number, number, number]) => ({ id, rgb, name: id });
+    const ring = (x: number) => [
+      { x, y: 0 }, { x: x + 4, y: 0 }, { x: x + 4, y: 4 }, { x, y: 4 },
+    ];
+    const big = (x: number) => [
+      { x, y: 10 }, { x: x + 30, y: 10 }, { x: x + 30, y: 40 }, { x, y: 40 },
+    ];
+    const project = {
+      version: 1 as const,
+      widthMm: 100,
+      heightMm: 100,
+      hoop: { wMm: 100, hMm: 100, name: "t" },
+      colors: [mk("red", [219, 28, 34]), mk("darkred", [152, 17, 20]), mk("blue", [50, 95, 200]), mk("lightblue", [194, 236, 251]), mk("black", [6, 3, 3])],
+      objects: [
+        { id: "o1", type: "fill" as const, colorId: "red", paths: [big(0)], params: {}, visible: true },
+        { id: "o2", type: "fill" as const, colorId: "darkred", paths: [ring(0)], params: {}, visible: true },
+        { id: "o3", type: "fill" as const, colorId: "blue", paths: [big(40)], params: {}, visible: true },
+        { id: "o4", type: "fill" as const, colorId: "lightblue", paths: [ring(10)], params: {}, visible: true },
+        { id: "o5", type: "fill" as const, colorId: "black", paths: [big(80)], params: {}, visible: true },
+      ],
+    };
+    const out = consolidateFringeColors(project as never, 5);
+    expect(out.colors.length).toBe(5); // nothing under budget is trimmed
+    const out3 = consolidateFringeColors(project as never, 3);
+    expect(out3.colors.length).toBeGreaterThanOrEqual(3);
+  });
+});

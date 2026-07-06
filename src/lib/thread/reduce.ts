@@ -124,14 +124,19 @@ const FRINGE_AREA_FRAC = 0.06;
  * of the design AND only moderately distinct (ΔE < FRINGE_DELTA_E). Two LARGE
  * distinct colors are left intact. Pure; object colorIds are remapped.
  */
-export function consolidateFringeColors(project: Project): Project {
+export function consolidateFringeColors(project: Project, minColors = 1): Project {
   if (project.colors.length <= 1) return project;
   const areas = colorAreas(project);
   const clusters = clustersFor(project).map((c) => ({ ...c, w: Math.max(1e-6, areas.get(c.rep.id) ?? 0) }));
   const near2 = NEAR_DELTA_E * NEAR_DELTA_E;
   const fringe2 = FRINGE_DELTA_E * FRINGE_DELTA_E;
-  return mergeLoop(project, clusters, (d2, aW, bW, totalW) => {
+  return mergeLoop(project, clusters, (d2, aW, bW, totalW, count) => {
     if (d2 <= near2) return true;
+    // Fringe trimming must never take the palette BELOW what the user asked
+    // for. Unbounded, this rule collapsed a requested-7 trace to three colors
+    // — eating a beacon dome, the whites, the greys — undoing both the colour
+    // budget and every feature the perceptual quantizer deliberately kept.
+    if (count <= minColors) return false;
     const minShare = Math.min(aW, bW) / (totalW || 1);
     return d2 <= fringe2 && minShare < FRINGE_AREA_FRAC;
   });
