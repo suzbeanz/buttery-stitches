@@ -155,6 +155,16 @@ describe("annulus weld: a chopped ring sews as one complete circle", () => {
     expect(inBand).toBeGreaterThan(200);
     expect(onRail / inBand).toBeGreaterThan(0.93);
   });
+
+  it("sews a CONNECTED network with no trims — connectors ride the ink", () => {
+    // The ring and its two bars are one connected ink network: the thread must
+    // walk between the strokes through the coverage (as the professional
+    // references do — hotdog sews 8.5k stitches with zero trims) instead of
+    // cutting at every stroke boundary.
+    const d = lineArtDesign(tireWithBars());
+    expect(d.filter((s) => s.trim).length).toBe(0);
+    expect(drawn(d)).toBeGreaterThan(300);
+  });
 });
 
 describe("line-art width regularization (constant-width pen stroke)", () => {

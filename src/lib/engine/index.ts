@@ -936,10 +936,16 @@ export function generateObjectRuns(
       const noBare = tatamiNoBareTravel || contourSpiral;
       for (const sub of ordered) {
         const r = dropShortStitches(sub, minStitch);
-        // Line-art is separate top-layer strokes — trim across the gaps between them
-        // (a buried connector would show where it crosses bare fabric), so it sews
-        // clean with no stray travel threads.
-        addRun(runs, r, false, regionIdx, noBare, undefined, lineArtFill);
+        // Line-art strokes CONNECT within their network, and that's how the
+        // professional references sew bold linework: the thread walks from
+        // stroke to stroke THROUGH the ink and almost never cuts. noBareTravel
+        // still forbids a bare slash, so a move between strokes either rides
+        // the same-colour coverage (the straight covered test or the buried
+        // router — both sample the whole path against the ink, holes included,
+        // so a connector can never cross open fabric) or trims. Only genuinely
+        // isolated islands (a door outline floating in the body colour) and
+        // colour changes still cut the thread.
+        addRun(runs, r, false, regionIdx, noBare);
         if (r.length) cursor = r[r.length - 1];
       }
       // Finishing edge run: walk the boundary just inside the edge so the fill's
