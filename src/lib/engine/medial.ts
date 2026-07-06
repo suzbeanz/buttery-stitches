@@ -18,6 +18,22 @@ const MIN_BRANCH_MM = 2;
  *  the trace's wobble into the satin. */
 const STRAIGHT_SNAP_MIN_MM = 2.5;
 const STRAIGHT_SNAP_MAX_DEV_MM = 0.6;
+/** Regularized (line-art) strokes snap straight more eagerly: a long traced rail
+ *  that undulates a little past the base tolerance still READS as a straight bar,
+ *  and a hand digitizer would draw it straight. Deviation allowed grows with the
+ *  chord, capped so a genuine curve never snaps. */
+const REGULARIZE_SNAP_DEV_FRAC = 0.03;
+const REGULARIZE_SNAP_DEV_MAX_MM = 1.2;
+/** Regularized width band: cartoon linework is a constant-width pen stroke, so a
+ *  column's half-width is clamped to this band around its own median. The trace's
+ *  bead-and-pinch noise flattens out while a genuine taper (which falls far below
+ *  the floor before the terminal trim) still narrows. */
+const REGULARIZE_WIDTH_LO = 0.78;
+const REGULARIZE_WIDTH_HI = 1.1;
+/** Arc-length half-window (mm) of the extra centerline low-pass applied to
+ *  regularized strokes — wide enough to kill the trace's undulation, narrow
+ *  enough to keep a real bend (a wheel arch, a bumper corner). */
+const REGULARIZE_SMOOTH_MM = 1.6;
 /** Above this many skeleton branches a region is a big auto-digitized blob, not
  *  lettering — skip the pairwise junction miter there (costly, less needed). */
 const MITER_MAX_BRANCHES = 16;
@@ -433,6 +449,36 @@ function smoothRail(rail: Point[], closed: boolean): Point[] {
   return out;
 }
 
+/** Arc-length moving average of a polyline: resample at a fine step, average each
+ *  sample over ±`radiusMm` of arc, endpoints pinned (loops wrap). Used to take the
+ *  trace's undulation out of a regularized line-art centerline — a stiffer low-pass
+ *  than the light vertex smoothing every centerline already gets. */
+function lowPassPath(path: Point[], radiusMm: number, closed: boolean): Point[] {
+  const step = 0.4;
+  const pts = resampleByDistance(path, step);
+  const n = pts.length;
+  if (n < 3) return path;
+  const win = Math.max(1, Math.round(radiusMm / step));
+  const out: Point[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    if (!closed && (i === 0 || i === n - 1)) {
+      out[i] = { ...pts[i] };
+      continue;
+    }
+    // Near an open end the window shrinks symmetrically so the line can't drift.
+    const w = closed ? win : Math.min(win, i, n - 1 - i);
+    let sx = 0, sy = 0, c = 0;
+    for (let k = -w; k <= w; k++) {
+      const j = closed ? (i + k + n) % n : i + k;
+      sx += pts[j].x;
+      sy += pts[j].y;
+      c++;
+    }
+    out[i] = { x: sx / c, y: sy / c };
+  }
+  return out;
+}
+
 /** A skeleton branch is a closed loop (o, e-counter, …) if its ends meet. */
 function isLoop(branch: [number, number][]): boolean {
   if (branch.length < 8) return false;
@@ -447,6 +493,11 @@ export interface MedialOptions {
   cellMm?: number;
   /** pull-compensation scale (fabric multiplier); 0 disables it (default 0). */
   pullScale?: number;
+  /** Treat the region as auto-traced LINE ART (a cartoon's pen strokes): smooth
+   *  the centerlines harder, snap long near-straight strokes to exact chords,
+   *  and hold each column to a constant width (its own median) so the trace's
+   *  bead-and-pinch noise never reaches the satin. */
+  regularize?: boolean;
 }
 
 /**
@@ -510,27 +561,36 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
     // strokes (they otherwise stitch as little floating boxes).
     if (polylineLength(raw) < MIN_BRANCH_MM) continue;
 
-    // Clean the centerline: drop the pixel staircase, then smooth it.
+    // Clean the centerline: drop the pixel staircase, then smooth it. Regularized
+    // line-art gets a stiffer low-pass on top — a cartoon stroke's undulation is
+    // trace noise, and the pen line a digitizer would draw through it is smooth.
     let center = smoothPath(douglasPeucker(raw, cellMm * 1.2), { maxSegmentMm: 0.8 });
     if (center.length < 2) continue;
+    if (opts.regularize && center.length > 2) {
+      center = lowPassPath(center, REGULARIZE_SMOOTH_MM, loop);
+    }
     // STRAIGHT-SNAP: a branch whose every point lies within a trace-noise bow
     // of its own end-to-end chord IS a straight stroke (a ladder rail segment,
     // a rung, a window bar) — replace it with the exact chord so the satin lies
     // dead straight. Endpoints are preserved, so junction meeting points don't
     // move; loops and genuinely curved branches (which bow far past the
-    // tolerance) are untouched.
+    // tolerance) are untouched. Regularized line-art snaps more eagerly (the
+    // allowance grows with the chord): a long wavy rail is a straight bar.
     if (!loop && center.length > 2) {
       const a = center[0];
       const b = center[center.length - 1];
       const chord = Math.hypot(b.x - a.x, b.y - a.y);
+      const devTol = opts.regularize
+        ? Math.min(REGULARIZE_SNAP_DEV_MAX_MM, Math.max(STRAIGHT_SNAP_MAX_DEV_MM, chord * REGULARIZE_SNAP_DEV_FRAC))
+        : STRAIGHT_SNAP_MAX_DEV_MM;
       if (chord >= STRAIGHT_SNAP_MIN_MM) {
         let maxDev = 0;
         for (const p of center) {
           const t = Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / (chord * chord)));
           maxDev = Math.max(maxDev, Math.hypot(p.x - (a.x + (b.x - a.x) * t), p.y - (a.y + (b.y - a.y) * t)));
-          if (maxDev > STRAIGHT_SNAP_MAX_DEV_MM) break;
+          if (maxDev > devTol) break;
         }
-        if (maxDev <= STRAIGHT_SNAP_MAX_DEV_MM) center = [a, b];
+        if (maxDev <= devTol) center = [a, b];
       }
     }
     prepped.push({ center, loop, straight: center.length === 2 });
@@ -737,6 +797,17 @@ function buildColumn(
   if (straightBar && medHalfDt > 0) {
     halves = halves.map(() => medHalfDt + OVERSHOOT_MM);
   }
+  // Regularized LINE ART holds every stroke near constant width: a cartoon's pen
+  // line doesn't bead and pinch — that's the trace talking. Clamp the width
+  // profile to a narrow band around the column's own median so the satin edge
+  // draws the line the artist meant. (Genuine junction balloons were already
+  // capped above; genuine terminal tapers get trimmed/extended below.)
+  const regularBand = opts.regularize && medHalfDt > 0;
+  if (regularBand && !straightBar) {
+    const lo = medHalfDt * REGULARIZE_WIDTH_LO;
+    const hi = medHalfDt * REGULARIZE_WIDTH_HI;
+    halves = halves.map((h) => Math.min(hi, Math.max(lo, h - OVERSHOOT_MM)) + OVERSHOOT_MM);
+  }
 
   // Drop junction-stub branches: the little segment at the very center of a Y
   // (a meeting R's stem, bowl and leg) is short and as wide as it is long, not a
@@ -862,6 +933,15 @@ function buildColumn(
     const hitR = rayHit(c, { x: -nrm.x, y: -nrm.y }, oriented, cap);
     let halfL = Math.min(hitL < cap ? hitL : dtHalf + OVERSHOOT_MM, widthCap) + comp;
     let halfR = Math.min(hitR < cap ? hitR : dtHalf + OVERSHOOT_MM, widthCap) + comp;
+    // Regularized line art: the ray landed on the trace's noisy edge — clamp each
+    // rail into the constant-width band so the satin edge stays a clean pen line
+    // (the miter below still pulls a rail back where columns meet).
+    if (regularBand) {
+      const rLo = medHalfDt * REGULARIZE_WIDTH_LO + comp;
+      const rHi = medHalfDt * REGULARIZE_WIDTH_HI + OVERSHOOT_MM + comp;
+      halfL = Math.min(rHi, Math.max(rLo, halfL));
+      halfR = Math.min(rHi, Math.max(rLo, halfR));
+    }
     // MITER: pull each rail back to the bisector with any neighbouring column so
     // meeting strokes abut along a clean seam instead of overlapping or fanning.
     const negNrm = { x: -nrm.x, y: -nrm.y };

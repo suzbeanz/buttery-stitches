@@ -402,6 +402,7 @@ function acceptableSatin(
   density: number,
   pullScale: number,
   authored?: Path[],
+  regularize = false,
 ): SatinColumn[] {
   // Adaptive skeleton resolution: a fixed 0.4 mm grid is far too coarse for small
   // lettering (a 2.5 mm stroke is barely 6 cells wide, so the skeleton staircases
@@ -441,7 +442,7 @@ function acceptableSatin(
       return cols;
     }
   }
-  const columns = medialColumns(region, { density, pullScale, cellMm });
+  const columns = medialColumns(region, { density, pullScale, cellMm, regularize });
   if (columns.length === 0) return [];
 
   // Median stroke width across the glyph's strokes; bold/large faces fail this
@@ -491,10 +492,11 @@ const RUNNING_COLUMN_MM = 0.6;
 /** Shortest line-art stroke (centerline mm) worth sewing — below this it's a
  *  medial spur/speck that just adds a trim. */
 const LINE_ART_MIN_LEN_MM = 2.5;
-/** Line-art strokes at/above this width (mm) are RIBBON-filled solid (an outline band,
- *  a tire wall); thinner detail (a hairline, an antenna) is bean-retraced down its
- *  centerline instead — too narrow to fill, but a single pass reads weak. */
-const LINE_ART_RIBBON_MIN_MM = 0.9;
+/** Line-art strokes at/above this width (mm) sew as satin across the stroke (an
+ *  outline band, a tire wall); thinner detail (a hairline, an antenna) is
+ *  bean-retraced down its centerline instead — too narrow to satin, but a single
+ *  pass reads weak. */
+const LINE_ART_SATIN_MIN_MM = 0.9;
 /** A thin line-art stroke is retraced forward/back/forward (bean / triple) so the
  *  hairline reads bold and dark instead of a single weak pass. */
 const LINE_ART_BEAN_REPEATS = 3;
@@ -575,30 +577,6 @@ function beanPath(line: Point[], repeats: number): Point[] {
     out = out.concat(pass.slice(1));
   }
   return out;
-}
-
-/** Fill a medial column with parallel passes running ALONG the stroke — interpolated
- *  between its two smoothed edge rails — instead of satin throws ACROSS it. The passes
- *  follow the smooth centerline, so a stroke fills as a clean solid band and a ring
- *  fills as clean concentric loops (a tire), with none of satin's radial starburst on
- *  a wide ring nor region-contour's wobble from tracing the jagged boundary. The passes
- *  alternate direction and join into ONE continuous serpentine (the next pass is a
- *  density-step away at the same end), so the whole stroke sews as a single run — no
- *  travel tangle between dozens of separate rows. */
-function ribbonFill(c: SatinColumn, density: number, stitchLength: number): Point[] {
-  const L = c.left;
-  const R = c.right;
-  const n = Math.min(L.length, R.length);
-  if (n < 2) return runningStitch(c.centerline, stitchLength);
-  const levels = Math.max(1, Math.round(c.widthMm / density));
-  let path: Point[] = [];
-  for (let k = 0; k <= levels; k++) {
-    const t = k / levels;
-    const line: Point[] = [];
-    for (let i = 0; i < n; i++) line.push({ x: L[i].x + (R[i].x - L[i].x) * t, y: L[i].y + (R[i].y - L[i].y) * t });
-    path = path.concat(k % 2 === 0 ? line : line.reverse());
-  }
-  return runningStitch(path, stitchLength);
 }
 
 /**
@@ -722,7 +700,7 @@ export function generateObjectRuns(
   regions.forEach((region, regionIdx) => {
     const columns =
       satin || (autoStyle && meanStrokeWidthMm(region) <= AUTO_SATIN_MAX_WIDTH_MM)
-        ? acceptableSatin(region, density, fabric.pullMul, authoredForRegion(object, region))
+        ? acceptableSatin(region, density, fabric.pullMul, authoredForRegion(object, region), p.lineArt)
         : [];
     const usingSatin = columns.length > 0;
     const contour = !usingSatin && p.fillStyle === "contour";
@@ -790,9 +768,9 @@ export function generateObjectRuns(
     // order (not re-sorting) keeps each ring one density-step from the next so they
     // connect with a hidden travel instead of a trimmed hop across the band.
     let contourSpiral = false;
-    // True when a line-art object is rendered as a SOLID ribbon fill (parallel passes
-    // along each stroke). It sews through the general ordered path below, not the satin
-    // emission path, and gets no residual tatami fill.
+    // True when a line-art object is rendered as regularized stroke satin. It sews
+    // through the general ordered path below, not the satin emission path, and gets
+    // no residual tatami fill (crossing columns cover the junctions).
     let lineArtFill = false;
     if (usingSatin) {
       // Line-art: drop medial-axis SPURS (tiny centerline stubs off a blobby
@@ -802,18 +780,18 @@ export function generateObjectRuns(
         : columns;
       if (p.lineArt) {
         // Auto-traced line-art — a cartoon's bold black linework (the silhouette
-        // outline, the tire rings, the ladder, window frames) — reads as SOLID shapes,
-        // not thin pen lines. Fill each medial column with parallel passes running
-        // ALONG the stroke (interpolated between its smoothed rails): a clean solid
-        // BAND for an outline, clean CONCENTRIC rings for a tire wall. Because the
-        // passes follow the SMOOTH centerline, there's none of satin's radial starburst
-        // (throws ACROSS a wide ring) nor region-contour's wavy nested loops (which
-        // trace the jagged boundary). A degenerate column with no rails falls back to
-        // its centerline so a hairline still sews.
+        // outline, the tire rings, the ladder, window frames) — sews as SATIN
+        // ACROSS each stroke, exactly how a hand digitizer renders bold pen lines:
+        // radial throws around a tire wall, clean zig-zag across a rail. The
+        // columns come in REGULARIZED (constant width around each stroke's median,
+        // stiffly smoothed centerlines — see medialColumns' regularize option), so
+        // the trace's bead-and-pinch noise never reaches the satin edge. Hairline
+        // detail below satin width is bean-retraced down its centerline instead —
+        // too narrow to satin, but a single pass reads weak.
         tops = keep.map((c) =>
-          c.widthMm < LINE_ART_RIBBON_MIN_MM
+          c.widthMm < LINE_ART_SATIN_MIN_MM
             ? beanPath(runningStitch(c.centerline, stitchLength), LINE_ART_BEAN_REPEATS)
-            : ribbonFill(c, density, stitchLength),
+            : c.throws,
         );
         tatamiNoBareTravel = true; // a fill: order for shortest travel, never slash a bare gap
         lineArtFill = true;
@@ -920,7 +898,7 @@ export function generateObjectRuns(
       // patches at stroke crossings and 3-way junctions where columns are trimmed
       // back so they don't fan. Without this a self-crossing script loop (the 'l' in
       // "hello") shows a hole. Laid first so the satin sits on top at the seams.
-      // (Line-art renders as a ribbon fill via lineArtFill and skips this path.)
+      // (Line-art renders as regularized stroke satin via lineArtFill and skips this path.)
       for (const patch of residualRegions(region, tops)) {
         const fill = tatamiFill([patch], {
           density,
@@ -966,8 +944,8 @@ export function generateObjectRuns(
       }
       // Finishing edge run: walk the boundary just inside the edge so the fill's
       // row-ends are capped and the silhouette (and its end-caps) read crisp. (Skip
-      // for line-art — the ribbon already follows the edges; retracing the whole
-      // network boundary only adds travel.)
+      // for line-art — the satin already lands on the stroke edges; retracing the
+      // whole network boundary only adds travel.)
       // The boundary of a concave shape (a C-band's mouth) or a holed shape (a
       // ring's counter) breaks into disjoint edge pieces; the hop BETWEEN them can
       // cross bare fabric. Forbid a bare travel here exactly as the fill rows do, so
