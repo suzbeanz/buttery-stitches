@@ -76,3 +76,36 @@ describe("machine safety: over-dense fills are clamped, not packed", () => {
     expect(minStitchGap(design)).toBeGreaterThanOrEqual(0.25);
   });
 });
+
+describe("machine safety: compensation yields at the hoop boundary", () => {
+  it("pull-comp overshoot at the hoop edge is clamped onto the boundary", () => {
+    // A fill flush against the hoop's left edge: pull compensation widens its
+    // rows a fraction of a millimetre past x=0. That must snap onto the
+    // boundary — stitches outside the hoop are a machine fault.
+    const o = makeObjectFromPaths(
+      "fill",
+      [[{ x: 0, y: 20 }, { x: 20, y: 20 }, { x: 20, y: 40 }, { x: 0, y: 40 }]],
+      "c1",
+    );
+    const design = generateDesign(projectWith(o));
+    for (const s of design) {
+      if (s.jump || s.trim) continue;
+      expect(s.x).toBeGreaterThanOrEqual(0);
+      expect(s.y).toBeGreaterThanOrEqual(0);
+    }
+    // ...while spacing safety still holds on the clamped boundary line.
+    expect(minStitchGap(design)).toBeGreaterThanOrEqual(0.25);
+  });
+
+  it("content genuinely placed outside the hoop is NOT masked by the clamp", () => {
+    // 10mm past the edge is a layout mistake, not compensation — the validator
+    // must keep seeing it.
+    const o = makeObjectFromPaths(
+      "fill",
+      [[{ x: -14, y: 20 }, { x: 6, y: 20 }, { x: 6, y: 40 }, { x: -14, y: 40 }]],
+      "c1",
+    );
+    const design = generateDesign(projectWith(o));
+    expect(design.some((s) => !s.jump && !s.trim && s.x < -1)).toBe(true);
+  });
+});

@@ -177,6 +177,20 @@ export function tracedataToObjects(
   const simp = (pts: Point[]): Path =>
     douglasPeucker(toMm(pts, mmPerPx, offsetX, offsetY), simplifyTolMm);
 
+  // The artwork can never legitimately exceed its own raster: a snapped
+  // primitive (an ellipse fitted to a region touching the image edge) can
+  // overshoot the bitmap by a fraction of a millimetre, which then lands
+  // stitches outside the hoop the layout was fitted to. Clamp every cleaned
+  // ring into the image rectangle — a sub-millimetre flat spot at the edge is
+  // invisible; stitches outside the hoop are a machine fault.
+  const boundW = offsetX + td.width * mmPerPx;
+  const boundH = offsetY + td.height * mmPerPx;
+  const clampToImage = (ring: Path): Path =>
+    ring.map((p) => ({
+      x: Math.min(boundW, Math.max(offsetX, p.x)),
+      y: Math.min(boundH, Math.max(offsetY, p.y)),
+    }));
+
   // Identify the background. Prefer the border color (robust: a big subject
   // isn't the background) by matching it to the nearest palette layer; otherwise
   // fall back to the largest-area color.
@@ -339,7 +353,7 @@ export function tracedataToObjects(
       // A thin stroke pinned along one image border is a capture artifact (a
       // screenshot frame line, resize edge shading) — never subject linework.
       if (isStroke && hugsImageEdge(pxOuter, td.width, td.height)) return;
-      const rings = [clean(rawOuter), ...rawHoles.map(clean)];
+      const rings = [clean(rawOuter), ...rawHoles.map(clean)].map(clampToImage);
       if (isStroke) {
         strokeRings.push(...rings);
         strokeArea += area;
