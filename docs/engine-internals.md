@@ -35,7 +35,13 @@ preview can never disagree with the file.
   via a coverage self-check.
 - **Contour** — distance-transform iso-contour rings (0.2 mm cell, 0.9 density step so
   raster jitter doesn't open gaps).
-- Others: gradient/ombré, two-thread blend, motif, carve, line-art ribbon.
+- Others: gradient/ombré, two-thread blend, motif, carve.
+- **Line art** — auto-traced pen-stroke networks sew as REGULARIZED satin across each
+  stroke (`medialColumns` `regularize`): centerlines low-passed, long near-straight
+  strokes snapped to exact chords, width clamped to a band around each column's
+  median — so the trace's bead-and-pinch noise never reaches the satin edge. Radial
+  throws around a ring (a tire), clean zig-zag across a bar (a ladder rail); hairlines
+  below satin width bean-retrace their centerline.
 
 ## Satin & underlay (`satin.ts`, `medial.ts`, `underlay.ts`)
 
