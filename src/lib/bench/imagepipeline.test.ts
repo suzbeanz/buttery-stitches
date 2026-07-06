@@ -2,30 +2,39 @@ import { describe, it, expect } from "vitest";
 import { imageDataToObjects } from "../trace";
 import { polygonArea } from "../trace/classify";
 import { generateDesign } from "../engine";
-import { createEmptyProject } from "../project";
+import { createEmptyProject, parseProject } from "../project";
+import { consolidateFringeColors } from "../thread/reduce";
+import { fixStitches } from "../fix";
 import { corpusImages } from "./imagecorpus";
 
 /**
- * END-TO-END pipeline gates over the image corpus: every structural class of
- * input (flat logo, card clipart, noisy scan, line art, many-color, tiny
- * features, border-touching subject, gradient) runs quantize → trace → engine,
- * and hard invariants are asserted on the RESULT. A change that improves one
- * class cannot silently break another.
+ * END-TO-END pipeline gates over the image corpus, run through the PRODUCT
+ * path — the exact sequence the auto-digitize dialog executes on Apply:
+ * trace → consolidateFringeColors → fixStitches → engine. Gating the library
+ * entry point alone once let a dialog-only step (unbounded fringe merging)
+ * collapse a 7-colour trace to three while every CI gate stayed green; the
+ * corpus now exercises what users actually run. A change that improves one
+ * input class cannot silently break another.
  */
 
 describe("image pipeline corpus gates", () => {
   for (const c of corpusImages()) {
     describe(c.name, () => {
-      const res = imageDataToObjects(c.image as unknown as ImageData, c.colors, {
+      const traced = imageDataToObjects(c.image as unknown as ImageData, c.colors, {
         mmPerPx: c.mmPerPx,
         removeBackground: c.removeBackground,
         detail: "balanced",
       });
-      const project = {
-        ...createEmptyProject(),
-        colors: res.colors,
-        objects: res.objects.map((o) => ({ ...o, visible: true })),
-      };
+      // The dialog's apply sequence, verbatim.
+      const res = consolidateFringeColors(
+        {
+          ...createEmptyProject(),
+          colors: traced.colors,
+          objects: traced.objects.map((o) => ({ ...o, visible: true })),
+        },
+        c.colors,
+      );
+      const project = fixStitches(parseProject(res));
       const design = generateDesign(project);
       const sewn = design.filter((s) => !s.jump && !s.trim);
 

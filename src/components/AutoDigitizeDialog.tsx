@@ -137,14 +137,19 @@ export default function AutoDigitizeDialog({
         // Collapse near-duplicate palette entries k-means split off a flat region
         // (anti-alias bands, thin shadow shades) so the body doesn't fragment and
         // thread slots aren't wasted. Area-aware, so distinct colors stay.
-        const { colors, objects } = consolidateFringeColors({
-          version: 1,
-          widthMm: hoop.wMm,
-          heightMm: hoop.hMm,
-          hoop: { ...hoop },
-          colors: traced.colors,
-          objects: traced.objects,
-        });
+        const { colors, objects } = consolidateFringeColors(
+          {
+            version: 1,
+            widthMm: hoop.wMm,
+            heightMm: hoop.hMm,
+            hoop: { ...hoop },
+            colors: traced.colors,
+            objects: traced.objects,
+          },
+          // Fringe cleanup may collapse duplicates, never the user's colour
+          // budget — the trace already chose the best numColors clusters.
+          numColors,
+        );
 
         let finalObjects = objects;
         if (recognizeText && objects.length > 0) {
