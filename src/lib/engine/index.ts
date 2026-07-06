@@ -1598,7 +1598,31 @@ export function generateDesign(
     pushTie(out, prevPoint, toward, { id: lastObj.id, colorId: lastObj.colorId });
   }
 
-  return capStitchLength(levelInnerTurns(enforceMinSpacing(collapseCoincident(out))));
+  // Hoop clamp runs FIRST so the spacing/coincidence safety passes apply to the
+  // clamped coordinates (snapping two edge stitches onto the boundary line can
+  // otherwise compress their gap below the jam floor).
+  return capStitchLength(
+    levelInnerTurns(
+      enforceMinSpacing(collapseCoincident(clampCompToHoop(out, project.widthMm, project.heightMm))),
+    ),
+  );
+}
+
+/** Engine-added compensation (pull-comp rail widening, edge overshoot) may push
+ *  a stitch a fraction of a millimetre past drawn geometry — at the hoop
+ *  boundary that's a machine fault, so compensation YIELDS there: anything
+ *  within this tolerance outside the hoop snaps onto the boundary (an invisible
+ *  flat spot). Content genuinely placed outside the hoop overshoots far more
+ *  and is left alone for the validator to flag honestly. */
+const HOOP_CLAMP_TOL_MM = 1;
+
+function clampCompToHoop(design: EngineStitch[], w: number, h: number, tol = HOOP_CLAMP_TOL_MM): EngineStitch[] {
+  return design.map((s) => {
+    const cx = Math.min(w, Math.max(0, s.x));
+    const cy = Math.min(h, Math.max(0, s.y));
+    if ((cx === s.x && cy === s.y) || Math.abs(cx - s.x) > tol || Math.abs(cy - s.y) > tol) return s;
+    return { ...s, x: cx, y: cy };
+  });
 }
 
 /** Longest a single drawn stitch may be (mm). The professional references run
