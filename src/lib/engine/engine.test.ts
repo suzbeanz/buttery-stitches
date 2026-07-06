@@ -333,6 +333,27 @@ describe("runningStitch", () => {
     for (const c of [{ x: 7, y: 0 }, { x: 7, y: 7 }, { x: 0, y: 7 }]) expect(hits(c)).toBe(true);
     expect(maxSeg(out)).toBeLessThanOrEqual(3 + 1e-6); // still no over-long stitch
   });
+
+  it("shortens stitches on a curve so no chord bows off the arc (smooth outlines)", () => {
+    // A 6mm-radius circle at a 3mm pitch. Fixed-pitch chords would bow
+    // ~0.19mm off the arc and read faceted; curve short-stitching holds every
+    // chord's sagitta near the professional smoothness (≤ ~0.1mm).
+    const R = 6;
+    const circle: Path = [];
+    for (let i = 0; i <= 120; i++) {
+      const a = (i / 120) * 2 * Math.PI;
+      circle.push({ x: 20 + R * Math.cos(a), y: 20 + R * Math.sin(a) });
+    }
+    const out = runningStitch(circle, 3);
+    for (let i = 1; i < out.length; i++) {
+      const chord = distance(out[i - 1], out[i]);
+      const sagitta = R - Math.sqrt(Math.max(0, R * R - (chord / 2) ** 2));
+      expect(sagitta).toBeLessThanOrEqual(0.105);
+    }
+    // …while a straight line keeps the full pitch (no needless densification).
+    const line = runningStitch([{ x: 0, y: 0 }, { x: 30, y: 0 }], 3);
+    expect(line.length).toBeLessThanOrEqual(12);
+  });
 });
 
 describe("satinColumn", () => {
