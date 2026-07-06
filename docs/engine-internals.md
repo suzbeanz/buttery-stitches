@@ -41,7 +41,11 @@ preview can never disagree with the file.
   strokes snapped to exact chords, width clamped to a band around each column's
   median — so the trace's bead-and-pinch noise never reaches the satin edge. Radial
   throws around a ring (a tire), clean zig-zag across a bar (a ladder rail); hairlines
-  below satin width bean-retrace their centerline.
+  below satin width bean-retrace their centerline. Round features are CIRCLE-SNAPPED:
+  a circular hole with a near-constant ink wall is an ANNULUS (one exact circular
+  column, other branches clipped out of its band), arcs of one circle weld into a
+  full ring, lone arcs snap onto their fitted circle, and the junction miter always
+  runs so columns abut instead of overlapping.
 
 ## Satin & underlay (`satin.ts`, `medial.ts`, `underlay.ts`)
 
