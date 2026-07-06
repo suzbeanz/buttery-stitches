@@ -563,8 +563,8 @@ function arcBins(pts: Point[], cx: number, cy: number): Uint8Array {
     return a;
   };
   for (let i = 1; i < pts.length; i++) {
-    let a0 = angOf(pts[i - 1]);
-    let a1 = angOf(pts[i]);
+    const a0 = angOf(pts[i - 1]);
+    const a1 = angOf(pts[i]);
     // Walk the short way between consecutive samples.
     let d = a1 - a0;
     if (d > 180) d -= 360;
