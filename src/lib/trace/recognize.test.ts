@@ -104,6 +104,56 @@ describe("smart-shape recognition", () => {
   });
 });
 
+describe("rounded rectangle (a cartoon window)", () => {
+  /** Axis-aligned rounded rect boundary point at parameter t ∈ [0,1). */
+  function roundedRectPoint(t: number, cx: number, cy: number, hw: number, hh: number, rc: number): Path[0] {
+    const straightW = 2 * (hw - rc);
+    const straightH = 2 * (hh - rc);
+    const arc = (Math.PI / 2) * rc;
+    const total = 2 * straightW + 2 * straightH + 4 * arc;
+    let s = t * total;
+    // bottom edge → BR arc → right edge → TR arc → top edge → TL arc → left edge → BL arc
+    const segs: { len: number; at: (u: number) => Path[0] }[] = [
+      { len: straightW, at: (u) => ({ x: cx - (hw - rc) + u * straightW, y: cy - hh }) },
+      { len: arc, at: (u) => ({ x: cx + (hw - rc) + rc * Math.sin((u * Math.PI) / 2), y: cy - (hh - rc) - rc * Math.cos((u * Math.PI) / 2) }) },
+      { len: straightH, at: (u) => ({ x: cx + hw, y: cy - (hh - rc) + u * straightH }) },
+      { len: arc, at: (u) => ({ x: cx + (hw - rc) + rc * Math.cos((u * Math.PI) / 2), y: cy + (hh - rc) + rc * Math.sin((u * Math.PI) / 2) }) },
+      { len: straightW, at: (u) => ({ x: cx + (hw - rc) - u * straightW, y: cy + hh }) },
+      { len: arc, at: (u) => ({ x: cx - (hw - rc) - rc * Math.sin((u * Math.PI) / 2), y: cy + (hh - rc) + rc * Math.cos((u * Math.PI) / 2) }) },
+      { len: straightH, at: (u) => ({ x: cx - hw, y: cy + (hh - rc) - u * straightH }) },
+      { len: arc, at: (u) => ({ x: cx - (hw - rc) - rc * Math.cos((u * Math.PI) / 2), y: cy - (hh - rc) - rc * Math.sin((u * Math.PI) / 2) }) },
+    ];
+    for (const seg of segs) {
+      if (s <= seg.len) return seg.at(seg.len ? s / seg.len : 0);
+      s -= seg.len;
+    }
+    return segs[0].at(0);
+  }
+
+  it("recognizes a rounded rectangle as roundedRect (not an oval)", () => {
+    // A truck-window-sized rounded rect (8×10 mm, 1.5 mm corners) with trace noise.
+    const ring = sampled(72, (t) => roundedRectPoint(t, 30, 20, 4, 5, 1.5), 0.12);
+    const r = recognizeShape(ring, 1.0);
+    expect(r?.kind).toBe("roundedRect");
+  });
+
+  it("recognizes a near-square sharp rectangle even though its principal axis is unstable", () => {
+    // A 7.7×9.4 mm sharp-cornered window. The covariance axis of a near-square
+    // is ill-conditioned — noise tilts it several degrees, inflating the OBB so
+    // the rectangle gate used to fail and the ellipse branch claimed an OVAL.
+    // The dominant-edge orientation candidate must recover the true rectangle.
+    const ring = sampled(80, (t) => roundedRectPoint(t, 30, 20, 3.85, 4.7, 0.4), 0.15);
+    const r = recognizeShape(ring, 1.0);
+    expect(r === null || r.kind === "rectangle" || r.kind === "roundedRect").toBe(true);
+    expect(r?.kind === "ellipse" || r?.kind === "circle").toBe(false);
+  });
+
+  it("still recognizes a true ellipse (rounded-rect must not eat it)", () => {
+    const ring = sampled(64, (t) => ({ x: 30 + 12 * Math.cos(t * 2 * Math.PI), y: 30 + 7 * Math.sin(t * 2 * Math.PI) }), 0.1);
+    expect(recognizeShape(ring, 0.8)?.kind).toBe("ellipse");
+  });
+});
+
 describe("narrow / asymmetric shapes (a traced flag pole)", () => {
   /** A 3 mm-wide bar, ~63 mm tall, slightly tapered at the foot (asymmetric — the
    *  centroid sits below the middle) with mildly wobbly traced edges. */

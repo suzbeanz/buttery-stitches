@@ -13,7 +13,7 @@ import { douglasPeucker } from "./simplify";
  * residual is within tolerance, else return null (keep the original outline).
  */
 
-export type ShapeId = "circle" | "ellipse" | "rectangle" | "polygon";
+export type ShapeId = "circle" | "ellipse" | "rectangle" | "roundedRect" | "polygon";
 
 export interface Recognized {
   kind: ShapeId;
@@ -105,6 +105,30 @@ function makeRegular(c: Point, r: number, sides: number, rot: number): Path {
   return out;
 }
 
+/** A rounded rectangle ring: straight edges joined by quarter-circle corners of
+ *  radius rc, in the frame centred at c rotated by rot. */
+function makeRoundedRect(c: Point, hw: number, hh: number, rc: number, rot: number): Path {
+  const cs = Math.cos(rot);
+  const sn = Math.sin(rot);
+  const put = (x: number, y: number): Point => ({ x: c.x + x * cs - y * sn, y: c.y + x * sn + y * cs });
+  const out: Path = [];
+  // Corner arc centers (CCW from +x+y corner), each spanning 90°.
+  const cornersC: [number, number, number][] = [
+    [hw - rc, hh - rc, 0],
+    [-(hw - rc), hh - rc, Math.PI / 2],
+    [-(hw - rc), -(hh - rc), Math.PI],
+    [hw - rc, -(hh - rc), (3 * Math.PI) / 2],
+  ];
+  const arcSteps = Math.max(3, Math.ceil((Math.PI / 2) * rc / 0.5));
+  for (const [cx, cy, a0] of cornersC) {
+    for (let s = 0; s <= arcSteps; s++) {
+      const a = a0 + ((Math.PI / 2) * s) / arcSteps;
+      out.push(put(cx + rc * Math.cos(a), cy + rc * Math.sin(a)));
+    }
+  }
+  return out;
+}
+
 /** A (possibly rotated) rectangle ring from center, half-extents, and angle. */
 function makeRect(c: Point, hw: number, hh: number, rot: number): Path {
   const cs = Math.cos(rot);
@@ -152,29 +176,56 @@ export function recognizeShape(ring: Path, tolMm = 0.6): Recognized | null {
   // centroid pulled toward the heavy end, and a primitive fitted symmetrically
   // about the centroid overshoots the light end by the asymmetry — a snapped
   // "ellipse" sticking millimetres above the artwork.
+  const obbAt = (rotC: number) => {
+    const cs = Math.cos(-rotC);
+    const sn = Math.sin(-rotC);
+    let loU = Infinity, hiU = -Infinity, loV = Infinity, hiV = -Infinity;
+    for (const p of samples) {
+      const dx = p.x - c.x;
+      const dy = p.y - c.y;
+      const u = dx * cs - dy * sn;
+      const v = dx * sn + dy * cs;
+      if (u < loU) loU = u;
+      if (u > hiU) hiU = u;
+      if (v < loV) loV = v;
+      if (v > hiV) hiV = v;
+    }
+    const a2 = (hiU - loU) / 2;
+    const b2 = (hiV - loV) / 2;
+    const mu = (loU + hiU) / 2;
+    const mv = (loV + hiV) / 2;
+    return {
+      a: a2,
+      b: b2,
+      cb: { x: c.x + mu * cs + mv * sn, y: c.y - mu * sn + mv * cs } as Point,
+      fillRatio: a2 > 0 && b2 > 0 ? area / (4 * a2 * b2) : 0,
+    };
+  };
   const rot = principalAngle(samples, c);
-  const cs = Math.cos(-rot);
-  const sn = Math.sin(-rot);
-  let loU = Infinity, hiU = -Infinity, loV = Infinity, hiV = -Infinity;
-  for (const p of samples) {
-    const dx = p.x - c.x;
-    const dy = p.y - c.y;
-    const u = dx * cs - dy * sn;
-    const v = dx * sn + dy * cs;
-    if (u < loU) loU = u;
-    if (u > hiU) hiU = u;
-    if (v < loV) loV = v;
-    if (v > hiV) hiV = v;
+  // The DOMINANT EDGE direction (length-weighted circular mean on the mod-90°
+  // torus). For anything rectangular this is the true orientation — the
+  // principal axis of a near-square box is ill-conditioned, and a few degrees
+  // of tilt inflates the OBB enough that a sharp rectangle reads as a rounded
+  // blob and falls through to the ellipse branch (a truck window snapped to an
+  // OVAL). Rect-family branches try both candidates and keep the better box.
+  const edgePoly = douglasPeucker(open, Math.max(0.3, perim * 0.008));
+  let ex4 = 0, ey4 = 0;
+  for (let i = 0; i < edgePoly.length; i++) {
+    const p1 = edgePoly[i];
+    const p2 = edgePoly[(i + 1) % edgePoly.length];
+    const len = dist(p1, p2);
+    if (len < 1e-6) continue;
+    const ang4 = 4 * Math.atan2(p2.y - p1.y, p2.x - p1.x);
+    ex4 += len * Math.cos(ang4);
+    ey4 += len * Math.sin(ang4);
   }
-  const a = (hiU - loU) / 2;
-  const b = (hiV - loV) / 2;
-  // Midrange centre, mapped back to design space (inverse of the -rot rotation).
-  const mu = (loU + hiU) / 2;
-  const mv = (loV + hiV) / 2;
-  const cb: Point = { x: c.x + mu * cs + mv * sn, y: c.y - mu * sn + mv * cs };
+  const rotEdges = Math.atan2(ey4, ex4) / 4;
+  const boxes = [obbAt(rot), obbAt(rotEdges)];
+  const rots = [rot, rotEdges];
+  // Rect-family candidates prefer the tighter box (higher fill ratio).
+  const rectFirst = boxes[1].fillRatio > boxes[0].fillRatio ? [1, 0] : [0, 1];
+  const { a, b, cb, fillRatio } = boxes[0];
   if (a < 0.5 || b < 0.5) return null;
-  const boxArea = 4 * a * b;
-  const fillRatio = area / boxArea; // 1.0 = fills its box (rectangle), 0.785 = ellipse
 
   // Fit tolerances must never exceed a fraction of the MINOR half-extent: on a
   // narrow shape (a 3 mm-wide flag pole) an absolute mm tolerance is wider than
@@ -183,11 +234,44 @@ export function recognizeShape(ring: Path, tolMm = 0.6): Recognized | null {
   // relative-cap idea the polygon branch uses below.
   const minor = Math.min(a, b);
 
-  // --- Rectangle: nearly fills its oriented bounding box. ---
-  if (fillRatio > 0.9) {
-    const rect = makeRect(cb, a, b, rot);
-    if (fitsWithin(samples, rect, Math.min(tolMm * 2, minor * 0.6))) {
-      return { kind: "rectangle", ring: rect, angleDeg: (rot * 180) / Math.PI };
+  // --- Rounded rectangle: a cartoon window, a badge, a button. Corner radius
+  // recovered from the area deficit vs the bounding box (area = 4ab − (4−π)rc²).
+  // The rc cap at 0.7·minor mathematically excludes every true ellipse (an
+  // ellipse's deficit gives rc = √(ab) ≥ 0.7·minor whenever a ≤ 2b), so this
+  // can't eat the ellipse family — while a rounded window, whose fill ratio
+  // sinks into ellipse range and previously snapped to a visibly wrong OVAL,
+  // is claimed here first with its true straight edges and round corners. ---
+  for (const bi of rectFirst) {
+    const B = boxes[bi];
+    if (B.a < 0.5 || B.b < 0.5) continue;
+    const minorB = Math.min(B.a, B.b);
+    const rc2 = (4 * B.a * B.b - area) / (4 - Math.PI);
+    const rc = rc2 > 0 ? Math.sqrt(rc2) : 0;
+    if (rc < minorB * 0.12 || rc > minorB * 0.7 || B.fillRatio <= 0.78) continue;
+    // The corners must really be EMPTY: on a rounded rect no outline point comes
+    // within ~0.41·rc of the box corner, while a jitter-traced SHARP rectangle
+    // (whose noise inflates the area deficit into a phantom rc) reaches its
+    // corners — that one belongs to the rectangle branch below.
+    const boxCorners = makeRect(B.cb, B.a, B.b, rots[bi]);
+    let cornerDist = Infinity;
+    for (const p of samples) for (const q of boxCorners) cornerDist = Math.min(cornerDist, dist(p, q));
+    if (cornerDist < rc * 0.25) continue;
+    const rrect = makeRoundedRect(B.cb, B.a, B.b, rc, rots[bi]);
+    const cap = Math.min(tolMm * 1.4, minorB * 0.3);
+    if (fitsWithin(samples, rrect, cap, cap * 0.9)) {
+      return { kind: "roundedRect", ring: rrect, angleDeg: (rots[bi] * 180) / Math.PI };
+    }
+  }
+
+  // --- Rectangle: nearly fills its oriented bounding box. Tried in both
+  // candidate orientations, tighter box first. ---
+  for (const bi of rectFirst) {
+    const B = boxes[bi];
+    if (B.a < 0.5 || B.b < 0.5 || B.fillRatio <= 0.9) continue;
+    const minorB = Math.min(B.a, B.b);
+    const rect = makeRect(B.cb, B.a, B.b, rots[bi]);
+    if (fitsWithin(samples, rect, Math.min(tolMm * 2, minorB * 0.6))) {
+      return { kind: "rectangle", ring: rect, angleDeg: (rots[bi] * 180) / Math.PI };
     }
   }
 

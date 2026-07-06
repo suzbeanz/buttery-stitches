@@ -34,6 +34,32 @@ const REGULARIZE_WIDTH_HI = 1.1;
  *  regularized strokes — wide enough to kill the trace's undulation, narrow
  *  enough to keep a real bend (a wheel arch, a bumper corner). */
 const REGULARIZE_SMOOTH_MM = 1.6;
+/** CIRCLE-SNAP (regularized line art): a branch whose points all sit within a
+ *  trace-noise band of a fitted circle IS that circle — a tire wall, a round
+ *  window frame, a wheel arch. Arcs of the SAME circle (a ring the skeleton
+ *  chopped at its junctions) weld back into ONE closed circular stroke, so the
+ *  tire sews as a single complete ring of radial satin with no trimmed-junction
+ *  wedges. Only arcs with real angular extent qualify (a shortish chord fits
+ *  any circle), and the fit tolerance scales with the radius. */
+const CIRCLE_SNAP_MIN_SPAN_DEG = 50;
+const CIRCLE_SNAP_MIN_R_MM = 1.5;
+const CIRCLE_SNAP_MAX_R_MM = 40;
+const CIRCLE_SNAP_DEV_FRAC = 0.08;
+const CIRCLE_SNAP_DEV_MIN_MM = 0.5;
+const CIRCLE_SNAP_DEV_MAX_MM = 1.0;
+/** Weld arcs into a full ring when together they cover at least this much of
+ *  the circle — the skeleton's junction chops are small, so a real ring's arcs
+ *  cover nearly all of it. */
+const CIRCLE_WELD_MIN_COVER_DEG = 300;
+/** ANNULUS detection: a circular HOLE with a near-constant ink wall around it
+ *  is a drawn ring (a tire around its hub, a round window frame) even when the
+ *  skeleton chained the ring into neighbouring strokes. The wall must be a
+ *  believable stroke width and hold near its median around most of the circle
+ *  (junction openings where other strokes meet the ring are the exceptions). */
+const ANNULUS_WALL_MIN_MM = 0.9;
+const ANNULUS_WALL_MAX_MM = 12;
+const ANNULUS_WALL_TOL_FRAC = 0.3;
+const ANNULUS_MIN_GOOD_FRAC = 0.6;
 /** Above this many skeleton branches a region is a big auto-digitized blob, not
  *  lettering — skip the pairwise junction miter there (costly, less needed). */
 const MITER_MAX_BRANCHES = 16;
@@ -479,6 +505,112 @@ function lowPassPath(path: Point[], radiusMm: number, closed: boolean): Point[] 
   return out;
 }
 
+/** Least-squares (Kåsa) circle fit. Returns the circle and the max radial
+ *  deviation of the points from it, or null for degenerate input. */
+function fitCircle(pts: Point[]): { cx: number; cy: number; r: number; maxDev: number } | null {
+  const n = pts.length;
+  if (n < 5) return null;
+  // Solve [Sxx Sxy Sx; Sxy Syy Sy; Sx Sy n] · [A B C]ᵀ = [Sxz Syz Sz]
+  // for x²+y² = A·x + B·y + C (center (A/2, B/2), r² = C + A²/4 + B²/4).
+  let Sx = 0, Sy = 0, Sxx = 0, Syy = 0, Sxy = 0, Sxz = 0, Syz = 0, Sz = 0;
+  for (const p of pts) {
+    const z = p.x * p.x + p.y * p.y;
+    Sx += p.x; Sy += p.y; Sxx += p.x * p.x; Syy += p.y * p.y; Sxy += p.x * p.y;
+    Sxz += p.x * z; Syz += p.y * z; Sz += z;
+  }
+  const m = [
+    [Sxx, Sxy, Sx],
+    [Sxy, Syy, Sy],
+    [Sx, Sy, n],
+  ];
+  const v = [Sxz, Syz, Sz];
+  // Gaussian elimination with partial pivoting (3×3).
+  for (let col = 0; col < 3; col++) {
+    let piv = col;
+    for (let r = col + 1; r < 3; r++) if (Math.abs(m[r][col]) > Math.abs(m[piv][col])) piv = r;
+    if (Math.abs(m[piv][col]) < 1e-9) return null;
+    [m[col], m[piv]] = [m[piv], m[col]];
+    [v[col], v[piv]] = [v[piv], v[col]];
+    for (let r = 0; r < 3; r++) {
+      if (r === col) continue;
+      const f = m[r][col] / m[col][col];
+      for (let c = col; c < 3; c++) m[r][c] -= f * m[col][c];
+      v[r] -= f * v[col];
+    }
+  }
+  const A = v[0] / m[0][0];
+  const B = v[1] / m[1][1];
+  const C = v[2] / m[2][2];
+  const cx = A / 2;
+  const cy = B / 2;
+  const r2 = C + cx * cx + cy * cy;
+  if (!(r2 > 0)) return null;
+  const r = Math.sqrt(r2);
+  let maxDev = 0;
+  for (const p of pts) {
+    maxDev = Math.max(maxDev, Math.abs(Math.hypot(p.x - cx, p.y - cy) - r));
+  }
+  return { cx, cy, r, maxDev };
+}
+
+/** Angular span (deg) a polyline covers around a center, plus which 1° bins it
+ *  touches (for union-of-arcs coverage). */
+function arcBins(pts: Point[], cx: number, cy: number): Uint8Array {
+  const bins = new Uint8Array(360);
+  const angOf = (p: Point) => {
+    let a = (Math.atan2(p.y - cy, p.x - cx) * 180) / Math.PI;
+    if (a < 0) a += 360;
+    return a;
+  };
+  for (let i = 1; i < pts.length; i++) {
+    const a0 = angOf(pts[i - 1]);
+    const a1 = angOf(pts[i]);
+    // Walk the short way between consecutive samples.
+    let d = a1 - a0;
+    if (d > 180) d -= 360;
+    if (d < -180) d += 360;
+    const steps = Math.max(1, Math.ceil(Math.abs(d)));
+    for (let s = 0; s <= steps; s++) {
+      let a = a0 + (d * s) / steps;
+      if (a < 0) a += 360;
+      bins[Math.floor(a) % 360] = 1;
+    }
+  }
+  return bins;
+}
+
+/** An exact circle polyline (closed: first point repeated last). */
+function circlePath(cx: number, cy: number, r: number, stepMm = 0.8): Point[] {
+  const n = Math.max(24, Math.ceil((2 * Math.PI * r) / stepMm));
+  const pts: Point[] = [];
+  for (let i = 0; i <= n; i++) {
+    const a = (i / n) * 2 * Math.PI;
+    pts.push({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
+  }
+  return pts;
+}
+
+/** Straight-snap a centerline to its exact chord when every point sits within
+ *  the (regularize-scaled) tolerance of it. Shared by pass 1 and the annulus
+ *  clipper (whose leftover tails deserve the same treatment). */
+function maybeStraightSnap(center: Point[], regularize: boolean): Point[] {
+  if (center.length <= 2) return center;
+  const a = center[0];
+  const b = center[center.length - 1];
+  const chord = Math.hypot(b.x - a.x, b.y - a.y);
+  if (chord < STRAIGHT_SNAP_MIN_MM) return center;
+  const devTol = regularize
+    ? Math.min(REGULARIZE_SNAP_DEV_MAX_MM, Math.max(STRAIGHT_SNAP_MAX_DEV_MM, chord * REGULARIZE_SNAP_DEV_FRAC))
+    : STRAIGHT_SNAP_MAX_DEV_MM;
+  let maxDev = 0;
+  for (const p of center) {
+    const t = Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / (chord * chord)));
+    maxDev = Math.max(maxDev, Math.hypot(p.x - (a.x + (b.x - a.x) * t), p.y - (a.y + (b.y - a.y) * t)));
+    if (maxDev > devTol) return center;
+  }
+  return [a, b];
+}
+
 /** A skeleton branch is a closed loop (o, e-counter, …) if its ends meet. */
 function isLoop(branch: [number, number][]): boolean {
   if (branch.length < 8) return false;
@@ -576,31 +708,226 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
     // move; loops and genuinely curved branches (which bow far past the
     // tolerance) are untouched. Regularized line-art snaps more eagerly (the
     // allowance grows with the chord): a long wavy rail is a straight bar.
-    if (!loop && center.length > 2) {
-      const a = center[0];
-      const b = center[center.length - 1];
-      const chord = Math.hypot(b.x - a.x, b.y - a.y);
-      const devTol = opts.regularize
-        ? Math.min(REGULARIZE_SNAP_DEV_MAX_MM, Math.max(STRAIGHT_SNAP_MAX_DEV_MM, chord * REGULARIZE_SNAP_DEV_FRAC))
-        : STRAIGHT_SNAP_MAX_DEV_MM;
-      if (chord >= STRAIGHT_SNAP_MIN_MM) {
-        let maxDev = 0;
-        for (const p of center) {
-          const t = Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / (chord * chord)));
-          maxDev = Math.max(maxDev, Math.hypot(p.x - (a.x + (b.x - a.x) * t), p.y - (a.y + (b.y - a.y) * t)));
-          if (maxDev > devTol) break;
+    if (!loop) center = maybeStraightSnap(center, !!opts.regularize);
+    prepped.push({ center, loop, straight: center.length === 2 });
+  }
+
+  // Pass 1¼ — ANNULUS detection (regularized line art only). A drawn ring — a
+  // tire around its hub, a round window frame — has a circular HOLE with a
+  // near-constant ink wall around it. The skeleton often chains the ring into
+  // neighbouring strokes (so no single branch is the circle), but the hole
+  // geometry is unambiguous: fit the hole, profile the wall by ray-casting from
+  // the center, and when the wall holds its median around most of the circle,
+  // sew ONE exact circular column down the wall's middle and clip every other
+  // branch out of the annulus band (the ring covers it; the leftover tails are
+  // re-snapped). This is what makes a wheel a complete, precise ring.
+  if (opts.regularize) {
+    const annulusRings: { center: Path; loop: boolean; straight: boolean }[] = [];
+    for (let hi = 0; hi < oriented.length; hi++) {
+      const ring = oriented[hi];
+      // A hole is contained in an odd number of other rings.
+      const probe = ring[0];
+      let depth = 0;
+      for (let j = 0; j < oriented.length; j++) {
+        if (j !== hi && inside(probe.x, probe.y, [oriented[j]])) depth++;
+      }
+      if (depth % 2 === 0) continue;
+      const fit = fitCircle(ring);
+      if (!fit) continue;
+      if (fit.r < CIRCLE_SNAP_MIN_R_MM || fit.r > CIRCLE_SNAP_MAX_R_MM) continue;
+      const tol = Math.min(CIRCLE_SNAP_DEV_MAX_MM, Math.max(CIRCLE_SNAP_DEV_MIN_MM, fit.r * CIRCLE_SNAP_DEV_FRAC));
+      if (fit.maxDev > tol) continue;
+      // Wall profile: crossings along K rays from the center. The crossing
+      // nearest the fitted radius is the hole edge; the next one out is the
+      // outer edge of the wall (or far away, at a junction opening).
+      const K = 72;
+      const walls: number[] = [];
+      for (let k = 0; k < K; k++) {
+        const ang = (k / K) * 2 * Math.PI;
+        const dir = { x: Math.cos(ang), y: Math.sin(ang) };
+        const ts: number[] = [];
+        for (const r2 of oriented) {
+          const m = r2.length;
+          for (let i = 0; i < m; i++) {
+            const a = r2[i];
+            const b = r2[(i + 1) % m];
+            const ex = b.x - a.x;
+            const ey = b.y - a.y;
+            const denom = dir.x * ey - dir.y * ex;
+            if (Math.abs(denom) < 1e-9) continue;
+            const t = ((a.x - fit.cx) * ey - (a.y - fit.cy) * ex) / denom;
+            const u = ((a.x - fit.cx) * dir.y - (a.y - fit.cy) * dir.x) / denom;
+            if (t > 1e-4 && u >= -1e-6 && u <= 1 + 1e-6) ts.push(t);
+          }
         }
-        if (maxDev <= devTol) center = [a, b];
+        ts.sort((x, y) => x - y);
+        let hIdx = -1;
+        let hBest = Infinity;
+        ts.forEach((t, i2) => {
+          const d = Math.abs(t - fit.r);
+          if (d < hBest) {
+            hBest = d;
+            hIdx = i2;
+          }
+        });
+        walls.push(hIdx >= 0 && hBest <= tol + 0.6 && hIdx + 1 < ts.length ? ts[hIdx + 1] - ts[hIdx] : NaN);
+      }
+      const finite = walls.filter((x) => isFinite(x)).sort((x, y) => x - y);
+      if (finite.length < K * ANNULUS_MIN_GOOD_FRAC) continue;
+      const med = finite[finite.length >> 1];
+      if (med < ANNULUS_WALL_MIN_MM || med > ANNULUS_WALL_MAX_MM) continue;
+      const good = walls.filter((x) => isFinite(x) && Math.abs(x - med) <= Math.max(0.5, med * ANNULUS_WALL_TOL_FRAC)).length;
+      if (good < K * ANNULUS_MIN_GOOD_FRAC) continue;
+
+      annulusRings.push({ center: circlePath(fit.cx, fit.cy, fit.r + med / 2), loop: true, straight: false });
+
+      // Clip existing branches out of the annulus band; the ring column owns it.
+      const bandLo = fit.r - 0.3;
+      const bandHi = fit.r + med + 0.3;
+      const inBand = (p: Point) => {
+        const d = Math.hypot(p.x - fit.cx, p.y - fit.cy);
+        return d >= bandLo && d <= bandHi;
+      };
+      for (let pi = prepped.length - 1; pi >= 0; pi--) {
+        const br = prepped[pi];
+        if (!br.center.some(inBand)) continue;
+        const dense2 = resampleByDistance(br.center, 0.4);
+        const subs: Point[][] = [];
+        let cur: Point[] = [];
+        for (const p of dense2) {
+          if (inBand(p)) {
+            if (cur.length) {
+              subs.push(cur);
+              cur = [];
+            }
+          } else {
+            cur.push(p);
+          }
+        }
+        if (cur.length) subs.push(cur);
+        const entries = subs
+          .filter((s2) => polylineLength(s2) >= MIN_BRANCH_MM)
+          .map((s2) => {
+            const c2 = maybeStraightSnap(smoothPath(douglasPeucker(s2, 0.3), { maxSegmentMm: 0.8 }), true);
+            return { center: c2, loop: false, straight: c2.length === 2 };
+          })
+          .filter((e) => e.center.length >= 2);
+        prepped.splice(pi, 1, ...entries);
       }
     }
-    prepped.push({ center, loop, straight: center.length === 2 });
+    prepped.push(...annulusRings);
+  }
+
+  // Pass 1½ — CIRCLE-SNAP + WELD (regularized line art only). A cartoon's round
+  // features — tire walls, hubs, round window frames, wheel arches — skeletonize
+  // into wobbly arcs, chopped wherever another stroke meets the ring. A hand
+  // digitizer draws the circle. So: snap every near-circular branch onto its
+  // least-squares circle, and weld arcs of the SAME circle back into one closed
+  // circular stroke that sews as a single complete ring of radial satin.
+  if (opts.regularize) {
+    type ArcFit = { idx: number; cx: number; cy: number; r: number; n: number; bins: Uint8Array };
+    const fits: ArcFit[] = [];
+    prepped.forEach((p, idx) => {
+      const pts = p.center;
+      if (pts.length < 5) return;
+      const fit = fitCircle(pts);
+      if (!fit) return;
+      if (fit.r < CIRCLE_SNAP_MIN_R_MM || fit.r > CIRCLE_SNAP_MAX_R_MM) return;
+      const tol = Math.min(CIRCLE_SNAP_DEV_MAX_MM, Math.max(CIRCLE_SNAP_DEV_MIN_MM, fit.r * CIRCLE_SNAP_DEV_FRAC));
+      if (fit.maxDev > tol) return;
+      const bins = arcBins(pts, fit.cx, fit.cy);
+      let span = 0;
+      for (let i = 0; i < 360; i++) span += bins[i];
+      if (!p.loop && span < CIRCLE_SNAP_MIN_SPAN_DEG) return; // a short chord fits any circle
+      if (p.loop) {
+        // A closed near-circular loop IS the circle.
+        prepped[idx] = { center: circlePath(fit.cx, fit.cy, fit.r), loop: true, straight: false };
+        return;
+      }
+      fits.push({ idx, cx: fit.cx, cy: fit.cy, r: fit.r, n: pts.length, bins });
+    });
+
+    // Group open arcs by circle identity, largest-radius first.
+    fits.sort((a, b) => b.r - a.r);
+    const grouped = new Set<number>();
+    const drop = new Set<number>();
+    for (let i = 0; i < fits.length; i++) {
+      if (grouped.has(i)) continue;
+      const group = [i];
+      grouped.add(i);
+      for (let j = i + 1; j < fits.length; j++) {
+        if (grouped.has(j)) continue;
+        const a = fits[i], b = fits[j];
+        if (
+          Math.hypot(a.cx - b.cx, a.cy - b.cy) <= Math.max(1.0, a.r * 0.15) &&
+          Math.abs(a.r - b.r) <= Math.max(0.6, a.r * 0.12)
+        ) {
+          group.push(j);
+          grouped.add(j);
+        }
+      }
+      if (group.length < 2) continue;
+      // Union coverage of the group's arcs around the (weighted) common circle.
+      let wc = 0, cx = 0, cy = 0, r = 0;
+      for (const g of group) {
+        const f = fits[g];
+        cx += f.cx * f.n; cy += f.cy * f.n; r += f.r * f.n; wc += f.n;
+      }
+      cx /= wc; cy /= wc; r /= wc;
+      const union = new Uint8Array(360);
+      for (const g of group) {
+        const b = arcBins(prepped[fits[g].idx].center, cx, cy);
+        for (let k = 0; k < 360; k++) if (b[k]) union[k] = 1;
+      }
+      let cover = 0;
+      for (let k = 0; k < 360; k++) cover += union[k];
+      if (cover < CIRCLE_WELD_MIN_COVER_DEG) continue;
+      // Weld: the first member becomes the full circle; the rest are dropped
+      // (the ring covers them, junction chops included).
+      prepped[fits[group[0]].idx] = { center: circlePath(cx, cy, r), loop: true, straight: false };
+      for (let k = 1; k < group.length; k++) drop.add(fits[group[k]].idx);
+    }
+
+    // Lone qualifying arcs (a wheel arch, a partial frame) snap ONTO their
+    // fitted circle — perfectly round, endpoints kept on the circle at their
+    // original angles, winding preserved.
+    for (let i = 0; i < fits.length; i++) {
+      const f = fits[i];
+      if (drop.has(f.idx)) continue;
+      const cur = prepped[f.idx];
+      if (cur.loop) continue; // already welded to a full circle
+      const pts = cur.center;
+      const angOf = (p: Point) => Math.atan2(p.y - f.cy, p.x - f.cx);
+      // Signed total sweep along the original polyline.
+      let sweep = 0;
+      for (let k = 1; k < pts.length; k++) {
+        let d = angOf(pts[k]) - angOf(pts[k - 1]);
+        if (d > Math.PI) d -= 2 * Math.PI;
+        if (d < -Math.PI) d += 2 * Math.PI;
+        sweep += d;
+      }
+      const a0 = angOf(pts[0]);
+      const steps = Math.max(4, Math.ceil((Math.abs(sweep) * f.r) / 0.8));
+      const arc: Point[] = [];
+      for (let s = 0; s <= steps; s++) {
+        const a = a0 + (sweep * s) / steps;
+        arc.push({ x: f.cx + f.r * Math.cos(a), y: f.cy + f.r * Math.sin(a) });
+      }
+      prepped[f.idx] = { center: arc, loop: false, straight: false };
+    }
+
+    if (drop.size) {
+      for (const idx of [...drop].sort((a, b) => b - a)) prepped.splice(idx, 1);
+    }
   }
 
   // Pass 2 — build longest-first, each MITERED against the longer strokes (the
   // multi-way junction solver: the dominant stroke runs through, branches abut).
   // Skipped for a huge auto-digitized region (many branches) where the pairwise
-  // miter would be costly and crisp junctions matter less than for lettering.
-  const miter = prepped.length <= MITER_MAX_BRANCHES;
+  // miter would be costly and crisp junctions matter less than for lettering —
+  // EXCEPT for regularized line art, where clean abutment (columns that meet
+  // instead of overlapping) is exactly the hand-digitized look being asked for.
+  const miter = prepped.length <= MITER_MAX_BRANCHES || !!opts.regularize;
   const order = prepped
     .map((_, i) => i)
     .sort((a, b) => polylineLength(prepped[b].center) - polylineLength(prepped[a].center));

@@ -85,6 +85,78 @@ describe("line-art strokes sew as satin ACROSS the stroke", () => {
   });
 });
 
+describe("annulus weld: a chopped ring sews as one complete circle", () => {
+  // A tire whose ring CONNECTS to two horizontal bars (running boards) — the
+  // skeleton chains the ring into the bars, so no single branch is a circle and
+  // the ring used to sew as trimmed arcs with bare wedges at the junctions. The
+  // circular HOLE plus a constant wall is unambiguous: one closed circular
+  // column must cover the full 360°.
+  function tireWithBars(): Path[] {
+    const cx = 30, cy = 30, rOut = 10, rIn = 6.5;
+    // ONE merged outer outline (the way a trace really delivers it): the circle
+    // united with a 2.4 mm bar out each side, walked as a single polygon.
+    const aBar = Math.asin(1.2 / rOut); // half-angle the bar consumes on the circle
+    const arc = (from: number, to: number, out: Path) => {
+      const steps = Math.max(8, Math.ceil((Math.abs(to - from) * rOut) / 0.5));
+      for (let s = 0; s <= steps; s++) {
+        const a = from + ((to - from) * s) / steps;
+        out.push({ x: cx + rOut * Math.cos(a), y: cy + rOut * Math.sin(a) });
+      }
+    };
+    const outer: Path = [];
+    arc(aBar, Math.PI - aBar, outer); // top of the circle, left-to-right in angle
+    outer.push({ x: cx - 22, y: cy + 1.2 }); // left bar (top edge, then around its cap)
+    outer.push({ x: cx - 22, y: cy - 1.2 });
+    arc(Math.PI + aBar, 2 * Math.PI - aBar, outer); // bottom of the circle
+    outer.push({ x: cx + 22, y: cy - 1.2 }); // right bar
+    outer.push({ x: cx + 22, y: cy + 1.2 });
+    const hub: Path = [];
+    for (let i = 90; i > 0; i--) {
+      const a = (i / 90) * 2 * Math.PI;
+      hub.push({ x: cx + rIn * Math.cos(a), y: cy + rIn * Math.sin(a) });
+    }
+    return [outer, hub];
+  }
+
+  it("covers the full ring with radial satin (no trimmed-junction wedge)", () => {
+    const runs = generateObjectRuns(lineArtObject(tireWithBars()));
+    const cx = 30, cy = 30, rIn = 6.5, rOut = 10;
+    // Angular coverage of drawn penetrations inside the annulus band. Bins are
+    // 5° so discrete penetration pitch can't fake a gap; a real trimmed-junction
+    // wedge (the old failure) is ~15–30° of bare ring and still gets caught.
+    const N = 72;
+    const bins = new Uint8Array(N);
+    for (const run of runs.filter((r) => !r.underlay)) {
+      for (const p of run.pts) {
+        const d = Math.hypot(p.x - cx, p.y - cy);
+        if (d < rIn - 0.5 || d > rOut + 0.5) continue;
+        let a = Math.atan2(p.y - cy, p.x - cx) / (2 * Math.PI);
+        if (a < 0) a += 1;
+        bins[Math.floor(a * N) % N] = 1;
+      }
+    }
+    let covered = 0;
+    for (let i = 0; i < N; i++) covered += bins[i];
+    expect(covered).toBe(N); // complete ring, no bare wedge
+
+    // PRECISION: the ring is one exact circle, so (almost) every penetration in
+    // the band lands ON one of its two rails. A chained wobbly skeleton (the old
+    // behavior) scatters penetrations across the wall at the junctions.
+    let onRail = 0;
+    let inBand = 0;
+    for (const run of runs.filter((r) => !r.underlay)) {
+      for (const p of run.pts) {
+        const d = Math.hypot(p.x - cx, p.y - cy);
+        if (d < rIn - 0.5 || d > rOut + 0.5) continue;
+        inBand++;
+        if (Math.abs(d - rIn) < 0.55 || Math.abs(d - rOut) < 0.55) onRail++;
+      }
+    }
+    expect(inBand).toBeGreaterThan(200);
+    expect(onRail / inBand).toBeGreaterThan(0.93);
+  });
+});
+
 describe("line-art width regularization (constant-width pen stroke)", () => {
   // A 40 mm bar whose TOP edge undulates (±0.8 mm, like a shakily traced ladder
   // rail) while the bottom edge is straight: the raw column's width beads and
