@@ -360,8 +360,11 @@ export function tracedataToObjects(
       // falls back to tatami per-region where satin can't cover). Declared here, not
       // left to re-classification, because a scattered BAG of strokes can fool the
       // whole-object width heuristic.
+      // Underlay stays ON: the references run a stabilising pass beneath every
+      // satin stroke (the engine skips it for hairline bean columns itself), and
+      // without it wide strokes — a tire wall — sink into the fabric.
       const strokeObj = makeObjectFromPaths("fill", strokeRings, colorId);
-      strokeObj.params = { fillStyle: "satin", lineArt: true, underlay: false };
+      strokeObj.params = { fillStyle: "satin", lineArt: true };
       built.push({ object: strokeObj, area: strokeArea, stroke: true });
       used = true;
     }

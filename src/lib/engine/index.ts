@@ -718,8 +718,13 @@ export function generateObjectRuns(
       // Satin: tiered underlay per column (center / edge-walk / zig-zag by width).
       // Tatami: inset edge run + perpendicular pass(es). (Motif fills are open and
       // decorative — no underlay.)
+      // Line-art hairlines render as bean retraces (their own reinforcement) —
+      // only columns wide enough to satin get the tiered underlay beneath them.
+      const ulColumns = p.lineArt
+        ? columns.filter((c) => c.widthMm >= LINE_ART_SATIN_MIN_MM)
+        : columns;
       const ulRuns = usingSatin
-        ? columns.flatMap((c) => columnUnderlay(c.centerline, c.widthMm, weight))
+        ? ulColumns.flatMap((c) => columnUnderlay(c.centerline, c.widthMm, weight))
         : contour
           ? // A contour fill follows the shape's curve, so its underlay should too —
             // sparse echo loops that hug the band instead of a parallel pass that
