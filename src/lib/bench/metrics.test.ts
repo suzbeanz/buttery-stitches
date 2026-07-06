@@ -106,7 +106,12 @@ describe("honest stitch stats (row advances exempt) + professional-pattern metri
     // With row advances exempt, the satin band's real needle-stress shorts are
     // a few percent (was 17% when the metric counted every zig-zag step).
     expect(m.stitchLen.shortPct).toBeLessThan(0.08);
-    expect(m.stitchLen.cv).toBeLessThan(0.35);
+    // CV reflects the band's true throw lengths. The old 5 mm global cap SPLIT
+    // legitimate ~6 mm satin throws in half (punching holes mid-column), which
+    // artificially tightened this to <0.35; with full-length throws restored
+    // the honest spread sits ~0.45. Bound leaves headroom without letting a
+    // real length-chaos regression (CV ≫ 0.6) through.
+    expect(m.stitchLen.cv).toBeLessThan(0.55);
     // Professional-pattern columns exist and are sane.
     expect(m.trimsPer1000).toBeGreaterThanOrEqual(0);
     expect(m.sharpTurnPct).toBeGreaterThan(0);

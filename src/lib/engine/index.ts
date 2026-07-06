@@ -63,8 +63,11 @@ const TIE_AMPLITUDE = 0.8;
 const TIE_MIN_BITE = 0.5;
 /** Number of penetrations in one tie/lock cluster. */
 const TIE_COUNT = 3;
-/** Stitch length (mm) for a travel run connecting nearby same-color shapes. */
-const TRAVEL_STITCH = 2.5;
+/** Stitch length (mm) for a travel run connecting nearby same-color shapes.
+ *  Travels are hidden (under later coverage or inside same-colour ink), so the
+ *  references run them LONG — longer travel stitches mean fewer perforations
+ *  punched through the stitching they ride beneath. */
+const TRAVEL_STITCH = 3.5;
 /** Longest same-color gap (mm) we'll sew as a hidden travel UNDER later coverage
  *  rather than trim. Generous — home machines cannot cut mid-color (a "trim"
  *  jump just DRAGS a loose thread across the design; the sew-out that exposed
@@ -1593,10 +1596,14 @@ export function generateDesign(
   return capStitchLength(levelInnerTurns(enforceMinSpacing(collapseCoincident(out))));
 }
 
-/** Longest a single drawn stitch may be (mm). Professional output keeps every
- *  stitch short (~≤5 mm) so nothing floats loose or snags; we split anything
- *  longer into equal sub-stitches along the same line. */
-const MAX_STITCH_MM = 5;
+/** Longest a single drawn stitch may be (mm). The professional references run
+ *  stitches up to ~9 mm on long straight runs (and hidden runs longer still) —
+ *  a hard 5 mm cap over-split those, adding needle-downs that stiffen the
+ *  fabric and slow the sew-out without any visual gain. 6.5 mm keeps the
+ *  economy of long straights while staying comfortably snag-safe (and far
+ *  under the 12.1 mm format encoding limits). Anything longer splits into
+ *  equal sub-stitches along the same line. */
+const MAX_STITCH_MM = 6.5;
 
 /** Split any drawn run longer than {@link MAX_STITCH_MM} into equal sub-stitches.
  *  Jumps, trims, stops, and colour changes are boundaries — never split across
