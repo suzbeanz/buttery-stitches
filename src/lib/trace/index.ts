@@ -340,9 +340,17 @@ export function tracedataToObjects(
       // stroke (an outline, a fur line) from a jagged shading blob that merely has a
       // low mean width — the blob stays a solid fill instead of fragmenting into a
       // mess of medial stubs.
-      const isStroke =
+      let isStroke =
         isNetwork ||
         (meanWidth < STROKE_MAX_WIDTH_MM && length >= STROKE_MIN_LENGTH_MM && elongation >= STROKE_MIN_ELONGATION);
+      // A LETTERFORM-scale shape — thin like a stroke but short and compact (the
+      // glyphs of small crest text) — sews far better through the FILL path: the
+      // engine's auto-satin there is the same machinery the fonts use (junction
+      // residual patching, no cartoon-scale regularization), which is why big
+      // fill-classified letters read crisp while line-art-classified small ones
+      // wobbled. Cartoon linework is long or a holey network, so this never
+      // reclassifies it.
+      if (isStroke && !isNetwork && length < LETTER_MAX_LENGTH_MM) isStroke = false;
       // An INTERIOR island of the background color at ANTI-ALIAS scale is edge
       // fringe (a blend remnant hugging a boundary) — never artwork. But only at
       // that scale: white LETTERING on a white-page source is thin, stroke-shaped
@@ -412,6 +420,9 @@ const STROKE_MIN_ELONGATION = 3.5;
  *  strokes are deliberate light detail (white lettering on a white-page
  *  source) and must sew. */
 const BG_SLIVER_MAX_WIDTH_MM = 0.55;
+/** A thin shape shorter than this (mm) is letterform-scale: it takes the fill
+ *  path (font-quality auto-satin) instead of the cartoon line-art path. */
+const LETTER_MAX_LENGTH_MM = 12;
 
 /** A holey, thin-walled region — a picture frame, a ring, or a logo's whole
  *  connected outline network — is line art: stitched down its medial centerline,
