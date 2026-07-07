@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { detectTextClusters, placeManualText, applyManualText } from "./manualText";
+import { detectTextClusters, placeManualText, placeGuidedText, applyManualText } from "./manualText";
 import { parseFont } from "../text/fonts";
 import { makeObjectFromPaths } from "../objects";
 import { pathsBounds } from "../geometry";
@@ -111,5 +111,36 @@ describe("placeManualText", () => {
     // All 4 traced glyph objects removed, 1 lettering object added.
     expect(out.length).toBe(1);
     for (const id of res.removeIds) expect(out.some((o) => o.id === id)).toBe(false);
+  });
+});
+
+describe("placeGuidedText (keep original letterforms)", () => {
+  const font = loadTtf("Oswald-Medium.ttf");
+
+  it("guides each traced letter with its character's font topology, keeping the traced rings", () => {
+    // Three letter blocks in a row → detected as one cluster; typed "ABC".
+    const objs = word(10, 20, 3, 5, 1.5, "c1");
+    const clusters = detectTextClusters(objs);
+    expect(clusters.length).toBe(1);
+    const res = placeGuidedText({
+      assignments: { [clusters[0].id]: "ABC" }, clusters, objects: objs, font, fontId: "oswald",
+    });
+    expect(res.placed).toBe(1);
+    expect(res.textObjects.length).toBe(3); // one guided object per letter
+    // Each guided object reuses a TRACED region (original letterform), as satin.
+    for (const o of res.textObjects) {
+      expect(o.params.fillStyle).toBe("satin");
+      expect(o.params.lineArt).toBe(true);
+    }
+  });
+
+  it("does NOT guess when letter count != character count — leaves the plain trace", () => {
+    const objs = word(10, 20, 3, 5, 1.5, "c1"); // 3 letters
+    const clusters = detectTextClusters(objs);
+    const res = placeGuidedText({
+      assignments: { [clusters[0].id]: "HELLO" }, clusters, objects: objs, font, fontId: "oswald",
+    });
+    expect(res.placed).toBe(0); // 3 regions vs 5 chars → no guess
+    expect(applyManualText(objs, res)).toBe(objs);
   });
 });

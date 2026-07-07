@@ -8,6 +8,7 @@ import { recognizeTextObjects, applyTextRecognition } from "../lib/trace/textRec
 import {
   detectTextClusters,
   placeManualText,
+  placeGuidedText,
   applyManualText,
   type DetectedTextCluster,
 } from "../lib/trace/manualText";
@@ -90,6 +91,9 @@ export default function AutoDigitizeDialog({
   // professional move for text OCR can't read (small, stylized, rotated).
   const [textClusters, setTextClusters] = useState<DetectedTextCluster[]>([]);
   const [textAssign, setTextAssign] = useState<Record<string, string>>({});
+  // "keep original letterforms" mode: guide clean satin down the TRACED letter
+  // shapes (their type, our stitch quality) instead of re-setting in our font.
+  const [textKeepShapes, setTextKeepShapes] = useState(false);
   const [font, setFont] = useState<Font | null>(null);
   // Power tools (per-color stitch style, palette merge/match) stay tucked until
   // asked for, so the first view is calm and most users never need them.
@@ -261,7 +265,8 @@ export default function AutoDigitizeDialog({
     if (!result) return [];
     const named = Object.values(textAssign).some((v) => v.trim().length > 0);
     if (!named || !font || textClusters.length === 0) return result.objects;
-    const res = placeManualText({
+    const place = textKeepShapes ? placeGuidedText : placeManualText;
+    const res = place({
       assignments: textAssign,
       clusters: textClusters,
       objects: result.objects,
@@ -269,7 +274,7 @@ export default function AutoDigitizeDialog({
       fontId: DEFAULT_FONT_ID,
     });
     return applyManualText(result.objects, res);
-  }, [result, textAssign, textClusters, font]);
+  }, [result, textAssign, textClusters, font, textKeepShapes]);
   const keptObjects = useMemo(
     () =>
       result
@@ -476,8 +481,31 @@ export default function AutoDigitizeDialog({
             </p>
             <p className="mb-2 text-[11px] text-navy/55">
               We spotted {textClusters.length === 1 ? "a text area" : `${textClusters.length} text areas`}.
-              Type the exact words and each is re-set in a clean satin font instead of traced — far
-              sharper for small or angled text. Leave a box blank to keep the plain trace.
+              Type the exact words so each sews sharp instead of tracing rough pixels. Leave a box
+              blank to keep the plain trace.
+            </p>
+            {/* Two ways to make text crisp: re-set it in our clean font, or keep
+                the artwork's own letterforms and lay clean satin down them. */}
+            <div className="mb-2 flex rounded-sm border border-ink/15 p-0.5 text-[11px]">
+              <button
+                type="button"
+                onClick={() => setTextKeepShapes(false)}
+                className={`flex-1 rounded-[2px] px-2 py-1 font-label uppercase tracking-wide ${!textKeepShapes ? "bg-ink text-cream" : "text-navy/60"}`}
+              >
+                Clean font
+              </button>
+              <button
+                type="button"
+                onClick={() => setTextKeepShapes(true)}
+                className={`flex-1 rounded-[2px] px-2 py-1 font-label uppercase tracking-wide ${textKeepShapes ? "bg-ink text-cream" : "text-navy/60"}`}
+              >
+                Keep original letters
+              </button>
+            </div>
+            <p className="mb-2 text-[11px] text-navy/45">
+              {textKeepShapes
+                ? "Keeps the logo's exact letterforms and lays clean satin down each stroke — the original type, sewn crisply."
+                : "Re-sets the words in a clean satin font. Sharpest, but swaps the original typeface for ours."}
             </p>
             <div className="flex flex-col gap-1.5">
               {textClusters.map((cl, i) => (
