@@ -5,6 +5,8 @@ import type { EngineStitch } from "./index";
 export interface RenderSegment {
   colorId: string;
   underlay: boolean;
+  /** buried connector stitches — drawn de-emphasised like underlay. */
+  travel: boolean;
   points: Point[];
 }
 
@@ -29,8 +31,8 @@ export function designToSegments(
       cur = null; // pen up — break the stroke
       continue;
     }
-    if (!cur || cur.colorId !== s.colorId || cur.underlay !== !!s.underlay) {
-      cur = { colorId: s.colorId, underlay: !!s.underlay, points: [] };
+    if (!cur || cur.colorId !== s.colorId || cur.underlay !== !!s.underlay || cur.travel !== !!s.travel) {
+      cur = { colorId: s.colorId, underlay: !!s.underlay, travel: !!s.travel, points: [] };
       segs.push(cur);
     }
     cur.points.push({ x: s.x, y: s.y });
@@ -67,8 +69,8 @@ export function extendSegments(
       cur = null;
       continue;
     }
-    if (!cur || cur.colorId !== s.colorId || cur.underlay !== !!s.underlay) {
-      cur = { colorId: s.colorId, underlay: !!s.underlay, points: [] };
+    if (!cur || cur.colorId !== s.colorId || cur.underlay !== !!s.underlay || cur.travel !== !!s.travel) {
+      cur = { colorId: s.colorId, underlay: !!s.underlay, travel: !!s.travel, points: [] };
       segs.push(cur);
     }
     cur.points.push({ x: s.x, y: s.y });

@@ -6,10 +6,11 @@ import type { ThreadColor } from "../types/project";
 /** A minimal CanvasRenderingContext2D recorder — captures the calls drawStitches
  *  makes so we can assert behavior without a real canvas. */
 function fakeCtx() {
-  const calls: { strokes: number; moveTos: number; lineTos: number } = {
+  const calls: { strokes: number; moveTos: number; lineTos: number; lastLineWidth: number } = {
     strokes: 0,
     moveTos: 0,
     lineTos: 0,
+    lastLineWidth: 0,
   };
   const ctx = {
     lineCap: "",
@@ -26,6 +27,7 @@ function fakeCtx() {
     },
     stroke() {
       calls.strokes++;
+      calls.lastLineWidth = this.lineWidth;
     },
   };
   return { ctx: ctx as unknown as CanvasRenderingContext2D, calls };
@@ -40,9 +42,10 @@ const opts = (realistic: boolean) => ({
   threadPx: 2,
   realistic,
 });
-const seg = (underlay: boolean): RenderSegment => ({
+const seg = (underlay: boolean, travel = false): RenderSegment => ({
   colorId: "c1",
   underlay,
+  travel,
   points: [{ x: 0, y: 0 }, { x: 10, y: 0 }],
 });
 
@@ -64,7 +67,7 @@ describe("drawStitches (shared stitch painter)", () => {
 
   it("draws underlay as its own thin faint pass and skips degenerate segments", () => {
     const { ctx, calls } = fakeCtx();
-    drawStitches(ctx, [seg(true), { colorId: "c1", underlay: false, points: [{ x: 0, y: 0 }] }], opts(false));
+    drawStitches(ctx, [seg(true), { colorId: "c1", underlay: false, travel: false, points: [{ x: 0, y: 0 }] }], opts(false));
     expect(calls.strokes).toBe(1); // single-point segment is skipped
   });
 
@@ -72,5 +75,20 @@ describe("drawStitches (shared stitch painter)", () => {
     expect(shadeRgb([100, 100, 100], 1)).toBe("rgb(100,100,100)");
     expect(shadeRgb([200, 200, 200], 2)).toBe("rgb(255,255,255)"); // clamped
     expect(shadeRgb([100, 100, 100], 0.5)).toBe("rgb(50,50,50)");
+  });
+});
+
+describe("preview honesty: buried travels", () => {
+  it("draws a travel segment as a thin faint pass, like underlay — never full thread weight", () => {
+    const under = fakeCtx();
+    drawStitches(under.ctx, [seg(true)], opts(false));
+    const trav = fakeCtx();
+    drawStitches(trav.ctx, [seg(false, true)], opts(false));
+    const top = fakeCtx();
+    drawStitches(top.ctx, [seg(false)], opts(false));
+    // travel styled like underlay (one thin pass)…
+    expect(trav.calls.strokes).toBe(under.calls.strokes);
+    // …and thinner than a top-layer stitch.
+    expect(trav.calls.lastLineWidth).toBeLessThan(top.calls.lastLineWidth);
   });
 });
