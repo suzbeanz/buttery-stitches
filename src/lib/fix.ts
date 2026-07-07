@@ -1,5 +1,5 @@
 import type { EmbObject, Project } from "../types/project";
-import { classifyRegion, isSmallRoundFill } from "./engine/classify";
+import { classifyRegion, isBroadlyThick, isSmallRoundFill } from "./engine/classify";
 
 import { knockdown, seamTrap } from "./boolean";
 import { STACK_MAX_FEATURE_MM2 } from "./trace/stack";
@@ -140,8 +140,19 @@ function isThinBand(rings: EmbObject["paths"], outer: EmbObject["paths"][number]
   if (totalPer <= 0) return false;
   const bandWidth = (2 * netArea) / totalPer; // holes-aware mean wall width
   const outerDia = 2 * Math.sqrt(outerArea / Math.PI); // equivalent diameter
-  return outerDia > 0 && bandWidth / outerDia < 0.3;
+  if (!(outerDia > 0 && bandWidth / outerDia < 0.3)) return false;
+  // The perimeter-based wall width is FOOLED by a big solid with many carve-outs
+  // (a crest whose stripe gaps inflate the perimeter): the mean deflates while
+  // the shape still has genuinely FAT interior. A true band is thin EVERYWHERE —
+  // judged by inscribed thickness, which boundary chatter can't fake. (Same
+  // discriminator the engine's auto-turn gate uses, for the same reason.)
+  return !isBroadlyThick(rings, BAND_MAX_HALF_WIDTH_MM);
 }
+
+/** A contour band's wall may be at most this half-width (mm) anywhere. A real
+ *  frame / ring / washer wall runs ~3–8mm total; anything with interior fatter
+ *  than this reads as a SOLID area and wants flat tatami, not echo rings. */
+const BAND_MAX_HALF_WIDTH_MM = 4;
 
 /** Centroid of a ring (average of its vertices). */
 function centroidOf(r: EmbObject["paths"][number]): { x: number; y: number } {

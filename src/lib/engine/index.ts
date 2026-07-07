@@ -1267,27 +1267,59 @@ export function generateDesign(
   drawn.forEach((d, i) => {
     if (!drawOrder.has(d.object.id)) drawOrder.set(d.object.id, i);
   });
-  /** True if a `colorId` travel from a→b stays hidden: every point lies under a
-   *  fill that is the same colour or sewn after `afterOrder` (so it's on top). */
-  function coveredBetween(a: Point, b: Point, colorId: string, afterOrder: number): boolean {
+  /** True if a `colorId` travel along `pts` stays hidden: every point lies ON
+   *  ink that is the same colour or sewn after `afterOrder` (so it's on top).
+   *  Sampling is FINE (0.6mm) — lettering-scale gaps are around a millimetre,
+   *  and a coarser step strides right across one and sews a visible connector
+   *  over open fabric. "On ink" is judged with the thread's own physical slack:
+   *  a sample within ~half a thread width of the ink is still riding it (rail
+   *  overshoot at run ends, a grazed inner edge on a corridor bend) — while no
+   *  real bare gap under a stitch can hide inside that slack, so a phantom
+   *  route across small-text kerning still fails. */
+  const COVER_EDGE_SLACK_MM = 0.45;
+  const distSqToSeg = (p: Point, sa: Point, sb: Point): number => {
+    const dx = sb.x - sa.x;
+    const dy = sb.y - sa.y;
+    const l2 = dx * dx + dy * dy || 1e-9;
+    let t = ((p.x - sa.x) * dx + (p.y - sa.y) * dy) / l2;
+    t = Math.max(0, Math.min(1, t));
+    const qx = sa.x + t * dx - p.x;
+    const qy = sa.y + t * dy - p.y;
+    return qx * qx + qy * qy;
+  };
+  function polylineCovered(pts: Point[], colorId: string, afterOrder: number): boolean {
     const cover = fills.filter(
       (o) => o.colorId === colorId || (drawOrder.get(o.id) ?? -1) > afterOrder,
     );
     if (cover.length === 0) return false;
-    const samples = Math.max(2, Math.ceil(distance(a, b) / 1.5));
-    for (let s = 0; s <= samples; s++) {
-      const t = s / samples;
-      const p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-      let covered = false;
+    const slack2 = COVER_EDGE_SLACK_MM * COVER_EDGE_SLACK_MM;
+    const onInk = (p: Point): boolean => {
+      for (const o of cover) if (pointInRings(p, o.paths)) return true;
+      // Not inside — near enough to an ink edge that the thread still rides it?
       for (const o of cover) {
-        if (pointInRings(p, o.paths)) {
-          covered = true;
-          break;
+        for (const ring of o.paths) {
+          for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+            if (distSqToSeg(p, ring[i], ring[j]) <= slack2) return true;
+          }
         }
       }
-      if (!covered) return false;
+      return false;
+    };
+    for (let k = 1; k < pts.length; k++) {
+      const a = pts[k - 1];
+      const b = pts[k];
+      const samples = Math.max(2, Math.ceil(distance(a, b) / 0.6));
+      for (let s = 0; s <= samples; s++) {
+        const t = s / samples;
+        if (!onInk({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })) return false;
+      }
     }
     return true;
+  }
+
+  /** True if a straight `colorId` travel from a→b stays hidden (see polylineCovered). */
+  function coveredBetween(a: Point, b: Point, colorId: string, afterOrder: number): boolean {
+    return polylineCovered([a, b], colorId, afterOrder);
   }
 
   // ── Travel-under-coverage router ──────────────────────────────────────────
@@ -1377,23 +1409,12 @@ export function generateDesign(
     }
     return null;
   }
-  /** Does the straight segment p→q stay over covered cells (grid line-of-sight)? */
-  function gridClear(c: Grid, p: Point, q: Point): boolean {
-    const steps = Math.max(1, Math.ceil(distance(p, q) / (COVERAGE_CELL * 0.5)));
-    for (let s = 0; s <= steps; s++) {
-      const t = s / steps;
-      const gx = Math.round((p.x + (q.x - p.x) * t - c.minX) / COVERAGE_CELL);
-      const gy = Math.round((p.y + (q.y - p.y) * t - c.minY) / COVERAGE_CELL);
-      if (!cellCovered(c, gx, gy)) return false;
-    }
-    return true;
-  }
   /**
    * A buried polyline from a to b (inclusive) that stays under coverage, or null
    * if none is found within {@link ROUTE_CAP}. A* over covered cells, line-of-sight
    * simplified so the travel is a few long legs rather than a staircase.
    */
-  function routeUnderCoverage(a: Point, b: Point, colorId: string): Point[] | null {
+  function routeUnderCoverage(a: Point, b: Point, colorId: string, afterOrder: number): Point[] | null {
     const c = coverage(colorId);
     if (!c) return null;
     const startCell = snapCell(c, a);
@@ -1468,8 +1489,14 @@ export function generateDesign(
         }
       }
     }
-    if (!found) return null;
-    // Reconstruct cell path (goal → start), then line-of-sight simplify.
+    if (!found) {
+      if (process.env.ROUTEDBG) console.log("ROUTEDBG: A* not found", a, b);
+      return null;
+    }
+    // Reconstruct cell path (goal → start), then line-of-sight simplify. Each
+    // simplified leg must hold the same fine-sampled coverage test the straight
+    // covered move uses (a pure grid check lets a leg cut across a bend of the
+    // corridor); a leg that fails falls back to the previous cell waypoint.
     const cells: number[] = [];
     for (let i = goalCell; i !== -1; i = came[i]) cells.push(i);
     cells.reverse();
@@ -1477,7 +1504,7 @@ export function generateDesign(
     const way: Point[] = [a];
     let anchor = a;
     for (let k = 1; k < centers.length; k++) {
-      if (!gridClear(c, anchor, centers[k])) {
+      if (!coveredBetween(anchor, centers[k], colorId, afterOrder)) {
         anchor = centers[k - 1];
         way.push(anchor);
       }
@@ -1487,9 +1514,26 @@ export function generateDesign(
     const cleaned = way.filter(
       (p, idx) => idx === 0 || idx === way.length - 1 || (distance(p, a) > COVERAGE_CELL && distance(p, b) > COVERAGE_CELL),
     );
+    // FINAL exact check over the whole route (LOS pushes its last leg and the
+    // per-cell fallbacks unverified): the 1mm lattice can thread a phantom
+    // corridor through small lettering — its sample points landing inside
+    // successive letters while every gap falls between them — and a route that
+    // can't pass the fine-sampled on-ink test end-to-end must TRIM, not sew a
+    // slash across the kerning. When only the SIMPLIFICATION broke it (a long
+    // leg chording across a hole), the unsimplified cell chain still follows
+    // the corridor — use that.
+    let route = cleaned;
+    if (!polylineCovered(route, colorId, afterOrder)) {
+      route = [a, ...centers, b];
+      if (!polylineCovered(route, colorId, afterOrder)) {
+        if (process.env.ROUTEDBG) console.log("ROUTEDBG: final check failed", JSON.stringify(cleaned.map((q) => [Math.round(q.x*10)/10, Math.round(q.y*10)/10])));
+        return null;
+      }
+    }
     let len = 0;
-    for (let k = 1; k < cleaned.length; k++) len += distance(cleaned[k - 1], cleaned[k]);
-    return len <= ROUTE_CAP ? cleaned : null;
+    for (let k = 1; k < route.length; k++) len += distance(route[k - 1], route[k]);
+    if (len > ROUTE_CAP && process.env.ROUTEDBG) console.log("ROUTEDBG: cap", len);
+    return len <= ROUTE_CAP ? route : null;
   }
 
   const out: EngineStitch[] = [];
@@ -1538,7 +1582,7 @@ export function generateDesign(
       // Otherwise, before trimming a same-color move, try to route it UNDER the
       // design's coverage and bury the travel (the pro move) instead of cutting.
       if (!travelPath && !d.trimGaps && !colorChanged && gap > jumpThreshold && gap <= ROUTE_CAP) {
-        travelPath = routeUnderCoverage(prevPoint, start, col);
+        travelPath = routeUnderCoverage(prevPoint, start, col, drawOrder.get(object.id) ?? di);
       }
       if (travelPath) {
         const travel = runningStitch(travelPath, TRAVEL_STITCH);

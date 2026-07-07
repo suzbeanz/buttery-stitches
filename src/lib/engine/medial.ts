@@ -34,6 +34,10 @@ const REGULARIZE_WIDTH_HI = 1.1;
  *  regularized strokes — wide enough to kill the trace's undulation, narrow
  *  enough to keep a real bend (a wheel arch, a bumper corner). */
 const REGULARIZE_SMOOTH_MM = 1.6;
+/** Regularization is CARTOON-SCALE machinery. On a branch shorter than this
+ *  (mm) — a small letterform's stroke — the low-pass window rivals the whole
+ *  stroke and MELTS the letter, so short branches keep their true shape. */
+const REGULARIZE_MIN_BRANCH_MM = 8;
 /** CIRCLE-SNAP (regularized line art): a branch whose points all sit within a
  *  trace-noise band of a fitted circle IS that circle — a tire wall, a round
  *  window frame, a wheel arch. Arcs of the SAME circle (a ring the skeleton
@@ -42,7 +46,11 @@ const REGULARIZE_SMOOTH_MM = 1.6;
  *  wedges. Only arcs with real angular extent qualify (a shortish chord fits
  *  any circle), and the fit tolerance scales with the radius. */
 const CIRCLE_SNAP_MIN_SPAN_DEG = 50;
-const CIRCLE_SNAP_MIN_R_MM = 1.5;
+/** Snap floor: a cartoon's round features (tires, hubs, frames, arches) live at
+ *  r ≥ ~3mm. Below that the near-circular arcs are LETTERFORM curls (the bowl
+ *  of a small 'U', the spine of an 'S') — snapping those to circles melts the
+ *  text, so they keep their traced shape. */
+const CIRCLE_SNAP_MIN_R_MM = 3;
 const CIRCLE_SNAP_MAX_R_MM = 40;
 const CIRCLE_SNAP_DEV_FRAC = 0.08;
 const CIRCLE_SNAP_DEV_MIN_MM = 0.5;
@@ -698,7 +706,7 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
     // trace noise, and the pen line a digitizer would draw through it is smooth.
     let center = smoothPath(douglasPeucker(raw, cellMm * 1.2), { maxSegmentMm: 0.8 });
     if (center.length < 2) continue;
-    if (opts.regularize && center.length > 2) {
+    if (opts.regularize && center.length > 2 && polylineLength(center) >= REGULARIZE_MIN_BRANCH_MM) {
       center = lowPassPath(center, REGULARIZE_SMOOTH_MM, loop);
     }
     // STRAIGHT-SNAP: a branch whose every point lies within a trace-noise bow
