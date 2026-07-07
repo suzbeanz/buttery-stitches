@@ -156,6 +156,22 @@ describe("annulus weld: a chopped ring sews as one complete circle", () => {
     expect(onRail / inBand).toBeGreaterThan(0.93);
   });
 
+  it("TRIMS between separated small shapes — no phantom connector across bare fabric", () => {
+    // Two small letter-like blocks 4mm apart (a word gap in 3mm lettering). The
+    // coverage grid's 1mm lattice can land sample points inside both while the
+    // bare gap falls between them — the router must NOT thread that phantom
+    // corridor and slash a visible connector across it; the move trims.
+    const blockA: Path = [{ x: 10, y: 10 }, { x: 13, y: 10 }, { x: 13, y: 14 }, { x: 10, y: 14 }];
+    const blockB: Path = [{ x: 10, y: 18 }, { x: 13, y: 18 }, { x: 13, y: 22 }, { x: 10, y: 22 }];
+    const d = lineArtDesign([blockA, blockB]);
+    // Nothing sewn in the bare band between the blocks (y 14.6–17.4).
+    for (const s of d) {
+      if (s.jump || s.trim) continue;
+      expect(s.y < 14.6 || s.y > 17.4).toBe(true);
+    }
+    expect(d.filter((s) => s.trim).length).toBeGreaterThanOrEqual(1);
+  });
+
   it("sews a CONNECTED network with no trims — connectors ride the ink", () => {
     // The ring and its two bars are one connected ink network: the thread must
     // walk between the strokes through the coverage (as the professional

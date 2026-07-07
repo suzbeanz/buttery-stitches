@@ -343,13 +343,15 @@ export function tracedataToObjects(
       const isStroke =
         isNetwork ||
         (meanWidth < STROKE_MAX_WIDTH_MM && length >= STROKE_MIN_LENGTH_MM && elongation >= STROKE_MIN_ELONGATION);
-      // An INTERIOR island of the background color that is a thin sliver is the
-      // background showing THROUGH a gap between two foreground shapes (between sail
-      // panels, between letters) — not a feature. Stitching it would lay a line of
-      // background-colored thread where there should be bare fabric, so drop it. A
-      // genuine same-as-background feature (a white ball on a white page) is blobby,
-      // not a sliver, so it fails this test and survives.
-      if (isNearBackground && isStroke) return;
+      // An INTERIOR island of the background color at ANTI-ALIAS scale is edge
+      // fringe (a blend remnant hugging a boundary) — never artwork. But only at
+      // that scale: white LETTERING on a white-page source is thin, stroke-shaped
+      // and background-colored too, and a crest's "ST LOUIS" must sew, not vanish
+      // because the page happened to match. Real AA fringe is sub-thread width
+      // (and the raster-level blend dissolution catches most of it upstream);
+      // anything wider that matches the background is deliberate light-colored
+      // detail — a hand digitizer sews it (the garment isn't always white).
+      if (isNearBackground && isStroke && meanWidth < BG_SLIVER_MAX_WIDTH_MM) return;
       // A thin stroke pinned along one image border is a capture artifact (a
       // screenshot frame line, resize edge shading) — never subject linework.
       if (isStroke && hugsImageEdge(pxOuter, td.width, td.height)) return;
@@ -405,6 +407,11 @@ const STROKE_MIN_LENGTH_MM = 5;
 /** A stroke must be this many times longer than it is wide — a true line, not a
  *  jagged shading blob that merely has a low mean width. */
 const STROKE_MIN_ELONGATION = 3.5;
+/** A near-background stroke is dropped as anti-alias fringe only below this
+ *  mean width (mm) — the blend-remnant scale. Wider background-coloured
+ *  strokes are deliberate light detail (white lettering on a white-page
+ *  source) and must sew. */
+const BG_SLIVER_MAX_WIDTH_MM = 0.55;
 
 /** A holey, thin-walled region — a picture frame, a ring, or a logo's whole
  *  connected outline network — is line art: stitched down its medial centerline,

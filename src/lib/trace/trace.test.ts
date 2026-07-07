@@ -477,21 +477,39 @@ describe("imageDataToObjects (real imagetracerjs)", () => {
     });
   });
 
-  it("drops a thin background-color sliver trapped between shapes", () => {
+  it("drops a background-color sliver at anti-alias scale, keeps wider light detail", () => {
     // Cream field (the background) with a solid blue square in the middle, split by
-    // a thin cream bar through its center — the background showing through a gap.
-    // With background removal on, the cream field (border) AND the interior cream
-    // sliver are dropped, so no cream thread is laid where there should be fabric.
+    // a HAIRLINE cream bar (~0.5 mm) — edge-fringe scale, dropped. (A WIDER
+    // background-coloured stroke is deliberate light detail — white lettering on a
+    // white-page source — and must survive; see the lettering test below.)
     const img = image(80, 80, (x, y) => {
       const inSquare = x >= 20 && x < 60 && y >= 20 && y < 60;
-      const inSliver = x >= 24 && x < 56 && y >= 38 && y < 41;
+      const inSliver = x >= 24 && x < 56 && y >= 39 && y < 40;
       return inSquare && !inSliver ? [30, 70, 200] : [235, 225, 200];
     });
-    // mmPerPx 0.5 makes the 3-px-tall bar ~1.5 mm wide — a thin sliver, not a fill.
+    // mmPerPx 0.5 makes the 1-px bar ~0.5 mm — fringe, not artwork.
     const { colors } = imageDataToObjects(img, 2, { mmPerPx: 0.5, removeBackground: true });
-    // No surviving color is the cream background tint.
     const hasCream = colors.some((c) => c.rgb[0] > 200 && c.rgb[1] > 190 && c.rgb[2] > 160);
     expect(hasCream).toBe(false);
+  });
+
+  it("keeps background-coloured LETTERING (white text on a white-page source)", () => {
+    // Blue panel on a white page, with white letter-like bars (~1 mm strokes)
+    // inside the panel — a crest's "ST LOUIS". The letters match the page colour
+    // but they are artwork: on any garment that isn't white they must sew.
+    const img = image(100, 100, (x, y) => {
+      const inPanel = x >= 20 && x < 80 && y >= 20 && y < 80;
+      if (!inPanel) return [250, 250, 250];
+      // three vertical 2-px-wide white bars, 24px tall (letter strokes)
+      const inBar = y >= 30 && y < 54 && ((x >= 34 && x < 36) || (x >= 44 && x < 46) || (x >= 54 && x < 56));
+      return inBar ? [250, 250, 250] : [30, 70, 200];
+    });
+    // mmPerPx 0.5 → strokes ~1 mm wide, 12 mm long — thin, but clearly detail.
+    const res = imageDataToObjects(img, 2, { mmPerPx: 0.5, removeBackground: true });
+    const white = res.colors.find((c) => c.rgb[0] > 200 && c.rgb[1] > 200 && c.rgb[2] > 200);
+    expect(white).toBeDefined();
+    const obj = res.objects.filter((o) => o.colorId === white!.id);
+    expect(obj.length).toBeGreaterThan(0);
   });
 
   it("keeps a blobby background-color island (a white ball on a white page)", () => {
