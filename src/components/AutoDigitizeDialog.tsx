@@ -13,6 +13,8 @@ import {
 } from "../lib/trace/manualText";
 import { loadFont, DEFAULT_FONT_ID } from "../lib/text/fonts";
 import type { Font } from "opentype.js";
+import { parseSvgShapes } from "../lib/trace/svgParse";
+import { svgShapesToObjects } from "../lib/trace/svgImport";
 import { fixStitches } from "../lib/fix";
 import { mergeSimilarColors, consolidateFringeColors } from "../lib/thread/reduce";
 import { matchColorsToChart } from "../lib/thread/match";
@@ -72,6 +74,12 @@ export default function AutoDigitizeDialog({
   onClose: () => void;
 }) {
   const [imageData, setImageData] = useState<ImageData | null>(null);
+  // A vector (SVG) source is imported EXACTLY — its shapes become stitch objects
+  // directly, skipping the raster tracer's resolution ceiling. Null for rasters.
+  const isSvg = file.type === "image/svg+xml" || /\.svg$/i.test(file.name);
+  const [svgShapes, setSvgShapes] = useState<{
+    shapes: ReturnType<typeof parseSvgShapes>;
+  } | null>(null);
   const [numColors, setNumColors] = useState(4);
   const [userSetColors, setUserSetColors] = useState(false);
   const [removeBackground, setRemoveBackground] = useState(true);
@@ -108,10 +116,19 @@ export default function AutoDigitizeDialog({
         logError(`Couldn't load image: ${(e as Error).message}`, (e as Error).stack);
         if (alive) setError((e as Error).message);
       });
+    // Vector source: also parse its shapes for the exact-geometry import path.
+    if (isSvg) {
+      file
+        .text()
+        .then((txt) => {
+          if (alive) setSvgShapes({ shapes: parseSvgShapes(txt) });
+        })
+        .catch(() => alive && setSvgShapes({ shapes: null }));
+    }
     return () => {
       alive = false;
     };
-  }, [file]);
+  }, [file, isSvg]);
 
   const complexity = useMemo(
     () => (imageData ? estimateColorComplexity(imageData) : 0),
@@ -132,6 +149,8 @@ export default function AutoDigitizeDialog({
   // (and optional OCR) runs off the debounce; the preview shows an "updating" veil.
   useEffect(() => {
     if (!imageData) return;
+    // A vector import waits for its shapes to finish parsing.
+    if (isSvg && !svgShapes) return;
     let alive = true;
     setUpdating(true);
     const handle = setTimeout(async () => {
@@ -140,13 +159,24 @@ export default function AutoDigitizeDialog({
         const mmPerPx = Math.min(hoop.wMm / imageData.width, hoop.hMm / imageData.height) * fit;
         const offsetX = (hoop.wMm - imageData.width * mmPerPx) / 2;
         const offsetY = (hoop.hMm - imageData.height * mmPerPx) / 2;
-        const traced = imageDataToObjects(imageData, numColors, {
-          mmPerPx,
-          offsetX,
-          offsetY,
-          removeBackground,
-          detail,
-        });
+        // VECTOR path: import the SVG's shapes exactly (no raster ceiling). Falls
+        // back to the raster tracer if the SVG couldn't be parsed.
+        const traced =
+          isSvg && svgShapes?.shapes
+            ? svgShapesToObjects(svgShapes.shapes.shapes, {
+                contentW: svgShapes.shapes.contentW,
+                contentH: svgShapes.shapes.contentH,
+                hoopWmm: hoop.wMm,
+                hoopHmm: hoop.hMm,
+                maxColors: numColors,
+              })
+            : imageDataToObjects(imageData, numColors, {
+                mmPerPx,
+                offsetX,
+                offsetY,
+                removeBackground,
+                detail,
+              });
         // Collapse near-duplicate palette entries k-means split off a flat region
         // (anti-alias bands, thin shadow shades) so the body doesn't fragment and
         // thread slots aren't wasted. Area-aware, so distinct colors stay.
@@ -208,7 +238,7 @@ export default function AutoDigitizeDialog({
       alive = false;
       clearTimeout(handle);
     };
-  }, [imageData, numColors, removeBackground, detail, recognizeText, hoop.wMm, hoop.hMm]);
+  }, [imageData, svgShapes, isSvg, numColors, removeBackground, detail, recognizeText, hoop.wMm, hoop.hMm]);
 
   // Load the lettering font once — the text-retype assist needs it.
   useEffect(() => {
