@@ -92,11 +92,14 @@ export function drawStitches(
         ctx.lineTo(px(seg.points[i].x) + dx, py(seg.points[i].y) + dy);
       }
     };
-    if (seg.underlay) {
+    if (seg.underlay || seg.travel) {
+      // Underlay sits beneath the top stitching and a travel is buried under
+      // coverage (or inside same-colour ink) — on fabric neither reads at full
+      // thread weight, so the preview mustn't draw them that way either.
       path(0, 0);
       ctx.strokeStyle = shadeRgb(rgb, 1);
       ctx.lineWidth = 0.6;
-      ctx.globalAlpha = 0.4;
+      ctx.globalAlpha = seg.travel ? 0.3 : 0.4;
       ctx.stroke();
     } else if (realistic) {
       // FUZZ HALO: a soft, wider, low-alpha pass gives each thread a downy edge.

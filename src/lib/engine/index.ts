@@ -38,6 +38,10 @@ export interface EngineStitch {
   jump?: boolean;
   trim?: boolean;
   underlay?: boolean;
+  /** a buried CONNECTOR stitch (a travel between shapes, hidden under coverage
+   *  or inside same-colour ink) — drawn de-emphasised so the preview matches
+   *  what fabric actually shows. */
+  travel?: boolean;
   /** machine STOP after this point (appliqué: pause to lay/trim fabric). */
   stop?: boolean;
 }
@@ -1539,7 +1543,7 @@ export function generateDesign(
       if (travelPath) {
         const travel = runningStitch(travelPath, TRAVEL_STITCH);
         for (const pt of travel.slice(1, -1)) {
-          out.push({ x: pt.x, y: pt.y, colorId: col, objectId: object.id });
+          out.push({ x: pt.x, y: pt.y, colorId: col, objectId: object.id, travel: true });
         }
       } else if (colorChanged || gap > jumpThreshold) {
         // Exposed long move or a color change → cut the thread (clean finish).
