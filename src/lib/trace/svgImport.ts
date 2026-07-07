@@ -13,6 +13,7 @@
 import type { EmbObject, Path, ThreadColor } from "../../types/project";
 import { newId } from "../id";
 import { makeObjectFromPaths } from "../objects";
+import { railsFromCenterline } from "../geometry";
 import { douglasPeucker } from "./simplify";
 import { polygonArea } from "./classify";
 import { nameForRgb } from "./colorname";
@@ -20,13 +21,17 @@ import type { DigitizeResult } from "./index";
 
 export type RGB = [number, number, number];
 
-/** One filled shape from an SVG: outer rings + hole rings, already in a single
- *  user-unit space (all transforms baked in), with its resolved fill colour. */
+/** One shape from an SVG, already in a single user-unit space (all transforms
+ *  baked in). Either a FILLED shape (rings; sub-path rings are its own holes via
+ *  fill-rule parity) or a STROKED path (centerline + width) — linework a logo
+ *  draws with `stroke` rather than ink shapes. */
 export interface SvgShape {
-  /** Closed rings in SVG user units. Winding distinguishes holes downstream via
-   *  even-odd depth, exactly like the tracer's layers. */
+  /** Closed rings in SVG user units (filled shapes). */
   rings: Path[];
   fill: RGB;
+  /** Present for stroke-only paths: the flattened centerline(s) and the stroke
+   *  width in user units. `fill` then carries the STROKE colour. */
+  stroke?: { centerlines: Path[]; widthUnits: number; closed: boolean[] };
 }
 
 export interface SvgImportOptions {
@@ -115,6 +120,17 @@ function reducePalette(colors: { rgb: RGB; area: number }[], k: number): Map<str
  * Turn flattened SVG shapes into a DigitizeResult (colors + objects) placed in
  * the hoop. Shapes keep their EXACT vector geometry — only scaled to mm and
  * lightly de-duplicated — so the import has no raster resolution ceiling.
+ *
+ * SVG PAINTS shapes over each other in document order — z-order IS the
+ * semantics. So each shape becomes its OWN object, in document order: sew
+ * order = paint order, and the apply-time knockdown pass resolves overlaps
+ * (later shapes subtract from earlier fills; small features stack on top)
+ * exactly as it does for hand-drawn designs. Merging a colour's shapes into
+ * one multi-ring object is WRONG here: two same-colour overlapping shapes
+ * would toggle fill parity and punch a bare hole where they overlap.
+ *
+ * Stroke-only paths (linework a logo draws with `stroke`) become SATIN
+ * columns down their centerline at the stroke's width.
  */
 export function svgShapesToObjects(shapes: SvgShape[], opts: SvgImportOptions): DigitizeResult {
   const {
@@ -136,14 +152,32 @@ export function svgShapesToObjects(shapes: SvgShape[], opts: SvgImportOptions): 
   const toMm = (ring: Path): Path =>
     ring.map((p) => ({ x: p.x * mmPerUnit + offX, y: p.y * mmPerUnit + offY }));
 
-  // Scale + simplify each shape's rings; keep shapes with real area.
+  // Scale + simplify each shape, keeping DOCUMENT ORDER; drop specks.
   interface Scaled {
-    rings: Path[];
     fill: RGB;
     area: number;
+    rings?: Path[]; // filled shape
+    satin?: { rails: [Path, Path][]; widthMm: number }; // stroked path
   }
   const scaled: Scaled[] = [];
   for (const s of shapes) {
+    if (s.stroke) {
+      const widthMm = s.stroke.widthUnits * mmPerUnit;
+      if (widthMm < 0.3) continue; // sub-thread hairline
+      const rails: [Path, Path][] = [];
+      let len = 0;
+      s.stroke.centerlines.forEach((cl, i) => {
+        const center = douglasPeucker(toMm(cl), simplifyTolMm);
+        if (center.length < 2) return;
+        rails.push(railsFromCenterline(center, widthMm, s.stroke!.closed[i] ?? false));
+        for (let k = 1; k < center.length; k++)
+          len += Math.hypot(center[k].x - center[k - 1].x, center[k].y - center[k - 1].y);
+      });
+      const area = len * widthMm;
+      if (rails.length === 0 || area < minAreaMm2) continue;
+      scaled.push({ fill: s.fill, area, satin: { rails, widthMm } });
+      continue;
+    }
     const rings = s.rings
       .map((r) => douglasPeucker(toMm(r), simplifyTolMm))
       .filter((r) => r.length >= 3);
@@ -164,15 +198,13 @@ export function svgShapesToObjects(shapes: SvgShape[], opts: SvgImportOptions): 
     : null;
   const finalFill = (rgb: RGB): RGB => (remap ? remap.get(rgb.join(",")) ?? rgb : rgb);
 
-  // One thread per distinct final colour; one object per colour holding all its
-  // shapes (matching the tracer's colour-grouped output).
+  // One thread per distinct final colour (first-appearance order); one object
+  // PER SHAPE in document order (paint order = sew order; knockdown resolves
+  // overlaps at apply time).
   const colorIdByRgb = new Map<string, string>();
   const colors: ThreadColor[] = [];
-  const ringsByColor = new Map<string, Path[]>();
-  const areaByColor = new Map<string, number>();
   const usedNames = new Map<string, number>();
-  for (const s of scaled) {
-    const rgb = finalFill(s.fill);
+  const colorIdFor = (rgb: RGB): string => {
     const kk = rgb.join(",");
     let cid = colorIdByRgb.get(kk);
     if (!cid) {
@@ -182,16 +214,21 @@ export function svgShapesToObjects(shapes: SvgShape[], opts: SvgImportOptions): 
       const n = (usedNames.get(base) ?? 0) + 1;
       usedNames.set(base, n);
       colors.push({ id: cid, rgb, name: n === 1 ? base : `${base} ${n}` });
-      ringsByColor.set(cid, []);
     }
-    ringsByColor.get(cid)!.push(...s.rings);
-    areaByColor.set(cid, (areaByColor.get(cid) ?? 0) + s.area);
+    return cid;
+  };
+  const objects: EmbObject[] = [];
+  for (const s of scaled) {
+    const cid = colorIdFor(finalFill(s.fill));
+    const cname = colors.find((c) => c.id === cid)?.name;
+    if (s.satin) {
+      // Each stroked sub-path is its own satin column (left/right rails).
+      for (const [left, right] of s.satin.rails) {
+        objects.push(makeObjectFromPaths("satin", [left, right], cid, cname));
+      }
+    } else {
+      objects.push(makeObjectFromPaths("fill", s.rings!, cid, cname));
+    }
   }
-
-  // Largest colour first (background-like areas sew first), matching the tracer.
-  const ordered = [...colors].sort((a, b) => (areaByColor.get(b.id) ?? 0) - (areaByColor.get(a.id) ?? 0));
-  const objects: EmbObject[] = ordered.map((c) =>
-    makeObjectFromPaths("fill", ringsByColor.get(c.id)!, c.id, c.name),
-  );
-  return { colors: ordered, objects };
+  return { colors, objects };
 }

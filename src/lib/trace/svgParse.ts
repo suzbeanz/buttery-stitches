@@ -14,23 +14,42 @@ import type { RGB, SvgShape } from "./svgImport";
  *  logo's curves stay smooth; the mm-space simplify drops the redundant points. */
 const FLATTEN_STEP = 1.5;
 
-/** Parse `none`/`#rgb`/`#rrggbb`/`rgb(...)`/named-ish fills to an RGB, or null
- *  when the element isn't painted (fill:none / fully transparent). */
+/** Normalise any CSS colour syntax to RGB via a probe node, or null. */
+function cssToRgb(el: Element, css: string): RGB | null {
+  if (!css || css === "none") return null;
+  const win = el.ownerDocument?.defaultView;
+  const probe = el.ownerDocument!.createElement("span");
+  probe.style.color = css;
+  el.ownerDocument!.body.appendChild(probe);
+  const rgb = (win ? win.getComputedStyle(probe).color : "") || "";
+  probe.remove();
+  const m = rgb.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+
+/** The element's FILL colour, or null when unpainted (fill:none / transparent). */
 function parseFill(el: Element): RGB | null {
   const win = el.ownerDocument?.defaultView;
   const style = win ? win.getComputedStyle(el) : null;
   const fill = (style?.fill || el.getAttribute("fill") || "").trim();
   const opacity = parseFloat(style?.fillOpacity || el.getAttribute("fill-opacity") || "1");
   if (!fill || fill === "none" || opacity === 0) return null;
-  // Let the browser normalise any colour syntax to rgb() by probing a temp node.
-  const probe = el.ownerDocument!.createElement("span");
-  probe.style.color = fill;
-  el.ownerDocument!.body.appendChild(probe);
-  const rgb = (win ? win.getComputedStyle(probe).color : "") || "";
-  probe.remove();
-  const m = rgb.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-  if (!m) return null;
-  return [Number(m[1]), Number(m[2]), Number(m[3])];
+  return cssToRgb(el, fill);
+}
+
+/** The element's STROKE paint + width (user units), or null when unstroked.
+ *  Logos often draw their linework (an arch, a divider) as strokes — dropping
+ *  those silently loses whole design elements. */
+function parseStroke(el: Element): { rgb: RGB; width: number } | null {
+  const win = el.ownerDocument?.defaultView;
+  const style = win ? win.getComputedStyle(el) : null;
+  const stroke = (style?.stroke || el.getAttribute("stroke") || "").trim();
+  const opacity = parseFloat(style?.strokeOpacity || el.getAttribute("stroke-opacity") || "1");
+  if (!stroke || stroke === "none" || opacity === 0) return null;
+  const width = parseFloat(style?.strokeWidth || el.getAttribute("stroke-width") || "1");
+  if (!(width > 0)) return null;
+  const rgb = cssToRgb(el, stroke);
+  return rgb ? { rgb, width } : null;
 }
 
 /** Apply an SVGMatrix (element's CTM relative to the root) to a point. */
@@ -88,12 +107,7 @@ export function parseSvgShapes(svgText: string): { shapes: SvgShape[]; contentW:
     const rootCTM = live.getCTM() ?? live.getScreenCTM() ?? new DOMMatrix();
     const shapes: SvgShape[] = [];
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const el of Array.from(live.querySelectorAll(FILLABLE)) as SVGGraphicsElement[]) {
-      const fill = parseFill(el);
-      if (!fill) continue;
-      const rings = flattenElement(el, rootCTM);
-      if (rings.length === 0) continue;
-      shapes.push({ rings, fill });
+    const grow = (rings: Path[]) => {
       for (const r of rings)
         for (const p of r) {
           if (p.x < minX) minX = p.x;
@@ -101,14 +115,38 @@ export function parseSvgShapes(svgText: string): { shapes: SvgShape[]; contentW:
           if (p.x > maxX) maxX = p.x;
           if (p.y > maxY) maxY = p.y;
         }
+    };
+    for (const el of Array.from(live.querySelectorAll(FILLABLE)) as SVGGraphicsElement[]) {
+      const fill = parseFill(el);
+      const stroke = parseStroke(el);
+      if (!fill && !stroke) continue;
+      const rings = flattenElement(el, rootCTM);
+      if (rings.length === 0) continue;
+      if (fill) {
+        shapes.push({ rings, fill });
+        grow(rings);
+      }
+      if (stroke) {
+        // The stroke rides the same flattened geometry: each sub-path ring is a
+        // centerline; closed when its ends meet.
+        const closed = rings.map((r) => {
+          const a = r[0], b = r[r.length - 1];
+          return Math.hypot(a.x - b.x, a.y - b.y) < FLATTEN_STEP * 2;
+        });
+        shapes.push({ rings: [], fill: stroke.rgb, stroke: { centerlines: rings, widthUnits: stroke.width, closed } });
+        grow(rings);
+      }
     }
     if (shapes.length === 0 || !isFinite(minX)) return null;
     // Normalise so the artwork starts at the origin (content bbox, not viewBox —
     // robust to padding/whitespace around the design).
     const contentW = maxX - minX;
     const contentH = maxY - minY;
-    for (const s of shapes)
-      s.rings = s.rings.map((r) => r.map((p) => ({ x: p.x - minX, y: p.y - minY })));
+    const shift = (r: Path) => r.map((p) => ({ x: p.x - minX, y: p.y - minY }));
+    for (const s of shapes) {
+      s.rings = s.rings.map(shift);
+      if (s.stroke) s.stroke.centerlines = s.stroke.centerlines.map(shift);
+    }
     return { shapes, contentW, contentH };
   } finally {
     host.remove();
