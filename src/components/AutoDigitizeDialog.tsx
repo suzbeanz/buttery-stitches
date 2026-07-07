@@ -5,7 +5,14 @@ import { loadImageData } from "../lib/image";
 import { imageDataToObjects, estimateColorComplexity, suggestColorCount, type DigitizeDetail } from "../lib/trace";
 import { ocrWords } from "../lib/trace/ocr";
 import { recognizeTextObjects, applyTextRecognition } from "../lib/trace/textRecognize";
+import {
+  detectTextClusters,
+  placeManualText,
+  applyManualText,
+  type DetectedTextCluster,
+} from "../lib/trace/manualText";
 import { loadFont, DEFAULT_FONT_ID } from "../lib/text/fonts";
+import type { Font } from "opentype.js";
 import { fixStitches } from "../lib/fix";
 import { mergeSimilarColors, consolidateFringeColors } from "../lib/thread/reduce";
 import { matchColorsToChart } from "../lib/thread/match";
@@ -70,6 +77,12 @@ export default function AutoDigitizeDialog({
   const [removeBackground, setRemoveBackground] = useState(true);
   const [detail, setDetail] = useState<DigitizeDetail>("balanced");
   const [recognizeText, setRecognizeText] = useState(false);
+  // Text-retype assist: detected text-like clusters + the string the user types
+  // for each. Typed clusters are replaced with crisp authored lettering — the
+  // professional move for text OCR can't read (small, stylized, rotated).
+  const [textClusters, setTextClusters] = useState<DetectedTextCluster[]>([]);
+  const [textAssign, setTextAssign] = useState<Record<string, string>>({});
+  const [font, setFont] = useState<Font | null>(null);
   // Power tools (per-color stitch style, palette merge/match) stay tucked until
   // asked for, so the first view is calm and most users never need them.
   const [advanced, setAdvanced] = useState(false);
@@ -176,6 +189,9 @@ export default function AutoDigitizeDialog({
         setResult({ colors, objects: finalObjects });
         setKeptIds(new Set(colors.map((c) => c.id))); // keep all by default each trace
         setStyleById({}); // a fresh trace = fresh colorIds, so clear overrides
+        // Offer the text-retype assist for any text-like clusters in the trace.
+        setTextClusters(detectTextClusters(finalObjects));
+        setTextAssign({}); // fresh trace = fresh cluster ids
         setError(
           objects.length === 0
             ? "No shapes found. Try more colors or turn off background removal."
@@ -194,18 +210,44 @@ export default function AutoDigitizeDialog({
     };
   }, [imageData, numColors, removeBackground, detail, recognizeText, hoop.wMm, hoop.hMm]);
 
+  // Load the lettering font once — the text-retype assist needs it.
+  useEffect(() => {
+    let alive = true;
+    loadFont(DEFAULT_FONT_ID).then((f) => alive && setFont(f)).catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const colorById = useMemo(
     () => new Map((result?.colors ?? []).map((c) => [c.id, c] as const)),
     [result],
   );
+  // Traced objects with any user-typed text swapped for authored lettering. This
+  // is a pure overlay on the trace (no re-trace), so typing updates the preview
+  // instantly. Falls back to the plain trace when nothing is typed or the font
+  // hasn't loaded.
+  const objectsWithText = useMemo(() => {
+    if (!result) return [];
+    const named = Object.values(textAssign).some((v) => v.trim().length > 0);
+    if (!named || !font || textClusters.length === 0) return result.objects;
+    const res = placeManualText({
+      assignments: textAssign,
+      clusters: textClusters,
+      objects: result.objects,
+      font,
+      fontId: DEFAULT_FONT_ID,
+    });
+    return applyManualText(result.objects, res);
+  }, [result, textAssign, textClusters, font]);
   const keptObjects = useMemo(
     () =>
       result
-        ? result.objects
+        ? objectsWithText
             .filter((o) => keptIds.has(o.colorId))
             .map((o) => styleObject(o, styleById[o.colorId] ?? "auto"))
         : [],
-    [result, keptIds, styleById],
+    [result, objectsWithText, keptIds, styleById],
   );
 
   const setColors = (n: number) => {
@@ -260,7 +302,7 @@ export default function AutoDigitizeDialog({
   function apply() {
     if (!result) return;
     const colors = result.colors.filter((c) => keptIds.has(c.id));
-    const objects = result.objects
+    const objects = objectsWithText
       .filter((o) => keptIds.has(o.colorId))
       .map((o) => styleObject(o, styleById[o.colorId] ?? "auto"));
     if (objects.length === 0) return;
@@ -394,6 +436,40 @@ export default function AutoDigitizeDialog({
             horizontal logo text; loads a recognizer the first time.
           </p>
         </fieldset>
+
+        {/* Text-retype assist — type what small/stylized/rotated text says and it's
+            re-set in crisp satin, the professional move OCR can't do. */}
+        {textClusters.length > 0 && (
+          <fieldset className="mb-4 rounded-sm border-2 border-ink/15 bg-butter-50 p-3">
+            <p className="mb-1 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/50">
+              Text found — type what it says for crisp lettering
+            </p>
+            <p className="mb-2 text-[11px] text-navy/55">
+              We spotted {textClusters.length === 1 ? "a text area" : `${textClusters.length} text areas`}.
+              Type the exact words and each is re-set in a clean satin font instead of traced — far
+              sharper for small or angled text. Leave a box blank to keep the plain trace.
+            </p>
+            <div className="flex flex-col gap-1.5">
+              {textClusters.map((cl, i) => (
+                <label key={cl.id} className="flex items-center gap-2 text-sm text-navy">
+                  <span
+                    className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-ink/15 text-[10px] font-semibold text-navy"
+                    title={`~${cl.heightMm.toFixed(0)}mm tall${Math.abs(cl.angleDeg) > 20 ? ", angled" : ""}`}
+                  >
+                    {i + 1}
+                  </span>
+                  <input
+                    type="text"
+                    value={textAssign[cl.id] ?? ""}
+                    onChange={(e) => setTextAssign((prev) => ({ ...prev, [cl.id]: e.target.value }))}
+                    placeholder={`Text area ${i + 1} (${cl.heightMm.toFixed(0)}mm${Math.abs(cl.angleDeg) > 20 ? ", angled" : ""})`}
+                    className="min-w-0 flex-1 rounded-sm border border-ink/20 bg-white px-2 py-1 text-sm text-navy placeholder:text-navy/35"
+                  />
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
 
         {/* Color list — tap to keep or skip; the preview updates instantly. */}
         {result && result.colors.length > 0 && (

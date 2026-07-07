@@ -31,6 +31,20 @@ vi.mock("../lib/trace", () => ({
 }));
 // Keep fixStitches an identity so onApply gets exactly the filtered subset.
 vi.mock("../lib/fix", () => ({ fixStitches: vi.fn((p: Project) => p) }));
+// jsdom can't fetch the font — load a real .ttf from disk so the text-retype
+// path actually places lettering (keeps the other tests' fonts.ts constants).
+vi.mock("../lib/text/fonts", async (importActual) => {
+  const actual = await importActual<typeof import("../lib/text/fonts")>();
+  const { readFileSync } = await import("node:fs");
+  const { dirname, join } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const here = dirname(fileURLToPath(import.meta.url));
+  const buf = readFileSync(join(here, "..", "lib", "text", "fonts", "Oswald-Medium.ttf"));
+  const font = actual.parseFont(
+    buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer,
+  );
+  return { ...actual, loadFont: vi.fn(async () => font) };
+});
 
 import AutoDigitizeDialog from "./AutoDigitizeDialog";
 import { imageDataToObjects } from "../lib/trace";
@@ -143,6 +157,37 @@ describe("AutoDigitizeDialog (live preview)", () => {
     fireEvent.click(screen.getByRole("button", { name: /Red/ })); // skip Red
     await waitFor(() => expect(previewCount()).toBe("2"));
     expect(vi.mocked(imageDataToObjects).mock.calls.length).toBe(before); // pure filter
+  });
+
+  it("text-retype: detects a text cluster, and typing swaps it for authored lettering", async () => {
+    // A row of six small same-colour glyph blocks — a word the trace can't set
+    // cleanly. The dialog should spot it and offer a text box.
+    const glyph = (id: string, x: number) => ({
+      id,
+      name: id,
+      type: "fill" as const,
+      colorId: "c1",
+      paths: [[{ x, y: 0 }, { x: x + 3, y: 0 }, { x: x + 3, y: 4 }, { x, y: 4 }]],
+      params: {},
+      visible: true,
+    });
+    const wordObjs = Array.from({ length: 6 }, (_, i) => glyph(`g${i}`, 10 + i * 4.5));
+    vi.mocked(imageDataToObjects).mockReturnValue({
+      colors: [{ id: "c1", rgb: [20, 20, 20], name: "Black" }],
+      objects: wordObjs,
+    });
+    const onApply = renderDialog();
+    // The "Text found" panel appears once the trace + detection run.
+    const box = (await screen.findByPlaceholderText(/Text area 1/, {}, { timeout: 2000 })) as HTMLInputElement;
+    // Type the word; the traced glyphs are replaced by ONE authored lettering
+    // object (fewer objects, and none of the original glyph ids remain).
+    fireEvent.change(box, { target: { value: "HELLO" } });
+    await waitFor(() => expect(previewCount()).toBe("1"));
+    fireEvent.click(screen.getByRole("button", { name: /Add to design/ }));
+    const project = onApply.mock.calls[0][0] as Project;
+    expect(project.objects).toHaveLength(1);
+    expect(project.objects.some((o) => o.id.startsWith("g"))).toBe(false); // rough glyphs gone
+    expect(project.objects[0].paths.length).toBeGreaterThan(0); // real lettering geometry
   });
 
   it("applies only the kept colors", async () => {
