@@ -9,21 +9,54 @@ function square(x: number, y: number, s: number): SvgShape["rings"][number] {
 }
 
 describe("svgShapesToObjects", () => {
-  it("places shapes in the hoop at exact scaled geometry, one object per colour", () => {
+  it("places shapes in the hoop at exact scaled geometry, one object per shape in document order", () => {
     const shapes: SvgShape[] = [
       { rings: [square(0, 0, 100)], fill: [200, 30, 30] }, // red, fills content
-      { rings: [square(20, 20, 20)], fill: [30, 30, 200] }, // blue inset
+      { rings: [square(20, 20, 20)], fill: [30, 30, 200] }, // blue painted ON TOP
     ];
     const res = svgShapesToObjects(shapes, { contentW: 100, contentH: 100, hoopWmm: 100, hoopHmm: 100 });
     expect(res.colors.length).toBe(2);
     expect(res.objects.length).toBe(2);
-    // Largest area sews first.
-    expect(res.colors[0].rgb).toEqual([200, 30, 30]);
+    // Document order = paint order = sew order (z-order semantics).
+    expect(res.objects[0].colorId).toBe(res.colors.find((c) => c.rgb[0] === 200)!.id);
+    expect(res.objects[1].colorId).toBe(res.colors.find((c) => c.rgb[2] === 200)!.id);
     // The red square scaled to fit 92% of the 100mm hoop → ~92mm, centred.
-    const red = res.objects.find((o) => o.colorId === res.colors[0].id)!;
-    const b = pathsBounds(red.paths)!;
+    const b = pathsBounds(res.objects[0].paths)!;
     expect(b.maxX - b.minX).toBeCloseTo(92, 0);
     expect(b.minX).toBeCloseTo(4, 0); // (100 - 92)/2 margin
+  });
+
+  it("keeps same-colour OVERLAPPING shapes as separate objects (no parity holes)", () => {
+    // A navy shield with two navy stripes painted over it. Merged into one
+    // multi-ring object, the stripes would toggle fill parity and punch bare
+    // holes through the shield — the corruption that mangled a real crest.
+    const shapes: SvgShape[] = [
+      { rings: [square(0, 0, 100)], fill: [10, 30, 60] },
+      { rings: [square(10, 40, 60)], fill: [10, 30, 60] },
+      { rings: [square(30, 20, 60)], fill: [10, 30, 60] },
+    ];
+    const res = svgShapesToObjects(shapes, { contentW: 100, contentH: 100, hoopWmm: 100, hoopHmm: 100 });
+    expect(res.colors.length).toBe(1);
+    expect(res.objects.length).toBe(3); // one per shape — parity can't cross shapes
+    for (const o of res.objects) expect(o.paths.length).toBe(1);
+  });
+
+  it("imports a stroke-only path as a satin column at the stroke width", () => {
+    const shapes: SvgShape[] = [
+      {
+        rings: [],
+        fill: [10, 30, 60],
+        stroke: { centerlines: [[{ x: 10, y: 50 }, { x: 90, y: 50 }]], widthUnits: 6, closed: [false] },
+      },
+    ];
+    const res = svgShapesToObjects(shapes, { contentW: 100, contentH: 100, hoopWmm: 100, hoopHmm: 100 });
+    expect(res.objects.length).toBe(1);
+    expect(res.objects[0].type).toBe("satin");
+    expect(res.objects[0].paths.length).toBe(2); // left + right rails
+    // Rail separation ≈ stroke width scaled to mm (6 units × 0.92 scale).
+    const [l, r] = res.objects[0].paths;
+    const sep = Math.abs(l[0].y - r[0].y);
+    expect(sep).toBeCloseTo(6 * 0.92, 1);
   });
 
   it("names colours by hue and keeps distinct fills apart", () => {
