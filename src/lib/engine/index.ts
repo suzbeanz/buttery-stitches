@@ -1525,10 +1525,7 @@ export function generateDesign(
         }
       }
     }
-    if (!found) {
-      if (process.env.ROUTEDBG) console.log("ROUTEDBG: A* not found", a, b);
-      return null;
-    }
+    if (!found) return null;
     // Reconstruct cell path (goal → start), then line-of-sight simplify. Each
     // simplified leg must hold the same fine-sampled coverage test the straight
     // covered move uses (a pure grid check lets a leg cut across a bend of the
@@ -1561,14 +1558,10 @@ export function generateDesign(
     let route = cleaned;
     if (!polylineCovered(route, colorId, afterOrder)) {
       route = [a, ...centers, b];
-      if (!polylineCovered(route, colorId, afterOrder)) {
-        if (process.env.ROUTEDBG) console.log("ROUTEDBG: final check failed", JSON.stringify(cleaned.map((q) => [Math.round(q.x*10)/10, Math.round(q.y*10)/10])));
-        return null;
-      }
+      if (!polylineCovered(route, colorId, afterOrder)) return null;
     }
     let len = 0;
     for (let k = 1; k < route.length; k++) len += distance(route[k - 1], route[k]);
-    if (len > ROUTE_CAP && process.env.ROUTEDBG) console.log("ROUTEDBG: cap", len);
     return len <= ROUTE_CAP ? route : null;
   }
 
