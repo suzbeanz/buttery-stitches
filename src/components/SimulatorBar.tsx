@@ -132,7 +132,9 @@ export default function SimulatorBar() {
           <button
             onClick={toggleRealistic}
             aria-pressed={realistic}
-            data-tip={realistic ? "Realistic thread on" : "Realistic thread off"}
+            // Describe the ACTION, not the current state — "Realistic thread off"
+            // right after switching it on reads like the click didn't work.
+            data-tip={realistic ? "Turn off realistic thread" : "Turn on realistic thread"}
             data-tip-side="top"
             className={`tap-target rounded-sm border-2 border-ink px-2 py-1 font-label text-xs font-semibold uppercase tracking-wide ${
               realistic ? "bg-ink text-cream" : "bg-cream text-ink hover:bg-butter-200"

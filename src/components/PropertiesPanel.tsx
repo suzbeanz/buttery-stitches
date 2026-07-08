@@ -511,6 +511,7 @@ function ObjectProperties({
       {(object.type === "fill" || object.type === "satin") && (
         <NumberField
           label="Density (mm/row)"
+          hint="Gap between rows — smaller packs stitches tighter (heavier, stiffer); larger is lighter."
           value={p.density ?? DEFAULT_PARAMS.density}
           step={0.05}
           min={0.1}
@@ -635,6 +636,7 @@ function ObjectProperties({
         ) : (
           <NumberField
             label="Angle (° from auto)"
+            hint="Tilts the direction rows run. 0 keeps the automatic grain; try 45 for a visible slant."
             value={p.angle ?? DEFAULT_PARAMS.angle}
             step={5}
             onChange={(v) => onParam({ angle: v })}
@@ -652,6 +654,7 @@ function ObjectProperties({
           />
           <NumberField
             label="Pull comp (mm)"
+            hint="Widens the column slightly so it stays full-width after the thread pulls the fabric in."
             value={p.pullComp ?? DEFAULT_PARAMS.pullComp}
             step={0.05}
             min={0}
@@ -668,14 +671,19 @@ function ObjectProperties({
       )}
 
       {object.type !== "running" && (
-        <label className="flex items-center gap-2 text-navy">
-          <input
-            type="checkbox"
-            checked={p.underlay ?? DEFAULT_PARAMS.underlay}
-            onChange={(e) => onParam({ underlay: e.target.checked })}
-            className="accent-ink"
-          />
-          Underlay
+        <label className="flex flex-col gap-0.5 text-navy">
+          <span className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={p.underlay ?? DEFAULT_PARAMS.underlay}
+              onChange={(e) => onParam({ underlay: e.target.checked })}
+              className="accent-ink"
+            />
+            Underlay
+          </span>
+          <span className="pl-6 font-body text-[10px] leading-snug text-navy/50">
+            A hidden first pass that steadies the fabric so the top stitches lie smooth. Keep it on.
+          </span>
         </label>
       )}
 
@@ -986,15 +994,19 @@ function MotifOptions() {
 
 function Field({
   label,
+  hint,
   children,
 }: {
   label: string;
+  /** One plain-language line for embroiderers new to this app's vocabulary. */
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
     <label className="flex flex-col gap-1">
       <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/60">{label}</span>
       {children}
+      {hint && <span className="font-body text-[10px] leading-snug text-navy/50">{hint}</span>}
     </label>
   );
 }
@@ -1058,6 +1070,7 @@ function CommitInput({
 
 function NumberField({
   label,
+  hint,
   value,
   step,
   min,
@@ -1065,6 +1078,7 @@ function NumberField({
   onChange,
 }: {
   label: string;
+  hint?: string;
   value: number;
   step?: number;
   min?: number;
@@ -1100,7 +1114,7 @@ function NumberField({
     if (c !== value) onChange(c);
   };
   return (
-    <Field label={label}>
+    <Field label={label} hint={hint}>
       <div className="flex items-stretch gap-1">
         <button
           type="button"
