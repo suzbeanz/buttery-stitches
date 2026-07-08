@@ -374,8 +374,12 @@ export function tracedataToObjects(
     });
 
     let used = false;
+    // Name traced objects by their colour ("Red fill", "Black outline") so the
+    // region-review walkthrough reads legibly instead of "Fill 1, Fill 2, …".
+    // (The SVG import already names by colour; this brings the raster path level.)
+    const colorName = color.name || `Color ${ci + 1}`;
     if (fillRings.length > 0) {
-      built.push({ object: makeObjectFromPaths("fill", fillRings, colorId), area: fillArea, stroke: false });
+      built.push({ object: makeObjectFromPaths("fill", fillRings, colorId, `${colorName} fill`), area: fillArea, stroke: false });
       used = true;
     }
     if (strokeRings.length > 0) {
@@ -387,7 +391,7 @@ export function tracedataToObjects(
       // Underlay stays ON: the references run a stabilising pass beneath every
       // satin stroke (the engine skips it for hairline bean columns itself), and
       // without it wide strokes — a tire wall — sink into the fabric.
-      const strokeObj = makeObjectFromPaths("fill", strokeRings, colorId);
+      const strokeObj = makeObjectFromPaths("fill", strokeRings, colorId, `${colorName} outline`);
       strokeObj.params = { fillStyle: "satin", lineArt: true };
       built.push({ object: strokeObj, area: strokeArea, stroke: true });
       used = true;
