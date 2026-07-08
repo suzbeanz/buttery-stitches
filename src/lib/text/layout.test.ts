@@ -209,4 +209,43 @@ describe("layoutText", () => {
     expect(minD).toBeLessThan(R);
     expect(maxD).toBeGreaterThan(R - 1);
   });
+
+  // MACHINE-SAFETY: these numeric fields are user-editable and stored verbatim,
+  // so a corrupt file or a half-typed value reaches layoutText. Each once either
+  // OOMed (unbounded curve subdivision) or leaked NaN into every coordinate.
+  const allFinite = (obj: { paths: { x: number; y: number }[][] }) =>
+    obj.paths.every((r) => r.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y)));
+
+  it("a zero flatten tolerance is floored, not subdivided forever", () => {
+    const { object } = layoutText({ text: "Hello", font, heightMm: 10, colorId: "c1", flattenToleranceMm: 0 });
+    expect(object.paths.length).toBeGreaterThan(0);
+    expect(allFinite(object)).toBe(true);
+  });
+
+  it("a NaN height renders finite geometry (does not poison every point)", () => {
+    const { object } = layoutText({ text: "Hg", font, heightMm: NaN, colorId: "c1" });
+    expect(allFinite(object)).toBe(true);
+    expect(object.paths.length).toBeGreaterThan(0);
+  });
+
+  it("a NaN line spacing renders finite multiline geometry", () => {
+    const { object } = layoutText({ text: "a\nb", font, heightMm: 10, lineSpacing: NaN, colorId: "c1" });
+    expect(allFinite(object)).toBe(true);
+  });
+
+  it("a NaN letter spacing does not crash or leak NaN", () => {
+    const { object } = layoutText({ text: "abc", font, heightMm: 10, letterSpacingMm: NaN, colorId: "c1" });
+    expect(allFinite(object)).toBe(true);
+  });
+
+  it("a path with a NaN vertex is cleaned, not crashed on", () => {
+    const { object } = layoutText({
+      text: "run",
+      font,
+      heightMm: 8,
+      colorId: "c1",
+      pathMm: [{ x: 0, y: 0 }, { x: NaN, y: 0 }, { x: 40, y: 0 }, { x: 80, y: 0 }],
+    });
+    expect(allFinite(object)).toBe(true);
+  });
 });

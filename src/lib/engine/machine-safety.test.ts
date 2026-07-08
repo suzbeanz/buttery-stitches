@@ -77,6 +77,92 @@ describe("machine safety: over-dense fills are clamped, not packed", () => {
   });
 });
 
+describe("machine safety: junk params never hang or OOM the tab", () => {
+  // These params are user-editable AND stored verbatim in a .embproj, so a
+  // hand-edited/corrupt file reaches the engine unchecked. A zero, negative, or
+  // non-finite STEP length made the stepping loops never advance (or diverge) →
+  // the tab OOMed before a single stitch. Each must now finish in bounded time
+  // with a bounded, finite stitch-out. (A hang would time the test out.)
+  const sq = (x: number, y: number, s: number) => [
+    { x, y }, { x: x + s, y }, { x: x + s, y: y + s }, { x, y: y + s },
+  ];
+  const finiteAndBounded = (design: EngineStitch[]) => {
+    expect(design.every((s) => Number.isFinite(s.x) && Number.isFinite(s.y))).toBe(true);
+    expect(countStitches(design)).toBeLessThan(200000);
+  };
+  function fill(params: Record<string, unknown>, ring = sq(10, 10, 40)) {
+    const o = makeObjectFromPaths("fill", [ring], "c1");
+    o.params = { ...o.params, ...params };
+    return generateDesign(projectWith(o));
+  }
+  function run(params: Record<string, unknown>, path = [{ x: 0, y: 0 }, { x: 40, y: 0 }]) {
+    const o = makeObjectFromPaths("running", [path], "c1");
+    o.params = { ...o.params, ...params };
+    return generateDesign(projectWith(o));
+  }
+  function satin(params: Record<string, unknown>) {
+    const o = makeObjectFromPaths(
+      "satin",
+      [[{ x: 0, y: 0 }, { x: 40, y: 0 }], [{ x: 0, y: 4 }, { x: 40, y: 4 }]],
+      "c1",
+    );
+    o.params = { ...o.params, ...params };
+    return generateDesign(projectWith(o));
+  }
+
+  it("a zero fill stitch length is floored, not looped forever", () => {
+    const design = fill({ fillStitchLength: 0 });
+    expect(countStitches(design)).toBeGreaterThan(0);
+    finiteAndBounded(design);
+  });
+
+  it("a negative fill stitch length is floored", () => finiteAndBounded(fill({ fillStitchLength: -5 })));
+
+  it("a zero running stitch length is floored", () => {
+    const design = run({ stitchLength: 0 });
+    expect(countStitches(design)).toBeGreaterThan(0);
+    finiteAndBounded(design);
+  });
+
+  it("a negative running stitch length is floored", () => finiteAndBounded(run({ stitchLength: -2 })));
+
+  it("a NaN satin density is coerced (no raw TypeError)", () => {
+    const design = satin({ density: NaN });
+    expect(countStitches(design)).toBeGreaterThan(0);
+    finiteAndBounded(design);
+  });
+
+  it("an astronomical pull comp yields bounded satin rows", () => finiteAndBounded(satin({ pullComp: 1e6 })));
+
+  it("a billion bean repeats is clamped to a sane count", () => finiteAndBounded(run({ beanRepeats: 1e9 })));
+});
+
+describe("machine safety: degenerate geometry is skipped, not stitched", () => {
+  const sq = (x: number, y: number, s: number) => [
+    { x, y }, { x: x + s, y }, { x: x + s, y: y + s }, { x, y: y + s },
+  ];
+  function fillPaths(ring: { x: number; y: number }[]) {
+    return generateDesign(projectWith(makeObjectFromPaths("fill", [ring], "c1")));
+  }
+
+  it("an Infinity coordinate produces no stitches (never steps to infinity)", () => {
+    expect(countStitches(fillPaths([{ x: 0, y: 0 }, { x: Infinity, y: 0 }, { x: 40, y: 40 }]))).toBe(0);
+  });
+
+  it("a NaN coordinate never leaks a non-finite penetration", () => {
+    const design = fillPaths([{ x: 0, y: 0 }, { x: NaN, y: 0 }, { x: 40, y: 40 }]);
+    expect(design.every((s) => Number.isFinite(s.x) && Number.isFinite(s.y))).toBe(true);
+  });
+
+  it("an astronomically large object (1e12 mm) is skipped, not stepped", () => {
+    expect(countStitches(fillPaths(sq(0, 0, 1e12)))).toBe(0);
+  });
+
+  it("a normal design of the same shape still stitches (guard isn't over-broad)", () => {
+    expect(countStitches(fillPaths(sq(10, 10, 40)))).toBeGreaterThan(0);
+  });
+});
+
 describe("machine safety: compensation yields at the hoop boundary", () => {
   it("pull-comp overshoot at the hoop edge is clamped onto the boundary", () => {
     // A fill flush against the hoop's left edge: pull compensation widens its

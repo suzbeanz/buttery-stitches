@@ -26,6 +26,26 @@ describe("svgShapesToObjects", () => {
     expect(b.minX).toBeCloseTo(4, 0); // (100 - 92)/2 margin
   });
 
+  it("drops a non-finite stroke width instead of emitting NaN satin rails", () => {
+    // `widthMm < 0.3` is false for NaN, so a non-finite stroke width used to slip
+    // through and produce all-NaN rails. It must be dropped like a hairline.
+    const shapes: SvgShape[] = [
+      { rings: [], fill: [0, 0, 0], stroke: { centerlines: [[{ x: 0, y: 0 }, { x: 50, y: 0 }]], widthUnits: NaN, closed: [false] } },
+      { rings: [square(20, 20, 40)], fill: [200, 30, 30] }, // a real shape survives
+    ];
+    const res = svgShapesToObjects(shapes, { contentW: 100, contentH: 100, hoopWmm: 100, hoopHmm: 100 });
+    expect(res.objects.length).toBe(1);
+    expect(res.objects.every((o) => o.paths.every((r) => r.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))))).toBe(true);
+  });
+
+  it("returns nothing (not NaN geometry) for a non-finite content box", () => {
+    // `NaN <= 0` is false, so a NaN contentW used to pass the `<= 0` guard and
+    // scale every coordinate to NaN. Now it's rejected up front.
+    const shapes: SvgShape[] = [{ rings: [square(0, 0, 100)], fill: [10, 10, 10] }];
+    const res = svgShapesToObjects(shapes, { contentW: NaN, contentH: 100, hoopWmm: 100, hoopHmm: 100 });
+    expect(res.objects.length).toBe(0);
+  });
+
   it("keeps a compound path's DISJOINT islands (an '=' sign) — does not cancel them as holes", () => {
     // One shape, two equal disjoint bars (the '=' glyph). The old net-area rule
     // subtracted the second bar as a "hole" → net ~0 → the whole glyph vanished.
