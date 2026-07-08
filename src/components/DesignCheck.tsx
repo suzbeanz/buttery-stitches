@@ -149,6 +149,14 @@ export default function DesignCheck({
             />
             <Stat label="Size" value={dims} icon />
             <Stat label="Thread" value={threadLen} />
+            <Stat
+              label="Bobbin (est.)"
+              value={
+                rulerUnit === "inch"
+                  ? `${(info.bobbinLengthMm / 25.4 / 12).toFixed(1)} ft`
+                  : `${(info.bobbinLengthMm / 1000).toFixed(1)} m`
+              }
+            />
             <Stat label="Est. time" value={runtime} />
             <Stat label="Hoop" value={info.withinHoop ? "Fits" : "Too big"} />
           </div>

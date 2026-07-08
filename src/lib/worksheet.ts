@@ -1,15 +1,16 @@
 import type { Project, ThreadColor } from "../types/project";
 import { designFor, type EngineStitch } from "./engine";
+import { BOBBIN_RATIO, estimateRuntimeMin } from "./engine/info";
 
 /**
  * Printable thread worksheet: the color-change sequence an operator follows at
- * the machine — swatch, thread name/brand/code, and stitch count per stop, plus
- * totals and an estimated run time.
+ * the machine — swatch, thread name/brand/code, stitch count and thread length
+ * per stop, plus totals (incl. an estimated bobbin/under-thread figure) and an
+ * estimated run time.
+ *
+ * The runtime + bobbin model is imported from `engine/info` so the worksheet and
+ * the Check panel always agree (they used to diverge: 600 vs 700 spm).
  */
-
-/** Typical home-machine speed and the overhead of a color change. */
-const STITCHES_PER_MIN = 600;
-const SECONDS_PER_COLOR_CHANGE = 20;
 
 export interface WorksheetRow {
   stop: number; // 1-based color-stop order
@@ -18,6 +19,8 @@ export interface WorksheetRow {
   brand?: string;
   code?: string;
   stitches: number;
+  /** top thread laid down at this stop (mm) — for spool ordering. */
+  threadMm: number;
 }
 
 export interface Worksheet {
@@ -25,9 +28,13 @@ export interface Worksheet {
   totalStitches: number;
   colorStops: number;
   estMinutes: number;
+  /** total top thread laid down (mm). */
+  totalThreadMm: number;
+  /** estimated bobbin/under-thread consumption (mm) — a rough ~⅓-of-top figure. */
+  bobbinMm: number;
 }
 
-/** Group the design into consecutive color stops and tally stitches each. */
+/** Group the design into consecutive color stops and tally stitches + thread. */
 export function buildWorksheet(
   project: Project,
   design: EngineStitch[] = designFor(project),
@@ -36,8 +43,12 @@ export function buildWorksheet(
   const rows: WorksheetRow[] = [];
   let prev: string | null = null;
   let total = 0;
+  let trims = 0;
+  let totalThreadMm = 0;
+  let prevStitch: EngineStitch | null = null;
 
   for (const s of design) {
+    if (s.trim) trims++;
     if (s.colorId !== prev) {
       const c = byId.get(s.colorId);
       rows.push({
@@ -47,24 +58,47 @@ export function buildWorksheet(
         brand: c?.brand,
         code: c?.code,
         stitches: 0,
+        threadMm: 0,
       });
       prev = s.colorId;
     }
-    if (!s.jump) {
-      rows[rows.length - 1].stitches += 1;
+    if (!s.jump && !s.trim && !s.stop) {
+      const row = rows[rows.length - 1];
+      row.stitches += 1;
       total += 1;
+      if (
+        prevStitch &&
+        !prevStitch.jump &&
+        !prevStitch.trim &&
+        !prevStitch.stop &&
+        prevStitch.colorId === s.colorId
+      ) {
+        const seg = Math.hypot(s.x - prevStitch.x, s.y - prevStitch.y);
+        row.threadMm += seg;
+        totalThreadMm += seg;
+      }
     }
+    prevStitch = s.jump || s.trim || s.stop ? null : s;
   }
 
-  const estMinutes =
-    total / STITCHES_PER_MIN + (rows.length * SECONDS_PER_COLOR_CHANGE) / 60;
+  const colorChanges = Math.max(0, rows.length - 1);
+  const estMinutes = estimateRuntimeMin(total, colorChanges, trims);
 
   return {
     rows,
     totalStitches: total,
     colorStops: rows.length,
     estMinutes,
+    totalThreadMm,
+    bobbinMm: totalThreadMm * BOBBIN_RATIO,
   };
+}
+
+/** Format a thread length (mm) for display: metres or feet by unit preference. */
+export function formatThread(mm: number, unit: "mm" | "inch"): string {
+  return unit === "inch"
+    ? `${(mm / 25.4 / 12).toFixed(1)} ft`
+    : `${(mm / 1000).toFixed(1)} m`;
 }
 
 /** Human-friendly duration, e.g. "1 h 04 m" or "7 m". */
@@ -86,7 +120,11 @@ const esc = (s: string) =>
  * Render the worksheet as a self-contained, print-friendly HTML document
  * (butter-themed). Opened in a new tab so the user can print or save to PDF.
  */
-export function worksheetHtml(worksheet: Worksheet, title = "Buttery Stitches"): string {
+export function worksheetHtml(
+  worksheet: Worksheet,
+  title = "Buttery Stitches",
+  unit: "mm" | "inch" = "mm",
+): string {
   const rows = worksheet.rows
     .map(
       (r) => `
@@ -97,6 +135,7 @@ export function worksheetHtml(worksheet: Worksheet, title = "Buttery Stitches"):
         <td>${esc(r.brand ?? "—")}</td>
         <td>${esc(r.code ?? "—")}</td>
         <td class="num">${r.stitches.toLocaleString()}</td>
+        <td class="num">${formatThread(r.threadMm, unit)}</td>
       </tr>`,
     )
     .join("");
@@ -133,10 +172,12 @@ export function worksheetHtml(worksheet: Worksheet, title = "Buttery Stitches"):
   <div class="totals">
     <div>Stitches<span>${worksheet.totalStitches.toLocaleString()}</span></div>
     <div>Color stops<span>${worksheet.colorStops}</span></div>
+    <div>Top thread<span>${formatThread(worksheet.totalThreadMm, unit)}</span></div>
+    <div>Bobbin (est.)<span>${formatThread(worksheet.bobbinMm, unit)}</span></div>
     <div>Est. run time<span>${formatDuration(worksheet.estMinutes)}</span></div>
   </div>
   <table>
-    <thead><tr><th class="num">#</th><th>Color</th><th>Name</th><th>Brand</th><th>Code</th><th class="num">Stitches</th></tr></thead>
+    <thead><tr><th class="num">#</th><th>Color</th><th>Name</th><th>Brand</th><th>Code</th><th class="num">Stitches</th><th class="num">Thread</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
   <div class="print"><button onclick="window.print()">Print / Save as PDF</button></div>

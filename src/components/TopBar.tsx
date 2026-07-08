@@ -112,6 +112,7 @@ export default function TopBar({
   const [showCheck, setShowCheck] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const activeColorId = useEditorStore((s) => s.activeColorId);
+  const rulerUnit = useEditorStore((s) => s.rulerUnit);
 
   const updateObject = useProjectStore((s) => s.updateObject);
   const layersOpen = useEditorStore((s) => s.layersOpen);
@@ -289,7 +290,7 @@ export default function TopBar({
       toast("Add a design first — there's nothing to print yet.", "info");
       return;
     }
-    const html = worksheetHtml(ws, "Buttery Stitches");
+    const html = worksheetHtml(ws, "Buttery Stitches", rulerUnit);
     const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
     window.open(url, "_blank");
     setTimeout(() => URL.revokeObjectURL(url), 10000);
