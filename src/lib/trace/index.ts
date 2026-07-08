@@ -645,6 +645,14 @@ export function imageDataToObjects(
   // colour, not almost all of it — a subject that reaches the image edge (a mound
   // that runs off the left border) must not cancel the background's slot.
   const opaqueBg = !transparentBg && opts.removeBackground !== false && borderIsSolidOpaque(source, 0.35);
+  // …but DROPPING that colour is destructive, so it needs a much stronger signal.
+  // A dark-dominant image (a checkerboard, a dark picture-frame, a full-bleed
+  // barcode) has a border split ~50/50, so the plurality "background" is really
+  // the SUBJECT — removing it silently deletes half the design. Only auto-remove
+  // when one colour genuinely OWNS the border (a real logo-on-white is 0.9+); at
+  // 0.7 a checkerboard/barcode border no longer qualifies and its ink is kept. An
+  // explicit opts.removeBackground (true/false) always wins over this heuristic.
+  const bgConfident = !transparentBg && borderIsSolidOpaque(source, 0.7);
   // Blend-band thickness scales with the upscale factor (bilinear turns a 1px
   // AA ribbon into a factor-px one).
   const flat = quantizeImage(source, opaqueBg ? numberOfColors + 1 : numberOfColors, {
@@ -695,7 +703,9 @@ export function imageDataToObjects(
     // A stripped card's colour still counts as the background downstream, so the
     // sliver-drop erases the anti-alias halo the card left around the subject
     // (interior blobs of that colour — the white ball — survive, as always).
-    removeBackground: transparentBg ? cardRgb !== undefined : opts.removeBackground,
+    // Opaque path: auto-remove only when the border is strongly dominated
+    // (bgConfident); an explicit caller value still overrides.
+    removeBackground: transparentBg ? cardRgb !== undefined : (opts.removeBackground ?? bgConfident),
   });
 }
 
