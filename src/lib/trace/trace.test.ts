@@ -315,6 +315,17 @@ describe("imageDataToObjects (real imagetracerjs)", () => {
     for (const o of objects) expect(o.paths[0].length).toBeGreaterThanOrEqual(2);
   });
 
+  it("names traced objects by colour so the review reads 'Red fill', not 'Fill 1'", () => {
+    const img = image(16, 16, (x) => (x < 8 ? [220, 20, 30] : [20, 60, 200]));
+    const { objects } = imageDataToObjects(img, 2, { mmPerPx: 1, removeBackground: false });
+    // Every object's name carries its hue + role, never the "Fill N" fallback.
+    for (const o of objects) {
+      expect(o.name).toBeTruthy();
+      expect(/^(Fill|Satin|Running) \d+$/.test(o.name!)).toBe(false);
+      expect(/\b(fill|outline)\b/.test(o.name!)).toBe(true);
+    }
+  });
+
   it("detail level controls despeckling: 'smooth' drops small stray pieces 'detailed' keeps", () => {
     // A red field with several tiny blue specks scattered in it. At 1mm/px each
     // 2×2 speck is ~4mm² — kept at "detailed" (minArea 0.4), dropped at "smooth"

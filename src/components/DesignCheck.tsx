@@ -34,6 +34,14 @@ export default function DesignCheck({
   const warnings = useMemo(() => validateDesign(design, project), [design, project]);
   const stitches = countStitches(design);
   const colorChanges = countColorChanges(design);
+  // DISTINCT threads, not colour CHANGES + 1: a colour sewn in two separate
+  // blocks (a red circle + a red crescent) inflates changes+1, so a 6-thread
+  // design would report "7 colours" — undermining the very confidence this
+  // dialog exists to give. Count unique thread ids, matching the export menu.
+  const distinctColors = useMemo(
+    () => new Set(design.filter((s) => !s.jump && !s.trim).map((s) => s.colorId)).size,
+    [design],
+  );
   const info = useMemo(() => designInfo(design, project), [design, project]);
   const threadLen =
     rulerUnit === "inch"
@@ -135,7 +143,10 @@ export default function DesignCheck({
         {!empty && (
           <div className="mt-4 grid grid-cols-3 gap-2 border-t-2 border-ink/10 pt-3 text-center">
             <Stat label="Stitches" value={stitches.toLocaleString()} />
-            <Stat label="Colors" value={String(colorChanges + 1)} />
+            <Stat
+              label="Colors"
+              value={colorChanges + 1 > distinctColors ? `${distinctColors} · ${colorChanges + 1} blocks` : String(distinctColors)}
+            />
             <Stat label="Size" value={dims} icon />
             <Stat label="Thread" value={threadLen} />
             <Stat label="Est. time" value={runtime} />
