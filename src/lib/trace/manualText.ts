@@ -13,11 +13,13 @@
  * font, it returns the lettering objects to add and the rough traced ids to drop.
  */
 import type { Font } from "opentype.js";
-import type { EmbObject, Point } from "../../types/project";
+import type { EmbObject, Path, Point } from "../../types/project";
 import { layoutText } from "../text/layout";
 import { applyMatrix, pathsBounds } from "../geometry";
 import { polygonArea } from "./classify";
 import { splitFillRegions } from "../engine/fill";
+import { guidedLetterObjects, type GuidedLetter } from "./guidedText";
+import { makeObjectFromPaths } from "../objects";
 
 /** A text-like cluster the UI can highlight and ask the user to name. Stable id,
  *  an oriented preview quad (mm, for the overlay), and the geometry placement
@@ -278,6 +280,71 @@ export function applyManualText(objects: EmbObject[], res: ManualTextResult): Em
   if (res.placed === 0) return objects;
   const drop = new Set(res.removeIds);
   return [...objects.filter((o) => !drop.has(o.id)), ...res.textObjects];
+}
+
+/**
+ * GUIDED mode: keep each cluster's ORIGINAL traced letterforms, but lay clean
+ * font-topology satin down them (the professional "keep the client's type" move).
+ * For a cluster whose traced letter regions line up 1:1 with the typed
+ * characters (ignoring spaces), each region is guided by its character's font
+ * skeleton. When the counts don't match — kerned serifs, split marks, an 'i'
+ * dot — we DON'T guess a mapping; the cluster's objects are left as the plain
+ * trace (still the original shape, just the engine's own skeleton). Honest
+ * degradation over a wrong guess.
+ */
+export function placeGuidedText(opts: ManualTextOptions): ManualTextResult {
+  const { assignments, clusters, objects, font, fontId } = opts;
+  const byId = new Map(objects.map((o) => [o.id, o]));
+  const textObjects: EmbObject[] = [];
+  const removeIds: string[] = [];
+  let placed = 0;
+  for (const cl of clusters) {
+    const text = (assignments[cl.id] ?? "").replace(/\s+/g, "");
+    if (!text) continue;
+    const chars = [...text];
+    // Traced letter regions in this cluster, ordered along the run axis.
+    const rad = (cl.angleDeg * Math.PI) / 180;
+    const ux = Math.cos(rad), uy = Math.sin(rad);
+    const letters: { region: Path[]; along: number; box: { cx: number; cy: number } }[] = [];
+    for (const id of cl.removeIds) {
+      const obj = byId.get(id);
+      if (!obj || obj.type !== "fill") continue;
+      for (const region of splitFillRegions(obj.paths)) {
+        const b = pathsBounds(region);
+        if (!b) continue;
+        const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
+        letters.push({ region, along: (cx - cl.cx) * ux + (cy - cl.cy) * uy, box: { cx, cy } });
+      }
+    }
+    letters.sort((a, b) => a.along - b.along);
+    // Only guide when the letter count matches the typed characters — no guessing.
+    if (letters.length !== chars.length) continue;
+    const halfHeight = cl.heightMm / 2;
+    // Each letter's along-run half-extent ≈ half the gap to its neighbours.
+    const guided: GuidedLetter[] = letters.map((L, i) => {
+      const prev = letters[i - 1]?.along ?? L.along - halfHeight;
+      const next = letters[i + 1]?.along ?? L.along + halfHeight;
+      const halfLen = Math.max(1, Math.min(L.along - prev, next - L.along));
+      return {
+        char: chars[i],
+        rings: L.region,
+        cx: L.box.cx,
+        cy: L.box.cy,
+        halfLen,
+        halfHeight,
+        angleRad: rad,
+        colorId: cl.colorId,
+      };
+    });
+    const objs = guidedLetterObjects(guided, font, fontId ?? "", (rings, colorId, name) =>
+      makeObjectFromPaths("fill", rings, colorId, name),
+    );
+    if (objs.length === 0) continue;
+    textObjects.push(...objs);
+    removeIds.push(...cl.removeIds);
+    placed++;
+  }
+  return { textObjects, removeIds, placed };
 }
 
 export { frameOf as _frameOf, glyphCandidates as _glyphCandidates, clusterGlyphs as _clusterGlyphs };
