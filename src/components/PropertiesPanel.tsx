@@ -26,6 +26,7 @@ import {
   Check,
 } from "lucide-react";
 import { alignObjects, distributeObjects, type AlignEdge } from "../lib/arrange";
+import { designBounds, scaleAllPaths, translateAllPaths } from "../lib/layout";
 import { useProjectStore } from "../store/projectStore";
 import { useEditorStore, type PropertiesTab } from "../store/editorStore";
 import ColorSelect from "./ColorSelect";
@@ -262,11 +263,46 @@ function ArrangeSection() {
   const distribute = (axis: "h" | "v") =>
     updateProject({ objects: distributeObjects(objects, selectedIds, axis) });
 
+  // Exact numeric position/size of the selection's bounding box (top-left corner
+  // + width/height, mm). Also a keyboard-only authoring path: a user who can't
+  // drag on the canvas can still place and size objects precisely here.
+  const bounds = designBounds(selectedObjs);
+  const round1 = (v: number) => Math.round(v * 10) / 10;
+  const applyRect = (patch: { xMm?: number; yMm?: number; wMm?: number; hMm?: number }) => {
+    if (!bounds) return;
+    const curW = bounds.maxX - bounds.minX;
+    const curH = bounds.maxY - bounds.minY;
+    const sx = patch.wMm != null && patch.wMm > 0 && curW > 0 ? patch.wMm / curW : 1;
+    const sy = patch.hMm != null && patch.hMm > 0 && curH > 0 ? patch.hMm / curH : 1;
+    let next = selectedObjs;
+    if (sx !== 1 || sy !== 1)
+      next = scaleAllPaths(next, sx, sy, { x: bounds.minX, y: bounds.minY });
+    const dx = (patch.xMm ?? bounds.minX) - bounds.minX;
+    const dy = (patch.yMm ?? bounds.minY) - bounds.minY;
+    if (dx !== 0 || dy !== 0) next = translateAllPaths(next, dx, dy);
+    const map = new Map(next.map((o) => [o.id, o]));
+    updateProject({ objects: objects.map((o) => map.get(o.id) ?? o) });
+  };
+
   return (
     <div className="flex flex-col gap-2 border-b border-navy/25 p-3 text-sm">
       <span className="font-label text-xs font-semibold uppercase tracking-[0.1em] text-ink-deep">
         Arrange
       </span>
+
+      {bounds && (
+        <>
+          <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/60">
+            Position &amp; size (mm)
+          </span>
+          <div className="grid grid-cols-2 gap-1.5">
+            <NumberField label="X" value={round1(bounds.minX)} step={1} onChange={(v) => applyRect({ xMm: v })} />
+            <NumberField label="Y" value={round1(bounds.minY)} step={1} onChange={(v) => applyRect({ yMm: v })} />
+            <NumberField label="W" value={round1(bounds.maxX - bounds.minX)} step={1} min={0.5} onChange={(v) => applyRect({ wMm: v })} />
+            <NumberField label="H" value={round1(bounds.maxY - bounds.minY)} step={1} min={0.5} onChange={(v) => applyRect({ hMm: v })} />
+          </div>
+        </>
+      )}
 
       <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/60">
         {n >= 2 ? "Align selection" : "Align in hoop"}
