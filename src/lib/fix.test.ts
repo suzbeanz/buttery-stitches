@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fixStitches, fixObjectStitches, fixStitchesWithReport } from "./fix";
+import { fixStitches, fixObjectStitches, fixStitchesWithReport, buriedPairs } from "./fix";
 import { makeObject, makeObjectFromPaths } from "./objects";
 import { createEmptyProject } from "./project";
 import type { Path } from "../types/project";
@@ -178,9 +178,11 @@ describe("fixStitches", () => {
     const b = makeObjectFromPaths("fill", [broadFill], "blue");
     // A NARROW fill gets its style assigned (→ satin); broad fills stay unset
     // for the engine's auto fill, so they no longer count as a style change.
+    // It sits BESIDE the blue fill (not on it) so grouping the reds together is
+    // legal — a detail ON the blue fill would rightly be pinned after it now.
     const c = makeObjectFromPaths(
       "fill",
-      [[{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 2, y: 30 }, { x: 0, y: 30 }]],
+      [[{ x: 50, y: 0 }, { x: 52, y: 0 }, { x: 52, y: 30 }, { x: 50, y: 30 }]],
       "red",
     );
     p.objects = [a, b, c];
@@ -233,5 +235,75 @@ describe("fixStitches", () => {
     // Geometry unchanged: a lone fill has no neighbour to trap against.
     expect(out[0].paths[0]).toBe(broadFill);
     expect(Math.max(...out[0].paths.flat().map((p) => p.x))).toBeCloseTo(40, 5);
+  });
+});
+
+describe("burial: a detail must never sew before the fill that covers it", () => {
+  // Distilled from a real user file: the trace put a white background object
+  // FIRST, so colour grouping dragged the white LETTERING to the front too —
+  // and the red field then stitched right over it. Thread has no z-order:
+  // whatever sews last wins, so the letters vanished from the sew-out.
+  const sq = (x: number, y: number, s: number): Path => [
+    { x, y }, { x: x + s, y }, { x: x + s, y: y + s }, { x, y: y + s },
+  ];
+
+  it("splits the colour block so covered lettering sews AFTER its field", () => {
+    const p = createEmptyProject();
+    const whiteBg = makeObjectFromPaths("fill", [sq(80, 80, 6)], "white"); // white seen first
+    const letters = [sq(15, 20, 4), sq(21, 20, 4), sq(27, 20, 4)].map((r) =>
+      makeObjectFromPaths("fill", [r], "white"),
+    );
+    const field = makeObjectFromPaths("fill", [sq(10, 10, 30)], "red"); // covers the letters
+    p.objects = [whiteBg, ...letters, field];
+    const out = fixStitches(p).objects;
+    const fieldAt = out.findIndex((o) => o.id === field.id);
+    for (const l of letters) {
+      expect(out.findIndex((o) => o.id === l.id)).toBeGreaterThan(fieldAt);
+    }
+    // The unrelated white object may stay early — only covered details move.
+    expect(out.some((o) => o.id === whiteBg.id)).toBe(true);
+  });
+
+  it("does NOT treat a detail inside a fill's HOLE as buried (even-odd)", () => {
+    const annulus = makeObjectFromPaths("fill", [sq(0, 0, 40), sq(10, 10, 20)], "red");
+    const inWindow = makeObjectFromPaths("fill", [sq(18, 18, 4)], "white");
+    expect(buriedPairs([inWindow, annulus])).toEqual([]);
+  });
+
+  it("flags a detail the fill covers, in sew order only", () => {
+    const field = makeObjectFromPaths("fill", [sq(0, 0, 30)], "red");
+    const dot = makeObjectFromPaths("fill", [sq(10, 10, 4)], "white");
+    expect(buriedPairs([dot, field])).toEqual([{ buried: 0, cover: 1 }]); // dot first → buried
+    expect(buriedPairs([field, dot])).toEqual([]); // dot already on top → fine
+  });
+});
+
+describe("sliver dissolution: sub-thread rings never reach the machine", () => {
+  it("drops an object that is nothing but a 0.3mm-wide crescent", () => {
+    const sliver: Path = [
+      { x: 10, y: 10 }, { x: 10.3, y: 10 }, { x: 10.3, y: 16 }, { x: 10, y: 16 },
+    ];
+    const p = createEmptyProject();
+    p.objects = [makeObjectFromPaths("fill", [sliver], "red")];
+    expect(fixStitches(p).objects.length).toBe(0);
+  });
+
+  it("strips a sliver ring but keeps the object's real geometry", () => {
+    const real: Path = [{ x: 0, y: 0 }, { x: 8, y: 0 }, { x: 8, y: 8 }, { x: 0, y: 8 }];
+    const sliver: Path = [
+      { x: 20, y: 0 }, { x: 20.3, y: 0 }, { x: 20.3, y: 6 }, { x: 20, y: 6 },
+    ];
+    const p = createEmptyProject();
+    p.objects = [makeObjectFromPaths("fill", [real, sliver], "red")];
+    const out = fixStitches(p).objects;
+    expect(out.length).toBe(1);
+    expect(out[0].paths.length).toBe(1); // sliver gone, real ring kept
+  });
+
+  it("keeps a legitimately thin 0.8mm stroke (satin-able, not a sliver)", () => {
+    const thin: Path = [{ x: 0, y: 0 }, { x: 0.8, y: 0 }, { x: 0.8, y: 20 }, { x: 0, y: 20 }];
+    const p = createEmptyProject();
+    p.objects = [makeObjectFromPaths("fill", [thin], "red")];
+    expect(fixStitches(p).objects.length).toBe(1);
   });
 });
