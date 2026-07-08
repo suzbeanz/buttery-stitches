@@ -1,10 +1,10 @@
-import type { EmbObject, Project } from "../types/project";
+import type { EmbObject, Path, Project } from "../types/project";
 import { classifyRegion, isBroadlyThick, isSmallRoundFill } from "./engine/classify";
 
 import { knockdown, seamTrap } from "./boolean";
 import { STACK_MAX_FEATURE_MM2 } from "./trace/stack";
 import { polygonArea, polygonPerimeter } from "./trace/classify";
-import { pathsBounds } from "./geometry";
+import { pathsBounds, pointInRing } from "./geometry";
 
 /**
  * "Fix stitches": a smart auto-cleanup pass over a design. It walks an explicit
@@ -67,6 +67,130 @@ function isSpeck(o: EmbObject): boolean {
   const minDim = Math.min(b.maxX - b.minX, b.maxY - b.minY);
   const outer = o.paths.reduce((a, r) => (Math.abs(polygonArea(r)) > Math.abs(polygonArea(a)) ? r : a));
   return minDim < SPECK_MIN_DIM_MM && Math.abs(polygonArea(outer)) < SPECK_MIN_AREA_MM2;
+}
+
+/** Mean stroke width (mm) of the region a ring encloses: 2·area / perimeter.
+ *  A long thin crescent of any length has a tiny value; a real shape doesn't. */
+function ringMeanWidthMm(r: Path): number {
+  const p = polygonPerimeter(r);
+  return p > 0 ? (2 * Math.abs(polygonArea(r))) / p : 0;
+}
+
+/** Below this mean width a ring is thinner than the THREAD — it can never sew as
+ *  coverage, only as a ridge of pile-ups. Trace fringe (an anti-alias crescent, a
+ *  0.3 mm worm along a colour boundary) lands here; no drawable satin column or
+ *  fill is this thin, so nothing legitimate is lost. */
+const SLIVER_MEAN_W_MM = 0.5;
+
+/** Strip sub-thread sliver rings out of a fill. Returns null when nothing real
+ *  remains (the whole object was trace fringe). Speck-drop handles tiny blobs;
+ *  this handles LONG-but-thin junk the area test can't see. */
+function dropSliverRings(o: EmbObject): EmbObject | null {
+  if (o.type !== "fill" || o.paths.length === 0) return o;
+  const real = o.paths.filter((r) => ringMeanWidthMm(r) >= SLIVER_MEAN_W_MM);
+  if (real.length === o.paths.length) return o;
+  if (real.length === 0) return null;
+  return { ...o, paths: real };
+}
+
+/** Fraction of `b`'s outline vertices that land INSIDE fill `f`'s even-odd
+ *  region — how much of `b` a later-sewn `f` would stitch over. Points in `f`'s
+ *  holes count as outside (a detail in a ring's window is not covered). */
+export function coveredFraction(b: EmbObject, f: EmbObject): number {
+  if (f.type !== "fill" || f.paths.length === 0) return 0;
+  let inside = 0;
+  let total = 0;
+  for (const ring of b.paths) {
+    for (const p of ring) {
+      total++;
+      let parity = 0;
+      for (const fr of f.paths) if (pointInRing(p, fr)) parity++;
+      if (parity % 2 === 1) inside++;
+    }
+  }
+  return total > 0 ? inside / total : 0;
+}
+
+/** An object this covered by a LATER fill is effectively sewn over — buried. */
+const BURY_COVERAGE = 0.6;
+
+/**
+ * Details the machine would BURY: each pair is an object at index `buried` that
+ * sews BEFORE the broad fill at index `cover` even though that fill stitches
+ * right over it (≥ {@link BURY_COVERAGE} of its outline inside the fill). The
+ * canvas z-order hides this — thread doesn't: whatever sews last wins. Only a
+ * clearly SMALLER object counts (under half the fill's area), which both matches
+ * "detail on a field" and keeps the relation acyclic. Shared by the validator
+ * (to warn) and the cleanup (to reorder).
+ */
+export function buriedPairs(objects: EmbObject[]): { buried: number; cover: number }[] {
+  if (objects.length > KNOCKDOWN_MAX_OBJECTS) return [];
+  const gross = objects.map((o) => o.paths.reduce((s, r) => s + Math.abs(polygonArea(r)), 0));
+  const out: { buried: number; cover: number }[] = [];
+  for (let j = 0; j < objects.length; j++) {
+    const f = objects[j];
+    if (f.type !== "fill" || f.visible === false) continue;
+    for (let i = 0; i < j; i++) {
+      const b = objects[i];
+      if (b.visible === false || b.paths.length === 0) continue;
+      if (gross[i] >= gross[j] * 0.5) continue; // only a detail under a broader fill
+      if (coveredFraction(b, f) >= BURY_COVERAGE) out.push({ buried: i, cover: j });
+    }
+  }
+  return out;
+}
+
+/**
+ * Re-schedule so no detail sews before a fill that covers it. Colour grouping
+ * alone can create burial: an early background object of some colour drags that
+ * colour's LETTERING to the front too, and the field the letters sit on then
+ * stitches straight over them. Correctness beats one fewer thread change — hold
+ * each covered detail back until every fill covering it has sewn (splitting the
+ * colour block when needed), keeping the incoming order otherwise.
+ */
+function unburyCovered(objects: EmbObject[]): EmbObject[] {
+  const pairs = buriedPairs(objects);
+  if (pairs.length === 0) return objects;
+  const covers = new Map<number, Set<number>>();
+  for (const p of pairs) {
+    if (!covers.has(p.buried)) covers.set(p.buried, new Set());
+    covers.get(p.buried)!.add(p.cover);
+  }
+  const emitted = new Set<number>();
+  const ready = (i: number) => [...(covers.get(i) ?? [])].every((c) => emitted.has(c));
+  const out: EmbObject[] = [];
+  const pending: number[] = [];
+  const release = () => {
+    let moved = true;
+    while (moved) {
+      moved = false;
+      for (let k = 0; k < pending.length; k++) {
+        if (ready(pending[k])) {
+          const idx = pending.splice(k, 1)[0];
+          emitted.add(idx);
+          out.push(objects[idx]);
+          moved = true;
+          break;
+        }
+      }
+    }
+  };
+  for (let i = 0; i < objects.length; i++) {
+    if (!ready(i)) {
+      pending.push(i);
+      continue;
+    }
+    emitted.add(i);
+    out.push(objects[i]);
+    // Release held-back details only at a COLOUR-BLOCK boundary, so a colour's
+    // own objects stay together and the detail block lands right after the
+    // whole field block that covers it (fewest extra thread changes).
+    const next = objects[i + 1];
+    if (!next || next.colorId !== objects[i].colorId) release();
+  }
+  release();
+  for (const i of pending) out.push(objects[i]); // safety net; the area rule makes deps acyclic
+  return out;
 }
 
 /** The fill style for a BROAD region (one the classifier called tatami):
@@ -266,9 +390,13 @@ export function fixStitchesWithReport(project: Project): { project: Project; rep
     if (o.params.underlay !== true && f.params.underlay === true) underlayEnabled++;
   });
 
-  // Drop genuine sub-mm specks (trace noise the area-only despeckle can miss) so
-  // they don't sew as lumps. Done after the change report so its indices stay aligned.
-  const kept = fixed.filter((o) => !isSpeck(o));
+  // Drop genuine sub-mm specks (trace noise the area-only despeckle can miss) and
+  // strip sub-thread SLIVER rings (a 0.3 mm crescent along a colour boundary sews
+  // as a ridge, never as coverage). Done after the change report so its indices
+  // stay aligned.
+  const kept = fixed
+    .map(dropSliverRings)
+    .filter((o): o is EmbObject => o !== null && !isSpeck(o));
 
   // Stable group by color: preserve first-seen color order and the relative
   // order within each color, but bring same-color objects together.
@@ -286,14 +414,19 @@ export function fixStitchesWithReport(project: Project): { project: Project; rep
       return a.i - b.i; // otherwise keep the drawn order (stable)
     })
     .map((x) => x.o);
-  const reordered = grouped.length !== fixed.length || grouped.some((o, i) => o.id !== kept[i].id);
+  // Colour grouping must never BURY a detail: if the grouping (or the drawn
+  // order) put lettering before the field it sits on, the field stitches right
+  // over it and it vanishes from the sew-out. Hold covered details back until
+  // their covering fill has sewn — correctness beats one fewer thread change.
+  const ordered = unburyCovered(grouped);
+  const reordered = ordered.length !== fixed.length || ordered.some((o, i) => o.id !== kept[i].id);
 
-  const trapped = knockdownPass(grouped);
+  const trapped = knockdownPass(ordered);
   // knockdownPass returns the SAME object reference when it leaves a fill alone,
   // so a changed reference means its edges were trapped.
   let seamsTrapped = 0;
   trapped.forEach((t, i) => {
-    if (t !== grouped[i]) seamsTrapped++;
+    if (t !== ordered[i]) seamsTrapped++;
   });
 
   return {

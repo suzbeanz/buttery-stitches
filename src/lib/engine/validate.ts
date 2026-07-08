@@ -1,6 +1,7 @@
 import type { Path, Project } from "../../types/project";
 import { resolveParams } from "../../types/project";
 import { distance } from "../geometry";
+import { buriedPairs } from "../fix";
 import { polygonArea } from "../trace/classify";
 import { resampleByCount } from "./resample";
 import { SATIN_MAX_WIDTH } from "./satin";
@@ -140,6 +141,35 @@ export function validateDesign(design: EngineStitch[], project: Project): Warnin
       level: "warn",
       message: `${total.toLocaleString()} stitches is a lot — long run time and thread use.`,
     });
+
+  // BURIED DETAILS. Thread has no z-order: whatever sews LAST wins. A detail
+  // sewn before a broad fill that covers it simply vanishes in the stitch-out —
+  // the single most heartbreaking surprise a design can hide, because the canvas
+  // preview shows shapes, not sew order. Aggregate per covering fill so a word's
+  // 13 letters read as one warning, not 13.
+  const visible = project.objects.filter((o) => o.visible);
+  const pairs = buriedPairs(visible);
+  if (pairs.length > 0) {
+    const byCover = new Map<number, number[]>();
+    for (const p of pairs) {
+      if (!byCover.has(p.cover)) byCover.set(p.cover, []);
+      byCover.get(p.cover)!.push(p.buried);
+    }
+    for (const [cover, buried] of byCover) {
+      const f = visible[cover];
+      const first = visible[buried[0]];
+      const fname = f.name ?? "a fill";
+      const bname = first.name ?? "a detail";
+      warnings.push({
+        level: "warn",
+        objectId: first.id,
+        message:
+          buried.length === 1
+            ? `"${bname}" sews before "${fname}", which stitches right over it — it will be buried. Clean up automatically moves it on top.`
+            : `${buried.length} details (like "${bname}") sew before "${fname}", which stitches right over them — they'll be buried. Clean up automatically moves them on top.`,
+      });
+    }
+  }
 
   return warnings;
 }
