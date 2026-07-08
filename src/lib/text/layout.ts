@@ -15,7 +15,7 @@
  */
 import type { EmbObject, Path, Point } from "../../types/project";
 import { makeObjectFromPaths } from "../objects";
-import { pathsBounds } from "../geometry";
+import { pathsBounds, polylineLength } from "../geometry";
 import { authoredAlphabet, type AuthoredAlphabet } from "./authored";
 // opentype is only used as a type here; parsing happens in fonts.ts. This keeps
 // layout pure (it never fetches or reads files — the caller passes the Font).
@@ -334,11 +334,21 @@ function layoutCircular(text: string, o: CircularOpts): TextLayoutResult {
   const Wmm = width * scale;
   const bottom = o.side === "bottom";
 
+  // When the typed run is longer than the circle can hold, its angular sweep
+  // (Wmm/R) exceeds a full turn and glyphs wrap back onto the same polar sector,
+  // physically overlapping. Compress the angular POSITIONS (not the glyph sizes —
+  // letters stay rigid) into an available arc just under 2π so they pack tightly
+  // instead of piling up. A run that already fits (the common case) is untouched:
+  // k = 1, so its layout is byte-for-byte identical.
+  const MAX_SWEEP = 2 * Math.PI * 0.92; // leave an 8% seam gap so ends don't touch
+  const sweep = R > 0 ? Wmm / R : 0;
+  const k = sweep > MAX_SWEEP ? MAX_SWEEP / sweep : 1;
+
   const rings: Path[] = [];
   const strokes: Path[] = [];
   for (const g of glyphs) {
     const cxmm = g.cx * scale;
-    const theta = (cxmm - Wmm / 2) / R; // arc-length → angle; centered at top/bottom
+    const theta = (k * (cxmm - Wmm / 2)) / R; // arc-length → angle; centered at top/bottom
     const c = Math.cos(theta);
     const s = Math.sin(theta);
     const place = (p: Point): Point => {
@@ -461,7 +471,9 @@ export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
   const heightMm = Math.max(0.5, finiteOr(opts.heightMm, 10)); // positive, real
   const letterSpacingMm = finiteOr(opts.letterSpacingMm, 0);
   const lineSpacing = Math.max(0.1, finiteOr(opts.lineSpacing, 1.35));
-  const archDeg = finiteOr(opts.archDeg, 0);
+  // Clamp the arch sweep below a full turn: an arch past ~360° wraps the strip
+  // back onto itself so the glyphs overlap, and is never a real design intent.
+  const archDeg = Math.max(-350, Math.min(350, finiteOr(opts.archDeg, 0)));
   const flattenToleranceMm = Math.max(0.05, Math.min(5, finiteOr(opts.flattenToleranceMm, 0.4)));
 
   const authored = authoredAlphabet(fontId);
@@ -472,9 +484,13 @@ export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
   const flattenTol = flattenToleranceMm / provScale;
 
   // Path baseline: rigid per-glyph placement along an arbitrary polyline. Drop
-  // any non-finite point first so a stray NaN vertex can't poison the tangents.
+  // any non-finite point first so a stray NaN vertex can't poison the tangents,
+  // then require a REAL extent — a path whose points are all (near-)coincident
+  // has zero length, which collapses every glyph onto one point (0 stitches,
+  // silently). Such a path can't carry text, so fall through to straight layout.
   const cleanPath = opts.pathMm?.filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
-  if (cleanPath && cleanPath.length >= 2) {
+  const pathLen = cleanPath ? polylineLength(cleanPath) : 0;
+  if (cleanPath && cleanPath.length >= 2 && pathLen > 0.1) {
     return layoutOnPath(text.replace(/\n/g, " "), cleanPath, {
       font, emSize, spacingUnits, flattenTol, authored, heightMm, provScale, colorId, name,
     });

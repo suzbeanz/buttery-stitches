@@ -248,4 +248,51 @@ describe("layoutText", () => {
     });
     expect(allFinite(object)).toBe(true);
   });
+
+  // GEOMETRY QUALITY (not crashes): overset arc text, runaway arch, dead path.
+  it("a run too long for the circle packs into the arc instead of overlapping", () => {
+    // 20 wide letters on a small radius would sweep ~895° (2.5 turns) and pile
+    // multiple glyphs into the same polar sector. They must now compress to fit.
+    const { object } = layoutText({ text: "W".repeat(20), font, heightMm: 8, circleRadiusMm: 15, colorId: "c1" });
+    // No two glyph-ring centroids share the same narrow sector at the same radius.
+    const cents = object.paths.map((r) => {
+      let x = 0, y = 0; for (const p of r) { x += p.x; y += p.y; } return { x: x / r.length, y: y / r.length };
+    });
+    let sameSector = 0;
+    for (let i = 0; i < cents.length; i++) for (let j = i + 1; j < cents.length; j++) {
+      let da = Math.abs(Math.atan2(cents[i].y, cents[i].x) - Math.atan2(cents[j].y, cents[j].x));
+      if (da > Math.PI) da = 2 * Math.PI - da;
+      if (da < 0.05 && Math.abs(Math.hypot(cents[i].x, cents[i].y) - Math.hypot(cents[j].x, cents[j].y)) < 3) sameSector++;
+    }
+    expect(sameSector).toBe(0);
+  });
+
+  it("a normal-length circle run is unchanged by the overset guard", () => {
+    // Regression: a run that already fits must be byte-identical (k = 1).
+    const a = layoutText({ text: "BADGE", font, heightMm: 8, circleRadiusMm: 40, colorId: "c1" });
+    const b = pathsBounds(a.object.paths)!;
+    // A small sweep (~<180°) stays a normal top arc above the centre.
+    expect(b.maxY).toBeLessThan(0);
+  });
+
+  it("an arch beyond a full turn is clamped (does not wrap onto itself)", () => {
+    // archDeg 720 would wrap the strip twice; it clamps to ≤350°, so its bbox
+    // matches the clamped value rather than collapsing into a self-overlap.
+    const wild = layoutText({ text: "OVERLAP", font, heightMm: 8, archDeg: 720, colorId: "c1" });
+    const clamped = layoutText({ text: "OVERLAP", font, heightMm: 8, archDeg: 350, colorId: "c1" });
+    const wb = pathsBounds(wild.object.paths)!;
+    const cb = pathsBounds(clamped.object.paths)!;
+    expect(wb.maxX - wb.minX).toBeCloseTo(cb.maxX - cb.minX, 3);
+    expect(wb.maxY - wb.minY).toBeCloseTo(cb.maxY - cb.minY, 3);
+  });
+
+  it("a zero-length (all-coincident) path falls back to straight layout, not 0 stitches", () => {
+    const { object } = layoutText({
+      text: "HELLO", font, heightMm: 10, colorId: "c1",
+      pathMm: [{ x: 5, y: 5 }, { x: 5, y: 5 }, { x: 5, y: 5 }],
+    });
+    const b = pathsBounds(object.paths)!;
+    expect(b.maxY - b.minY).toBeCloseTo(10, 0); // real letters at the asked height
+    expect(b.maxX - b.minX).toBeGreaterThan(10); // a real string width, not collapsed
+  });
 });
