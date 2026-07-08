@@ -64,6 +64,10 @@ interface GlyphPiece {
   cy: number;
   dim: number;
   area: number;
+  /** every vertex of the region (mm), so the cluster frame can measure the true
+   *  extent perpendicular to the run axis instead of an axis-aligned square (a
+   *  square projected onto a 45° cross-axis inflates cap height by √2). */
+  pts: Point[];
 }
 
 /** A detected cluster of small glyph-like shapes: its member object ids, oriented
@@ -108,7 +112,7 @@ function glyphCandidates(objects: EmbObject[]): GlyphPiece[] {
       if (dim > GLYPH_MAX_DIM_MM || dim <= 0) continue;
       const area = region.reduce((s, r) => s + Math.abs(polygonArea(r)), 0);
       if (area < GLYPH_MIN_AREA_MM2) continue;
-      out.push({ objectId: o.id, colorId: o.colorId, cx: (b.minX + b.maxX) / 2, cy: (b.minY + b.maxY) / 2, dim, area });
+      out.push({ objectId: o.id, colorId: o.colorId, cx: (b.minX + b.maxX) / 2, cy: (b.minY + b.maxY) / 2, dim, area, pts: region.flat() });
     }
   }
   return out;
@@ -166,18 +170,19 @@ function frameOf(members: number[], cands: ReturnType<typeof glyphCandidates>): 
   // A single-glyph-wide column (all centres nearly coincident) has no reliable
   // axis — fall back to the members' own tallest extent orientation.
   if (Math.abs(sxx - syy) < 1e-6 && Math.abs(sxy) < 1e-6) angleRad = 0;
-  // Project every member's footprint (centre ± half its dim) onto the along/
-  // cross axes for the run's extents. Cross extent ≈ cap height.
+  // Project every member's ACTUAL ink vertices onto the along/cross axes for the
+  // run's extents. Using the real polygon (not an axis-aligned square footprint)
+  // makes the cross extent — the cap height — exact at any run angle; the old
+  // square-corner projection inflated it by √2 (≈+41%) at 45°, so diagonal crest
+  // text was re-typed ~40% too tall.
   const ux = Math.cos(angleRad), uy = Math.sin(angleRad);
   let loA = Infinity, hiA = -Infinity, loC = Infinity, hiC = -Infinity;
   const colorArea = new Map<string, number>();
   const objIds = new Set<string>();
   for (const i of members) {
-    const r = cands[i].dim / 2;
-    for (const [ox, oy] of [[r, r], [-r, r], [r, -r], [-r, -r]] as const) {
-      const px = cands[i].cx + ox, py = cands[i].cy + oy;
-      const a = (px - cx) * ux + (py - cy) * uy;
-      const cc = -(px - cx) * uy + (py - cy) * ux;
+    for (const p of cands[i].pts) {
+      const a = (p.x - cx) * ux + (p.y - cy) * uy;
+      const cc = -(p.x - cx) * uy + (p.y - cy) * ux;
       loA = Math.min(loA, a); hiA = Math.max(hiA, a);
       loC = Math.min(loC, cc); hiC = Math.max(hiC, cc);
     }

@@ -61,6 +61,30 @@ describe("detectTextClusters", () => {
     expect(heights[1]).toBeGreaterThan(12);
   });
 
+  it("measures cap height correctly on a DIAGONAL run (no √2 inflation)", () => {
+    // A word rotated to run at 45°: each 4mm letter is rotated with the baseline,
+    // so its true extent PERPENDICULAR to the run is still 4mm. The old code
+    // approximated each glyph as an axis-aligned square and projected its corners
+    // onto the cross-axis → √2·4 ≈ 5.66mm (+41%), so re-typed diagonal crest text
+    // came out ~40% too tall. It must now read ~4mm at any angle.
+    const s = 4, deg = 45;
+    const a = (deg * Math.PI) / 180;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    const rotatedGlyph = (cx: number, cy: number): EmbObject => {
+      const h = s / 2;
+      const corners: [number, number][] = [[-h, -h], [h, -h], [h, h], [-h, h]];
+      const ring: Path = corners.map(([x, y]) => ({ x: cx + x * ca - y * sa, y: cy + x * sa + y * ca }));
+      return makeObjectFromPaths("fill", [ring], "c1");
+    };
+    const pitch = s + 1.5;
+    const objs = Array.from({ length: 6 }, (_, i) => rotatedGlyph(20 + i * pitch * ca, 20 + i * pitch * sa));
+    const clusters = detectTextClusters(objs, 1);
+    expect(clusters.length).toBe(1);
+    // True cap height is 4mm; accept a small tolerance, but nowhere near √2·4.
+    expect(clusters[0].heightMm).toBeGreaterThan(3.5);
+    expect(clusters[0].heightMm).toBeLessThan(4.6); // was ~5.66 before the fix
+  });
+
   it("ignores a lone shape and a big logo mark (not text)", () => {
     const mark = makeObjectFromPaths("fill", [[
       { x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 40 }, { x: 0, y: 40 },
