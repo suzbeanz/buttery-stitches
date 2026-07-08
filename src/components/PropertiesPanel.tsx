@@ -39,7 +39,7 @@ import { newId } from "../lib/id";
 import { convertObjectType, satinWidthOf, setSatinWidth } from "../lib/objects";
 import { splitRegionComponents } from "../lib/regions";
 import { toast } from "../store/toastStore";
-import { MOTIFS } from "../lib/engine/motifs";
+import { motifsByGroup } from "../lib/engine/motifs";
 import { buildOutline, DEFAULT_OUTLINE_WIDTH } from "../lib/outline";
 import { generateObjectStitches } from "../lib/engine";
 import DesignPanel from "./DesignPanel";
@@ -432,9 +432,7 @@ function ObjectProperties({
               className="select"
             >
               <option value="none">None (plain line)</option>
-              {MOTIFS.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
+              <MotifOptions />
             </select>
           </Field>
           {p.motifRun && p.motifRun !== "none" && (
@@ -519,9 +517,7 @@ function ObjectProperties({
               onChange={(e) => onParam({ motif: e.target.value })}
               className="select"
             >
-              {MOTIFS.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
+              <MotifOptions />
             </select>
           </Field>
           <NumberField
@@ -543,9 +539,7 @@ function ObjectProperties({
               className="select"
             >
               <option value="none">None</option>
-              {MOTIFS.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
+              <MotifOptions />
             </select>
           </Field>
           <label className="flex items-center gap-2 text-sm text-navy">
@@ -911,6 +905,23 @@ function hexToRgb(hex: string): [number, number, number] {
 }
 
 // ---------------------------------------------------------------------------
+
+/** The motif library as grouped <optgroup>s, shared by the run/fill/carve pickers. */
+function MotifOptions() {
+  return (
+    <>
+      {motifsByGroup().map((g) => (
+        <optgroup key={g.group} label={g.label}>
+          {g.motifs.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </>
+  );
+}
 
 function Field({
   label,
