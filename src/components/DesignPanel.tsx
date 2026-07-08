@@ -108,18 +108,46 @@ export default function DesignPanel() {
       {/* Hoop */}
       <label className="flex flex-col gap-1">
         <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/60">Hoop</span>
-        <select
-          value={presetIndex === -1 ? "custom" : presetIndex}
-          onChange={(e) => onHoopPreset(e.target.value)}
-          className="select"
-        >
-          {HOOP_PRESETS.map((h, i) => (
-            <option key={h.name} value={i}>
-              {h.name}
-            </option>
-          ))}
-          <option value="custom">Custom…</option>
-        </select>
+        <div className="flex items-center gap-1.5">
+          <select
+            value={presetIndex === -1 ? "custom" : presetIndex}
+            onChange={(e) => onHoopPreset(e.target.value)}
+            className="select flex-1"
+          >
+            {HOOP_PRESETS.map((h, i) => (
+              <option key={h.name} value={i}>
+                {h.name}
+              </option>
+            ))}
+            <option value="custom">Custom…</option>
+          </select>
+          {/* Rotate: mount the same hoop sideways (a 5×7 becomes a 7×5). */}
+          <button
+            type="button"
+            disabled={hoop.wMm === hoop.hMm}
+            data-tip="Rotate hoop 90° (swap width and height)"
+            aria-label="Rotate hoop 90 degrees — swap width and height"
+            onClick={() =>
+              updateProject({
+                hoop: {
+                  wMm: hoop.hMm,
+                  hMm: hoop.wMm,
+                  name: hoop.name.endsWith(" (rotated)")
+                    ? hoop.name.slice(0, -" (rotated)".length)
+                    : `${hoop.name} (rotated)`,
+                },
+                widthMm: hoop.hMm,
+                heightMm: hoop.wMm,
+              })
+            }
+            className="tap-target grid h-9 w-9 shrink-0 place-items-center rounded-sm border-2 border-ink/50 text-ink hover:bg-butter-200 disabled:opacity-30"
+          >
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
+              <rect x="1.5" y="4.5" width="12" height="8" rx="1" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M11 1.5l2 2-2 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
       </label>
 
       {presetIndex === -1 && (

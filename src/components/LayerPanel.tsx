@@ -14,6 +14,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useProjectStore } from "../store/projectStore";
+import { toast } from "../store/toastStore";
 import type { StitchType, ThreadColor } from "../types/project";
 
 /** Small glyph for each stitch type, matching the tool strip's icons. */
@@ -36,6 +37,23 @@ export default function LayerPanel() {
   const removeObjects = useProjectStore((s) => s.removeObjects);
   const reorderObjects = useProjectStore((s) => s.reorderObjects);
   const moveOrder = useProjectStore((s) => s.moveOrder);
+  const sortByColor = useProjectStore((s) => s.sortByColor);
+
+  // Thread-change economy: how many color BLOCKS the current order sews vs the
+  // minimum possible (one per distinct color). When they differ, offer the fix.
+  const { colorBlocks, distinctColors } = useMemo(() => {
+    let blocks = 0;
+    let prev: string | null = null;
+    const seen = new Set<string>();
+    for (const o of objects) {
+      if (o.colorId !== prev) {
+        blocks++;
+        prev = o.colorId;
+      }
+      seen.add(o.colorId);
+    }
+    return { colorBlocks: blocks, distinctColors: seen.size };
+  }, [objects]);
 
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   // The row currently hovered during a drag — drives the insertion line that
@@ -91,6 +109,19 @@ export default function LayerPanel() {
     >
       <div className="flex items-center gap-1.5 border-b border-ink/20 px-3 py-2.5 font-label text-xs font-semibold uppercase tracking-[0.18em] text-ink-deep">
         <ListOrdered size={14} className="text-ink-deep" aria-hidden /> Stitch Order
+        {colorBlocks > distinctColors && (
+          <button
+            onClick={() => {
+              sortByColor();
+              toast("Re-sequenced — same-color objects now sew together", "success");
+            }}
+            data-tip={`Sew each color once (${colorBlocks} thread changes → ${distinctColors})`}
+            data-tip-side="bottom"
+            className="ml-auto rounded-sm border border-ink/40 px-1.5 py-0.5 font-label text-[9px] font-semibold uppercase tracking-[0.08em] text-ink/80 hover:bg-butter-200"
+          >
+            Sort by color
+          </button>
+        )}
       </div>
 
       {objects.length === 0 ? (

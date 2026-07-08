@@ -73,6 +73,10 @@ export interface ProjectState {
   reorderObjects: (fromIndex: number, toIndex: number) => void;
   /** Move the selected objects in stitch order: one step or all the way. */
   moveOrder: (ids: string[], dir: "earlier" | "later" | "first" | "last") => void;
+  /** Re-sequence so same-color objects sew consecutively (fewest thread
+   *  changes). Stable: keeps relative order within a color and the colors'
+   *  first-seen order, so layering shifts as little as possible. */
+  sortByColor: () => void;
   /** Tie objects into one group (select/move/align together). */
   groupObjects: (ids: string[]) => void;
   /** Remove the group tag from any of these objects' groups. */
@@ -289,6 +293,23 @@ export const useProjectStore = create<ProjectState>()(
             }
           }
           return { project: { ...s.project, objects } };
+        }),
+
+      sortByColor: () =>
+        set((s) => {
+          const objects = s.project.objects;
+          // Stable bucket sort by first-seen color: within a color the existing
+          // order (and thus layering) is preserved exactly.
+          const buckets = new Map<string, EmbObject[]>();
+          for (const o of objects) {
+            const b = buckets.get(o.colorId);
+            if (b) b.push(o);
+            else buckets.set(o.colorId, [o]);
+          }
+          const sorted = [...buckets.values()].flat();
+          // No-op when already color-consecutive (keeps undo history clean).
+          if (sorted.every((o, i) => o === objects[i])) return s;
+          return { project: { ...s.project, objects: sorted } };
         }),
 
       groupObjects: (ids) =>

@@ -253,6 +253,21 @@ describe("projectStore.mergeObjects / splitRegion", () => {
     ]);
   });
 
+  it("sortByColor groups same-color objects, stable within color and by first appearance", () => {
+    const a = makeObject("fill", square(0, 0), "red");
+    const b = makeObject("fill", square(20, 0), "blue");
+    const c = makeObject("fill", square(40, 0), "red");
+    const d = makeObject("fill", square(60, 0), "blue");
+    useProjectStore.getState().addObjects([a, b, c, d]); // red,blue,red,blue = 4 blocks
+    useProjectStore.getState().sortByColor();
+    const order = useProjectStore.getState().project.objects.map((o) => o.id);
+    expect(order).toEqual([a.id, c.id, b.id, d.id]); // red,red,blue,blue = 2 blocks
+    // no-op when already sorted (undo history stays clean)
+    const before = useProjectStore.getState().project;
+    useProjectStore.getState().sortByColor();
+    expect(useProjectStore.getState().project).toBe(before);
+  });
+
   it("subtract punches a hole: overlapping cutter leaves a hole in the base", () => {
     const cId = useProjectStore.getState().project.colors[0].id;
     const base = makeObject("fill", square(0, 0, 30), cId); // big square
