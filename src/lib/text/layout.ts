@@ -104,6 +104,16 @@ function controlPolyLength(...pts: Point[]): number {
  * longer than `tol` mm. Each Z (or each M after the first) starts a new ring.
  * The commands are already scaled to mm by the caller.
  */
+/** Hard ceiling on curve subdivision. A zero/NaN tolerance makes `len/tol`
+ *  diverge to Infinity → the flattening loop never ends and the tab OOMs. Even a
+ *  legitimately tiny tolerance can't produce more than this many points per
+ *  segment; a real glyph curve at a sane tolerance uses a few dozen. */
+const MAX_CURVE_STEPS = 4096;
+function stepsFor(len: number, tol: number): number {
+  if (!(tol > 0) || !Number.isFinite(len)) return 2;
+  return Math.max(2, Math.min(MAX_CURVE_STEPS, Math.ceil(len / tol)));
+}
+
 function commandsToRings(commands: OtCommand[], tol: number): Path[] {
   const rings: Path[] = [];
   let ring: Path = [];
@@ -135,7 +145,7 @@ function commandsToRings(commands: OtCommand[], tol: number): Path[] {
       case "Q": {
         const c = { x: cmd.x1!, y: cmd.y1! };
         const end = { x: cmd.x!, y: cmd.y! };
-        const steps = Math.max(2, Math.ceil(controlPolyLength(cur, c, end) / tol));
+        const steps = stepsFor(controlPolyLength(cur, c, end), tol);
         for (let i = 1; i <= steps; i++) push(quadAt(cur, c, end, i / steps));
         break;
       }
@@ -143,10 +153,7 @@ function commandsToRings(commands: OtCommand[], tol: number): Path[] {
         const c1 = { x: cmd.x1!, y: cmd.y1! };
         const c2 = { x: cmd.x2!, y: cmd.y2! };
         const end = { x: cmd.x!, y: cmd.y! };
-        const steps = Math.max(
-          2,
-          Math.ceil(controlPolyLength(cur, c1, c2, end) / tol),
-        );
+        const steps = stepsFor(controlPolyLength(cur, c1, c2, end), tol);
         for (let i = 1; i <= steps; i++) push(cubicAt(cur, c1, c2, end, i / steps));
         break;
       }
@@ -432,19 +439,30 @@ function layoutOnPath(text: string, rawPath: Point[], o: PathLayoutOpts): TextLa
   return { object, widthMm: Wmm };
 }
 
+/** Finite value or the fallback (guards NaN/Infinity from a corrupt file or a
+ *  half-typed UI field before it cascades into every coordinate). */
+const finiteOr = (v: number | undefined, def: number): number =>
+  v !== undefined && Number.isFinite(v) ? v : def;
+
 export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
   const {
     text,
     font,
-    heightMm,
-    letterSpacingMm = 0,
-    lineSpacing = 1.35,
-    archDeg = 0,
     colorId,
     name,
-    flattenToleranceMm = 0.4,
     fontId,
   } = opts;
+
+  // SANITIZE numeric inputs. These are user-editable and stored verbatim, so a
+  // NaN height or a zero flatten tolerance reaches here from a corrupt file or a
+  // mid-edit field. A non-finite height divides every coordinate to NaN; a zero
+  // tolerance makes curve flattening subdivide without bound (OOM). Coerce each
+  // to a sane finite value BEFORE any geometry is derived from it.
+  const heightMm = Math.max(0.5, finiteOr(opts.heightMm, 10)); // positive, real
+  const letterSpacingMm = finiteOr(opts.letterSpacingMm, 0);
+  const lineSpacing = Math.max(0.1, finiteOr(opts.lineSpacing, 1.35));
+  const archDeg = finiteOr(opts.archDeg, 0);
+  const flattenToleranceMm = Math.max(0.05, Math.min(5, finiteOr(opts.flattenToleranceMm, 0.4)));
 
   const authored = authoredAlphabet(fontId);
   const unitsPerEm = font.unitsPerEm || 1000;
@@ -453,9 +471,11 @@ export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
   const spacingUnits = provScale > 0 ? letterSpacingMm / provScale : 0;
   const flattenTol = flattenToleranceMm / provScale;
 
-  // Path baseline: rigid per-glyph placement along an arbitrary polyline.
-  if (opts.pathMm && opts.pathMm.length >= 2) {
-    return layoutOnPath(text.replace(/\n/g, " "), opts.pathMm, {
+  // Path baseline: rigid per-glyph placement along an arbitrary polyline. Drop
+  // any non-finite point first so a stray NaN vertex can't poison the tangents.
+  const cleanPath = opts.pathMm?.filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
+  if (cleanPath && cleanPath.length >= 2) {
+    return layoutOnPath(text.replace(/\n/g, " "), cleanPath, {
       font, emSize, spacingUnits, flattenTol, authored, heightMm, provScale, colorId, name,
     });
   }

@@ -246,17 +246,54 @@ export const DEFAULT_PARAMS: Required<EmbObjectParams> = {
   applique: false,
 };
 
+/**
+ * MACHINE-SAFETY param sanitizers. These numeric fields are user-editable (and
+ * are stored verbatim in a `.embproj`, so a hand-edited or corrupt file reaches
+ * the engine unchecked). A non-positive or non-finite STEP length makes the
+ * engine's stepping loops never advance — or diverge — so the tab OOMs before a
+ * single stitch is drawn; an astronomically large one melts the machine. There
+ * is no legitimate design with a zero, negative, NaN, or 5-metre stitch length,
+ * so every such value is coerced to a sane finite number here, at the one place
+ * every consumer (engine AND validator) resolves params.
+ */
+/** A positive, finite length (mm) clamped to [min, max]; junk → the default. */
+function safeLen(v: number | undefined, def: number, min: number, max: number): number {
+  if (v === undefined || !Number.isFinite(v)) return def;
+  return Math.max(min, Math.min(max, v));
+}
+/** A finite SIGNED value (mm) clamped to [-max, max]; junk → the default. Pull /
+ *  push compensation may legitimately be 0 or negative, so only the magnitude is
+ *  bounded (a 1e6 mm pull comp would spawn unbounded satin rows). */
+function safeSigned(v: number | undefined, def: number, max: number): number {
+  if (v === undefined || !Number.isFinite(v)) return def;
+  return Math.max(-max, Math.min(max, v));
+}
+/** A finite integer count clamped to [0, max]; junk → the default. */
+function safeCount(v: number | undefined, def: number, max: number): number {
+  if (v === undefined || !Number.isFinite(v)) return def;
+  return Math.max(0, Math.min(max, Math.floor(v)));
+}
+/** Density is NOT clamped to the safe FLOOR here — the validator must still see a
+ *  recklessly-tight requested value to warn on it, and the engine floors it at
+ *  generation. Only a NON-FINITE density is corruption (it crashes satin spacing
+ *  with a raw TypeError), so that alone is coerced; finite-but-tight passes
+ *  through untouched. */
+function safeDensity(v: number | undefined, def: number): number {
+  if (v === undefined || !Number.isFinite(v)) return def;
+  return v;
+}
+
 /** Resolve an object's params against the defaults for the engine. */
 export function resolveParams(
   type: StitchType,
   params: EmbObjectParams,
 ): Required<EmbObjectParams> {
   return {
-    stitchLength: params.stitchLength ?? DEFAULT_PARAMS.stitchLength,
-    beanRepeats: params.beanRepeats ?? DEFAULT_PARAMS.beanRepeats,
+    stitchLength: safeLen(params.stitchLength, DEFAULT_PARAMS.stitchLength, 0.5, 12),
+    beanRepeats: safeCount(params.beanRepeats, DEFAULT_PARAMS.beanRepeats, 12),
     raw: params.raw ?? DEFAULT_PARAMS.raw,
-    density: params.density ?? DEFAULT_PARAMS.density,
-    fillStitchLength: params.fillStitchLength ?? DEFAULT_PARAMS.fillStitchLength,
+    density: safeDensity(params.density, DEFAULT_PARAMS.density),
+    fillStitchLength: safeLen(params.fillStitchLength, DEFAULT_PARAMS.fillStitchLength, 0.5, 12),
     angle: params.angle ?? DEFAULT_PARAMS.angle,
     directionDeg: params.directionDeg ?? DEFAULT_PARAMS.directionDeg,
     flowPath: params.flowPath ?? DEFAULT_PARAMS.flowPath,
@@ -264,14 +301,14 @@ export function resolveParams(
     underlay:
       type === "running" ? false : (params.underlay ?? DEFAULT_PARAMS.underlay),
     underlayWeight: params.underlayWeight ?? DEFAULT_PARAMS.underlayWeight,
-    pullComp: params.pullComp ?? DEFAULT_PARAMS.pullComp,
-    pushComp: params.pushComp ?? DEFAULT_PARAMS.pushComp,
+    pullComp: safeSigned(params.pullComp, DEFAULT_PARAMS.pullComp, 5),
+    pushComp: safeSigned(params.pushComp, DEFAULT_PARAMS.pushComp, 5),
     outline: params.outline ?? DEFAULT_PARAMS.outline,
     fillStyle: params.fillStyle ?? DEFAULT_PARAMS.fillStyle,
     lineArt: params.lineArt ?? DEFAULT_PARAMS.lineArt,
     blendColorId: params.blendColorId ?? DEFAULT_PARAMS.blendColorId,
     motif: params.motif ?? DEFAULT_PARAMS.motif,
-    motifSizeMm: params.motifSizeMm ?? DEFAULT_PARAMS.motifSizeMm,
+    motifSizeMm: safeLen(params.motifSizeMm, DEFAULT_PARAMS.motifSizeMm, 0.5, 100),
     carve: params.carve ?? DEFAULT_PARAMS.carve,
     motifRun: params.motifRun ?? DEFAULT_PARAMS.motifRun,
     applique: params.applique ?? DEFAULT_PARAMS.applique,

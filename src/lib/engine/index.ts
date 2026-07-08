@@ -529,6 +529,37 @@ const SATIN_MIN_STITCH = 0.3;
 /** Densest row spacing (mm) the engine will ever stitch — denser packs/jams. */
 const MIN_SAFE_DENSITY = 0.3;
 
+/** MACHINE-SAFETY geometry bound. An object whose coordinates are non-finite, or
+ *  that spans more than this many mm on a side, is not a real design — it's
+ *  corrupt/degenerate input (a bad import, a hand-edited project, an overflowed
+ *  transform). Stepping across it would place hundreds of millions of stitches
+ *  and hang/OOM the tab, and a NaN coordinate would leak a non-finite needle
+ *  penetration into the design. Real designs live inside a hoop of at most a few
+ *  hundred mm; this cap sits an order of magnitude beyond, so only pathological
+ *  input trips it. Such an object generates no runs (skipped, not stitched). */
+const MAX_OBJECT_SPAN_MM = 5000;
+
+/** True only if every coordinate is finite and the geometry fits within a sane
+ *  span — the precondition for stepping across it without hanging or leaking a
+ *  non-finite stitch. A NaN point is invisible to a min/max bbox (all its
+ *  comparisons are false), so every point is checked explicitly. */
+function geometryIsSane(paths: Path[]): boolean {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  let any = false;
+  for (const path of paths) {
+    for (const p of path) {
+      if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return false;
+      any = true;
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
+    }
+  }
+  if (!any) return false;
+  return maxX - minX <= MAX_OBJECT_SPAN_MM && maxY - minY <= MAX_OBJECT_SPAN_MM;
+}
+
 /** How far inside the boundary (mm) a broad fill's finishing edge run sits — far
  *  enough to bury the ragged tatami row-ends and any pull-comp overshoot, close
  *  enough that the fill still reads as filled all the way to its outline. */
@@ -595,6 +626,11 @@ export function generateObjectRuns(
   object: EmbObject,
   fabric: FabricProfile = fabricProfile(undefined),
 ): StitchRun[] {
+  // MACHINE-SAFETY gate: never step across non-finite or absurdly large
+  // geometry. Doing so hangs/OOMs the tab (hundreds of millions of stitches) or
+  // leaks a NaN needle penetration into the design. Corrupt/degenerate input is
+  // dropped here rather than stitched.
+  if (!geometryIsSane(object.paths)) return [];
   const p = resolveParams(object.type, object.params);
   // Professional size scaling, measured from a 9-size reference series of one
   // design (25→120mm): fill stitch length grows with the object's size and

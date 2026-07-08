@@ -49,8 +49,11 @@ export function parseProject(value: unknown): Project {
   // color). Valid files are unchanged, so the round trip stays lossless.
   const project: Project = {
     ...(value as Project),
-    widthMm: Math.max(1, p.widthMm as number),
-    heightMm: Math.max(1, p.heightMm as number),
+    // Document dimensions drive the canvas-fit math. A NaN slips past `Math.max`
+    // (Math.max(1, NaN) === NaN) and an Infinity stays Infinity — both then poison
+    // every fit calculation — so coerce non-finite to the default and cap the span.
+    widthMm: safeDim(p.widthMm as number, DEFAULT_HOOP.wMm),
+    heightMm: safeDim(p.heightMm as number, DEFAULT_HOOP.hMm),
     hoop: normalizeHoop(p.hoop),
     colors: (p.colors as unknown[]).map(normalizeColor),
     objects: (p.objects as unknown[]).map(normalizeObject),
@@ -58,6 +61,13 @@ export function parseProject(value: unknown): Project {
   // Continue numbering new objects from where the opened document left off.
   syncObjectCounter(project.objects);
   return project;
+}
+
+/** A finite document dimension (mm) in [1, 100000]; non-finite → the default.
+ *  Caps an absurd span so downstream fit math stays bounded. */
+function safeDim(v: number, def: number): number {
+  if (!Number.isFinite(v)) return def;
+  return Math.max(1, Math.min(100000, v));
 }
 
 /** A safe hoop (positive dimensions) so the canvas fit math can't divide by zero. */

@@ -173,7 +173,14 @@ export function svgShapesToObjects(shapes: SvgShape[], opts: SvgImportOptions): 
     minAreaMm2 = 1,
     simplifyTolMm = 0.2,
   } = opts;
-  if (shapes.length === 0 || contentW <= 0 || contentH <= 0) return { colors: [], objects: [] };
+  // Guard non-finite too: `NaN <= 0` is false, so a NaN content box would slip
+  // past a bare `<= 0` check and turn every mapped coordinate into NaN.
+  if (
+    shapes.length === 0 ||
+    !(contentW > 0) || !(contentH > 0) ||
+    !Number.isFinite(contentW) || !Number.isFinite(contentH)
+  )
+    return { colors: [], objects: [] };
 
   // Scale user units → mm to fit the hoop with a margin, centred.
   const mmPerUnit = Math.min(hoopWmm / contentW, hoopHmm / contentH) * fit;
@@ -193,7 +200,9 @@ export function svgShapesToObjects(shapes: SvgShape[], opts: SvgImportOptions): 
   for (const s of shapes) {
     if (s.stroke) {
       const widthMm = s.stroke.widthUnits * mmPerUnit;
-      if (widthMm < 0.3) continue; // sub-thread hairline
+      // `!(widthMm >= 0.3)` also rejects NaN (a non-finite stroke width would
+      // otherwise emit NaN satin rails); a valid width passes.
+      if (!(widthMm >= 0.3)) continue; // sub-thread hairline or non-finite
       const rails: [Path, Path][] = [];
       let len = 0;
       s.stroke.centerlines.forEach((cl, i) => {

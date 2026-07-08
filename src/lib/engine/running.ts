@@ -21,6 +21,11 @@ const CURVE_MIN_PITCH_MM = 0.8;
 
 export function runningStitch(path: Path, stitchLength: number): Path {
   if (path.length < 2) return path.map((p) => ({ ...p }));
+  // MACHINE-SAFETY floor: a zero, negative, or non-finite pitch makes the walk
+  // below never advance (or diverge), placing points until the tab OOMs. Callers
+  // route through resolveParams' floor, but this is exported and unit-tested
+  // directly, so it defends itself. A valid pitch is untouched.
+  if (!(stitchLength > 0.1)) stitchLength = 2.5;
 
   // Fine pass: sample well below the target pitch so local curvature is
   // measurable, then walk it placing penetrations at the curvature-scaled pitch.

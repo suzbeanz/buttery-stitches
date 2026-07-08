@@ -79,6 +79,21 @@ describe("project serialization", () => {
       parseProject({ version: 1, widthMm: 100, heightMm: 100 }),
     ).toThrow();
   });
+
+  it("coerces non-finite document dimensions to a finite default", () => {
+    // A hand-edited/corrupt file with NaN or Infinity dims would otherwise slip
+    // past `Math.max(1, …)` (NaN stays NaN, Infinity stays Infinity) and poison
+    // every canvas-fit calculation.
+    const nan = parseProject({ version: 1, widthMm: NaN, heightMm: 100, colors: [], objects: [] });
+    expect(Number.isFinite(nan.widthMm)).toBe(true);
+    expect(nan.widthMm).toBeGreaterThan(0);
+    const inf = parseProject({ version: 1, widthMm: 100, heightMm: Infinity, colors: [], objects: [] });
+    expect(Number.isFinite(inf.heightMm)).toBe(true);
+    // A sane finite value is preserved unchanged.
+    const ok = parseProject({ version: 1, widthMm: 120, heightMm: 80, colors: [], objects: [] });
+    expect(ok.widthMm).toBe(120);
+    expect(ok.heightMm).toBe(80);
+  });
 });
 
 describe("default object naming", () => {
