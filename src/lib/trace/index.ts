@@ -155,6 +155,13 @@ function hugsImageEdge(pts: Point[], w: number, h: number): boolean {
  *  genuine small features, so keep it modest. */
 const STRAIGHTEN_TOL_MM = 0.5;
 
+/** Above this many traced regions the input isn't a clean logo — it's a photo /
+ *  noisy scan. The O(n²) polish passes (idealize/stack/underlap) are skipped so
+ *  a pathological image returns a bounded result in seconds instead of freezing.
+ *  Real designs peak in the low tens of regions; only un-digitisable input
+ *  approaches this. */
+const PATHOLOGICAL_RING_CAP = 200;
+
 /**
  * Convert imagetracerjs tracedata into stitch objects (Section 5, steps 3–5).
  * Pure — feed it a tracedata object and it returns colors + classified
@@ -403,6 +410,17 @@ export function tracedataToObjects(
   // outlines and detail land crisply ON TOP of the fills instead of being buried.
   built.sort((a, b) => Number(a.stroke) - Number(b.stroke) || b.area - a.area);
   const objects = built.map((b) => b.object);
+
+  // PATHOLOGICAL-INPUT GUARD. The polish passes below (idealize, stack, underlap)
+  // are O(n²) in region count. A clean logo has tens of regions (the truck: 61,
+  // a crest: 35); a PHOTO or noisy scan shatters into hundreds–thousands, where
+  // those passes take minutes and freeze the tab — and add nothing, since you
+  // can't idealize noise or gap-proof a thousand specks. Above this cap we skip
+  // them and return the basic (already sewable) trace. Real designs never
+  // approach it; only un-digitisable input does.
+  const totalRings = objects.reduce((s, o) => s + o.paths.length, 0);
+  if (totalRings > PATHOLOGICAL_RING_CAP) return { colors, objects };
+
   const ordered = opts.idealize === false ? objects : idealizeDesign(objects);
   // Gap-proof the color boundaries LAST — after idealization, or a re-snapped
   // primitive would undo the expansion. Stacking runs first (a filled hole

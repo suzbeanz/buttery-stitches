@@ -80,7 +80,9 @@ describe("encodeDst", () => {
     expect(h.startsWith("LA:Untitled")).toBe(true);
     expect(h).toContain("ST:");
     expect(h).toContain("CO:");
-    expect(bytes.length % 1).toBe(0);
+    // Real check (was a tautology `length % 1 === 0`): a DST file is the 512-byte
+    // header + 3 bytes per stitch record, so the body length is a multiple of 3.
+    expect((bytes.length - HEADER) % 3).toBe(0);
     expect(bytes.length).toBeGreaterThan(HEADER);
   });
 

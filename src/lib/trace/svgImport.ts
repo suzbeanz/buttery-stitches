@@ -13,7 +13,7 @@
 import type { EmbObject, Path, ThreadColor } from "../../types/project";
 import { newId } from "../id";
 import { makeObjectFromPaths } from "../objects";
-import { railsFromCenterline } from "../geometry";
+import { railsFromCenterline, pointInRing } from "../geometry";
 import { douglasPeucker } from "./simplify";
 import { polygonArea } from "./classify";
 import { nameForRgb } from "./colorname";
@@ -51,6 +51,36 @@ export interface SvgImportOptions {
   /** Simplify flattened rings at this tolerance (mm, default 0.2 — vectors are
    *  already clean, so this only drops collinear run points). */
   simplifyTolMm?: number;
+}
+
+/** Net FILLED area (mm²) of a shape's rings via even–odd containment depth: a
+ *  ring nested inside an EVEN number of others is a positive island (an outer, a
+ *  dot inside a counter's counter); nested inside an ODD number it's a hole. So
+ *  two disjoint islands both count positive, an annulus subtracts its counter,
+ *  and nested holes alternate — matching how the fill actually paints. */
+function svgNetArea(rings: Path[]): number {
+  let net = 0;
+  for (let i = 0; i < rings.length; i++) {
+    // A cheap containment probe point: the ring's first vertex is on its own
+    // boundary, so use its centroid-ish average instead.
+    let px = 0, py = 0;
+    for (const p of rings[i]) {
+      px += p.x;
+      py += p.y;
+    }
+    px /= rings[i].length;
+    py /= rings[i].length;
+    const probe = { x: px, y: py };
+    let depth = 0;
+    for (let j = 0; j < rings.length; j++) {
+      if (j === i) continue;
+      if (Math.abs(polygonArea(rings[j])) <= Math.abs(polygonArea(rings[i]))) continue; // only larger rings can contain
+      if (pointInRing(probe, rings[j])) depth++;
+    }
+    const a = Math.abs(polygonArea(rings[i]));
+    net += depth % 2 === 0 ? a : -a;
+  }
+  return Math.max(0, net);
 }
 
 /** Perceptual (chroma-weighted) distance², matching the quantizer's metric so a
@@ -180,13 +210,17 @@ export function svgShapesToObjects(shapes: SvgShape[], opts: SvgImportOptions): 
     }
     const rings = s.rings
       .map((r) => douglasPeucker(toMm(r), simplifyTolMm))
-      .filter((r) => r.length >= 3);
+      // Drop non-finite / degenerate rings so a stray Infinity/NaN can't poison
+      // the whole shape (they otherwise sew nothing downstream, silently).
+      .filter((r) => r.length >= 3 && r.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y)));
     if (rings.length === 0) continue;
-    // Net area = outer minus holes (largest ring is the outer boundary).
-    const areas = rings.map((r) => Math.abs(polygonArea(r)));
-    const outer = Math.max(...areas);
-    const holes = areas.reduce((s2, a) => s2 + a, 0) - outer;
-    const net = outer - holes;
+    // Net FILLED area by containment depth, NOT "largest minus all the rest".
+    // A ring is a HOLE only when it sits INSIDE an odd number of other rings
+    // (a counter); DISJOINT islands of one compound path (the two bars of an
+    // '=', the dots of a ':', an umlaut) are each their own positive area. The
+    // old outer-minus-everything rule cancelled two equal islands to ~0 and
+    // dropped the whole glyph.
+    const net = svgNetArea(rings);
     if (net < minAreaMm2) continue;
     scaled.push({ rings, fill: s.fill, area: net });
   }
