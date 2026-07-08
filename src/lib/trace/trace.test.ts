@@ -349,6 +349,30 @@ describe("imageDataToObjects (real imagetracerjs)", () => {
     for (const o of objects) expect(o.paths[0].length).toBeGreaterThanOrEqual(2);
   });
 
+  it("keeps a dark subject on a split border — does not drop it as 'background'", () => {
+    // A checkerboard's dark tiles form one lattice that touches the border, so
+    // the plurality border colour is ~50/50 and the dark ink is really the
+    // SUBJECT. Auto background-removal used to delete it (half the design gone).
+    // With the dominance gate, a border no single colour owns keeps both colours.
+    const checker = image(200, 200, (x, y) =>
+      (Math.floor(x / 40) + Math.floor(y / 40)) % 2 === 0 ? [10, 10, 10] : [245, 245, 245],
+    );
+    const { colors } = imageDataToObjects(checker, 2, { mmPerPx: 0.5 }); // auto bg
+    expect(colors.length).toBe(2);
+    expect(colors.some((c) => c.rgb[0] < 128)).toBe(true); // dark ink survived
+  });
+
+  it("still auto-removes a genuine solid background (logo on white)", () => {
+    // A red disc on a fully-white field: the border is 100% white → a real
+    // background, still removed (only the disc's colour remains).
+    const logo = image(200, 200, (x, y) =>
+      Math.hypot(x - 100, y - 100) < 55 ? [200, 30, 30] : [255, 255, 255],
+    );
+    const { colors } = imageDataToObjects(logo, 2, { mmPerPx: 0.5 }); // auto bg
+    expect(colors.every((c) => !(c.rgb[0] > 200 && c.rgb[1] > 200 && c.rgb[2] > 200))).toBe(true);
+    expect(colors.some((c) => c.rgb[0] > 150 && c.rgb[1] < 100)).toBe(true); // red kept
+  });
+
   it("names traced objects by colour so the review reads 'Red fill', not 'Fill 1'", () => {
     const img = image(16, 16, (x) => (x < 8 ? [220, 20, 30] : [20, 60, 200]));
     const { objects } = imageDataToObjects(img, 2, { mmPerPx: 1, removeBackground: false });
