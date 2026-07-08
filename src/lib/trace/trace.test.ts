@@ -264,6 +264,40 @@ describe("tracedataToObjects", () => {
     );
   });
 
+  it("returns a BOUNDED result fast on pathological input (hundreds of regions)", () => {
+    // A photo / noisy scan shatters into hundreds of tiny regions. The O(n²)
+    // polish passes (idealize/stack/underlap) would take minutes and freeze the
+    // tab on this — the PATHOLOGICAL_RING_CAP guard skips them. Build a color
+    // with ~400 disjoint specks and assert we still return promptly with every
+    // speck preserved as a sewable ring (no silent drop, no hang).
+    const specks = [];
+    for (let i = 0; i < 400; i++) {
+      const x = (i % 20) * 5;
+      const y = Math.floor(i / 20) * 5;
+      specks.push(sq(x, y, x + 3, y + 3));
+    }
+    const td = {
+      width: 100,
+      height: 100,
+      palette: [
+        { r: 255, g: 255, b: 255, a: 255 }, // background
+        { r: 40, g: 90, b: 160, a: 255 }, // the shattered color
+      ],
+      layers: [[sq(0, 0, 100, 100)], specks],
+    } as unknown as Tracedata;
+
+    const t0 = performance.now();
+    const { objects } = tracedataToObjects(td, { mmPerPx: 1 });
+    const ms = performance.now() - t0;
+    // Guard trips well under a second; without it this is minutes. Generous
+    // ceiling so a slow CI box doesn't flake, but far below the hang.
+    expect(ms).toBeLessThan(4000);
+    // The whole color is one object (disjoint specks grouped even-odd); every
+    // speck survives — the guard skips POLISH, it doesn't drop geometry.
+    const total = objects.reduce((s, o) => s + o.paths.length, 0);
+    expect(total).toBeGreaterThan(200);
+  });
+
   it("scales pixels to millimeters and offsets", () => {
     const td = {
       width: 10,

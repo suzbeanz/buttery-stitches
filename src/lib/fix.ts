@@ -25,6 +25,11 @@ import { pathsBounds } from "./geometry";
  */
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
+/** Above this object count the design isn't clean art — it's a photo/noisy
+ *  trace. The O(n²) knockdown seam pass is skipped so it stays responsive.
+ *  Real designs are well under this; only pathological input reaches it. */
+const KNOCKDOWN_MAX_OBJECTS = 250;
+
 /** Layer order within a color: broad fills go down first, then satin columns,
  *  then running lines/outlines on top — so details aren't buried by a fill. */
 const LAYER_RANK: Record<EmbObject["type"], number> = { fill: 0, satin: 1, running: 2 };
@@ -307,6 +312,12 @@ export function fixStitchesWithReport(project: Project): { project: Project; rep
  * Both are no-ops for an isolated fill, so they never hurt a clean design.
  */
 function knockdownPass(objects: EmbObject[], trapMm = 0.35): EmbObject[] {
+  // PATHOLOGICAL-INPUT GUARD: seamTrap + knockdown are O(n²) polygon-boolean ops
+  // over every object pair. A clean design has tens of objects; a photo/noisy
+  // scan shatters into hundreds, where this takes minutes and freezes the tab
+  // (and gives nothing — you can't meaningfully knock down noise). Skip it above
+  // a cap far beyond any real design so pathological input stays responsive.
+  if (objects.length > KNOCKDOWN_MAX_OBJECTS) return objects;
   // Only BROAD solid fills on top knock down what's beneath — thin lettering and
   // satin details sit on top, and carving their shapes out of a background just
   // adds complex travel for no gain (and no real buildup). SMALL features (a

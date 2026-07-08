@@ -26,6 +26,38 @@ describe("svgShapesToObjects", () => {
     expect(b.minX).toBeCloseTo(4, 0); // (100 - 92)/2 margin
   });
 
+  it("keeps a compound path's DISJOINT islands (an '=' sign) — does not cancel them as holes", () => {
+    // One shape, two equal disjoint bars (the '=' glyph). The old net-area rule
+    // subtracted the second bar as a "hole" → net ~0 → the whole glyph vanished.
+    const shapes: SvgShape[] = [
+      { rings: [square(10, 10, 30), square(10, 55, 30)], fill: [20, 20, 20] },
+    ];
+    const res = svgShapesToObjects(shapes, { contentW: 100, contentH: 100, hoopWmm: 100, hoopHmm: 100, minAreaMm2: 1 });
+    expect(res.objects.length).toBe(1); // the shape survives
+    expect(res.colors.length).toBe(1);
+    expect(res.objects[0].paths.length).toBe(2); // both bars kept
+  });
+
+  it("still treats a CONTAINED ring as a hole (annulus stays a donut)", () => {
+    // Outer 80 with a concentric 30 hole → net = ring, and the hole is bare.
+    const shapes: SvgShape[] = [
+      { rings: [square(10, 10, 80), square(35, 35, 30)], fill: [10, 10, 10] },
+    ];
+    const res = svgShapesToObjects(shapes, { contentW: 100, contentH: 100, hoopWmm: 100, hoopHmm: 100, minAreaMm2: 1 });
+    expect(res.objects.length).toBe(1);
+    expect(res.objects[0].paths.length).toBe(2); // outer + hole
+  });
+
+  it("drops a shape whose only rings are non-finite (guards NaN/Infinity)", () => {
+    const shapes: SvgShape[] = [
+      { rings: [[{ x: 0, y: 0 }, { x: Infinity, y: 0 }, { x: 10, y: 10 }]], fill: [0, 0, 0] },
+      { rings: [square(20, 20, 40)], fill: [200, 30, 30] }, // a real shape survives
+    ];
+    const res = svgShapesToObjects(shapes, { contentW: 100, contentH: 100, hoopWmm: 100, hoopHmm: 100 });
+    expect(res.objects.length).toBe(1);
+    expect(res.colors[0].rgb).toEqual([200, 30, 30]);
+  });
+
   it("keeps same-colour OVERLAPPING shapes as separate objects (no parity holes)", () => {
     // A navy shield with two navy stripes painted over it. Merged into one
     // multi-ring object, the stripes would toggle fill parity and punch bare
