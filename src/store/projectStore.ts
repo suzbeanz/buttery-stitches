@@ -15,6 +15,7 @@ import { expandGroups, pathsFromNodes, isClosedType } from "../lib/objects";
 import { densifyRing, translateNodes } from "../lib/nodes";
 import { smoothPath, smoothRingKeepingCorners } from "../lib/smooth";
 import { mergeRegionPaths, splitRegionComponents, weldToNeighbors } from "../lib/regions";
+import { booleanOp } from "../lib/boolean";
 import { newId } from "../lib/id";
 
 /**
@@ -79,6 +80,12 @@ export interface ProjectState {
   /** Union 2+ same-color fills into one region. No-op unless all are fills of
    *  the same color. */
   mergeObjects: (ids: string[]) => void;
+  /** Boolean subtract/intersect: the earliest-selected fill (in stitch order) is
+   *  the base; the rest are cutters. Subtract punches the cutters out of the base
+   *  (a hole); intersect keeps only the overlap. The base is replaced with the
+   *  result and the cutters are removed. No-op unless 2+ fills are selected and a
+   *  non-empty result remains. */
+  booleanObjects: (ids: string[], op: "subtract" | "intersect") => void;
   /** Separate a fill's disconnected pieces into one object each. No-op unless the
    *  object is a fill with 2+ components. */
   splitRegion: (id: string) => void;
@@ -343,6 +350,35 @@ export const useProjectStore = create<ProjectState>()(
           const objects = s.project.objects
             .map((o) => (o.id === first.id ? region : o))
             .filter((o) => o.id === region.id || !sel.has(o.id));
+          return { project: { ...s.project, objects }, selectedIds: [region.id] };
+        }),
+
+      booleanObjects: (ids, op) =>
+        set((s) => {
+          const sel = new Set(ids);
+          // Selected fills in document (stitch) order; the earliest is the base
+          // and later ones are the cutters (they sit "on top").
+          const picked = s.project.objects.filter(
+            (o) => sel.has(o.id) && o.type === "fill",
+          );
+          if (picked.length < 2) return s;
+          const base = picked[0];
+          // All cutter paths pooled into one region for the boolean.
+          const cutters = picked.slice(1).flatMap((o) => o.paths);
+          const result = booleanOp(base.paths, cutters, op);
+          if (result.length === 0) return s; // empty result would delete the shape — refuse
+          const region: EmbObject = {
+            ...base,
+            id: newId("obj"),
+            paths: result,
+            nodes: undefined,
+            satinCenterlines: undefined,
+            groupId: undefined,
+          };
+          const cutterIds = new Set(picked.slice(1).map((o) => o.id));
+          const objects = s.project.objects
+            .map((o) => (o.id === base.id ? region : o))
+            .filter((o) => !cutterIds.has(o.id));
           return { project: { ...s.project, objects }, selectedIds: [region.id] };
         }),
 

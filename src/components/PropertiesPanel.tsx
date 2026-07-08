@@ -19,6 +19,7 @@ import {
   Split,
   Spline,
   Magnet,
+  SquaresIntersect,
   Minus,
   Plus,
   Trash2,
@@ -223,6 +224,7 @@ function ArrangeSection() {
   const groupObjects = useProjectStore((s) => s.groupObjects);
   const ungroupObjects = useProjectStore((s) => s.ungroupObjects);
   const mergeObjects = useProjectStore((s) => s.mergeObjects);
+  const booleanObjects = useProjectStore((s) => s.booleanObjects);
   const splitRegion = useProjectStore((s) => s.splitRegion);
   const weldObject = useProjectStore((s) => s.weldObject);
   const n = selectedIds.length;
@@ -250,6 +252,9 @@ function ArrangeSection() {
   // Weld needs a lone fill plus at least one other fill to butt against.
   const canWeld =
     !!splitTarget && objects.some((o) => o.id !== splitTarget.id && o.type === "fill");
+  // Subtract/intersect need 2+ fills selected (any color — unlike merge).
+  const canBoolean =
+    selectedObjs.length >= 2 && selectedObjs.every((o) => o.type === "fill");
   if (n === 0) return null;
 
   const align = (edge: AlignEdge) =>
@@ -345,6 +350,26 @@ function ArrangeSection() {
           }}
         >
           <Magnet size={15} />
+        </ArrangeBtn>
+        <ArrangeBtn
+          label="Subtract top shape(s) from bottom (punch a hole)"
+          disabled={!canBoolean}
+          onClick={() => {
+            booleanObjects(selectedIds, "subtract");
+            toast("Subtracted overlap", "success");
+          }}
+        >
+          <Minus size={15} />
+        </ArrangeBtn>
+        <ArrangeBtn
+          label="Intersect — keep only the overlap"
+          disabled={!canBoolean}
+          onClick={() => {
+            booleanObjects(selectedIds, "intersect");
+            toast("Kept overlap", "success");
+          }}
+        >
+          <SquaresIntersect size={15} />
         </ArrangeBtn>
       </div>
     </div>
