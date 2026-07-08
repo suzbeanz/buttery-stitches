@@ -1,5 +1,33 @@
 # Buttery Stitches — Full Capability Audit vs Wilcom / Hatch (2026-07)
 
+> **Progress log (2026-07-08).** Landed since this audit was written:
+> - **Fixed the flagship-flow crash**: stray `process.env` debug refs in the A*
+>   travel router broke every auto-digitize in the browser ("process is not
+>   defined"); removed + a lint rule bans bare `process` in shipped source.
+>   Verified fixed by driving the real app.
+> - **Production data (§6)**: worksheet & Check panel now share one runtime
+>   model (was 600 vs 700 spm), plus bobbin estimate and per-color thread
+>   usage for spool ordering.
+> - **Motif library (§5)**: 4 → 15 motifs in grouped picker (line/geo/nature).
+> - **Editing (§4)**: boolean subtract/intersect exposed in the UI (hole
+>   punching); numeric X/Y/W/H entry for the selection (also a keyboard-only
+>   authoring path); fixed satin centerlines not scaling on resize.
+> - **Thread content (§5)**: user-importable CSV/JSON thread charts, persisted
+>   locally — real brand codes on the worksheet without shipping licensed data.
+> - **Hooping (§6)**: rotate-hoop-90° button. **Sequencing**: one-click stable
+>   "Sort by color" with a thread-change counter in the Stitch Order panel.
+> - **Studio UX** (from a hands-on Playwright walkthrough): labeled
+>   EXPORT/CLEAN UP/CHECK top-bar actions, machine-brand captions on export
+>   formats, plain-language hints on Density/Angle/Pull comp/Underlay, honest
+>   3D-toggle tooltip.
+> - All 960 unit + 10 e2e tests green (e2e config now honors `CHROMIUM_PATH`
+>   for sandboxed environments).
+>
+> Still open, in priority order: sew-out calibration (Tier 0.3), real
+> third-party file fixtures + import fuzzing (0.2), Pyodide worker (0.1 —
+> the CSP/self-hosted-wheel half already shipped), Bézier tangent handles &
+> editable satin rails (Tier 2), multi-angle fills, photo-stitch, multi-hoop.
+
 **Question asked:** can this be *as good as Wilcom / Hatch* for digitizing images into machine
 embroidery files?
 

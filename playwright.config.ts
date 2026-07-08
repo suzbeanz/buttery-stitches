@@ -13,6 +13,12 @@ export default defineConfig({
   use: {
     baseURL: "http://localhost:5173",
     trace: "on-first-retry",
+    // Sandboxes/CI images often pre-install a Chromium and block downloads
+    // (`npx playwright install` fails). Point CHROMIUM_PATH at that binary to
+    // run e2e there; unset, Playwright uses its own managed browser as before.
+    launchOptions: process.env.CHROMIUM_PATH
+      ? { executablePath: process.env.CHROMIUM_PATH }
+      : {},
   },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
