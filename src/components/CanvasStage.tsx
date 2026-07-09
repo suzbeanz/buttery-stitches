@@ -48,7 +48,8 @@ import { computeTicksRange } from "../lib/ruler";
 import { mmToInch } from "../lib/units";
 import ContextMenu from "./ContextMenu";
 import { buildTestSwatch } from "../lib/samples/swatch";
-import { designFor, orientByDepth } from "../lib/engine";
+import { designFor, orientByDepth, type EngineStitch } from "../lib/engine";
+import { buildDensityMap, hotCells, DENSITY_CELL_MM } from "../lib/engine/densitymap";
 import { extendSegments, designToSegments, type RenderSegment, needleAt } from "../lib/engine/render";
 import { drawStitches } from "../lib/render-stitches";
 
@@ -1931,6 +1932,14 @@ function StitchView({
 }) {
   const upTo = useEditorStore((s) => s.simIndex);
   const realistic = useEditorStore((s) => s.realistic);
+  const showDensity = useEditorStore((s) => s.showDensity);
+  // Density heat overlay: rasterize the FULL design once (not per playback
+  // frame) and paint only the cells past the caution threshold.
+  const heat = useMemo(() => {
+    if (!showDensity) return [];
+    const map = buildDensityMap(design as EngineStitch[]);
+    return map ? hotCells(map) : [];
+  }, [showDensity, design]);
   // Playback advances upTo every animation frame; a full re-segmentation per
   // frame is O(n) allocations (O(n²) per playback — GC churn at 50k stitches).
   // Keep an incremental cache and EXTEND it while upTo moves forward; rebuild
@@ -1989,6 +1998,33 @@ function StitchView({
           drawStitches(native, segs, { colorById, px, py, threadPx, realistic: effectiveRealistic });
         }}
       />
+      {/* Density heat overlay: amber (caution) → stamp-red (danger) squares
+          where penetrations pile past what fabric takes well. One Shape, drawn
+          natively — heat is recomputed only when the design changes. */}
+      {heat.length > 0 && (
+        <Shape
+          listening={false}
+          sceneFunc={(ctx) => {
+            const native = (ctx as unknown as { _context: CanvasRenderingContext2D })._context;
+            const cellPx = Math.max(2, px(DENSITY_CELL_MM) - px(0));
+            for (const cell of heat) {
+              // 0 → amber caution, 1 → solid stamp red.
+              native.fillStyle =
+                cell.severity >= 1
+                  ? "rgba(178, 58, 46, 0.62)"
+                  : `rgba(${Math.round(216 + (178 - 216) * cell.severity)}, ${Math.round(
+                      150 + (58 - 150) * cell.severity,
+                    )}, 46, ${0.28 + 0.3 * cell.severity})`;
+              native.fillRect(
+                px(cell.x) - cellPx / 2,
+                py(cell.y) - cellPx / 2,
+                cellPx,
+                cellPx,
+              );
+            }
+          }}
+        />
+      )}
       {needle && (
         <Group x={px(needle.x)} y={py(needle.y)} listening={false}>
           {/* A flat stamp-red ring around a cream dot — a clear "live needle"

@@ -90,6 +90,8 @@ interface EditorState {
   guidesEnabled: boolean;
   /** realistic thread shading in stitch view. */
   realistic: boolean;
+  /** density heat overlay in stitch view — paints where thread piles up. */
+  showDensity: boolean;
   /** deep copies of objects held for paste (transient; not undone). */
   clipboard: EmbObject[];
   /** whether the left (layers) and right (properties) panels are open. */
@@ -140,6 +142,7 @@ interface EditorState {
   toggleSnap: () => void;
   toggleGuides: () => void;
   toggleRealistic: () => void;
+  toggleDensity: () => void;
   setClipboard: (objects: EmbObject[]) => void;
   setPropertiesTab: (tab: PropertiesTab) => void;
   setLayersOpen: (open: boolean) => void;
@@ -179,6 +182,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   snapEnabled: true,
   guidesEnabled: true,
   realistic: true,
+  showDensity: false,
   clipboard: [],
   layersOpen: true,
   propertiesOpen: true,
@@ -213,6 +217,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   toggleSnap: () => set((s) => ({ snapEnabled: !s.snapEnabled })),
   toggleGuides: () => set((s) => ({ guidesEnabled: !s.guidesEnabled })),
   toggleRealistic: () => set((s) => ({ realistic: !s.realistic })),
+  toggleDensity: () => set((s) => ({ showDensity: !s.showDensity })),
   setClipboard: (clipboard) => set({ clipboard }),
   setPropertiesTab: (propertiesTab) => set({ propertiesTab }),
   setLayersOpen: (layersOpen) => set({ layersOpen }),
