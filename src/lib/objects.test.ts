@@ -3,6 +3,7 @@ import {
   makeObject,
   makeNodeObject,
   makeSatinFromRails,
+  satinPathsFromNodes,
   cloneObject,
   satinWidthOf,
   setSatinWidth,
@@ -41,6 +42,43 @@ describe("makeNodeObject", () => {
     const c = cloneObject(o, 5, 0);
     expect(c.nodes![0][0]).toMatchObject({ x: 5, y: 0 });
     expect(o.nodes![0][0]).toMatchObject({ x: 0, y: 0 }); // original untouched
+  });
+});
+
+describe("node-backed satin (editable centerline)", () => {
+  it("a drawn satin keeps its centerline as nodes and derives the rail pair", () => {
+    const o = makeNodeObject("satin", line, "c1", false);
+    expect(o.type).toBe("satin");
+    expect(o.nodes![0]).toHaveLength(3); // the spine, exactly as placed
+    expect(o.paths).toHaveLength(2); // left + right rail
+    expect(satinWidthOf(o.paths)).toBeCloseTo(DEFAULT_SATIN_WIDTH, 1);
+    // Rails straddle the horizontal spine at ±width/2.
+    const ys = o.paths.flatMap((rail) => rail.map((p) => p.y));
+    expect(Math.min(...ys)).toBeCloseTo(-DEFAULT_SATIN_WIDTH / 2, 1);
+    expect(Math.max(...ys)).toBeCloseTo(DEFAULT_SATIN_WIDTH / 2, 1);
+  });
+
+  it("satinPathsFromNodes rebuilds rails at a given width from edited nodes", () => {
+    const o = makeNodeObject("satin", line, "c1", false);
+    // Reshape the spine: pull the middle node up 5mm, then rebuild at 2mm width.
+    const edited = [o.nodes![0].map((n, i) => (i === 1 ? { ...n, y: -5 } : n))];
+    const rails = satinPathsFromNodes(edited, 2);
+    expect(rails).toHaveLength(2);
+    expect(satinWidthOf(rails)).toBeCloseTo(2, 0);
+    // The column follows the reshaped spine: some rail points sit well above y=0.
+    const ys = rails.flatMap((rail) => rail.map((p) => p.y));
+    expect(Math.min(...ys)).toBeLessThan(-3);
+  });
+
+  it("a smooth (curve-mode) satin densifies its spine into curved rails", () => {
+    const bent = [
+      { x: 0, y: 0 },
+      { x: 10, y: -6 },
+      { x: 20, y: 0 },
+    ];
+    const o = makeNodeObject("satin", bent, "c1", true);
+    // Densified spine → rails carry many more points than the 3 placed nodes.
+    expect(o.paths[0].length).toBeGreaterThan(6);
   });
 });
 

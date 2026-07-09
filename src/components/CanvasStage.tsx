@@ -26,7 +26,7 @@ import type Konva from "konva";
 import { useProjectStore } from "../store/projectStore";
 import { useEditorStore, isDrawTool, isPointTool } from "../store/editorStore";
 import type { EmbObject, Path, Point, ThreadColor } from "../types/project";
-import { makeObject, makeObjectFromPaths, makeNodeObject, makeSatinFromRails, minPointsFor, pathsFromNodes, isClosedType } from "../lib/objects";
+import { makeObject, makeObjectFromPaths, makeNodeObject, makeSatinFromRails, minPointsFor, pathsFromNodes, satinPathsFromNodes, satinWidthOf, isClosedType } from "../lib/objects";
 import { densifyRing, insertNode, moveNode, deleteNode, toggleNodeSmooth, translateNodes, impliedHandles, setNodeHandle, type NodePath } from "../lib/nodes";
 import { shapeFromDrag, shapeRings, type ShapeKind } from "../lib/shapes";
 import { bucketFill } from "../lib/paintbucket";
@@ -323,7 +323,13 @@ export default function CanvasStage() {
   }, []);
   const handleCommitNodes = useCallback((id: string, nodes: NodePath[]) => {
     const o = useProjectStore.getState().project.objects.find((x) => x.id === id);
-    useProjectStore.getState().updateObject(id, { nodes, paths: pathsFromNodes(nodes, o?.type === "fill") });
+    // A satin's nodes are its centerline: rebuild the rail pair at the column's
+    // current width so reshaping the spine keeps the width the user set.
+    const paths =
+      o?.type === "satin"
+        ? satinPathsFromNodes(nodes, satinWidthOf(o.paths))
+        : pathsFromNodes(nodes, o?.type === "fill");
+    useProjectStore.getState().updateObject(id, { nodes, paths });
   }, []);
   const handleMoveSelected = useCallback((dxMm: number, dyMm: number) => {
     const store = useProjectStore.getState();
@@ -434,15 +440,11 @@ export default function CanvasStage() {
       useEditorStore.getState().activeColorId ??
       useProjectStore.getState().project.colors[0]?.id;
     if (!colorId) return;
-    if (tool === "satin") {
-      // Satin keeps the centerline→rails model (no node editing); the Curve
-      // toggle densifies the centerline before the rails are derived.
-      addObject(makeObject("satin", smooth ? smoothPath(cleaned) : cleaned, colorId));
-    } else {
-      // Running / fill keep their placed points as editable control NODES, each
-      // seeded smooth (Curve on) or corner (Curve off); paths densify from them.
-      addObject(makeNodeObject(tool, cleaned, colorId, smooth));
-    }
+    // All draw tools keep their placed points as editable control NODES, each
+    // seeded smooth (Curve on) or corner (Curve off). Running/fill densify the
+    // nodes into their path; satin keeps the nodes as its CENTERLINE and derives
+    // the rail pair — so the spine stays reshape-editable after commit.
+    addObject(makeNodeObject(tool, cleaned, colorId, smooth));
     clearDraft();
   }
 
@@ -2101,9 +2103,18 @@ const ObjectShape = memo(function ObjectShape({
   // a node-drag is a single undo step and the outline follows the handle).
   const [livePaths, setLivePaths] = useState<Path[] | null>(null);
   const paths = livePaths ?? object.paths;
-  // Editable control nodes (running/fill). Absent → legacy polyline editing.
+  // Editable control nodes (running/fill/satin). Absent → legacy polyline editing.
   const nodeRings = object.nodes;
   const closedRings = object.type === "fill";
+  // Live node-edit preview: a satin's nodes are its CENTERLINE — preview the
+  // derived rail pair (at the current width) so the column follows the spine.
+  const liveDensify = useCallback(
+    (rings: NodePath[]): Path[] =>
+      object.type === "satin"
+        ? satinPathsFromNodes(rings, satinWidthOf(object.paths))
+        : rings.map((r) => densifyRing(r, object.type === "fill")),
+    [object.type, object.paths],
+  );
 
   // Rings oriented for nonzero-winding fill so counters cut and overlapping
   // (script) contours union — no false holes.
@@ -2324,7 +2335,11 @@ const ObjectShape = memo(function ObjectShape({
                   if (!pos) return;
                   const at = toMm(pos.x, pos.y);
                   if (nodeRings) {
-                    const nodes = nodeRings.map((r, i) => (i === pi ? insertNode(r, at, closedRings) : r));
+                    // A satin renders its RAILS but keeps one node ring (the
+                    // centerline) — always insert into ring 0; insertNode's
+                    // projection maps the rail click onto the spine.
+                    const target = object.type === "satin" ? 0 : pi;
+                    const nodes = nodeRings.map((r, i) => (i === target ? insertNode(r, at, closedRings) : r));
                     onCommitNodes(object.id, nodes);
                   } else {
                     const ring = insertPointOnRing(object.paths[pi], at, object.type === "fill");
@@ -2350,7 +2365,7 @@ const ObjectShape = memo(function ObjectShape({
             const liveMove = (e: Konva.KonvaEventObject<DragEvent>) => {
               const m = toMm(e.target.x(), e.target.y());
               const moved = nodeRings.map((r, ri) => (ri === pi ? moveNode(r, ti, m) : r));
-              setLivePaths(moved.map((r) => densifyRing(r, closedRings)));
+              setLivePaths(liveDensify(moved));
             };
             const commit = (e: Konva.KonvaEventObject<DragEvent>) => {
               const m = toMm(e.target.x(), e.target.y());
@@ -2409,7 +2424,7 @@ const ObjectShape = memo(function ObjectShape({
                 onCommitNodes(object.id, rings);
                 setLivePaths(null);
               } else {
-                setLivePaths(rings.map((r) => densifyRing(r, closedRings)));
+                setLivePaths(liveDensify(rings));
               }
             };
             return (

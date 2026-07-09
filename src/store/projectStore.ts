@@ -11,7 +11,7 @@ import type {
 } from "../types/project";
 import { createEmptyProject } from "../lib/project";
 import { translatePaths } from "../lib/geometry";
-import { expandGroups, pathsFromNodes, isClosedType } from "../lib/objects";
+import { expandGroups, pathsFromNodes, satinPathsFromNodes, satinWidthOf, isClosedType } from "../lib/objects";
 import { densifyRing, translateNodes } from "../lib/nodes";
 import { smoothPath, smoothRingKeepingCorners } from "../lib/smooth";
 import { mergeRegionPaths, splitRegionComponents, weldToNeighbors } from "../lib/regions";
@@ -28,7 +28,13 @@ function smoothOne(o: EmbObject): EmbObject {
   if (o.nodes && o.nodes.length > 0) {
     const closed = isClosedType(o.type);
     const nodes = o.nodes.map((ring) => ring.map((n) => ({ ...n, smooth: true })));
-    return { ...o, nodes, paths: nodes.map((ring) => densifyRing(ring, closed)) };
+    // A satin's nodes are its centerline — rebuild the rail pair, don't let the
+    // spine polyline replace the rails.
+    const paths =
+      o.type === "satin"
+        ? satinPathsFromNodes(nodes, satinWidthOf(o.paths))
+        : nodes.map((ring) => densifyRing(ring, closed));
+    return { ...o, nodes, paths };
   }
   if (o.type === "running") {
     return { ...o, paths: o.paths.map((p) => smoothPath(p)) };
