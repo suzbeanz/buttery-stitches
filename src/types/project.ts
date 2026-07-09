@@ -14,11 +14,18 @@ export type StitchType = "running" | "satin" | "fill";
 export type Point = { x: number; y: number };
 export type Path = Point[];
 
-/** A user-placed control node; `smooth` curves the path through it (vs a corner). */
+/** A user-placed control node; `smooth` curves the path through it (vs a corner).
+ *  A smooth node may carry explicit Bézier tangent handles — `hIn`/`hOut` are
+ *  RELATIVE mm offsets from the node (so they ride along when the node moves).
+ *  Absent handles mean "automatic": the curve's tangent follows the neighbors. */
 export interface NodePt {
   x: number;
   y: number;
   smooth?: boolean;
+  /** incoming tangent handle (toward the previous node), relative to (x,y). */
+  hIn?: Point;
+  /** outgoing tangent handle (toward the next node), relative to (x,y). */
+  hOut?: Point;
 }
 export type NodePath = NodePt[];
 

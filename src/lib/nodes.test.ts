@@ -6,6 +6,8 @@ import {
   insertNode,
   deleteNode,
   moveNode,
+  impliedHandles,
+  setNodeHandle,
   type NodePath,
 } from "./nodes";
 
@@ -92,5 +94,78 @@ describe("node ops", () => {
     expect(deleteNode(tri, 0)).toHaveLength(2);
     expect(moveNode(tri, 2, { x: 9, y: 9 })[2]).toEqual({ x: 9, y: 9, smooth: false });
     expect(tri[2]).toEqual({ x: 5, y: 8, smooth: false });
+  });
+});
+
+describe("Bézier tangent handles", () => {
+  // Three collinear points: with automatic tangents the middle stays on the
+  // line; an explicit handle bends the curve off it.
+  const line: NodePath = [
+    { x: 0, y: 0 },
+    { x: 10, y: 0, smooth: true },
+    { x: 20, y: 0 },
+  ];
+
+  it("an explicit handle overrides the automatic tangent and bends the curve", () => {
+    const auto = densifyRing(line, false);
+    expect(Math.max(...auto.map((p) => Math.abs(p.y)))).toBeLessThan(0.05);
+    // Pull the middle node's tangent upward.
+    const bent = setNodeHandle(line, 1, "out", { x: 3, y: -4 }, true, false);
+    const path = densifyRing(bent, false);
+    expect(Math.max(...path.map((p) => Math.abs(p.y)))).toBeGreaterThan(1);
+  });
+
+  it("impliedHandles matches what densifyRing draws (grabbing an ear never jumps)", () => {
+    const hs = impliedHandles(line, 1, false);
+    // Cardinal tangent at the middle node = (next-prev)/2 = (10,0); handles = ±(10,0)/3.
+    expect(hs.hOut.x).toBeCloseTo(10 / 3);
+    expect(hs.hOut.y).toBeCloseTo(0);
+    expect(hs.hIn.x).toBeCloseTo(-10 / 3);
+    // Setting the implied handles explicitly must not change the densified shape.
+    const explicit = line.map((nd, i) =>
+      i === 1 ? { ...nd, hIn: hs.hIn, hOut: hs.hOut } : nd,
+    );
+    const a = densifyRing(line, false);
+    const b = densifyRing(explicit, false);
+    expect(b.length).toBe(a.length);
+    for (let i = 0; i < a.length; i++) {
+      expect(b[i].x).toBeCloseTo(a[i].x, 6);
+      expect(b[i].y).toBeCloseTo(a[i].y, 6);
+    }
+  });
+
+  it("mirror keeps the opposite handle collinear but preserves its length", () => {
+    const withIn = setNodeHandle(line, 1, "in", { x: -2, y: 0 }, false, false);
+    const out = setNodeHandle(withIn, 1, "out", { x: 0, y: 5 }, true, false);
+    const nd = out[1];
+    expect(nd.hOut).toEqual({ x: 0, y: 5 });
+    // hIn re-aligned opposite (0,-1 direction) but kept its own length 2.
+    expect(nd.hIn!.x).toBeCloseTo(0);
+    expect(nd.hIn!.y).toBeCloseTo(-2);
+  });
+
+  it("Alt (mirror off) moves only one side — a cusp", () => {
+    const withBoth = setNodeHandle(line, 1, "out", { x: 3, y: 3 }, true, false);
+    const cusp = setNodeHandle(withBoth, 1, "in", { x: -1, y: 4 }, false, false);
+    expect(cusp[1].hIn).toEqual({ x: -1, y: 4 });
+    expect(cusp[1].hOut).toEqual({ x: 3, y: 3 }); // untouched
+  });
+
+  it("turning a node into a corner clears its handles", () => {
+    const withHandles = setNodeHandle(line, 1, "out", { x: 3, y: -4 }, true, false);
+    const corner = toggleNodeSmooth(withHandles, 1);
+    expect(corner[1].smooth).toBe(false);
+    expect(corner[1].hIn).toBeUndefined();
+    expect(corner[1].hOut).toBeUndefined();
+  });
+
+  it("setting a handle marks the node smooth", () => {
+    const sharp: NodePath = nodesFromPath([
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 20, y: 0 },
+    ]);
+    const out = setNodeHandle(sharp, 1, "out", { x: 2, y: 2 }, true, false);
+    expect(out[1].smooth).toBe(true);
   });
 });

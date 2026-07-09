@@ -34,9 +34,11 @@ function hermite(a: NodePt, b: NodePt, ma: Point, mb: Point, t: number): Point {
 
 /**
  * Densify a node path into a polyline. A span between two nodes is straight when
- * BOTH ends are corners; otherwise it's a cardinal-spline curve whose tangents
- * vanish toward a corner end (so the curve runs straight into a sharp point) and
- * follow the neighbors at a smooth end. `closed` wraps the last node to the first.
+ * BOTH ends are corners (and neither carries a handle); otherwise it's a curve:
+ * the tangent at each end comes from the node's EXPLICIT Bézier handle when set
+ * (a cubic Bézier control offset c maps to a Hermite tangent 3·c), else from the
+ * cardinal rule (follow the neighbors at a smooth end, run straight into a
+ * corner). `closed` wraps the last node to the first.
  */
 export function densifyRing(nodes: NodePath, closed: boolean, maxSeg = DENS_MAX_SEG): Path {
   const n = nodes.length;
@@ -51,9 +53,19 @@ export function densifyRing(nodes: NodePath, closed: boolean, maxSeg = DENS_MAX_
     const aPrev = closed || i > 0 ? at(i - 1) : a;
     const bNext = closed || i + 2 <= n - 1 ? at(i + 2) : b;
     const chord: Point = { x: b.x - a.x, y: b.y - a.y };
-    const ma = a.smooth ? { x: (b.x - aPrev.x) * 0.5, y: (b.y - aPrev.y) * 0.5 } : chord;
-    const mb = b.smooth ? { x: (bNext.x - a.x) * 0.5, y: (bNext.y - a.y) * 0.5 } : chord;
-    const straight = !a.smooth && !b.smooth;
+    const ma: Point = a.hOut
+      ? { x: a.hOut.x * 3, y: a.hOut.y * 3 }
+      : a.smooth
+        ? { x: (b.x - aPrev.x) * 0.5, y: (b.y - aPrev.y) * 0.5 }
+        : chord;
+    // hIn points BACK toward the previous node, so the Hermite end tangent
+    // (which points forward along the curve) is its negation.
+    const mb: Point = b.hIn
+      ? { x: -b.hIn.x * 3, y: -b.hIn.y * 3 }
+      : b.smooth
+        ? { x: (bNext.x - a.x) * 0.5, y: (bNext.y - a.y) * 0.5 }
+        : chord;
+    const straight = !a.smooth && !b.smooth && !a.hOut && !b.hIn;
     if (straight) {
       out.push({ x: b.x, y: b.y });
       continue;
@@ -68,14 +80,77 @@ export function densifyRing(nodes: NodePath, closed: boolean, maxSeg = DENS_MAX_
   return out;
 }
 
+/**
+ * The tangent handles a smooth node WOULD use if none are set explicitly —
+ * one third of the cardinal tangent, the exact Bézier equivalent of what
+ * densifyRing draws. Seeds the on-canvas "ears" so grabbing a handle starts
+ * from the curve's current shape, never a jump.
+ */
+export function impliedHandles(
+  nodes: NodePath,
+  i: number,
+  closed: boolean,
+): { hIn: Point; hOut: Point } {
+  const n = nodes.length;
+  const at = (k: number) => nodes[((k % n) + n) % n];
+  const nd = at(i);
+  const prev = closed || i > 0 ? at(i - 1) : nd;
+  const next = closed || i < n - 1 ? at(i + 1) : nd;
+  const t: Point = { x: (next.x - prev.x) * 0.5, y: (next.y - prev.y) * 0.5 };
+  return {
+    hIn: nd.hIn ?? { x: -t.x / 3, y: -t.y / 3 },
+    hOut: nd.hOut ?? { x: t.x / 3, y: t.y / 3 },
+  };
+}
+
+/**
+ * Set one tangent handle of node `i` (relative mm offset). In `mirror` mode —
+ * the default smooth-node gesture — the opposite handle re-aligns to stay
+ * collinear but keeps its own length, so an asymmetric curve isn't flattened
+ * (the standard vector-editor behavior). `mirror: false` (Alt-drag) moves only
+ * one side, creating a cusp. Setting a handle marks the node smooth.
+ */
+export function setNodeHandle(
+  nodes: NodePath,
+  i: number,
+  side: "in" | "out",
+  v: Point,
+  mirror: boolean,
+  closed: boolean,
+): NodePath {
+  const cur = impliedHandles(nodes, i, closed);
+  return nodes.map((nd, j) => {
+    if (j !== i) return { ...nd };
+    const next: NodePt = { ...nd, smooth: true };
+    if (side === "out") next.hOut = { ...v };
+    else next.hIn = { ...v };
+    const len = Math.hypot(v.x, v.y);
+    if (mirror && len > 1e-9) {
+      const other = side === "out" ? (nd.hIn ?? cur.hIn) : (nd.hOut ?? cur.hOut);
+      const otherLen = Math.hypot(other.x, other.y) || len;
+      const mirrored = { x: (-v.x / len) * otherLen, y: (-v.y / len) * otherLen };
+      if (side === "out") next.hIn = mirrored;
+      else next.hOut = mirrored;
+    }
+    return next;
+  });
+}
+
 /** Convert a plain polyline into a node path (every point a corner). */
 export function nodesFromPath(path: Path, smooth = false): NodePath {
   return path.map((p) => ({ x: p.x, y: p.y, smooth }));
 }
 
-/** Flip a node between smooth and corner (returns a new node path). */
+/** Flip a node between smooth and corner (returns a new node path). Turning a
+ *  node into a corner clears its Bézier handles — a sharp point has none. */
 export function toggleNodeSmooth(nodes: NodePath, i: number): NodePath {
-  return nodes.map((nd, j) => (j === i ? { ...nd, smooth: !nd.smooth } : { ...nd }));
+  return nodes.map((nd, j) =>
+    j === i
+      ? nd.smooth
+        ? { x: nd.x, y: nd.y, smooth: false }
+        : { ...nd, smooth: true }
+      : { ...nd },
+  );
 }
 
 /** Move a node to a new position (returns a new node path). */

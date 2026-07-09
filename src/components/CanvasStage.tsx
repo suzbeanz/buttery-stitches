@@ -27,7 +27,7 @@ import { useProjectStore } from "../store/projectStore";
 import { useEditorStore, isDrawTool, isPointTool } from "../store/editorStore";
 import type { EmbObject, Path, Point, ThreadColor } from "../types/project";
 import { makeObject, makeObjectFromPaths, makeNodeObject, makeSatinFromRails, minPointsFor, pathsFromNodes, isClosedType } from "../lib/objects";
-import { densifyRing, insertNode, moveNode, deleteNode, toggleNodeSmooth, translateNodes, type NodePath } from "../lib/nodes";
+import { densifyRing, insertNode, moveNode, deleteNode, toggleNodeSmooth, translateNodes, impliedHandles, setNodeHandle, type NodePath } from "../lib/nodes";
 import { shapeFromDrag, shapeRings, type ShapeKind } from "../lib/shapes";
 import { bucketFill } from "../lib/paintbucket";
 import {
@@ -2215,9 +2215,24 @@ const ObjectShape = memo(function ObjectShape({
         node.setAttrs({ x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 });
         if (nodeRings) {
           // Transform the control NODES (keep curve-editability through scale/rotate).
+          // Bézier handles are relative mm vectors: the matrix's LINEAR part
+          // (rotation/scale — no translation) applies to them directly, since
+          // mm→px is a uniform scale that commutes with it.
+          const linear = (v: { x: number; y: number }) => ({
+            x: m[0] * v.x + m[2] * v.y,
+            y: m[1] * v.x + m[3] * v.y,
+          });
           const pxNodes = nodeRings.map((r) => r.map((nd) => ({ x: px(nd.x), y: py(nd.y) })));
           const movedNodes = applyMatrix(pxNodes, m).map((r, ri) =>
-            r.map((p, pi) => ({ ...toMm(p.x, p.y), smooth: nodeRings[ri][pi].smooth })),
+            r.map((p, pi) => {
+              const src = nodeRings[ri][pi];
+              return {
+                ...toMm(p.x, p.y),
+                smooth: src.smooth,
+                hIn: src.hIn ? linear(src.hIn) : undefined,
+                hOut: src.hOut ? linear(src.hOut) : undefined,
+              };
+            }),
           );
           onCommitNodes(object.id, movedNodes);
           return;
@@ -2365,6 +2380,63 @@ const ObjectShape = memo(function ObjectShape({
             );
           }),
         )}
+
+      {/* Bézier tangent "ears" on the FOCUSED smooth node: two draggable tips
+          collinear through the node. Drag to reshape the curve's direction and
+          tension; the opposite ear mirrors to stay smooth (Alt-drag moves one
+          side only, making a cusp). Seeded from the curve's implied tangent so
+          grabbing an ear never jumps the shape. */}
+      {editingNodes && nodeRings && nodeSel?.objectId === object.id &&
+        (() => {
+          const ring = nodeRings[nodeSel.ring];
+          const nd = ring?.[nodeSel.point];
+          if (!nd?.smooth) return null;
+          const hs = impliedHandles(ring, nodeSel.point, closedRings);
+          const sides: ["in" | "out", { x: number; y: number }][] = [
+            ["in", hs.hIn],
+            ["out", hs.hOut],
+          ];
+          return sides.map(([side, h]) => {
+            const tipX = px(nd.x + h.x);
+            const tipY = py(nd.y + h.y);
+            const dragTo = (e: Konva.KonvaEventObject<DragEvent>, commitIt: boolean) => {
+              const tip = toMm(e.target.x(), e.target.y());
+              const v = { x: tip.x - nd.x, y: tip.y - nd.y };
+              const mirror = !(e.evt as MouseEvent | undefined)?.altKey;
+              const nextRing = setNodeHandle(ring, nodeSel.point, side, v, mirror, closedRings);
+              const rings = nodeRings.map((r, ri) => (ri === nodeSel.ring ? nextRing : r));
+              if (commitIt) {
+                onCommitNodes(object.id, rings);
+                setLivePaths(null);
+              } else {
+                setLivePaths(rings.map((r) => densifyRing(r, closedRings)));
+              }
+            };
+            return (
+              <Group key={`ear-${side}`}>
+                <Line
+                  points={[px(nd.x), py(nd.y), tipX, tipY]}
+                  stroke={C.navy}
+                  strokeWidth={1}
+                  dash={[3, 2]}
+                  opacity={0.55}
+                  listening={false}
+                />
+                <Circle
+                  x={tipX}
+                  y={tipY}
+                  radius={4}
+                  fill={C.cream}
+                  stroke={C.salted}
+                  strokeWidth={1.5}
+                  draggable
+                  onDragMove={(e) => dragTo(e, false)}
+                  onDragEnd={(e) => dragTo(e, true)}
+                />
+              </Group>
+            );
+          });
+        })()}
 
       {/* Legacy polyline editing (imported / shapes): handles on raw vertices. */}
       {editingNodes && !nodeRings &&
