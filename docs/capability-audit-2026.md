@@ -23,10 +23,28 @@
 > - All 960 unit + 10 e2e tests green (e2e config now honors `CHROMIUM_PATH`
 >   for sandboxed environments).
 >
-> Still open, in priority order: sew-out calibration (Tier 0.3), real
-> third-party file fixtures + import fuzzing (0.2), Pyodide worker (0.1 —
-> the CSP/self-hosted-wheel half already shipped), Bézier tangent handles &
-> editable satin rails (Tier 2), multi-angle fills, photo-stitch, multi-hoop.
+> **Progress log 2 (2026-07-09) — digitization depth.** Landed:
+> - **Bézier tangent handles** (the #1 missing pro gesture): smooth nodes
+>   carry explicit hIn/hOut; densifyRing honors them as Hermite tangents with
+>   exact cubic-Bézier equivalence; draggable mirrored "ears" on the focused
+>   node (Alt = cusp), seeded from the implied tangent so grabbing never jumps
+>   the shape. Survive move/scale/rotate/resize/serialize.
+> - **Editable satin columns** (missing gesture #2): drawn satins are now
+>   node-backed on their CENTERLINE — move/insert/delete/curve/ears reshape
+>   the spine and the rails rebuild at the set width. Engine equivalence
+>   locked by test (identical stitches to the legacy path).
+> - **Density heat overlay**: rasterizes the final stitch stream (1mm grid)
+>   and paints caution→danger cells in stitch view ("Heat" toggle) — shows
+>   *where* thread piles up (stacked objects, underlay + edge meetings), not
+>   just which object's parameter is high.
+> - **Tooling truth**: `npm run typecheck` was a silent no-op (tsc --noEmit on
+>   a solution-style tsconfig validates nothing); now `tsc -b --force`, which
+>   immediately caught a real error.
+>
+> Still open, in priority order: **sew-out calibration** (Tier 0.3 — needs a
+> real machine), real third-party file fixtures + import fuzzing (0.2),
+> Pyodide worker (0.1 — the CSP/self-hosted-wheel half already shipped),
+> multi-angle-line fill networks, photo-stitch, multi-hoop splitting.
 
 **Question asked:** can this be *as good as Wilcom / Hatch* for digitizing images into machine
 embroidery files?
