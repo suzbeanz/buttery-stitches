@@ -41,10 +41,23 @@
 >   a solution-style tsconfig validates nothing); now `tsc -b --force`, which
 >   immediately caught a real error.
 >
+> **Progress log 3 (2026-07-10) — validation + infrastructure + lettering.**
+> - **Third-party reference fixtures** (Tier 0.2): committed pyembroidery-
+>   written .dst/.pes fixtures + generator script; tests prove our PEC decoder
+>   reads a third-party file exactly, our PES encoder is functionally identical
+>   to pyembroidery's, and our DST stitch section is BYTE-identical. PEC
+>   decoder fuzzed (truncation at every offset + seeded garbage).
+> - **Pyodide worker** (Tier 0.1): the Python path (JEF/EXP/VP3/PESv6/appliqué,
+>   all imports) now runs in a module worker — no more multi-second main-thread
+>   freeze; graceful fallback + friendly errors verified; protocol locked by
+>   mock-Worker tests.
+> - **Font import**: users can import their own TTF/OTF (IndexedDB-persisted,
+>   validated, hairline-stroke warning); the biggest lettering-content gap is
+>   now user-fillable.
+>
 > Still open, in priority order: **sew-out calibration** (Tier 0.3 — needs a
-> real machine), real third-party file fixtures + import fuzzing (0.2),
-> Pyodide worker (0.1 — the CSP/self-hosted-wheel half already shipped),
-> multi-angle-line fill networks, photo-stitch, multi-hoop splitting.
+> real machine), multi-angle-line fill networks, photo-stitch, multi-hoop
+> splitting, per-pair kerning/per-glyph nudge, oracle scripts in scheduled CI.
 
 **Question asked:** can this be *as good as Wilcom / Hatch* for digitizing images into machine
 embroidery files?
