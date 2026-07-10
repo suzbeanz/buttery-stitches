@@ -1,4 +1,5 @@
 import { getPyodide, type LoadStage, type PyodideInterface } from "../pyodide/loader";
+import { workerAvailable, exportViaWorker, importViaWorker } from "../pyodide/workerClient";
 import { encodeDst } from "./native/dst";
 import { encodePes } from "./native/pes";
 import embroideryPy from "./embroidery.py?raw";
@@ -265,13 +266,25 @@ export async function exportToBytes(
     return encodePes(splitPlanForFormat(plan, "pes"));
   }
 
+  // Split any over-long stitch/jump for the target format before serializing,
+  // so the machine never silently turns a long stitch into a jump/trim.
+  const safe = splitPlanForFormat(plan, format);
+
+  // Preferred: run Pyodide in a WORKER, so the multi-second first load (CDN
+  // download + WASM compile + wheel install) and the encode itself never
+  // freeze the page. Falls back to the legacy main-thread path only when a
+  // worker can't run at all in this embedder.
+  if (workerAvailable()) {
+    try {
+      return await exportViaWorker(JSON.stringify(safe), format, pesVersion, onStage);
+    } catch (err) {
+      if (!(err instanceof Error && err.message === "worker-unavailable")) throw err;
+    }
+  }
+
   const run = exportChain.then(async () => {
     const pyodide = await getPyodide(onStage);
     await ensurePython(pyodide);
-
-    // Split any over-long stitch/jump for the target format before serializing,
-    // so the machine never silently turns a long stitch into a jump/trim.
-    const safe = splitPlanForFormat(plan, format);
     pyodide.globals.set("__plan_json", JSON.stringify(safe));
     pyodide.globals.set("__fmt", format);
     pyodide.globals.set("__pes_version", pesVersion);
@@ -340,6 +353,15 @@ export async function importDesignBytes(
       `This file is ${(bytes.byteLength / 1024 / 1024).toFixed(1)} MB — embroidery files are far smaller. It may be corrupt or not an embroidery file.`,
     );
   }
+  if (workerAvailable()) {
+    try {
+      const json = await importViaWorker(bytes, format, onStage);
+      return JSON.parse(json) as ImportedPlan;
+    } catch (err) {
+      if (!(err instanceof Error && err.message === "worker-unavailable")) throw err;
+    }
+  }
+
   const run = exportChain.then(async () => {
     const pyodide = await getPyodide(onStage);
     await ensurePython(pyodide);
