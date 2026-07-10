@@ -1,7 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { EmbObject, Hoop, ThreadColor, Point } from "../types/project";
 import type { Font } from "opentype.js";
-import { FONTS, DEFAULT_FONT_ID, loadFont } from "../lib/text/fonts";
+import { FONTS, DEFAULT_FONT_ID, loadFont, invalidateFontCache } from "../lib/text/fonts";
+import {
+  listCustomFonts,
+  parseImportedFont,
+  removeCustomFont,
+  saveCustomFont,
+  type CustomFontMeta,
+} from "../lib/text/customFonts";
 import { layoutText } from "../lib/text/layout";
 import { translatePaths, pathsBounds } from "../lib/geometry";
 import { ringsToSvgPath } from "../lib/svgPath";
@@ -86,6 +93,35 @@ export default function TextDialog({
   const [error, setError] = useState<string | null>(null);
   useEscapeToClose(onClose);
   const dialogRef = useDialogFocus<HTMLDivElement>();
+
+  // User-imported fonts (IndexedDB): list for the picker, plus import/remove.
+  const [customFonts, setCustomFonts] = useState<CustomFontMeta[]>([]);
+  const [fontNote, setFontNote] = useState<string | null>(null);
+  const fontFileInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    void listCustomFonts().then(setCustomFonts);
+  }, []);
+  const importFont = async (file: File) => {
+    try {
+      const buf = await file.arrayBuffer();
+      const { meta } = parseImportedFont(buf, file.name);
+      await saveCustomFont(meta, buf);
+      invalidateFontCache(meta.id);
+      setCustomFonts(await listCustomFonts());
+      setFontId(meta.id);
+      setFontNote(meta.note || null);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't import that font.");
+    }
+  };
+  const removeFont = async (id: string) => {
+    await removeCustomFont(id);
+    invalidateFontCache(id);
+    setCustomFonts(await listCustomFonts());
+    setFontNote(null);
+    if (fontId === id) setFontId(DEFAULT_FONT_ID);
+  };
 
   // Load (and cache) the chosen font.
   useEffect(() => {
@@ -220,7 +256,7 @@ export default function TextDialog({
           />
         </label>
 
-        <label className="mb-3 block text-sm text-navy">
+        <label className="mb-1 block text-sm text-navy">
           <div className="mb-1">Font</div>
           <select
             value={fontId}
@@ -232,8 +268,53 @@ export default function TextDialog({
                 {f.name}
               </option>
             ))}
+            {customFonts.length > 0 && (
+              <optgroup label="Your fonts">
+                {customFonts.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </label>
+        <div className="mb-3 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => fontFileInput.current?.click()}
+            className="rounded-sm border border-ink/40 px-1.5 py-0.5 font-label text-[10px] font-semibold uppercase tracking-[0.08em] text-ink/80 hover:bg-butter-200"
+          >
+            Import font (TTF / OTF)…
+          </button>
+          {customFonts.some((f) => f.id === fontId) && (
+            <button
+              type="button"
+              onClick={() => void removeFont(fontId)}
+              className="rounded-sm border border-ink/40 px-1.5 py-0.5 font-label text-[10px] font-semibold uppercase tracking-[0.08em] text-stamp hover:bg-butter-200"
+            >
+              Remove
+            </button>
+          )}
+          <span className="font-body text-[10px] leading-tight text-navy/50">
+            Bold, even-stroke faces embroider best.
+          </span>
+          <input
+            ref={fontFileInput}
+            type="file"
+            accept=".ttf,.otf,font/ttf,font/otf"
+            className="hidden"
+            aria-label="Import a font file"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void importFont(f);
+              e.target.value = "";
+            }}
+          />
+        </div>
+        {fontNote && (
+          <p className="mb-2 font-body text-[11px] leading-snug text-stamp">{fontNote}</p>
+        )}
 
         <div className="mb-3 flex gap-3">
           <label className="flex-1 text-sm text-navy">

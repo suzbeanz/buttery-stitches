@@ -81,12 +81,39 @@ export function parseFont(buffer: ArrayBuffer): Font {
 
 const cache = new Map<string, Promise<Font>>();
 
+/** Drop a cached parse (after re-importing or removing a custom font). */
+export function invalidateFontCache(id: string): void {
+  cache.delete(id);
+}
+
 /**
- * Load and parse a bundled font by id, caching the parsed result so repeated
- * use (live preview, multiple text objects) never re-fetches or re-parses.
- * Browser-only (uses fetch against the bundled asset URL).
+ * Load and parse a font by id, caching the parsed result so repeated use
+ * (live preview, multiple text objects) never re-fetches or re-parses.
+ * Bundled ids resolve from the shipped assets; `user-…` ids resolve from the
+ * imported-fonts store (IndexedDB), so a project that names a custom font
+ * keeps working as long as that font is present on this machine.
+ * Browser-only (uses fetch / IndexedDB).
  */
 export function loadFont(id: string): Promise<Font> {
+  if (id.startsWith("user-")) {
+    const cachedUser = cache.get(id);
+    if (cachedUser) return cachedUser;
+    const promise = import("./customFonts")
+      .then((m) => m.getCustomFontBytes(id))
+      .then((bytes) => {
+        if (!bytes)
+          throw new Error(
+            "This text uses an imported font that isn't on this machine — re-import it in the Words dialog, or pick another font.",
+          );
+        return parseFont(bytes);
+      })
+      .catch((err) => {
+        cache.delete(id);
+        throw err;
+      });
+    cache.set(id, promise);
+    return promise;
+  }
   const entry = FONTS.find((f) => f.id === id);
   if (!entry) {
     return Promise.reject(new Error(`Unknown font id: ${id}`));
