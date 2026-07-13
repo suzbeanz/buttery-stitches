@@ -88,6 +88,11 @@ pe.write_pes(pattern, pes, {"pes version": 1})
 with open(os.path.join(OUT, "reference-v1.pes"), "wb") as f:
     f.write(pes.getvalue())
 
+tbf = io.BytesIO()
+pe.write_tbf(pattern, tbf)
+with open(os.path.join(OUT, "reference.tbf"), "wb") as f:
+    f.write(tbf.getvalue())
+
 # Read pyembroidery's own DST back with its reader: the authoritative record of
 # what a machine-side reader sees (STITCH/JUMP penetrations after decoding).
 readback = pe.read_dst(io.BytesIO(dst.getvalue()))

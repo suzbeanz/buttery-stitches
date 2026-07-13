@@ -31,6 +31,8 @@ const FORMAT_BRAND: Record<EmbFormat, string> = {
   jef: "Janome",
   exp: "Melco · Bernina",
   vp3: "Husqvarna · Pfaff",
+  tbf: "Barudan",
+  t01: "Tajima · Pfaff",
 };
 
 const STAGE_LABEL: Record<LoadStage, string> = {

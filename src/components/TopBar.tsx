@@ -333,7 +333,7 @@ export default function TopBar({
         <BarButton label="Open" onClick={() => fileInput.current?.click()}>
           <FolderOpen size={18} />
         </BarButton>
-        <BarButton label="Import & add a design (.embproj, .pes, .dst, .jef, .exp, .vp3)" onClick={() => importInput.current?.click()}>
+        <BarButton label="Import & add a design (.embproj, .pes, .dst, .jef, .exp, .vp3, .tbf, .t01)" onClick={() => importInput.current?.click()}>
           <ImportIcon size={18} />
         </BarButton>
         <BarButton
@@ -498,7 +498,7 @@ export default function TopBar({
       <input
         ref={importInput}
         type="file"
-        accept=".embproj,.pes,.dst,.jef,.exp,.vp3,application/json"
+        accept=".embproj,.pes,.dst,.jef,.exp,.vp3,.tbf,.t01,application/json"
         aria-label="Import a design file"
         className="hidden"
         onChange={onImportFile}

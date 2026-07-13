@@ -28,6 +28,7 @@ _WRITERS = {
     "jef": pe.write_jef,
     "exp": pe.write_exp,
     "vp3": pe.write_vp3,
+    "tbf": pe.write_tbf,  # Barudan (carries colors; thread change = NEEDLE_SET)
 }
 
 _READERS = {
@@ -36,6 +37,7 @@ _READERS = {
     "jef": pe.read_jef,
     "exp": pe.read_exp,
     "vp3": pe.read_vp3,
+    "tbf": pe.read_tbf,
 }
 
 
@@ -89,6 +91,11 @@ def import_design(data, fmt):
         if c == pe.STITCH or c == pe.SEW_TO or c == pe.NEEDLE_AT:
             run.append([x, y])
         elif c == pe.COLOR_CHANGE or c == pe.NEEDLE_SET:
+            # Some formats (TBF/U01) open with a NEEDLE_SET that *selects* the
+            # first thread rather than changing away from it. Advancing here
+            # would shift every block one color over — skip while empty.
+            if not cur["runs"] and len(run) < 2:
+                continue
             flush()
             blocks.append(cur)
             color_idx += 1

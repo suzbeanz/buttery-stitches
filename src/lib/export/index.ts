@@ -1,6 +1,7 @@
 import { getPyodide, type LoadStage, type PyodideInterface } from "../pyodide/loader";
 import { workerAvailable, exportViaWorker, importViaWorker } from "../pyodide/workerClient";
-import { encodeDst } from "./native/dst";
+import { encodeDst, encodeT01 } from "./native/dst";
+import { decodeTernaryPlan } from "./native/ternary-decode";
 import { encodePes } from "./native/pes";
 import embroideryPy from "./embroidery.py?raw";
 import type { Project, ThreadColor } from "../../types/project";
@@ -15,7 +16,7 @@ import { zipStore } from "../zip";
  * on-canvas simulator, so preview and file always agree.
  */
 
-export const EMB_FORMATS = ["pes", "dst", "jef", "exp", "vp3"] as const;
+export const EMB_FORMATS = ["pes", "dst", "jef", "exp", "vp3", "tbf", "t01"] as const;
 export type EmbFormat = (typeof EMB_FORMATS)[number];
 
 /** Most compatible PES first; #PES0060 carries richer color data. */
@@ -164,6 +165,10 @@ export const MAX_STITCH_TENTHS: Record<EmbFormat, number> = {
   pes: 127,
   jef: 127,
   vp3: 127,
+  // T01 is the DST record encoding (ternary, ±121) without the text header.
+  t01: 121,
+  // Barudan TBF records are signed bytes: ±127.
+  tbf: 127,
 };
 
 /**
@@ -266,6 +271,15 @@ export async function exportToBytes(
     return encodePes(splitPlanForFormat(plan, "pes"));
   }
 
+  // Native T01 — always: pyembroidery 1.5.1 has no T01 writer, and the format
+  // is the DST record stream without the header (our DST records are validated
+  // byte-identical to the reference implementation). STOPs encode as the
+  // DST-family color-change pause.
+  if (format === "t01") {
+    onStage?.("ready");
+    return encodeT01(splitPlanForFormat(plan, "t01"));
+  }
+
   // Split any over-long stitch/jump for the target format before serializing,
   // so the machine never silently turns a long stitch into a jump/trim.
   const safe = splitPlanForFormat(plan, format);
@@ -352,6 +366,12 @@ export async function importDesignBytes(
     throw new Error(
       `This file is ${(bytes.byteLength / 1024 / 1024).toFixed(1)} MB — embroidery files are far smaller. It may be corrupt or not an embroidery file.`,
     );
+  }
+  // DST and T01 decode natively (the Tajima ternary family) — instant, no
+  // Pyodide download, works offline and on memory-constrained mobile.
+  if (format === "dst" || format === "t01") {
+    onStage?.("ready");
+    return decodeTernaryPlan(bytes);
   }
   if (workerAvailable()) {
     try {

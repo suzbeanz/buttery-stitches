@@ -1,9 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { encodeDst } from "./dst";
+import { encodeDst, encodeT01 } from "./dst";
 import { encodePes } from "./pes";
 import { decodePecStitches } from "./pec-decode";
+import { decodeTernaryPlan, decodeTernaryStitches } from "./ternary-decode";
 import type { StitchPlan } from "../index";
 
 /**
@@ -55,7 +56,7 @@ describe("reference fixtures (pyembroidery-written, independent of our writers)"
     const ref = new TextDecoder().decode(refDst.slice(0, 125));
     const fields = (h: string) =>
       Object.fromEntries(
-        [...h.matchAll(/([A-Z+\-]{2}):([^\r]*)/g)].map((m) => [m[1], m[2].trim()]),
+        [...h.matchAll(/([A-Z+-]{2}):([^\r]*)/g)].map((m) => [m[1], m[2].trim()]),
       );
     const a = fields(ours);
     const b = fields(ref);
@@ -64,6 +65,69 @@ describe("reference fixtures (pyembroidery-written, independent of our writers)"
     for (const key of ["LA", "CO", "+X", "-X", "+Y", "-Y", "AX", "AY"]) {
       expect(a[key], `header field ${key}`).toBe(b[key]);
     }
+  });
+});
+
+describe("T01 (native): the DST record stream without the header", () => {
+  it("encodeT01 equals the reference DST's stitch section byte-for-byte", () => {
+    // reference.dst was written by pyembroidery; its post-header bytes ARE the
+    // T01 encoding of the plan — a third-party check of the whole T01 writer.
+    expect(Array.from(encodeT01(plan))).toEqual(Array.from(refDst.slice(512)));
+  });
+
+  it("a machine STOP encodes as the DST-family color-change pause instead of throwing", () => {
+    const withStop: StitchPlan = {
+      blocks: [
+        { rgb: 0xff0000, cmds: [["s", 0, 0], ["s", 30, 0], ["stop"], ["s", 60, 0]] },
+      ],
+    };
+    const bytes = encodeT01(withStop);
+    const decoded = decodeTernaryStitches(bytes);
+    expect(decoded.some((s) => s.colorChange)).toBe(true); // the pause is there
+    expect(decoded.filter((s) => !s.jump && !s.colorChange).length).toBe(3);
+  });
+});
+
+describe("native ternary decoder (DST + T01 import without Pyodide)", () => {
+  it("decodes the THIRD-PARTY reference DST back to the exact plan penetrations", () => {
+    const decoded = decodeTernaryStitches(refDst);
+    const pen = decoded.filter((s) => !s.jump && !s.colorChange).map((s) => [s.x, s.y]);
+    expect(pen).toEqual(planPenetrations.map(([x, y]) => [x, y]));
+  });
+
+  it("round-trips our own T01 bytes to the same plan", () => {
+    const decoded = decodeTernaryStitches(encodeT01(plan));
+    const pen = decoded.filter((s) => !s.jump && !s.colorChange).map((s) => [s.x, s.y]);
+    expect(pen).toEqual(planPenetrations.map(([x, y]) => [x, y]));
+  });
+
+  it("builds an ImportedPlan with the right block/run structure", () => {
+    const imported = decodeTernaryPlan(refDst);
+    expect(imported.blocks).toHaveLength(2); // the plan's two colors
+    // First block: 3 runs (jump + trim split the stream in two places).
+    expect(imported.blocks[0].runs).toHaveLength(3);
+    expect(imported.blocks[1].runs).toHaveLength(1);
+    // Every point matches a plan penetration, in order.
+    const flat = imported.blocks.flatMap((b) => b.runs.flat());
+    expect(flat).toEqual(planPenetrations.map(([x, y]) => [x, y]));
+    // Placeholder colors are distinct (DST stores none).
+    expect(imported.blocks[0].rgb).not.toBe(imported.blocks[1].rgb);
+  });
+
+  it("rejects too-short input and survives truncation/garbage without hanging", () => {
+    expect(() => decodeTernaryStitches(new Uint8Array(2))).toThrow(/too short/i);
+    const whole = encodeT01(plan);
+    for (let len = 3; len <= whole.length; len += 5) {
+      const out = decodeTernaryStitches(whole.slice(0, len));
+      expect(out.length).toBeLessThanOrEqual(whole.length / 3);
+    }
+    // Seeded garbage: must terminate with bounded output.
+    let seed = 0xbeef;
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) >>> 16) & 0xff;
+    const junk = new Uint8Array(3000);
+    for (let i = 0; i < junk.length; i++) junk[i] = rnd();
+    const out = decodeTernaryStitches(junk);
+    expect(out.length).toBeLessThanOrEqual(1000);
   });
 });
 

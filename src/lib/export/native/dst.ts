@@ -68,12 +68,29 @@ export interface DstHeaderInfo {
   label?: string;
 }
 
-/** Encode a stitch plan as DST file bytes. Mirrors pyembroidery's write_dst:
- *  every move from the current needle position is split by its larger axis into
- *  ≤121-unit segments; reaching a STITCH, the intermediate segments are JUMPs and
- *  the final segment is the stitch (the lead-in); a JUMP is all JUMPs. Between
- *  color blocks we emit TRIM + COLOR_CHANGE. */
-export function encodeDst(plan: StitchPlan, info: DstHeaderInfo = {}): Uint8Array {
+interface TernaryStreamResult {
+  /** the 3-byte records incl. the EOF record. */
+  records: number[];
+  stitchCount: number;
+  colorChanges: number;
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  /** final needle position. */
+  px: number;
+  py: number;
+}
+
+/** Build the Tajima ternary record stream for a plan. Mirrors pyembroidery's
+ *  write_dst: every move from the current needle position is split by its
+ *  larger axis into ≤121-unit segments; reaching a STITCH, the intermediate
+ *  segments are JUMPs and the final segment is the stitch (the lead-in); a
+ *  JUMP is all JUMPs. Between color blocks we emit TRIM + COLOR_CHANGE.
+ *  `stopAsColorChange` maps a machine STOP to a color-change record — the
+ *  DST-family pause convention (what pyembroidery's own DST writer does) —
+ *  instead of throwing. */
+function encodeTernaryStream(plan: StitchPlan, stopAsColorChange: boolean): TernaryStreamResult {
   const records: number[] = [];
   let cx = 0;
   let cy = 0;
@@ -142,8 +159,16 @@ export function encodeDst(plan: StitchPlan, info: DstHeaderInfo = {}): Uint8Arra
         continue;
       }
       if (cmd[0] === "stop") {
-        // STOP (appliqué pause) isn't covered by the native writer yet — callers
-        // route plans containing a STOP through the Python path. Guard, don't guess.
+        if (stopAsColorChange) {
+          // The DST family has no STOP opcode; a color-change record is the
+          // native pause (the machine halts for the operator either way).
+          if (!lastTrim) emitTrim();
+          colorChangeRec();
+          colorChanges++;
+          continue;
+        }
+        // Callers route STOP-bearing plans through the Python path. Guard,
+        // don't guess.
         throw new Error("native DST: STOP command not supported");
       }
       moveTo(cmd[1], cmd[2], cmd[0] === "s");
@@ -151,8 +176,13 @@ export function encodeDst(plan: StitchPlan, info: DstHeaderInfo = {}): Uint8Arra
   });
   // End-of-file record.
   records.push(0x00, 0x00, 0xf3);
-  const px = cx;
-  const py = cy;
+  return { records, stitchCount, colorChanges, minX, maxX, minY, maxY, px: cx, py: cy };
+}
+
+/** Encode a stitch plan as DST file bytes (512-byte header + ternary records). */
+export function encodeDst(plan: StitchPlan, info: DstHeaderInfo = {}): Uint8Array {
+  const { records, stitchCount, colorChanges, minX, maxX, minY, maxY, px, py } =
+    encodeTernaryStream(plan, false);
 
   // Header (512 bytes, space-padded). Field formats mirror pyembroidery/Tajima.
   const header = new Uint8Array(HEADER_SIZE).fill(0x20);
@@ -178,4 +208,16 @@ export function encodeDst(plan: StitchPlan, info: DstHeaderInfo = {}): Uint8Arra
   out.set(header, 0);
   out.set(Uint8Array.from(records), HEADER_SIZE);
   return out;
+}
+
+/**
+ * Encode a stitch plan as Tajima/Pfaff T01 bytes. T01 is the DST stitch
+ * section WITHOUT the 512-byte text header — the same balanced-ternary 3-byte
+ * records ending in the same EOF record. Machine STOPs (appliqué pauses) are
+ * encoded as color-change records, the DST-family pause convention, so
+ * appliqué designs export natively too.
+ */
+export function encodeT01(plan: StitchPlan): Uint8Array {
+  const { records } = encodeTernaryStream(plan, true);
+  return Uint8Array.from(records);
 }
