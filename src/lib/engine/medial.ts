@@ -1150,8 +1150,20 @@ function buildColumn(
   // elongated (length < ~1.4× its own width) skip it — the strokes that cross
   // the junction already cover that patch. (Loops are always real; authored
   // strokes are trusted.)
+  //
+  // CRUCIAL REFINEMENT: the length test alone misfires on SHORT REAL STROKES.
+  // A T's crossbar or a serif is only ~1.5–2× as long as it is wide, and the
+  // junction balloon inflates the median width, so the naive test read it as a
+  // stub and silently dropped a third of the letter (coverage then failed and
+  // the whole glyph fell back to chewed tatami). The reliable distinction: a
+  // real stroke has at least one FREE TERMINAL at the glyph outline, where the
+  // width pinches back to the stroke's own half — a junction-center stub is
+  // ballooned at BOTH ends. Only drop when both ends are fat.
   if (dropStubs && !loop && medHalfDt > 0 && polylineLength(center) < 2 * medHalfDt * 1.4) {
-    return null;
+    // Robust "true stroke half": the lean quartile, immune to junction bloat.
+    const leanHalf = dtHalves[Math.floor(dtHalves.length * 0.25)] ?? medHalfDt;
+    const endFat = (i: number) => halves[i] - OVERSHOOT_MM > leanHalf * 1.3;
+    if (endFat(0) && endFat(halves.length - 1)) return null;
   }
 
   // Trim JUNCTION ends. A real stroke terminal sits at the glyph outline (small
