@@ -34,7 +34,9 @@ export interface AddTextResult {
 }
 
 /** Default text height in mm (≈ 0.6"), a comfortable readable size. */
-const DEFAULT_HEIGHT_MM = 15;
+// Exactly half an inch: the dialog defaults to inches, and 15mm read as an
+// arbitrary "0.59" there. 12.7mm also matches the first quick-size chip (0.5).
+const DEFAULT_HEIGHT_MM = 12.7;
 
 /** Quick height presets, in each unit. Inches mirror common lettering sizes. */
 const SIZE_PRESETS: Record<"in" | "mm", number[]> = {

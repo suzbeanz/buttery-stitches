@@ -149,6 +149,12 @@ export default function ToolRail() {
         </RailBtn>
       </Group>
 
+      {/* A first-timer looking for "add a circle" scans this rail and misses
+          the Insert group up top — point them there. */}
+      <p className="mt-2 hidden px-2 text-center font-body text-[9.5px] leading-snug text-ink/50 lg:block">
+        Words, images &amp; shapes live in the <span className="font-semibold text-ink/70">top bar</span> ↑
+      </p>
+
       {/* Units toggle pinned to the bottom. */}
       <div className="mt-auto px-2 pt-2">
         <div className="flex overflow-hidden rounded-sm border-2 border-ink text-[11px]">
