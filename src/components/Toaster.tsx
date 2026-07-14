@@ -18,7 +18,10 @@ export default function Toaster() {
   const dismiss = useToastStore((s) => s.dismiss);
   if (toasts.length === 0) return null;
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-16 z-[70] flex flex-col items-center gap-2 px-4 lg:bottom-4">
+    // Below lg the studio stacks the ToolRail strip + SimulatorBar along the
+    // bottom (~120px of chrome), so toasts float above that; at lg+ only the
+    // simulator sits under the canvas and they hug the bottom edge.
+    <div className="pointer-events-none fixed inset-x-0 bottom-32 z-[70] flex flex-col items-center gap-2 px-4 lg:bottom-4">
       {toasts.map((t) => {
         const Icon = ICON[t.kind];
         return (
