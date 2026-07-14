@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { EmbObject, Hoop, ThreadColor, Point } from "../types/project";
+import type { EmbObject, GlyphTweak, Hoop, ThreadColor, Point } from "../types/project";
 import type { Font } from "opentype.js";
 import { FONTS, DEFAULT_FONT_ID, loadFont, invalidateFontCache } from "../lib/text/fonts";
 import {
@@ -85,6 +85,14 @@ export default function TextDialog({
   const onCircle = shape === "circleTop" || shape === "circleBottom";
   const circleSide: "top" | "bottom" = shape === "circleBottom" ? "bottom" : "top";
 
+  // PER-GLYPH TWEAKS: nudge/rotate/scale for single letters, keyed by VISIBLE
+  // glyph index (whitespace excluded — the layout's counting rule). Restored
+  // from the stored TextSpec when re-editing, so tweaks survive round trips.
+  const [glyphTweaks, setGlyphTweaks] = useState<Record<number, GlyphTweak>>(
+    initial?.glyphTweaks ?? {},
+  );
+  const [selGlyph, setSelGlyph] = useState<number | null>(null);
+
   // Color: either an existing project color id, or "__new" to add one.
   const [colorChoice, setColorChoice] = useState<string>(
     editObject?.colorId ?? colors[0]?.id ?? "__new",
@@ -154,11 +162,81 @@ export default function TextDialog({
         colorId: "preview",
         name: text.replace(/\n/g, " "),
         fontId,
+        glyphTweaks,
       });
     } catch {
       return null;
     }
-  }, [font, text, heightMm, letterSpacingMm, lineSpacing, archDeg, fontId, onCircle, circleRadiusMm, circleSide, onPath, pathMm]);
+  }, [font, text, heightMm, letterSpacingMm, lineSpacing, archDeg, fontId, onCircle, circleRadiusMm, circleSide, onPath, pathMm, glyphTweaks]);
+
+  // Tweaks are INDEX-based ("per letter position"): when the content changes,
+  // drop tweaks whose index is past the new visible-glyph count, and clamp the
+  // selection. Tweaks on surviving indices stay (they may land on a different
+  // letter after an edit — accepted v1 behavior, noted in the hint line).
+  const glyphCount = layout?.glyphs?.length;
+  useEffect(() => {
+    if (glyphCount == null) return;
+    setGlyphTweaks((prev) => {
+      const stale = Object.keys(prev).filter((k) => Number(k) >= glyphCount);
+      if (stale.length === 0) return prev;
+      const next = { ...prev };
+      for (const k of stale) delete next[Number(k)];
+      return next;
+    });
+    setSelGlyph((s) => (s !== null && s >= glyphCount ? null : s));
+  }, [glyphCount]);
+
+  /** Merge a tweak change for glyph `i`; an all-identity tweak is removed. */
+  const round2 = (v: number) => Math.round(v * 100) / 100;
+  function updateTweak(i: number, patch: (t: GlyphTweak) => GlyphTweak) {
+    setGlyphTweaks((prev) => {
+      const t = patch(prev[i] ?? {});
+      const identity = !t.dx && !t.dy && !t.rotDeg && (t.scale ?? 1) === 1;
+      const next = { ...prev };
+      if (identity) delete next[i];
+      else next[i] = t;
+      return next;
+    });
+  }
+  const nudge = (i: number, axis: "dx" | "dy", dir: 1 | -1, big: boolean) =>
+    updateTweak(i, (t) => ({ ...t, [axis]: round2((t[axis] ?? 0) + dir * (big ? 1 : 0.25)) }));
+  const rotate = (i: number, dir: 1 | -1) =>
+    updateTweak(i, (t) => ({ ...t, rotDeg: round2((t.rotDeg ?? 0) + dir * 2) }));
+  const resize = (i: number, dir: 1 | -1) =>
+    updateTweak(i, (t) => ({
+      ...t,
+      scale: round2(Math.min(10, Math.max(0.1, (t.scale ?? 1) + dir * 0.05))),
+    }));
+  const resetTweak = (i: number) =>
+    setGlyphTweaks((prev) => {
+      const next = { ...prev };
+      delete next[i];
+      return next;
+    });
+
+  // Keyboard on the (focusable) preview: [ / ] pick a letter, arrows nudge the
+  // selected one (0.25 mm; Shift = 1 mm).
+  function onPreviewKeyDown(e: React.KeyboardEvent) {
+    const n = glyphCount ?? 0;
+    if (n === 0) return;
+    if (e.key === "[" || e.key === "]") {
+      e.preventDefault();
+      const d = e.key === "]" ? 1 : -1;
+      setSelGlyph((s) => (s === null ? (d === 1 ? 0 : n - 1) : (s + d + n) % n));
+      return;
+    }
+    if (!e.key.startsWith("Arrow")) return;
+    e.preventDefault();
+    if (selGlyph === null) {
+      setSelGlyph(0);
+      return;
+    }
+    const big = e.shiftKey;
+    if (e.key === "ArrowLeft") nudge(selGlyph, "dx", -1, big);
+    else if (e.key === "ArrowRight") nudge(selGlyph, "dx", 1, big);
+    else if (e.key === "ArrowUp") nudge(selGlyph, "dy", -1, big);
+    else if (e.key === "ArrowDown") nudge(selGlyph, "dy", 1, big);
+  }
 
   // Size shown in the active unit; editing it converts back to mm.
   const sizeValue = unit === "in" ? mmToInch(heightMm) : heightMm;
@@ -220,6 +298,7 @@ export default function TextDialog({
         circleRadiusMm: onCircle ? circleRadiusMm : undefined,
         circleSide: onCircle ? circleSide : undefined,
         pathMm: onPath ? pathMm : undefined,
+        glyphTweaks: Object.keys(glyphTweaks).length > 0 ? glyphTweaks : undefined,
       },
     };
     onAdd({ object, newColor });
@@ -480,7 +559,39 @@ export default function TextDialog({
           layout={layout}
           colorHex={previewHex(colorChoice, colors, newColorHex)}
           loading={font === null && !error}
+          selected={selGlyph}
+          onSelectGlyph={setSelGlyph}
+          onKeyDown={onPreviewKeyDown}
         />
+
+        {selGlyph !== null && (glyphCount ?? 0) > selGlyph ? (
+          <div className="mt-2 rounded-sm border border-ink/30 bg-cream p-2">
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="mr-1 font-label text-[10px] font-semibold uppercase tracking-[0.08em] text-ink">
+                Letter {selGlyph + 1}
+              </span>
+              <TweakButton label="Nudge letter left (Shift for 1 mm)" onClick={(e) => nudge(selGlyph, "dx", -1, e.shiftKey)}>←</TweakButton>
+              <TweakButton label="Nudge letter right (Shift for 1 mm)" onClick={(e) => nudge(selGlyph, "dx", 1, e.shiftKey)}>→</TweakButton>
+              <TweakButton label="Nudge letter up (Shift for 1 mm)" onClick={(e) => nudge(selGlyph, "dy", -1, e.shiftKey)}>↑</TweakButton>
+              <TweakButton label="Nudge letter down (Shift for 1 mm)" onClick={(e) => nudge(selGlyph, "dy", 1, e.shiftKey)}>↓</TweakButton>
+              <span aria-hidden className="mx-0.5 h-4 w-px bg-ink/20" />
+              <TweakButton label="Rotate letter counterclockwise 2 degrees" onClick={() => rotate(selGlyph, -1)}>−2°</TweakButton>
+              <TweakButton label="Rotate letter clockwise 2 degrees" onClick={() => rotate(selGlyph, 1)}>+2°</TweakButton>
+              <span aria-hidden className="mx-0.5 h-4 w-px bg-ink/20" />
+              <TweakButton label="Shrink letter 5 percent" onClick={() => resize(selGlyph, -1)}>A−</TweakButton>
+              <TweakButton label="Enlarge letter 5 percent" onClick={() => resize(selGlyph, 1)}>A+</TweakButton>
+              <span aria-hidden className="mx-0.5 h-4 w-px bg-ink/20" />
+              <TweakButton label="Reset this letter's tweaks" onClick={() => resetTweak(selGlyph)}>Reset</TweakButton>
+            </div>
+            <p className="mt-1 font-body text-[10px] leading-snug text-ink/80">
+              Tweaks apply per letter position. Arrow keys nudge 0.25 mm (Shift = 1 mm); [ and ] change letter.
+            </p>
+          </div>
+        ) : (glyphCount ?? 0) > 0 ? (
+          <p className="mt-1 font-body text-[10px] text-ink/80">
+            Click a letter in the preview to nudge, rotate, or resize just that letter.
+          </p>
+        ) : null}
 
         {error && <p className="mt-2 text-[12px] text-stamp">{error}</p>}
 
@@ -504,15 +615,47 @@ export default function TextDialog({
   );
 }
 
-/** A small SVG preview of the generated rings (even-odd so counters show). */
+/** A calm strip button (nudge / rotate / resize / reset a single letter). */
+function TweakButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="min-w-7 rounded-sm border border-ink/40 px-1.5 py-0.5 font-label text-[11px] font-semibold text-ink hover:bg-butter-200"
+    >
+      {children}
+    </button>
+  );
+}
+
+/** A small SVG preview of the generated rings (even-odd so counters show).
+ *  Each VISIBLE glyph is its own clickable path (the layout reports which rings
+ *  belong to which letter), and the whole preview is focusable so a keyboard
+ *  user can pick ([ / ]) and nudge (arrows) letters without a mouse. */
 function TextPreview({
   layout,
   colorHex,
   loading,
+  selected,
+  onSelectGlyph,
+  onKeyDown,
 }: {
   layout: ReturnType<typeof layoutText> | null;
   colorHex: string;
   loading?: boolean;
+  selected: number | null;
+  onSelectGlyph: (i: number | null) => void;
+  onKeyDown: (e: React.KeyboardEvent) => void;
 }) {
   const box = useMemo(() => {
     if (!layout || layout.object.paths.length === 0) return null;
@@ -527,21 +670,71 @@ function TextPreview({
     };
   }, [layout]);
 
+  const glyphs = layout?.glyphs ?? [];
+  // Dashed marker box around the selected letter.
+  const selBox = useMemo(() => {
+    if (!layout || selected === null) return null;
+    const g = layout.glyphs?.[selected];
+    if (!g) return null;
+    const b = pathsBounds(layout.object.paths.slice(g.ringStart, g.ringStart + g.ringCount));
+    if (!b) return null;
+    const pad = 0.6;
+    return { x: b.minX - pad, y: b.minY - pad, w: b.maxX - b.minX + pad * 2, h: b.maxY - b.minY + pad * 2 };
+  }, [layout, selected]);
+
   return (
-    <div className="flex h-24 items-center justify-center rounded border border-navy/10 bg-white">
+    // A focusable "canvas" region operated by the keyboard ([ ] to pick a
+    // letter, arrows to nudge) — announced via its aria-label. jsx-a11y has no
+    // interactive role for this widget shape, so the two rules are silenced.
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex
+    <div role="application" tabIndex={0} onKeyDown={onKeyDown}
+      aria-label="Letter preview. Click a letter to select it, or press [ and ] to change the selected letter; arrow keys nudge it (hold Shift for bigger steps)."
+      className="flex h-24 items-center justify-center rounded border border-navy/10 bg-white outline-none focus-visible:ring-2 focus-visible:ring-ink/60"
+    >
       {layout && box ? (
         <svg
           viewBox={`${box.minX} ${box.minY} ${box.w} ${box.h}`}
           className="max-h-full max-w-full"
           preserveAspectRatio="xMidYMid meet"
+          onClick={() => onSelectGlyph(null)}
         >
           {/* Render with the font's own winding (nonzero), exactly like a
-              browser — so the preview works for every font. */}
-          <path
-            d={ringsToSvgPath(layout.object.paths)}
-            fill={colorHex}
-            fillRule="nonzero"
-          />
+              browser — so the preview works for every font. One path per
+              letter so single glyphs are clickable; a transparent stroke
+              widens the hit area for thin strokes. */}
+          {glyphs.length > 0 ? (
+            glyphs.map((g, i) => (
+              <path
+                key={i}
+                d={ringsToSvgPath(layout.object.paths.slice(g.ringStart, g.ringStart + g.ringCount))}
+                fill={colorHex}
+                fillRule="nonzero"
+                stroke="transparent"
+                strokeWidth={1.5}
+                className="cursor-pointer"
+                aria-label={`Letter ${i + 1}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectGlyph(selected === i ? null : i);
+                }}
+              />
+            ))
+          ) : (
+            <path d={ringsToSvgPath(layout.object.paths)} fill={colorHex} fillRule="nonzero" />
+          )}
+          {selBox && (
+            <rect
+              x={selBox.x}
+              y={selBox.y}
+              width={selBox.w}
+              height={selBox.h}
+              fill="none"
+              stroke="#20242c"
+              strokeWidth={0.35}
+              strokeDasharray="1.2 0.8"
+              pointerEvents="none"
+            />
+          )}
         </svg>
       ) : loading ? (
         <span className="font-mono text-[12px] text-ink/55">Loading font…</span>

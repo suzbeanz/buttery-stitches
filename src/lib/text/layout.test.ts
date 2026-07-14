@@ -286,6 +286,166 @@ describe("layoutText", () => {
     expect(wb.maxY - wb.minY).toBeCloseTo(cb.maxY - cb.minY, 3);
   });
 
+  // PER-GLYPH TWEAKS (glyphTweaks): keyed by VISIBLE glyph index (whitespace
+  // excluded), applied in the glyph's LOCAL frame after normal layout.
+  describe("glyphTweaks", () => {
+    /** rings of one visible glyph, by the layout's own ring ranges. */
+    const glyphRings = (res: ReturnType<typeof layoutText>, i: number) => {
+      const g = res.glyphs![i];
+      return res.object.paths.slice(g.ringStart, g.ringStart + g.ringCount);
+    };
+    const bboxOf = (rings: { x: number; y: number }[][]) => pathsBounds(rings)!;
+
+    it("absent, empty, and identity tweaks all produce identical output (deep-equal)", () => {
+      const opts = { text: "Hi\nthere", font, heightMm: 10, archDeg: 30, colorId: "c1" };
+      const a = layoutText(opts);
+      const b = layoutText({ ...opts, glyphTweaks: {} });
+      const c = layoutText({ ...opts, glyphTweaks: { 0: { dx: 0, dy: 0, rotDeg: 0, scale: 1 } } });
+      expect(b.object.paths).toEqual(a.object.paths);
+      expect(c.object.paths).toEqual(a.object.paths);
+      expect(b.widthMm).toBe(a.widthMm);
+      expect(b.glyphs).toEqual(a.glyphs);
+    });
+
+    it("dx moves exactly one glyph's bbox by exactly dx along a straight baseline", () => {
+      const base = layoutText({ text: "HELLO", font, heightMm: 10, colorId: "c1" });
+      const nudged = layoutText({
+        text: "HELLO", font, heightMm: 10, colorId: "c1",
+        glyphTweaks: { 1: { dx: 2 } },
+      });
+      const b0 = bboxOf(glyphRings(base, 1));
+      const b1 = bboxOf(glyphRings(nudged, 1));
+      expect(b1.minX - b0.minX).toBeCloseTo(2, 9);
+      expect(b1.maxX - b0.maxX).toBeCloseTo(2, 9);
+      expect(b1.minY).toBeCloseTo(b0.minY, 9);
+      expect(b1.maxY).toBeCloseTo(b0.maxY, 9);
+      // every OTHER glyph is byte-identical
+      for (const i of [0, 2, 3, 4]) {
+        expect(glyphRings(nudged, i)).toEqual(glyphRings(base, i));
+      }
+    });
+
+    it("visible-glyph indexing skips whitespace", () => {
+      // In "A B", tweak index 1 must move the B (the space renders nothing).
+      const base = layoutText({ text: "A B", font, heightMm: 10, colorId: "c1" });
+      const nudged = layoutText({
+        text: "A B", font, heightMm: 10, colorId: "c1",
+        glyphTweaks: { 1: { dx: 3 } },
+      });
+      expect(base.glyphs!.length).toBe(2);
+      expect(glyphRings(nudged, 0)).toEqual(glyphRings(base, 0));
+      const b0 = bboxOf(glyphRings(base, 1));
+      const b1 = bboxOf(glyphRings(nudged, 1));
+      expect(b1.minX - b0.minX).toBeCloseTo(3, 9);
+    });
+
+    it("dy on an ARCHED baseline moves the glyph along the local normal, not global y", () => {
+      const opts = { text: "ARCH", font, heightMm: 10, archDeg: 90, colorId: "c1" };
+      const base = layoutText(opts);
+      const bent = layoutText({ ...opts, glyphTweaks: { 0: { dy: 3 } } });
+      // Points correspond 1:1; each moves exactly 3mm (a rigid slide along the
+      // glyph's local radial normal)…
+      const r0 = glyphRings(base, 0);
+      const r1 = glyphRings(bent, 0);
+      let sumDx = 0;
+      let n = 0;
+      for (let r = 0; r < r0.length; r++) {
+        for (let p = 0; p < r0[r].length; p++) {
+          const dx = r1[r][p].x - r0[r][p].x;
+          const dy = r1[r][p].y - r0[r][p].y;
+          expect(Math.hypot(dx, dy)).toBeCloseTo(3, 6);
+          sumDx += dx;
+          n++;
+        }
+      }
+      // …and the first glyph of a 90° arch has a clearly tilted normal, so the
+      // displacement has a substantial GLOBAL-x component (global y would have 0).
+      expect(Math.abs(sumDx / n)).toBeGreaterThan(0.5);
+      // untouched glyphs are byte-identical
+      for (const i of [1, 2, 3]) expect(glyphRings(bent, i)).toEqual(glyphRings(base, i));
+    });
+
+    it("rotDeg rotates rigidly about the glyph's own anchor", () => {
+      const base = layoutText({ text: "AB", font, heightMm: 10, colorId: "c1" });
+      const rot = layoutText({
+        text: "AB", font, heightMm: 10, colorId: "c1",
+        glyphTweaks: { 1: { rotDeg: 180 } },
+      });
+      // A 180° rotation about anchor a maps p → 2a − p, so (p + p′)/2 is the SAME
+      // fixed point for every point of the glyph: a single common anchor.
+      const r0 = glyphRings(base, 1);
+      const r1 = glyphRings(rot, 1);
+      const mids: { x: number; y: number }[] = [];
+      for (let r = 0; r < r0.length; r++)
+        for (let p = 0; p < r0[r].length; p++)
+          mids.push({ x: (r0[r][p].x + r1[r][p].x) / 2, y: (r0[r][p].y + r1[r][p].y) / 2 });
+      const a = mids[0];
+      for (const m of mids) {
+        expect(m.x).toBeCloseTo(a.x, 6);
+        expect(m.y).toBeCloseTo(a.y, 6);
+      }
+      // bbox-center distance to the anchor is preserved by the rotation
+      const c0 = bboxOf(r0);
+      const c1 = bboxOf(r1);
+      const d0 = Math.hypot((c0.minX + c0.maxX) / 2 - a.x, (c0.minY + c0.maxY) / 2 - a.y);
+      const d1 = Math.hypot((c1.minX + c1.maxX) / 2 - a.x, (c1.minY + c1.maxY) / 2 - a.y);
+      expect(d1).toBeCloseTo(d0, 6);
+      expect(glyphRings(rot, 0)).toEqual(glyphRings(base, 0));
+    });
+
+    it("scale scales the glyph's bbox proportionally, leaving the rest untouched", () => {
+      const base = layoutText({ text: "OK", font, heightMm: 10, colorId: "c1" });
+      const big = layoutText({
+        text: "OK", font, heightMm: 10, colorId: "c1",
+        glyphTweaks: { 1: { scale: 1.5 } },
+      });
+      const b0 = bboxOf(glyphRings(base, 1));
+      const b1 = bboxOf(glyphRings(big, 1));
+      expect((b1.maxX - b1.minX) / (b0.maxX - b0.minX)).toBeCloseTo(1.5, 6);
+      expect((b1.maxY - b1.minY) / (b0.maxY - b0.minY)).toBeCloseTo(1.5, 6);
+      expect(glyphRings(big, 0)).toEqual(glyphRings(base, 0));
+    });
+
+    it("tweaks apply on circle and path baselines too (rigid 1-glyph move)", () => {
+      const circOpts = { text: "BADGE", font, heightMm: 8, circleRadiusMm: 40, colorId: "c1" };
+      const c0 = layoutText(circOpts);
+      const c1 = layoutText({ ...circOpts, glyphTweaks: { 2: { dy: 2 } } });
+      const g0 = glyphRings(c0, 2);
+      const g1 = glyphRings(c1, 2);
+      for (let r = 0; r < g0.length; r++)
+        for (let p = 0; p < g0[r].length; p++) {
+          const d = Math.hypot(g1[r][p].x - g0[r][p].x, g1[r][p].y - g0[r][p].y);
+          expect(d).toBeCloseTo(2, 6);
+        }
+      expect(glyphRings(c1, 0)).toEqual(glyphRings(c0, 0));
+
+      const pathOpts = {
+        text: "RISE", font, heightMm: 8, colorId: "c1",
+        pathMm: [{ x: 0, y: 0 }, { x: 60, y: -60 }],
+      };
+      const p0 = layoutText(pathOpts);
+      const p1 = layoutText({ ...pathOpts, glyphTweaks: { 1: { dx: 1.5 } } });
+      const h0 = glyphRings(p0, 1);
+      const h1 = glyphRings(p1, 1);
+      // dx slides along the 45° tangent: equal global x and y components.
+      const ddx = h1[0][0].x - h0[0][0].x;
+      const ddy = h1[0][0].y - h0[0][0].y;
+      expect(Math.hypot(ddx, ddy)).toBeCloseTo(1.5, 6);
+      expect(Math.abs(ddx)).toBeCloseTo(Math.abs(ddy), 6);
+      expect(glyphRings(p1, 0)).toEqual(glyphRings(p0, 0));
+    });
+
+    it("junk tweak values (NaN, zero scale) degrade to identity, never NaN geometry", () => {
+      const base = layoutText({ text: "AB", font, heightMm: 10, colorId: "c1" });
+      const junk = layoutText({
+        text: "AB", font, heightMm: 10, colorId: "c1",
+        glyphTweaks: { 0: { dx: NaN, dy: NaN, rotDeg: NaN, scale: 0 } },
+      });
+      expect(junk.object.paths).toEqual(base.object.paths);
+      expect(allFinite(junk.object)).toBe(true);
+    });
+  });
+
   it("a zero-length (all-coincident) path falls back to straight layout, not 0 stitches", () => {
     const { object } = layoutText({
       text: "HELLO", font, heightMm: 10, colorId: "c1",
