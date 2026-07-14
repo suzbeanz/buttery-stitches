@@ -341,7 +341,26 @@ export function guidanceFieldFill(rings: Path[], opts: FillOptions): Path[] | nu
   if (oriented.length === 0 || oriented[0].length < 3) return null;
   const f = solvePotential(oriented);
   if (!f) return null;
+  return assembleFieldRuns(f, opts);
+}
 
+/**
+ * Shared strip assembly: walk a field's levels 0→1, extract the masked
+ * marching-squares isolines, space them adaptively by |∇u|, connect them into
+ * serpentine runs, and apply the coverage + connector-quality self-checks.
+ * Used verbatim by guidanceFieldFill (harmonic sweep potential) and
+ * multiAngleFill (blended phase field) — only the field construction differs.
+ *
+ * `reorder`: a blended PHASE field's level sets can be DISCONNECTED (with two
+ * different guide angles the same phase value shows up in separate parts of the
+ * shape), so the level-ordered walk interleaves the components row by row and
+ * the raw run sequence hops between them at every level. Reordering greedily by
+ * proximity (and re-merging adjacent runs) restores one contiguous sweep per
+ * component before the self-checks judge the hop budget. guidanceFieldFill's
+ * harmonic potential is monotone cap-to-cap, so it keeps the plain u-order
+ * (reorder=false → behavior unchanged).
+ */
+function assembleFieldRuns(f: Field, opts: FillOptions, reorder = false): Path[] | null {
   const density = Math.max(MIN_FILL_DENSITY, opts.density);
   const stitch = opts.stitchLength ?? FILL_STITCH_LENGTH;
 
@@ -406,6 +425,7 @@ export function guidanceFieldFill(rings: Path[], opts: FillOptions): Path[] | nu
   }
   flush();
   if (runs.length === 0) return null;
+  const ordered = reorder ? reorderAndMergeRuns(runs, CONNECT_MAX_MM) : runs;
 
   // Self-validate coverage cheaply: a clean fill lays ≈ area/density mm of thread.
   // A degenerate solve (ambiguous caps on a near-round shape, a field that didn't
@@ -414,7 +434,7 @@ export function guidanceFieldFill(rings: Path[], opts: FillOptions): Path[] | nu
   let insideCells = 0;
   for (let i = 0; i < f.g.cells.length; i++) insideCells += f.g.cells[i];
   const areaMm2 = insideCells * f.g.cellMm * f.g.cellMm;
-  const laid = runs.reduce((s, r) => s + polylineLen(r), 0);
+  const laid = ordered.reduce((s, r) => s + polylineLen(r), 0);
   if (areaMm2 > 0 && laid < 0.7 * (areaMm2 / density)) return null;
 
   // Connector-quality gate — the real bird-nest guard. A clean field breaks into
@@ -425,12 +445,175 @@ export function guidanceFieldFill(rings: Path[], opts: FillOptions): Path[] | nu
   // Those hops become exposed floats the assembler can't hide. When the hop
   // budget dominates, reject so the caller keeps the clean tatami runs instead.
   let connector = 0;
-  for (let i = 1; i < runs.length; i++) {
-    const prev = runs[i - 1];
-    const cur = runs[i];
+  for (let i = 1; i < ordered.length; i++) {
+    const prev = ordered[i - 1];
+    const cur = ordered[i];
     const pe = prev[prev.length - 1];
     connector += Math.min(dist(pe, cur[0]), dist(pe, cur[cur.length - 1]));
   }
   if (laid > 0 && connector > FIELD_MAX_CONNECTOR_FRAC * laid) return null;
-  return runs;
+  return ordered;
+}
+
+/** Greedy nearest-neighbour reorder of runs (either end may lead), re-merging
+ *  consecutive runs whose gap is within `connectMax` into one serpentine — the
+ *  same connection budget the level walk itself uses. */
+function reorderAndMergeRuns(runs: Path[], connectMax: number): Path[] {
+  if (runs.length <= 1) return runs;
+  const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
+  const used = new Uint8Array(runs.length);
+  const out: Path[] = [];
+  let current = runs[0].slice();
+  used[0] = 1;
+  for (let placed = 1; placed < runs.length; placed++) {
+    const tail = current[current.length - 1];
+    let best = -1, bestD = Infinity, bestRev = false;
+    for (let i = 0; i < runs.length; i++) {
+      if (used[i]) continue;
+      const r = runs[i];
+      const d0 = dist(tail, r[0]);
+      const d1 = dist(tail, r[r.length - 1]);
+      if (d0 < bestD) { bestD = d0; best = i; bestRev = false; }
+      if (d1 < bestD) { bestD = d1; best = i; bestRev = true; }
+    }
+    const next = bestRev ? runs[best].slice().reverse() : runs[best].slice();
+    used[best] = 1;
+    if (bestD <= connectMax) {
+      current = current.concat(next);
+    } else {
+      out.push(current);
+      current = next;
+    }
+  }
+  out.push(current);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// MULTI-ANGLE FILL — Wilcom-style turning fill from several dropped angle guides.
+//
+// Each guide pins a stitch angle θᵢ at an anchor point. Rows at a CONSTANT angle
+// θ are the isolines of the linear phase g(x,y) = x·sinθ − y·cosθ, so a fill
+// whose angle varies smoothly between guides falls out of blending the per-guide
+// phases with inverse-distance weights on the SAME masked raster grid the
+// guidance-field fill solves on:
+//
+//   g(p) = Σ wᵢ·((p − c)·nᵢ) / Σ wᵢ,   wᵢ = 1/(dᵢ² + ε),   nᵢ = (sin θᵢ, −cos θᵢ)
+//
+// where dᵢ is the mm distance from the cell to guide i's anchor, c is the grid
+// centre (a fixed local frame, so the field is translation-invariant), and each
+// nᵢ is SIGN-ALIGNED with the first guide's normal — a grain is an orientation
+// (mod 180°), and two normals pointing opposite ways would cancel in the blend.
+// With identical guide angles the weights cancel exactly and g is the plain
+// single-angle phase, so the rows come out straight at θ. Isoline extraction,
+// the adaptive |∇g| spacing, the serpentine connection, and the coverage +
+// connector self-checks are the same machinery guidanceFieldFill uses
+// (assembleFieldRuns).
+// ---------------------------------------------------------------------------
+
+/** IDW smoothing (mm²) so a guide's weight stays finite at its own anchor. */
+const GUIDE_IDW_EPS_MM2 = 1;
+
+export interface MultiAngleOptions extends FillOptions {
+  /** Angle guides as `[x, y, deg]` in ABSOLUTE mm — the engine denormalizes the
+   *  bbox-relative guides stored on the object (EmbObjectParams.angleGuides)
+   *  before calling. Needs ≥ 2 to produce a field. */
+  guides: [number, number, number][];
+}
+
+/** Build the blended-phase field on the masked raster. u is normalized so the
+ *  assembler's level walk (0→1) starts and ends about half a row-gap inside the
+ *  phase extremes — the same half-phase edge alignment a scanline fill uses,
+ *  so neither extreme edge is left a full gap bare. */
+function blendedPhaseField(
+  rings: Path[],
+  guides: [number, number, number][],
+  density: number,
+): Field | null {
+  const g = rasterize(rings, SOLVE_CELL_MM);
+  if (!g) return null;
+  const { w, h, cells } = g;
+
+  // Per-guide unit normals, sign-aligned with the first guide's (grain is mod 180°).
+  const normals = guides.map(([, , deg]) => {
+    const r = (deg * Math.PI) / 180;
+    return { x: Math.sin(r), y: -Math.cos(r) };
+  });
+  for (let i = 1; i < normals.length; i++) {
+    if (normals[i].x * normals[0].x + normals[i].y * normals[0].y < 0) {
+      normals[i] = { x: -normals[i].x, y: -normals[i].y };
+    }
+  }
+
+  // Fixed local frame at the grid centre: keeps the blend translation-invariant
+  // (phases measured from a far-away origin would let the IDW weight gradients
+  // tilt the isolines).
+  const cx = g.ox + ((w - 1) * g.cellMm) / 2;
+  const cy = g.oy + ((h - 1) * g.cellMm) / 2;
+
+  const u = new Float32Array(w * h).fill(NaN);
+  let gmin = Infinity, gmax = -Infinity;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (!cells[i]) continue;
+      const mx = g.ox + x * g.cellMm;
+      const my = g.oy + y * g.cellMm;
+      let sw = 0, sg = 0;
+      for (let k = 0; k < guides.length; k++) {
+        const dx = mx - guides[k][0];
+        const dy = my - guides[k][1];
+        const wk = 1 / (dx * dx + dy * dy + GUIDE_IDW_EPS_MM2);
+        sw += wk;
+        sg += wk * ((mx - cx) * normals[k].x + (my - cy) * normals[k].y);
+      }
+      const v = sg / sw;
+      u[i] = v;
+      if (v < gmin) gmin = v;
+      if (v > gmax) gmax = v;
+    }
+  }
+  const range = gmax - gmin;
+  if (!Number.isFinite(range) || range < 1e-6) return null;
+  for (let i = 0; i < u.length; i++) if (cells[i]) u[i] = (u[i] - gmin) / range;
+
+  // Half-row edge alignment: estimate the typical inter-row LEVEL step
+  // (density · median |∇u|) and stretch u so levels 0 and 1 land half a step
+  // OUTSIDE the data range. The assembler's first isoline (level 0) then sits
+  // ~half a row-gap from the low-phase edge instead of a full gap (unlike the
+  // harmonic field, whose u=0 cap cells ARE the edge, a pure phase field has a
+  // single extreme cell — its level-0 isoline would otherwise be empty and the
+  // walk would coarse-step past the first row).
+  const f: Field = { g, u };
+  const grads: number[] = [];
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      if (cells[y * w + x]) grads.push(gradMag(f, x, y));
+    }
+  }
+  if (grads.length === 0) return null;
+  grads.sort((a, b) => a - b);
+  const med = grads[grads.length >> 1];
+  if (!(med > 1e-9)) return null;
+  const dl = Math.min(0.2, density * med);
+  for (let i = 0; i < u.length; i++) if (cells[i]) u[i] = u[i] * (1 + dl) - dl / 2;
+  return f;
+}
+
+/**
+ * Multi-angle fill: rows sweep smoothly between the dropped angle guides.
+ * Returns serpentine runs like guidanceFieldFill, or null when the guides are
+ * degenerate or the assembled result fails the coverage/connector self-checks
+ * (caller falls back to its tatami path).
+ */
+export function multiAngleFill(rings: Path[], opts: MultiAngleOptions): Path[] | null {
+  if (!opts.guides || opts.guides.length < 2) return null;
+  for (const [gx, gy, deg] of opts.guides) {
+    if (!Number.isFinite(gx) || !Number.isFinite(gy) || !Number.isFinite(deg)) return null;
+  }
+  const oriented = orientByDepth(rings);
+  if (oriented.length === 0 || oriented[0].length < 3) return null;
+  const f = blendedPhaseField(oriented, opts.guides, Math.max(MIN_FILL_DENSITY, opts.density));
+  if (!f) return null;
+  return assembleFieldRuns(f, opts, true);
 }
