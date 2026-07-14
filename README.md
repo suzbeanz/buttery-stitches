@@ -12,7 +12,7 @@ desktop software or uploading my art to someone's server. It's named after my
 dog, Butters — hence the butter-yellow-and-navy theme, the serif wordmark, and
 rulers styled like the marks on a stick of butter.
 
-![Buttery Stitches editor](docs/hero.svg)
+![The Buttery Stitches studio — the calibration swatch rendered as realistic thread in Stitch view](docs/hero.jpg)
 
 It's happiest with **clean logos, lettering, and limited-color artwork**. It is
 *not* a photo converter — feed it a photograph and you'll get a rough, heavily
