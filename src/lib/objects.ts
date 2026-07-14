@@ -71,14 +71,25 @@ export function pathsFromNodes(nodes: NodePath[], closed: boolean): Path[] {
   return nodes.map((ring) => densifyRing(ring, closed));
 }
 
+/** Densify a satin's centerline nodes and rebuild its two rails at `widthMm`.
+ *  This is the satin flavor of pathsFromNodes: the NODES are the editable
+ *  spine; the PATHS the engine reads are always the derived rail pair. */
+export function satinPathsFromNodes(nodes: NodePath[], widthMm: number): Path[] {
+  const center = densifyRing(nodes[0] ?? [], false);
+  const [left, right] = railsFromCenterline(center, Math.max(0.2, widthMm));
+  return [left, right];
+}
+
 /**
- * Build a node-backed object (running line or fill) from the user's placed
- * control nodes. The editable nodes are kept on the object; `paths` is densified
- * from them so the engine/exporter stay oblivious. `smooth` seeds every node's
- * curve flag (the Curve toggle at draw time).
+ * Build a node-backed object (running line, fill, or satin) from the user's
+ * placed control nodes. The editable nodes are kept on the object; `paths` is
+ * densified from them so the engine/exporter stay oblivious. For satin, the
+ * nodes are the CENTERLINE and `paths` is the derived rail pair — so the spine
+ * stays reshape-editable (move/insert/delete/curve nodes) after commit.
+ * `smooth` seeds every node's curve flag (the Curve toggle at draw time).
  */
 export function makeNodeObject(
-  type: "running" | "fill",
+  type: StitchType,
   points: Path,
   colorId: string,
   smooth: boolean,
@@ -91,7 +102,10 @@ export function makeNodeObject(
     type,
     colorId,
     nodes,
-    paths: pathsFromNodes(nodes, closed),
+    paths:
+      type === "satin"
+        ? satinPathsFromNodes(nodes, DEFAULT_SATIN_WIDTH)
+        : pathsFromNodes(nodes, closed),
     params: {},
     visible: true,
   };

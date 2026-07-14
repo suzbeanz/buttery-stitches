@@ -183,29 +183,38 @@ function Studio({ onHome, saveStatus }: { onHome: () => void; saveStatus: SaveSt
   return (
     <div className="flex h-full flex-col bg-paper text-navy">
       <TopBar onHelp={() => setShowHelp((v) => !v)} onHome={onHome} saveStatus={saveStatus} />
-      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+      {/* Studio body — one grid, two arrangements (pure CSS, same DOM):
+            • below lg: a single column of rows — canvas (1fr) / ToolRail strip /
+              SimulatorBar — so the tools become a bottom toolbar and the canvas
+              gets the full phone width;
+            • at lg+: columns — [layers] [ToolRail] [canvas+simulator] [properties]
+              — the classic desktop shell, with the rail and side panels spanning
+              both rows (i.e. running beside the simulator, exactly as before).
+          Each child pins itself with col/row-start classes; the ToolRail carries
+          its own (see ToolRail.tsx). */}
+      <div className="relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto_auto] overflow-hidden lg:grid-cols-[auto_auto_minmax(0,1fr)_auto] lg:grid-rows-[minmax(0,1fr)_auto]">
         {layersOpen && (
-          <div className={isNarrow ? `${overlay} anim-drawer-l left-0` : "contents"}>
+          <div className={isNarrow ? `${overlay} anim-drawer-l left-0` : "col-start-1 row-span-2 row-start-1 min-h-0"}>
             <LayerPanel />
           </div>
         )}
 
         <ToolRail />
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="relative flex min-h-0 flex-1 flex-col">
-            {/* Own boundary: a canvas render error must not blank the panels/topbar —
-                the project state survives and the fallback offers reload/report. */}
-            <ErrorBoundary>
-              <CanvasStage />
-            </ErrorBoundary>
-            <ReviewBar />
-          </div>
+        <div className="relative col-start-1 row-start-1 flex min-h-0 min-w-0 flex-col lg:col-start-3">
+          {/* Own boundary: a canvas render error must not blank the panels/topbar —
+              the project state survives and the fallback offers reload/report. */}
+          <ErrorBoundary>
+            <CanvasStage />
+          </ErrorBoundary>
+          <ReviewBar />
+        </div>
+        <div className="col-start-1 row-start-3 min-w-0 lg:col-start-3 lg:row-start-2">
           <SimulatorBar />
         </div>
 
         {propertiesOpen && (
-          <div className={isNarrow ? `${overlay} anim-drawer-r right-0` : "contents"}>
+          <div className={isNarrow ? `${overlay} anim-drawer-r right-0` : "col-start-4 row-span-2 row-start-1 min-h-0"}>
             <PropertiesPanel />
           </div>
         )}
@@ -251,15 +260,21 @@ function useIsNarrow(): boolean {
   return narrow;
 }
 
+// Every tool has a key (discoverable as a badge on its rail button).
 const TOOL_KEYS: Record<string, Tool> = {
   v: "select",
   n: "node",
   h: "pan",
   m: "measure",
+  x: "cut",
+  d: "direction",
   r: "running",
   s: "satin",
+  c: "satin2", // Column; in the Points tool, C toggles corner↔curve instead
   f: "fill",
   b: "pencil",
+  e: "brush",
+  a: "applique",
 };
 
 /** Editor-wide keyboard shortcuts (see HelpOverlay for the full list). */
@@ -410,13 +425,20 @@ function useGlobalShortcuts(setShowHelp: (fn: (v: boolean) => boolean) => void) 
         }
         return;
       }
+      // Curve toggle — bends new strokes through their points.
+      if (e.key.toLowerCase() === "q" && editor.viewMode === "edit") {
+        editor.toggleSmooth();
+        return;
+      }
       // Tool selection. The hand (pan) works in either view (you pan the
-      // simulator too); the rest are edit-view tools.
+      // simulator too); the rest are edit-view tools. In the Points tool, C
+      // stays the corner↔curve toggle (handled by the canvas), not Column.
       const tool = TOOL_KEYS[e.key.toLowerCase()];
       if (tool === "pan") {
         editor.setTool("pan");
         return;
       }
+      if (tool === "satin2" && editor.tool === "node") return;
       if (tool && editor.viewMode === "edit") editor.setTool(tool);
     }
 

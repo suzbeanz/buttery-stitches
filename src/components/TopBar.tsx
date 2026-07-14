@@ -112,6 +112,7 @@ export default function TopBar({
   const [showCheck, setShowCheck] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const activeColorId = useEditorStore((s) => s.activeColorId);
+  const rulerUnit = useEditorStore((s) => s.rulerUnit);
 
   const updateObject = useProjectStore((s) => s.updateObject);
   const layersOpen = useEditorStore((s) => s.layersOpen);
@@ -276,6 +277,8 @@ export default function TopBar({
     setShapeKind(kind);
     setTool("shape");
     setShowShapes(false);
+    // First-timers click a shape and wait — tell them the next gesture.
+    toast("Now drag on the canvas to place it (hold Shift for equal sides)", "info");
   }
 
   function saveCopy() {
@@ -289,7 +292,7 @@ export default function TopBar({
       toast("Add a design first — there's nothing to print yet.", "info");
       return;
     }
-    const html = worksheetHtml(ws, "Buttery Stitches");
+    const html = worksheetHtml(ws, "Buttery Stitches", rulerUnit);
     const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
     window.open(url, "_blank");
     setTimeout(() => URL.revokeObjectURL(url), 10000);
@@ -332,7 +335,7 @@ export default function TopBar({
         <BarButton label="Open" onClick={() => fileInput.current?.click()}>
           <FolderOpen size={18} />
         </BarButton>
-        <BarButton label="Import & add a design (.embproj, .pes, .dst, .jef, .exp, .vp3)" onClick={() => importInput.current?.click()}>
+        <BarButton label="Import & add a design (.embproj, .pes, .dst, .jef, .exp, .vp3, .tbf, .t01)" onClick={() => importInput.current?.click()}>
           <ImportIcon size={18} />
         </BarButton>
         <BarButton
@@ -405,6 +408,7 @@ export default function TopBar({
       <ExportMenu open={exportOpen} onOpenChange={setExportOpen} />
       <BarButton
         label="Clean up the stitching — fix densities, fill styles, order & seams"
+        text="Clean up"
         onClick={() => {
           const { project: cleaned, report } = fixStitchesWithReport(project);
           setProject(cleaned);
@@ -418,7 +422,7 @@ export default function TopBar({
       </BarButton>
       {/* Check + Print — inline on wide screens; in the "More" menu on narrow. */}
       <div className="hidden items-center gap-1 lg:flex">
-        <BarButton label="Check design — is it ready to stitch?" onClick={() => setShowCheck(true)}>
+        <BarButton label="Check design — is it ready to stitch?" text="Check" onClick={() => setShowCheck(true)}>
           <BadgeCheck size={18} />
         </BarButton>
         <BarButton label="Print thread list" onClick={openWorksheet}>
@@ -496,7 +500,7 @@ export default function TopBar({
       <input
         ref={importInput}
         type="file"
-        accept=".embproj,.pes,.dst,.jef,.exp,.vp3,application/json"
+        accept=".embproj,.pes,.dst,.jef,.exp,.vp3,.tbf,.t01,application/json"
         aria-label="Import a design file"
         className="hidden"
         onChange={onImportFile}
@@ -581,6 +585,7 @@ function MoreItem({ icon: Icon, label, onClick }: { icon: LucideIcon; label: str
 function BarButton({
   children,
   label,
+  text,
   onClick,
   disabled,
   active,
@@ -590,6 +595,9 @@ function BarButton({
   children: React.ReactNode;
   /** accessible name + tooltip for the icon button. */
   label: string;
+  /** optional short visible caption (≥xl screens) — key actions shouldn't rely
+   *  on hover tooltips alone to be discoverable. */
+  text?: string;
   onClick: () => void;
   disabled?: boolean;
   active?: boolean;
@@ -609,11 +617,16 @@ function BarButton({
       aria-pressed={popup ? undefined : active}
       aria-haspopup={popup ? "menu" : undefined}
       aria-expanded={popup ? active : undefined}
-      className={`tap-target grid h-9 w-9 shrink-0 place-items-center rounded-lg text-butter-100 transition-transform hover:bg-butter-200/15 active:translate-y-px active:bg-butter-200/25 disabled:cursor-not-allowed disabled:text-butter-200/40 disabled:hover:bg-transparent ${
-        active ? "bg-butter-200/15 text-butter-200" : ""
-      }`}
+      className={`tap-target flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg text-butter-100 transition-transform hover:bg-butter-200/15 active:translate-y-px active:bg-butter-200/25 disabled:cursor-not-allowed disabled:text-butter-200/40 disabled:hover:bg-transparent ${
+        text ? "px-2" : "w-9"
+      } ${active ? "bg-butter-200/15 text-butter-200" : ""}`}
     >
       {children}
+      {text && (
+        <span className="hidden font-label text-xs font-semibold uppercase tracking-[0.08em] xl:inline">
+          {text}
+        </span>
+      )}
     </button>
   );
 }

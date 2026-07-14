@@ -253,6 +253,66 @@ describe("projectStore.mergeObjects / splitRegion", () => {
     ]);
   });
 
+  it("sortByColor groups same-color objects, stable within color and by first appearance", () => {
+    const a = makeObject("fill", square(0, 0), "red");
+    const b = makeObject("fill", square(20, 0), "blue");
+    const c = makeObject("fill", square(40, 0), "red");
+    const d = makeObject("fill", square(60, 0), "blue");
+    useProjectStore.getState().addObjects([a, b, c, d]); // red,blue,red,blue = 4 blocks
+    useProjectStore.getState().sortByColor();
+    const order = useProjectStore.getState().project.objects.map((o) => o.id);
+    expect(order).toEqual([a.id, c.id, b.id, d.id]); // red,red,blue,blue = 2 blocks
+    // no-op when already sorted (undo history stays clean)
+    const before = useProjectStore.getState().project;
+    useProjectStore.getState().sortByColor();
+    expect(useProjectStore.getState().project).toBe(before);
+  });
+
+  it("subtract punches a hole: overlapping cutter leaves a hole in the base", () => {
+    const cId = useProjectStore.getState().project.colors[0].id;
+    const base = makeObject("fill", square(0, 0, 30), cId); // big square
+    const cutter = makeObject("fill", square(10, 10, 10), cId); // small, inside
+    useProjectStore.getState().addObjects([base, cutter]);
+    useProjectStore.getState().booleanObjects([base.id, cutter.id], "subtract");
+    const { project, selectedIds } = useProjectStore.getState();
+    expect(project.objects).toHaveLength(1); // cutter consumed
+    const result = project.objects[0];
+    expect(result.type).toBe("fill");
+    expect(result.paths.length).toBeGreaterThanOrEqual(2); // outer ring + hole
+    expect(selectedIds).toEqual([result.id]);
+  });
+
+  it("intersect keeps only the overlap of two fills", () => {
+    const cId = useProjectStore.getState().project.colors[0].id;
+    const a = makeObject("fill", square(0, 0, 20), cId);
+    const b = makeObject("fill", square(10, 10, 20), cId); // overlaps corner
+    useProjectStore.getState().addObjects([a, b]);
+    useProjectStore.getState().booleanObjects([a.id, b.id], "intersect");
+    const { project } = useProjectStore.getState();
+    expect(project.objects).toHaveLength(1);
+    // the overlap is the 10x10 corner square — much smaller than either input
+    const xs = project.objects[0].paths[0].map((p) => p.x);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(15);
+  });
+
+  it("subtract is a no-op when the result would be empty", () => {
+    const cId = useProjectStore.getState().project.colors[0].id;
+    const base = makeObject("fill", square(0, 0, 10), cId);
+    const cutter = makeObject("fill", square(-5, -5, 30), cId); // fully covers base
+    useProjectStore.getState().addObjects([base, cutter]);
+    useProjectStore.getState().booleanObjects([base.id, cutter.id], "subtract");
+    expect(useProjectStore.getState().project.objects).toHaveLength(2); // refused
+  });
+
+  it("boolean ops ignore non-fill selections (need 2+ fills)", () => {
+    const cId = useProjectStore.getState().project.colors[0].id;
+    const a = makeObject("fill", square(0, 0, 20), cId);
+    const b = makeObject("running", [{ x: 0, y: 0 }, { x: 10, y: 0 }], cId);
+    useProjectStore.getState().addObjects([a, b]);
+    useProjectStore.getState().booleanObjects([a.id, b.id], "subtract");
+    expect(useProjectStore.getState().project.objects).toHaveLength(2); // unchanged
+  });
+
   it("refuses to merge fills of different colors", () => {
     const cId = useProjectStore.getState().project.colors[0].id;
     const a = makeObject("fill", square(0, 0), cId);

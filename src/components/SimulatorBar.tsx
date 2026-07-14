@@ -25,6 +25,8 @@ export default function SimulatorBar() {
   const simSpeed = useEditorStore((s) => s.simSpeed);
   const realistic = useEditorStore((s) => s.realistic);
   const toggleRealistic = useEditorStore((s) => s.toggleRealistic);
+  const showDensity = useEditorStore((s) => s.showDensity);
+  const toggleDensity = useEditorStore((s) => s.toggleDensity);
   const setSimIndex = useEditorStore((s) => s.setSimIndex);
   const setSimPlaying = useEditorStore((s) => s.setSimPlaying);
   const setSimSpeed = useEditorStore((s) => s.setSimSpeed);
@@ -132,13 +134,32 @@ export default function SimulatorBar() {
           <button
             onClick={toggleRealistic}
             aria-pressed={realistic}
-            data-tip={realistic ? "Realistic thread on" : "Realistic thread off"}
+            // Describe the ACTION, not the current state — "Realistic thread off"
+            // right after switching it on reads like the click didn't work.
+            data-tip={realistic ? "Turn off realistic thread" : "Turn on realistic thread"}
             data-tip-side="top"
             className={`tap-target rounded-sm border-2 border-ink px-2 py-1 font-label text-xs font-semibold uppercase tracking-wide ${
               realistic ? "bg-ink text-cream" : "bg-cream text-ink hover:bg-butter-200"
             }`}
           >
             3D
+          </button>
+
+          <button
+            onClick={toggleDensity}
+            aria-pressed={showDensity}
+            data-tip={
+              showDensity
+                ? "Hide the density heat overlay"
+                : "Show density heat — where thread piles up enough to pucker"
+            }
+            data-tip-tone="red"
+            data-tip-side="top"
+            className={`tap-target rounded-sm border-2 border-ink px-2 py-1 font-label text-xs font-semibold uppercase tracking-wide ${
+              showDensity ? "bg-stamp text-cream" : "bg-cream text-ink hover:bg-butter-200"
+            }`}
+          >
+            Heat
           </button>
         </>
       ) : (

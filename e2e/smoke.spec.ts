@@ -68,5 +68,7 @@ test("draws a running stitch and switches its type to satin", async ({ page }) =
 
   // Properties panel reflects the selection; change type to Satin.
   await page.getByRole("combobox").first().selectOption("satin");
-  await expect(page.getByText(/Column width/i)).toBeVisible();
+  // Exact label: the underlay-type hint also says "column width", and the loose
+  // regex tripped strict mode.
+  await expect(page.getByText("Column width (mm)")).toBeVisible();
 });

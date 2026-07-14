@@ -19,12 +19,14 @@ import {
   Split,
   Spline,
   Magnet,
+  SquaresIntersect,
   Minus,
   Plus,
   Trash2,
   Check,
 } from "lucide-react";
 import { alignObjects, distributeObjects, type AlignEdge } from "../lib/arrange";
+import { designBounds, scaleAllPaths, translateAllPaths } from "../lib/layout";
 import { useProjectStore } from "../store/projectStore";
 import { useEditorStore, type PropertiesTab } from "../store/editorStore";
 import ColorSelect from "./ColorSelect";
@@ -34,12 +36,13 @@ import type {
   EmbObjectParams,
   Path,
   ThreadColor,
+  UnderlayType,
 } from "../types/project";
 import { newId } from "../lib/id";
 import { convertObjectType, satinWidthOf, setSatinWidth } from "../lib/objects";
 import { splitRegionComponents } from "../lib/regions";
 import { toast } from "../store/toastStore";
-import { MOTIFS } from "../lib/engine/motifs";
+import { motifsByGroup } from "../lib/engine/motifs";
 import { buildOutline, DEFAULT_OUTLINE_WIDTH } from "../lib/outline";
 import { generateObjectStitches } from "../lib/engine";
 import DesignPanel from "./DesignPanel";
@@ -223,6 +226,7 @@ function ArrangeSection() {
   const groupObjects = useProjectStore((s) => s.groupObjects);
   const ungroupObjects = useProjectStore((s) => s.ungroupObjects);
   const mergeObjects = useProjectStore((s) => s.mergeObjects);
+  const booleanObjects = useProjectStore((s) => s.booleanObjects);
   const splitRegion = useProjectStore((s) => s.splitRegion);
   const weldObject = useProjectStore((s) => s.weldObject);
   const n = selectedIds.length;
@@ -250,6 +254,9 @@ function ArrangeSection() {
   // Weld needs a lone fill plus at least one other fill to butt against.
   const canWeld =
     !!splitTarget && objects.some((o) => o.id !== splitTarget.id && o.type === "fill");
+  // Subtract/intersect need 2+ fills selected (any color — unlike merge).
+  const canBoolean =
+    selectedObjs.length >= 2 && selectedObjs.every((o) => o.type === "fill");
   if (n === 0) return null;
 
   const align = (edge: AlignEdge) =>
@@ -257,11 +264,46 @@ function ArrangeSection() {
   const distribute = (axis: "h" | "v") =>
     updateProject({ objects: distributeObjects(objects, selectedIds, axis) });
 
+  // Exact numeric position/size of the selection's bounding box (top-left corner
+  // + width/height, mm). Also a keyboard-only authoring path: a user who can't
+  // drag on the canvas can still place and size objects precisely here.
+  const bounds = designBounds(selectedObjs);
+  const round1 = (v: number) => Math.round(v * 10) / 10;
+  const applyRect = (patch: { xMm?: number; yMm?: number; wMm?: number; hMm?: number }) => {
+    if (!bounds) return;
+    const curW = bounds.maxX - bounds.minX;
+    const curH = bounds.maxY - bounds.minY;
+    const sx = patch.wMm != null && patch.wMm > 0 && curW > 0 ? patch.wMm / curW : 1;
+    const sy = patch.hMm != null && patch.hMm > 0 && curH > 0 ? patch.hMm / curH : 1;
+    let next = selectedObjs;
+    if (sx !== 1 || sy !== 1)
+      next = scaleAllPaths(next, sx, sy, { x: bounds.minX, y: bounds.minY });
+    const dx = (patch.xMm ?? bounds.minX) - bounds.minX;
+    const dy = (patch.yMm ?? bounds.minY) - bounds.minY;
+    if (dx !== 0 || dy !== 0) next = translateAllPaths(next, dx, dy);
+    const map = new Map(next.map((o) => [o.id, o]));
+    updateProject({ objects: objects.map((o) => map.get(o.id) ?? o) });
+  };
+
   return (
     <div className="flex flex-col gap-2 border-b border-navy/25 p-3 text-sm">
       <span className="font-label text-xs font-semibold uppercase tracking-[0.1em] text-ink-deep">
         Arrange
       </span>
+
+      {bounds && (
+        <>
+          <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/60">
+            Position &amp; size (mm)
+          </span>
+          <div className="grid grid-cols-2 gap-1.5">
+            <NumberField label="X" value={round1(bounds.minX)} step={1} onChange={(v) => applyRect({ xMm: v })} />
+            <NumberField label="Y" value={round1(bounds.minY)} step={1} onChange={(v) => applyRect({ yMm: v })} />
+            <NumberField label="W" value={round1(bounds.maxX - bounds.minX)} step={1} min={0.5} onChange={(v) => applyRect({ wMm: v })} />
+            <NumberField label="H" value={round1(bounds.maxY - bounds.minY)} step={1} min={0.5} onChange={(v) => applyRect({ hMm: v })} />
+          </div>
+        </>
+      )}
 
       <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/60">
         {n >= 2 ? "Align selection" : "Align in hoop"}
@@ -345,6 +387,26 @@ function ArrangeSection() {
           }}
         >
           <Magnet size={15} />
+        </ArrangeBtn>
+        <ArrangeBtn
+          label="Subtract top shape(s) from bottom (punch a hole)"
+          disabled={!canBoolean}
+          onClick={() => {
+            booleanObjects(selectedIds, "subtract");
+            toast("Subtracted overlap", "success");
+          }}
+        >
+          <Minus size={15} />
+        </ArrangeBtn>
+        <ArrangeBtn
+          label="Intersect — keep only the overlap"
+          disabled={!canBoolean}
+          onClick={() => {
+            booleanObjects(selectedIds, "intersect");
+            toast("Kept overlap", "success");
+          }}
+        >
+          <SquaresIntersect size={15} />
         </ArrangeBtn>
       </div>
     </div>
@@ -432,9 +494,7 @@ function ObjectProperties({
               className="select"
             >
               <option value="none">None (plain line)</option>
-              {MOTIFS.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
+              <MotifOptions />
             </select>
           </Field>
           {p.motifRun && p.motifRun !== "none" && (
@@ -452,6 +512,7 @@ function ObjectProperties({
       {(object.type === "fill" || object.type === "satin") && (
         <NumberField
           label="Density (mm/row)"
+          hint="Gap between rows — smaller packs stitches tighter (heavier, stiffer); larger is lighter."
           value={p.density ?? DEFAULT_PARAMS.density}
           step={0.05}
           min={0.1}
@@ -519,9 +580,7 @@ function ObjectProperties({
               onChange={(e) => onParam({ motif: e.target.value })}
               className="select"
             >
-              {MOTIFS.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
+              <MotifOptions />
             </select>
           </Field>
           <NumberField
@@ -543,9 +602,7 @@ function ObjectProperties({
               className="select"
             >
               <option value="none">None</option>
-              {MOTIFS.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
+              <MotifOptions />
             </select>
           </Field>
           <label className="flex items-center gap-2 text-sm text-navy">
@@ -580,6 +637,7 @@ function ObjectProperties({
         ) : (
           <NumberField
             label="Angle (° from auto)"
+            hint="Tilts the direction rows run. 0 keeps the automatic grain; try 45 for a visible slant."
             value={p.angle ?? DEFAULT_PARAMS.angle}
             step={5}
             onChange={(v) => onParam({ angle: v })}
@@ -597,6 +655,7 @@ function ObjectProperties({
           />
           <NumberField
             label="Pull comp (mm)"
+            hint="Widens the column slightly so it stays full-width after the thread pulls the fabric in."
             value={p.pullComp ?? DEFAULT_PARAMS.pullComp}
             step={0.05}
             min={0}
@@ -613,14 +672,19 @@ function ObjectProperties({
       )}
 
       {object.type !== "running" && (
-        <label className="flex items-center gap-2 text-navy">
-          <input
-            type="checkbox"
-            checked={p.underlay ?? DEFAULT_PARAMS.underlay}
-            onChange={(e) => onParam({ underlay: e.target.checked })}
-            className="accent-ink"
-          />
-          Underlay
+        <label className="flex flex-col gap-0.5 text-navy">
+          <span className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={p.underlay ?? DEFAULT_PARAMS.underlay}
+              onChange={(e) => onParam({ underlay: e.target.checked })}
+              className="accent-ink"
+            />
+            Underlay
+          </span>
+          <span className="pl-6 font-body text-[10px] leading-snug text-navy/50">
+            A hidden first pass that steadies the fabric so the top stitches lie smooth. Keep it on.
+          </span>
         </label>
       )}
 
@@ -639,6 +703,26 @@ function ObjectProperties({
             <option value="light">Light — edge only</option>
             <option value="standard">Standard</option>
             <option value="heavy">Heavy — extra support</option>
+          </select>
+        </Field>
+      )}
+
+      {object.type !== "running" && (p.underlay ?? DEFAULT_PARAMS.underlay) && (
+        <Field
+          label="Underlay type"
+          hint="Auto picks by column width — override for special fabrics."
+        >
+          <select
+            value={p.underlayType ?? DEFAULT_PARAMS.underlayType}
+            onChange={(e) => onParam({ underlayType: e.target.value as UnderlayType })}
+            className="select"
+          >
+            <option value="auto">Auto (recommended)</option>
+            <option value="center">Center run</option>
+            <option value="edge">Edge walk</option>
+            <option value="zigzag">Zigzag</option>
+            <option value="double-zigzag">Double zigzag</option>
+            <option value="tatami">Tatami (fills)</option>
           </select>
         </Field>
       )}
@@ -912,17 +996,38 @@ function hexToRgb(hex: string): [number, number, number] {
 
 // ---------------------------------------------------------------------------
 
+/** The motif library as grouped <optgroup>s, shared by the run/fill/carve pickers. */
+function MotifOptions() {
+  return (
+    <>
+      {motifsByGroup().map((g) => (
+        <optgroup key={g.group} label={g.label}>
+          {g.motifs.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </>
+  );
+}
+
 function Field({
   label,
+  hint,
   children,
 }: {
   label: string;
+  /** One plain-language line for embroiderers new to this app's vocabulary. */
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
     <label className="flex flex-col gap-1">
       <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/60">{label}</span>
       {children}
+      {hint && <span className="font-body text-[10px] leading-snug text-navy/50">{hint}</span>}
     </label>
   );
 }
@@ -986,6 +1091,7 @@ function CommitInput({
 
 function NumberField({
   label,
+  hint,
   value,
   step,
   min,
@@ -993,6 +1099,7 @@ function NumberField({
   onChange,
 }: {
   label: string;
+  hint?: string;
   value: number;
   step?: number;
   min?: number;
@@ -1028,7 +1135,7 @@ function NumberField({
     if (c !== value) onChange(c);
   };
   return (
-    <Field label={label}>
+    <Field label={label} hint={hint}>
       <div className="flex items-stretch gap-1">
         <button
           type="button"

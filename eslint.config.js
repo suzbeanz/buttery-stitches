@@ -53,4 +53,22 @@ export default tseslint.config(
     files: ["scripts/**/*.{js,mjs}", "*.{js,ts}"],
     languageOptions: { globals: { ...globals.node } },
   },
+  // Production app source ships to the BROWSER: `process` is undefined there
+  // and a stray `process.env.X` crashes the feature that touches it at runtime
+  // (it happened — a debug flag in the engine broke auto-digitize). Tests and
+  // bench code run under node and may keep using it.
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/**/*.test.{ts,tsx}", "src/test/**", "src/lib/bench/**"],
+    rules: {
+      "no-restricted-globals": [
+        "error",
+        {
+          name: "process",
+          message:
+            "`process` does not exist in the browser. Use import.meta.env, or guard with typeof process !== 'undefined'.",
+        },
+      ],
+    },
+  },
 );

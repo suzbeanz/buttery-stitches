@@ -23,6 +23,18 @@ import { buildTag } from "../lib/version";
  * summary + any validation warnings, then exports through Pyodide/pyembroidery.
  */
 
+/** Which machines read each format — shown under the format buttons so a
+ *  first-timer doesn't need to already know that PES means Brother. */
+const FORMAT_BRAND: Record<EmbFormat, string> = {
+  pes: "Brother · Babylock",
+  dst: "Tajima · most",
+  jef: "Janome",
+  exp: "Melco · Bernina",
+  vp3: "Husqvarna · Pfaff",
+  tbf: "Barudan",
+  t01: "Tajima · Pfaff",
+};
+
 const STAGE_LABEL: Record<LoadStage, string> = {
   idle: "",
   "loading-runtime": "Loading the stitch engine…",
@@ -138,14 +150,17 @@ export default function ExportMenu({
 
   return (
     <div className="relative">
+      {/* The deliverable action — labeled and visually distinct from the other
+          icon buttons so "how do I get my file?" answers itself at a glance. */}
       <button
         onClick={() => setOpen(!open)}
-        data-tip="Export"
-        aria-label="Export"
+        data-tip="Export a machine file (PES, DST…)"
+        aria-label="Export a machine file"
         aria-expanded={open}
-        className="tap-target grid h-9 w-9 shrink-0 place-items-center rounded-lg text-butter-100 hover:bg-butter-200/15"
+        className="tap-target flex h-9 shrink-0 items-center gap-1.5 rounded-sm border-2 border-butter-200/70 px-2.5 font-label text-xs font-semibold uppercase tracking-[0.08em] text-butter-100 hover:bg-butter-200/15"
       >
-        <Download size={18} />
+        <Download size={16} />
+        <span className="hidden sm:inline">Export</span>
       </button>
 
       {open && (
@@ -209,9 +224,10 @@ export default function ExportMenu({
                     key={f}
                     disabled={busy}
                     onClick={() => doExport(f)}
-                    className="tap-target rounded-sm border-2 border-ink bg-cream px-2 py-1.5 font-label text-xs font-semibold uppercase tracking-wide text-ink shadow-press-sm transition-transform hover:bg-ink hover:text-cream active:translate-y-[2px] active:shadow-none disabled:opacity-40"
+                    className="tap-target flex flex-col items-center rounded-sm border-2 border-ink bg-cream px-1 py-1.5 shadow-press-sm transition-transform hover:bg-ink hover:text-cream active:translate-y-[2px] active:shadow-none disabled:opacity-40 group"
                   >
-                    {f}
+                    <span className="font-label text-xs font-semibold uppercase tracking-wide text-ink group-hover:text-cream">{f}</span>
+                    <span className="font-body text-[9px] leading-tight text-char/55 group-hover:text-cream/70">{FORMAT_BRAND[f]}</span>
                   </button>
                 ))}
               </div>

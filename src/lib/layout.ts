@@ -24,15 +24,25 @@ export function scaleAllPaths(
   pivot: { x: number; y: number },
 ): EmbObject[] {
   const sc = (x: number, p: number, s: number) => p + (x - p) * s;
+  const scPath = (path: { x: number; y: number }[]) =>
+    path.map((p) => ({ x: sc(p.x, pivot.x, sx), y: sc(p.y, pivot.y, sy) }));
   return objects.map((o) => ({
     ...o,
-    paths: o.paths.map((path) =>
-      path.map((p) => ({ x: sc(p.x, pivot.x, sx), y: sc(p.y, pivot.y, sy) })),
-    ),
+    paths: o.paths.map(scPath),
     // Keep the editable control nodes in step so curves survive a resize.
+    // Bézier handles are relative offsets — they scale but don't re-pivot.
     nodes: o.nodes?.map((ring) =>
-      ring.map((nd) => ({ x: sc(nd.x, pivot.x, sx), y: sc(nd.y, pivot.y, sy), smooth: nd.smooth })),
+      ring.map((nd) => ({
+        x: sc(nd.x, pivot.x, sx),
+        y: sc(nd.y, pivot.y, sy),
+        smooth: nd.smooth,
+        hIn: nd.hIn ? { x: nd.hIn.x * sx, y: nd.hIn.y * sy } : undefined,
+        hOut: nd.hOut ? { x: nd.hOut.x * sx, y: nd.hOut.y * sy } : undefined,
+      })),
     ),
+    // Authored satin centerlines (flagship lettering) must scale too, or a
+    // resized word keeps its old-size stroke skeleton and mis-renders.
+    satinCenterlines: o.satinCenterlines?.map(scPath),
   }));
 }
 

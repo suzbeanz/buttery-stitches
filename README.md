@@ -12,7 +12,7 @@ desktop software or uploading my art to someone's server. It's named after my
 dog, Butters — hence the butter-yellow-and-navy theme, the serif wordmark, and
 rulers styled like the marks on a stick of butter.
 
-![Buttery Stitches editor](docs/hero.svg)
+![The Buttery Stitches studio — the calibration swatch rendered as realistic thread in Stitch view](docs/hero.jpg)
 
 It's happiest with **clean logos, lettering, and limited-color artwork**. It is
 *not* a photo converter — feed it a photograph and you'll get a rough, heavily
@@ -265,9 +265,11 @@ node scripts/fetch-fonts.mjs   # re-vendors Latin woff2 + regenerates src/fonts.
 | `V` | Select | `⌘/Ctrl Z` / `⇧Z` | Undo / Redo |
 | `N` | Node edit | `⌘/Ctrl C` / `V` | Copy / Paste |
 | `R` `S` `F` | Running / Satin / Fill | `⌘/Ctrl D` | Duplicate |
-| `Enter` / `Esc` | Finish / cancel a shape | `⌘/Ctrl S` | Save `.embproj` |
-| `Del` | Delete selection | `P` | Toggle stitch view |
-| `?` | Shortcut help | `Space` | Play / pause simulation |
+| `C` `B` `E` | Column / Pencil / Brush | `⌘/Ctrl S` | Save `.embproj` |
+| `X` `D` `A` | Cut / Direction / Appliqué | `P` | Toggle stitch view |
+| `Q` | Curve toggle | `Space` | Play / pause simulation |
+| `Enter` / `Esc` | Finish / cancel a shape | `Del` | Delete selection |
+| `?` | Shortcut help (full list) | | |
 
 ## Hosting
 

@@ -411,6 +411,18 @@ body::after {
     right: 0;
     transform: none;
   }
+  /* Red-branded elements (stamp-red chips, the Heat toggle) carry a matching
+     stamp-red tooltip so the tone follows the thing you're pointing at. */
+  [data-tip-tone="red"]::after {
+    background: #b23a2e;
+    box-shadow: 0 6px 20px -10px rgba(120, 30, 22, 0.65);
+  }
+}
+
+/* Selected text wears the brand: butter-yellow type on press-blue navy. */
+::selection {
+  background: #173a7a;
+  color: #f1de8b;
 }
 
 /* Thin, buttery scrollbars. */

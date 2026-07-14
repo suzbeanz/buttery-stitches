@@ -21,11 +21,17 @@ import {
 } from "../store/editorStore";
 
 /**
- * Left vertical tool rail — the tools you pick up to draw and edit, grouped Edit
+ * Tool rail — the tools you pick up to draw and edit, grouped Edit
  * (Select · Points · Hand · Measure) · Stitch · Helpers, each with a label, and
  * the stitch tools use custom glyphs that DEPICT the stitch they make. Adding
  * CONTENT (words · image · shapes) lives in the top bar's Insert group, not here,
  * so nothing is duplicated.
+ *
+ * ONE component, two orientations (same buttons, handlers and aria — only CSS
+ * reflows): at lg+ it's the classic left vertical column; below lg it's a
+ * horizontal, swipe-scrollable strip pinned above the SimulatorBar, so a phone's
+ * canvas isn't crushed by a fixed side column. The Studio grid in App.tsx places
+ * it via the col/row-start classes below.
  */
 export default function ToolRail() {
   const tool = useEditorStore((s) => s.tool);
@@ -47,18 +53,16 @@ export default function ToolRail() {
   const lockTip = "Switch to Edit view to use tools";
 
   return (
-    // overflow-visible (not -auto): a vertical scroll container forces the cross
-    // axis to clip, which hid the right-side tooltips inside the rail and flashed a
-    // horizontal scrollbar. The compact two-column layout fits the kit without it.
+    // Below lg: a horizontal overflow-x-auto bottom strip (grid row 2, above the
+    // SimulatorBar) that swipes sideways through the kit. At lg+: the vertical
+    // left column, overflow-visible (not -auto) so the right-side tooltips
+    // aren't clipped — the compact two-column layout fits the kit without it.
     <aside
       aria-label="Drawing tools"
-      // Narrow screens get a single icon column (w-14) — the fixed two-column
-      // rail was 28% of a phone's width. Labels return at lg alongside the
-      // two-column grid; every button keeps its aria-label + tooltip.
-      className="flex w-14 shrink-0 flex-col gap-0.5 overflow-visible border-r-2 border-ink bg-cream py-1.5 lg:w-28"
+      className="col-start-1 row-start-2 flex min-w-0 flex-row gap-0.5 overflow-x-auto border-t-2 border-ink bg-cream px-1 py-1 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:w-28 lg:flex-col lg:overflow-visible lg:border-r-2 lg:border-t-0 lg:px-0 lg:py-1.5"
     >
       {locked && (
-        <div className="mx-1.5 mb-1 rounded-sm bg-butter-200 px-1 py-1 text-center font-label text-[9px] font-semibold uppercase leading-tight tracking-wide text-ink/70">
+        <div className="mx-1.5 w-24 shrink-0 self-center rounded-sm bg-butter-200 px-1 py-1 text-center font-label text-[9px] font-semibold uppercase leading-tight tracking-wide text-ink/70 lg:mb-1 lg:w-auto lg:self-auto">
           Stitch view — tools paused
         </div>
       )}
@@ -75,10 +79,10 @@ export default function ToolRail() {
         <ToolBtn id="measure" label="Measure" shortcut="M" tip="Measure distance & angle" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Ruler size={20} />
         </ToolBtn>
-        <ToolBtn id="cut" label="Cut" tip="Cut a running line in two" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="cut" label="Cut" shortcut="X" tip="Cut a running line in two" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Slice size={20} />
         </ToolBtn>
-        <ToolBtn id="direction" label="Direction" tip="Set a fill's stitch direction" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="direction" label="Direction" shortcut="D" tip="Set a fill's stitch direction" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Compass size={20} />
         </ToolBtn>
       </Group>
@@ -91,7 +95,7 @@ export default function ToolRail() {
         <ToolBtn id="satin" label="Satin" shortcut="S" tip="Satin column — borders & lettering" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <SatinGlyph />
         </ToolBtn>
-        <ToolBtn id="satin2" label="Column" tip="Two-rail satin (variable width)" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="satin2" label="Column" shortcut="C" tip="Two-rail satin (variable width)" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Satin2Glyph />
         </ToolBtn>
         <ToolBtn id="fill" label="Fill" shortcut="F" tip="Fill a solid area" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
@@ -100,14 +104,15 @@ export default function ToolRail() {
         <ToolBtn id="pencil" label="Pencil" shortcut="B" tip="Freehand running line" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Pencil size={20} />
         </ToolBtn>
-        <ToolBtn id="brush" label="Brush" tip="Freehand filled area" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="brush" label="Brush" shortcut="E" tip="Freehand filled area" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Paintbrush size={20} />
         </ToolBtn>
-        <ToolBtn id="applique" label="Appliqué" tip="Appliqué — fabric patch" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="applique" label="Appliqué" shortcut="A" tip="Appliqué — fabric patch" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Scissors size={20} />
         </ToolBtn>
         <RailBtn
           label="Curve"
+          shortcut="Q"
           tip={locked ? lockTip : "Curved drawing — bends new strokes through their points"}
           active={smooth && !locked}
           disabled={locked}
@@ -148,9 +153,16 @@ export default function ToolRail() {
         </RailBtn>
       </Group>
 
-      {/* Units toggle pinned to the bottom. */}
-      <div className="mt-auto px-2 pt-2">
-        <div className="flex overflow-hidden rounded-sm border-2 border-ink text-[11px]">
+      {/* A first-timer looking for "add a circle" scans this rail and misses
+          the Insert group up top — point them there. */}
+      <p className="mt-2 hidden px-2 text-center font-body text-[9.5px] leading-snug text-ink/80 lg:block">
+        Words, images &amp; shapes live in the <span className="font-semibold text-ink">top bar</span> ↑
+      </p>
+
+      {/* Units toggle — pinned to the bottom of the column at lg+, trailing the
+          horizontal strip below lg. */}
+      <div className="flex shrink-0 items-center px-1 lg:mt-auto lg:block lg:px-2 lg:pt-2">
+        <div className="flex w-20 overflow-hidden rounded-sm border-2 border-ink text-[11px] lg:w-auto">
           {(["in", "mm"] as const).map((u) => {
             const unit: RulerUnit = u === "in" ? "inch" : "mm";
             const on = rulerUnit === unit;
@@ -159,7 +171,7 @@ export default function ToolRail() {
                 key={u}
                 onClick={() => setRulerUnit(unit)}
                 aria-pressed={on}
-                className={`flex-1 py-1 font-label font-semibold uppercase tracking-wide ${
+                className={`flex-1 py-2 font-label font-semibold uppercase tracking-wide lg:py-1 ${
                   on ? "bg-ink text-cream" : "bg-cream text-ink hover:bg-butter-200"
                 }`}
               >
@@ -175,18 +187,21 @@ export default function ToolRail() {
 
 function Group({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="px-1.5">
+    <div className="shrink-0 px-1.5">
       <div className="mb-0.5 text-center font-label text-[9px] font-semibold uppercase tracking-[0.18em] text-ink/80">
         {label}
       </div>
-      {/* Two columns so the whole kit fits at a glance without scrolling. */}
-      <div className="grid grid-cols-1 gap-1 lg:grid-cols-2">{children}</div>
+      {/* Below lg the group lays its buttons in a swipeable row; at lg+ two
+          columns so the whole kit fits at a glance without scrolling. */}
+      <div className="flex gap-1 lg:grid lg:grid-cols-2">{children}</div>
     </div>
   );
 }
 
 function Rule() {
-  return <div className="mx-3 my-0.5 border-t border-ink/15" />;
+  // Divider follows the rail's orientation: vertical hairline in the horizontal
+  // strip, horizontal hairline in the lg+ column.
+  return <div className="my-1 shrink-0 border-l border-ink/15 lg:mx-3 lg:my-0.5 lg:border-l-0 lg:border-t" />;
 }
 
 /** A tool selector button (icon + label) that sets the active tool. */
@@ -247,7 +262,7 @@ function RailBtn({
       aria-label={label}
       aria-keyshortcuts={shortcut}
       aria-pressed={active}
-      className={`tap-target relative flex w-full flex-col items-center gap-0.5 rounded-sm border-2 px-1 py-1.5 transition-[color,background-color,border-color,transform] active:translate-y-px disabled:opacity-40 ${
+      className={`tap-target relative flex w-12 shrink-0 flex-col items-center justify-center gap-0.5 rounded-sm border-2 px-1 py-1.5 transition-[color,background-color,border-color,transform] active:translate-y-px disabled:opacity-40 lg:w-full ${
         active
           ? "border-ink bg-ink text-cream"
           : "border-transparent text-ink hover:border-ink/30 hover:bg-butter-200/60"

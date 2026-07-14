@@ -26,8 +26,8 @@ import type Konva from "konva";
 import { useProjectStore } from "../store/projectStore";
 import { useEditorStore, isDrawTool, isPointTool } from "../store/editorStore";
 import type { EmbObject, Path, Point, ThreadColor } from "../types/project";
-import { makeObject, makeObjectFromPaths, makeNodeObject, makeSatinFromRails, minPointsFor, pathsFromNodes, isClosedType } from "../lib/objects";
-import { densifyRing, insertNode, moveNode, deleteNode, toggleNodeSmooth, translateNodes, type NodePath } from "../lib/nodes";
+import { makeObject, makeObjectFromPaths, makeNodeObject, makeSatinFromRails, minPointsFor, pathsFromNodes, satinPathsFromNodes, satinWidthOf, isClosedType } from "../lib/objects";
+import { densifyRing, insertNode, moveNode, deleteNode, toggleNodeSmooth, translateNodes, impliedHandles, setNodeHandle, type NodePath } from "../lib/nodes";
 import { shapeFromDrag, shapeRings, type ShapeKind } from "../lib/shapes";
 import { bucketFill } from "../lib/paintbucket";
 import {
@@ -48,7 +48,8 @@ import { computeTicksRange } from "../lib/ruler";
 import { mmToInch } from "../lib/units";
 import ContextMenu from "./ContextMenu";
 import { buildTestSwatch } from "../lib/samples/swatch";
-import { designFor, orientByDepth } from "../lib/engine";
+import { designFor, orientByDepth, type EngineStitch } from "../lib/engine";
+import { buildDensityMap, hotCells, DENSITY_CELL_MM } from "../lib/engine/densitymap";
 import { extendSegments, designToSegments, type RenderSegment, needleAt } from "../lib/engine/render";
 import { drawStitches } from "../lib/render-stitches";
 
@@ -323,7 +324,13 @@ export default function CanvasStage() {
   }, []);
   const handleCommitNodes = useCallback((id: string, nodes: NodePath[]) => {
     const o = useProjectStore.getState().project.objects.find((x) => x.id === id);
-    useProjectStore.getState().updateObject(id, { nodes, paths: pathsFromNodes(nodes, o?.type === "fill") });
+    // A satin's nodes are its centerline: rebuild the rail pair at the column's
+    // current width so reshaping the spine keeps the width the user set.
+    const paths =
+      o?.type === "satin"
+        ? satinPathsFromNodes(nodes, satinWidthOf(o.paths))
+        : pathsFromNodes(nodes, o?.type === "fill");
+    useProjectStore.getState().updateObject(id, { nodes, paths });
   }, []);
   const handleMoveSelected = useCallback((dxMm: number, dyMm: number) => {
     const store = useProjectStore.getState();
@@ -360,11 +367,17 @@ export default function CanvasStage() {
   useEffect(() => {
     const tr = trRef.current;
     if (!tr) return;
-    const node =
-      tool === "select" && selectedIds.length === 1
-        ? nodeRefs.current.get(selectedIds[0])
-        : undefined;
-    tr.nodes(node ? [node] : []);
+    // Attach EVERY selected object's node: a multi-selection gets one shared
+    // box with handles (scale/rotate together), exactly like single-select —
+    // each object bakes its own matrix on transformend. (This was previously
+    // gated to length === 1, so multi-select silently lost its handles.)
+    const nodes =
+      tool === "select"
+        ? selectedIds
+            .map((id) => nodeRefs.current.get(id))
+            .filter((n): n is Konva.Group => !!n)
+        : [];
+    tr.nodes(nodes);
     tr.getLayer()?.batchDraw();
   }, [tool, selectedIds, project.objects]);
 
@@ -434,15 +447,11 @@ export default function CanvasStage() {
       useEditorStore.getState().activeColorId ??
       useProjectStore.getState().project.colors[0]?.id;
     if (!colorId) return;
-    if (tool === "satin") {
-      // Satin keeps the centerline→rails model (no node editing); the Curve
-      // toggle densifies the centerline before the rails are derived.
-      addObject(makeObject("satin", smooth ? smoothPath(cleaned) : cleaned, colorId));
-    } else {
-      // Running / fill keep their placed points as editable control NODES, each
-      // seeded smooth (Curve on) or corner (Curve off); paths densify from them.
-      addObject(makeNodeObject(tool, cleaned, colorId, smooth));
-    }
+    // All draw tools keep their placed points as editable control NODES, each
+    // seeded smooth (Curve on) or corner (Curve off). Running/fill densify the
+    // nodes into their path; satin keeps the nodes as its CENTERLINE and derives
+    // the rail pair — so the spine stays reshape-editable after commit.
+    addObject(makeNodeObject(tool, cleaned, colorId, smooth));
     clearDraft();
   }
 
@@ -1929,6 +1938,14 @@ function StitchView({
 }) {
   const upTo = useEditorStore((s) => s.simIndex);
   const realistic = useEditorStore((s) => s.realistic);
+  const showDensity = useEditorStore((s) => s.showDensity);
+  // Density heat overlay: rasterize the FULL design once (not per playback
+  // frame) and paint only the cells past the caution threshold.
+  const heat = useMemo(() => {
+    if (!showDensity) return [];
+    const map = buildDensityMap(design as EngineStitch[]);
+    return map ? hotCells(map) : [];
+  }, [showDensity, design]);
   // Playback advances upTo every animation frame; a full re-segmentation per
   // frame is O(n) allocations (O(n²) per playback — GC churn at 50k stitches).
   // Keep an incremental cache and EXTEND it while upTo moves forward; rebuild
@@ -1987,6 +2004,33 @@ function StitchView({
           drawStitches(native, segs, { colorById, px, py, threadPx, realistic: effectiveRealistic });
         }}
       />
+      {/* Density heat overlay: amber (caution) → stamp-red (danger) squares
+          where penetrations pile past what fabric takes well. One Shape, drawn
+          natively — heat is recomputed only when the design changes. */}
+      {heat.length > 0 && (
+        <Shape
+          listening={false}
+          sceneFunc={(ctx) => {
+            const native = (ctx as unknown as { _context: CanvasRenderingContext2D })._context;
+            const cellPx = Math.max(2, px(DENSITY_CELL_MM) - px(0));
+            for (const cell of heat) {
+              // 0 → amber caution, 1 → solid stamp red.
+              native.fillStyle =
+                cell.severity >= 1
+                  ? "rgba(178, 58, 46, 0.62)"
+                  : `rgba(${Math.round(216 + (178 - 216) * cell.severity)}, ${Math.round(
+                      150 + (58 - 150) * cell.severity,
+                    )}, 46, ${0.28 + 0.3 * cell.severity})`;
+              native.fillRect(
+                px(cell.x) - cellPx / 2,
+                py(cell.y) - cellPx / 2,
+                cellPx,
+                cellPx,
+              );
+            }
+          }}
+        />
+      )}
       {needle && (
         <Group x={px(needle.x)} y={py(needle.y)} listening={false}>
           {/* A flat stamp-red ring around a cream dot — a clear "live needle"
@@ -2101,9 +2145,18 @@ const ObjectShape = memo(function ObjectShape({
   // a node-drag is a single undo step and the outline follows the handle).
   const [livePaths, setLivePaths] = useState<Path[] | null>(null);
   const paths = livePaths ?? object.paths;
-  // Editable control nodes (running/fill). Absent → legacy polyline editing.
+  // Editable control nodes (running/fill/satin). Absent → legacy polyline editing.
   const nodeRings = object.nodes;
   const closedRings = object.type === "fill";
+  // Live node-edit preview: a satin's nodes are its CENTERLINE — preview the
+  // derived rail pair (at the current width) so the column follows the spine.
+  const liveDensify = useCallback(
+    (rings: NodePath[]): Path[] =>
+      object.type === "satin"
+        ? satinPathsFromNodes(rings, satinWidthOf(object.paths))
+        : rings.map((r) => densifyRing(r, object.type === "fill")),
+    [object.type, object.paths],
+  );
 
   // Rings oriented for nonzero-winding fill so counters cut and overlapping
   // (script) contours union — no false holes.
@@ -2215,9 +2268,24 @@ const ObjectShape = memo(function ObjectShape({
         node.setAttrs({ x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 });
         if (nodeRings) {
           // Transform the control NODES (keep curve-editability through scale/rotate).
+          // Bézier handles are relative mm vectors: the matrix's LINEAR part
+          // (rotation/scale — no translation) applies to them directly, since
+          // mm→px is a uniform scale that commutes with it.
+          const linear = (v: { x: number; y: number }) => ({
+            x: m[0] * v.x + m[2] * v.y,
+            y: m[1] * v.x + m[3] * v.y,
+          });
           const pxNodes = nodeRings.map((r) => r.map((nd) => ({ x: px(nd.x), y: py(nd.y) })));
           const movedNodes = applyMatrix(pxNodes, m).map((r, ri) =>
-            r.map((p, pi) => ({ ...toMm(p.x, p.y), smooth: nodeRings[ri][pi].smooth })),
+            r.map((p, pi) => {
+              const src = nodeRings[ri][pi];
+              return {
+                ...toMm(p.x, p.y),
+                smooth: src.smooth,
+                hIn: src.hIn ? linear(src.hIn) : undefined,
+                hOut: src.hOut ? linear(src.hOut) : undefined,
+              };
+            }),
           );
           onCommitNodes(object.id, movedNodes);
           return;
@@ -2309,7 +2377,11 @@ const ObjectShape = memo(function ObjectShape({
                   if (!pos) return;
                   const at = toMm(pos.x, pos.y);
                   if (nodeRings) {
-                    const nodes = nodeRings.map((r, i) => (i === pi ? insertNode(r, at, closedRings) : r));
+                    // A satin renders its RAILS but keeps one node ring (the
+                    // centerline) — always insert into ring 0; insertNode's
+                    // projection maps the rail click onto the spine.
+                    const target = object.type === "satin" ? 0 : pi;
+                    const nodes = nodeRings.map((r, i) => (i === target ? insertNode(r, at, closedRings) : r));
                     onCommitNodes(object.id, nodes);
                   } else {
                     const ring = insertPointOnRing(object.paths[pi], at, object.type === "fill");
@@ -2335,7 +2407,7 @@ const ObjectShape = memo(function ObjectShape({
             const liveMove = (e: Konva.KonvaEventObject<DragEvent>) => {
               const m = toMm(e.target.x(), e.target.y());
               const moved = nodeRings.map((r, ri) => (ri === pi ? moveNode(r, ti, m) : r));
-              setLivePaths(moved.map((r) => densifyRing(r, closedRings)));
+              setLivePaths(liveDensify(moved));
             };
             const commit = (e: Konva.KonvaEventObject<DragEvent>) => {
               const m = toMm(e.target.x(), e.target.y());
@@ -2365,6 +2437,63 @@ const ObjectShape = memo(function ObjectShape({
             );
           }),
         )}
+
+      {/* Bézier tangent "ears" on the FOCUSED smooth node: two draggable tips
+          collinear through the node. Drag to reshape the curve's direction and
+          tension; the opposite ear mirrors to stay smooth (Alt-drag moves one
+          side only, making a cusp). Seeded from the curve's implied tangent so
+          grabbing an ear never jumps the shape. */}
+      {editingNodes && nodeRings && nodeSel?.objectId === object.id &&
+        (() => {
+          const ring = nodeRings[nodeSel.ring];
+          const nd = ring?.[nodeSel.point];
+          if (!nd?.smooth) return null;
+          const hs = impliedHandles(ring, nodeSel.point, closedRings);
+          const sides: ["in" | "out", { x: number; y: number }][] = [
+            ["in", hs.hIn],
+            ["out", hs.hOut],
+          ];
+          return sides.map(([side, h]) => {
+            const tipX = px(nd.x + h.x);
+            const tipY = py(nd.y + h.y);
+            const dragTo = (e: Konva.KonvaEventObject<DragEvent>, commitIt: boolean) => {
+              const tip = toMm(e.target.x(), e.target.y());
+              const v = { x: tip.x - nd.x, y: tip.y - nd.y };
+              const mirror = !(e.evt as MouseEvent | undefined)?.altKey;
+              const nextRing = setNodeHandle(ring, nodeSel.point, side, v, mirror, closedRings);
+              const rings = nodeRings.map((r, ri) => (ri === nodeSel.ring ? nextRing : r));
+              if (commitIt) {
+                onCommitNodes(object.id, rings);
+                setLivePaths(null);
+              } else {
+                setLivePaths(liveDensify(rings));
+              }
+            };
+            return (
+              <Group key={`ear-${side}`}>
+                <Line
+                  points={[px(nd.x), py(nd.y), tipX, tipY]}
+                  stroke={C.navy}
+                  strokeWidth={1}
+                  dash={[3, 2]}
+                  opacity={0.55}
+                  listening={false}
+                />
+                <Circle
+                  x={tipX}
+                  y={tipY}
+                  radius={4}
+                  fill={C.cream}
+                  stroke={C.salted}
+                  strokeWidth={1.5}
+                  draggable
+                  onDragMove={(e) => dragTo(e, false)}
+                  onDragEnd={(e) => dragTo(e, true)}
+                />
+              </Group>
+            );
+          });
+        })()}
 
       {/* Legacy polyline editing (imported / shapes): handles on raw vertices. */}
       {editingNodes && !nodeRings &&

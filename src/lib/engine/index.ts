@@ -14,7 +14,7 @@ import { tatamiFill, tatamiConcaveRuns, multiBlendFill, motifFill, motifRunAlong
 import { contourFill } from "./contour";
 import { medialColumns, columnsFromCenterlines, satinCoverage, residualRegions, type SatinColumn } from "./medial";
 import { turningFill, flowFill, flowAlong } from "./turning";
-import { guidanceFieldFill } from "./field";
+import { guidanceFieldFill, multiAngleFill } from "./field";
 import { isSmallRoundFill, meanStrokeWidthMm, isBroadlyThick } from "./classify";
 import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
 import { dropShortStitches, splitLongTravels } from "./resample";
@@ -653,6 +653,9 @@ export function generateObjectRuns(
   const pushComp = p.pushComp * fabric.pullMul;
   // Underlay heaviness: a per-object override wins over the fabric default.
   const weight = p.underlayWeight === "auto" ? fabric.underlay : p.underlayWeight;
+  // Explicit underlay TYPE: "auto" keeps the width/weight tiering; anything else
+  // lays exactly the picked pass (see underlay.ts for the per-type mapping).
+  const underlayType = p.underlayType;
   // Pile rides longer stitches above its loops; other fabrics keep the drawn
   // length. (The MIN floor in resample still protects against sub-mm stitches.)
   const stitchLength = p.stitchLength * fabric.stitchLenMul;
@@ -684,7 +687,7 @@ export function generateObjectRuns(
     const [left, right] = object.paths;
     if (!left || !right) return runs;
     if (p.underlay) {
-      for (const run of satinUnderlay(left, right, weight)) {
+      for (const run of satinUnderlay(left, right, weight, underlayType)) {
         addRun(runs, dropShortStitches(run, SATIN_MIN_STITCH), true);
       }
     }
@@ -720,10 +723,20 @@ export function generateObjectRuns(
   // differently-angled letters (stitch-direction continuity). The user's Angle
   // field offsets it. A painted Direction (directionDeg) is an ABSOLUTE override:
   // the user has told us which way the stitches run, so skip the auto grain.
-  const manualDirection = p.directionDeg != null;
-  const tatamiAngle = manualDirection
-    ? p.directionDeg!
-    : autoFillAngleForRegions(regions, p.angle);
+  // MULTI-ANGLE guides (Direction tool, Shift-drag): several [x,y,deg] anchors
+  // whose angles the rows sweep between (Wilcom-style turning fill). Two or more
+  // route to multiAngleFill below; exactly ONE degrades to a plain manual
+  // direction at its angle. Precedence: angleGuides (≥2) > flowPath > directionDeg.
+  const guideList = p.angleGuides && p.angleGuides.length > 0 ? p.angleGuides : null;
+  const multiGuides = guideList && guideList.length >= 2 ? guideList : null;
+  const singleGuideDeg = guideList && guideList.length === 1 ? guideList[0][2] : null;
+  const manualDirection = p.directionDeg != null || singleGuideDeg != null;
+  const tatamiAngle =
+    singleGuideDeg != null
+      ? singleGuideDeg
+      : p.directionDeg != null
+        ? p.directionDeg
+        : autoFillAngleForRegions(regions, p.angle);
   // A painted flow curve (normalized to the object's bbox) the rows follow. Map it
   // back to mm here so it rides the object's current position/size.
   const flowSpineMm: Point[] | null = (() => {
@@ -732,6 +745,17 @@ export function generateObjectRuns(
     if (!b) return null;
     const w = b.maxX - b.minX, h = b.maxY - b.minY;
     return p.flowPath.map(([nx, ny]) => ({ x: b.minX + nx * w, y: b.minY + ny * h }));
+  })();
+  // Multi-angle guides denormalized to mm — stored bbox-normalized (like flowPath)
+  // so they ride the object's move/scale.
+  const guidesMm: [number, number, number][] | null = (() => {
+    if (!multiGuides) return null;
+    const b = pathsBounds(object.paths);
+    if (!b) return null;
+    const w = b.maxX - b.minX, h = b.maxY - b.minY;
+    return multiGuides.map(
+      ([nx, ny, deg]) => [b.minX + nx * w, b.minY + ny * h, deg] as [number, number, number],
+    );
   })();
   // AUTO fill style (user left the default): a NARROW region — a flag pole, a
   // stem, a border bar — also tries satin columns. Tatami on a 3 mm column lays
@@ -764,13 +788,14 @@ export function generateObjectRuns(
         ? columns.filter((c) => c.widthMm >= LINE_ART_SATIN_MIN_MM)
         : columns;
       const ulRuns = usingSatin
-        ? ulColumns.flatMap((c) => columnUnderlay(c.centerline, c.widthMm, weight))
-        : contour
+        ? ulColumns.flatMap((c) => columnUnderlay(c.centerline, c.widthMm, weight, underlayType))
+        : contour && underlayType === "auto"
           ? // A contour fill follows the shape's curve, so its underlay should too —
             // sparse echo loops that hug the band instead of a parallel pass that
-            // would bridge (and trim across) the hole of a ring.
+            // would bridge (and trim across) the hole of a ring. An explicit
+            // underlay type is the digitizer overruling that, so it falls through.
             contourFill(region, { density: Math.max(1.6, density * 3.5) })
-          : fillUnderlayRuns(region, fillAngle, weight);
+          : fillUnderlayRuns(region, fillAngle, weight, underlayType);
       for (const run of ulRuns) {
         for (const sub of splitLongTravels(run, travelMax)) {
           const u = dropShortStitches(sub);
@@ -888,12 +913,15 @@ export function generateObjectRuns(
       // patchwork (and can fan an odd diagonal across a letter), so those fill with
       // the object's one shared tatami grain instead.
       const fillOpts = { density, angle: fillAngle, stitchLength: fillStitchLength, pullCompMm: pullComp };
-      // Precedence: a painted FLOW CURVE wins (the user drew the grain); else a
-      // painted straight Direction (handled via the angle, so skip turning/flow);
-      // else the AUTO flows — a clean single-spine band turns (turningFill), a
-      // branchy/organic shape flows along its limbs (flowFill); else concavity-aware
-      // tatami. Every path declines (→ null) and self-validates to never slash.
-      const userFlow = flowSpineMm ? flowAlong(region, flowSpineMm, fillOpts) : null;
+      // Precedence: MULTI-ANGLE GUIDES win (the digitizer pinned explicit per-spot
+      // angles the rows sweep between); else a painted FLOW CURVE (the user drew
+      // the grain); else a painted straight Direction (handled via the angle, so
+      // skip turning/flow); else the AUTO flows — a clean single-spine band turns
+      // (turningFill), a branchy/organic shape flows along its limbs (flowFill);
+      // else concavity-aware tatami. Every path declines (→ null) and
+      // self-validates to never slash.
+      const multiAngle = guidesMm ? multiAngleFill(region, { ...fillOpts, guides: guidesMm }) : null;
+      const userFlow = !multiAngle && flowSpineMm ? flowAlong(region, flowSpineMm, fillOpts) : null;
       // AUTO turning/flow is for BAND-LIKE shapes (a crescent, a leaf, a
       // banner): thin nearly everywhere, so rows that follow the form read as
       // intentional. A broad solid (a plain ellipse — especially one that just
@@ -903,7 +931,8 @@ export function generateObjectRuns(
       // thickness (isBroadlyThick), which a boundary notch can't fool the way
       // it inflates perimeter-based mean width.
       const bandLike = !isBroadlyThick(region, BAND_MAX_HALF_WIDTH_MM);
-      const autoSingle = !manualDirection && !flowSpineMm && regions.length === 1 && bandLike;
+      const autoSingle =
+        !manualDirection && !flowSpineMm && !guidesMm && regions.length === 1 && bandLike;
       // A clean single-spine band (banner, leaf, crescent) turns. The guidance FIELD
       // is the promoted default there — it sweeps the form cap-to-cap and beats the
       // spine-march on coverage + long-stitch count (bench: crescent-field) — with
@@ -911,6 +940,7 @@ export function generateObjectRuns(
       // coverage). A branchy/organic shape still flows along its limbs (flowFill).
       const autoTurn = autoSingle ? turningFill(region, fillOpts) : null;
       let turned =
+        multiAngle ??
         userFlow ??
         (autoTurn
           ? (guidanceFieldFill(region, fillOpts) ?? autoTurn)
@@ -1525,10 +1555,7 @@ export function generateDesign(
         }
       }
     }
-    if (!found) {
-      if (process.env.ROUTEDBG) console.log("ROUTEDBG: A* not found", a, b);
-      return null;
-    }
+    if (!found) return null;
     // Reconstruct cell path (goal → start), then line-of-sight simplify. Each
     // simplified leg must hold the same fine-sampled coverage test the straight
     // covered move uses (a pure grid check lets a leg cut across a bend of the
@@ -1561,14 +1588,10 @@ export function generateDesign(
     let route = cleaned;
     if (!polylineCovered(route, colorId, afterOrder)) {
       route = [a, ...centers, b];
-      if (!polylineCovered(route, colorId, afterOrder)) {
-        if (process.env.ROUTEDBG) console.log("ROUTEDBG: final check failed", JSON.stringify(cleaned.map((q) => [Math.round(q.x*10)/10, Math.round(q.y*10)/10])));
-        return null;
-      }
+      if (!polylineCovered(route, colorId, afterOrder)) return null;
     }
     let len = 0;
     for (let k = 1; k < route.length; k++) len += distance(route[k - 1], route[k]);
-    if (len > ROUTE_CAP && process.env.ROUTEDBG) console.log("ROUTEDBG: cap", len);
     return len <= ROUTE_CAP ? route : null;
   }
 

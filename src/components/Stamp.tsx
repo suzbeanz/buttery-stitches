@@ -38,6 +38,8 @@ export default function Stamp({
     <span
       data-tip={tip}
       data-tip-side="top"
+      // Red stamps get a matching stamp-red tooltip (tone follows the element).
+      data-tip-tone={variant === "red" ? "red" : undefined}
       className={`inline-block rounded-sm border-[1.5px] px-2.5 py-1 font-mono text-[11px] uppercase tracking-[0.1em] ${VARIANT[variant]} ${
         tip ? `cursor-default transition-colors ${HOVER[variant]}` : ""
       } ${className}`}

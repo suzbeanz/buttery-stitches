@@ -11,10 +11,11 @@ import type {
 } from "../types/project";
 import { createEmptyProject } from "../lib/project";
 import { translatePaths } from "../lib/geometry";
-import { expandGroups, pathsFromNodes, isClosedType } from "../lib/objects";
+import { expandGroups, pathsFromNodes, satinPathsFromNodes, satinWidthOf, isClosedType } from "../lib/objects";
 import { densifyRing, translateNodes } from "../lib/nodes";
 import { smoothPath, smoothRingKeepingCorners } from "../lib/smooth";
 import { mergeRegionPaths, splitRegionComponents, weldToNeighbors } from "../lib/regions";
+import { booleanOp } from "../lib/boolean";
 import { newId } from "../lib/id";
 
 /**
@@ -27,7 +28,13 @@ function smoothOne(o: EmbObject): EmbObject {
   if (o.nodes && o.nodes.length > 0) {
     const closed = isClosedType(o.type);
     const nodes = o.nodes.map((ring) => ring.map((n) => ({ ...n, smooth: true })));
-    return { ...o, nodes, paths: nodes.map((ring) => densifyRing(ring, closed)) };
+    // A satin's nodes are its centerline — rebuild the rail pair, don't let the
+    // spine polyline replace the rails.
+    const paths =
+      o.type === "satin"
+        ? satinPathsFromNodes(nodes, satinWidthOf(o.paths))
+        : nodes.map((ring) => densifyRing(ring, closed));
+    return { ...o, nodes, paths };
   }
   if (o.type === "running") {
     return { ...o, paths: o.paths.map((p) => smoothPath(p)) };
@@ -72,6 +79,10 @@ export interface ProjectState {
   reorderObjects: (fromIndex: number, toIndex: number) => void;
   /** Move the selected objects in stitch order: one step or all the way. */
   moveOrder: (ids: string[], dir: "earlier" | "later" | "first" | "last") => void;
+  /** Re-sequence so same-color objects sew consecutively (fewest thread
+   *  changes). Stable: keeps relative order within a color and the colors'
+   *  first-seen order, so layering shifts as little as possible. */
+  sortByColor: () => void;
   /** Tie objects into one group (select/move/align together). */
   groupObjects: (ids: string[]) => void;
   /** Remove the group tag from any of these objects' groups. */
@@ -79,6 +90,12 @@ export interface ProjectState {
   /** Union 2+ same-color fills into one region. No-op unless all are fills of
    *  the same color. */
   mergeObjects: (ids: string[]) => void;
+  /** Boolean subtract/intersect: the earliest-selected fill (in stitch order) is
+   *  the base; the rest are cutters. Subtract punches the cutters out of the base
+   *  (a hole); intersect keeps only the overlap. The base is replaced with the
+   *  result and the cutters are removed. No-op unless 2+ fills are selected and a
+   *  non-empty result remains. */
+  booleanObjects: (ids: string[], op: "subtract" | "intersect") => void;
   /** Separate a fill's disconnected pieces into one object each. No-op unless the
    *  object is a fill with 2+ components. */
   splitRegion: (id: string) => void;
@@ -284,6 +301,23 @@ export const useProjectStore = create<ProjectState>()(
           return { project: { ...s.project, objects } };
         }),
 
+      sortByColor: () =>
+        set((s) => {
+          const objects = s.project.objects;
+          // Stable bucket sort by first-seen color: within a color the existing
+          // order (and thus layering) is preserved exactly.
+          const buckets = new Map<string, EmbObject[]>();
+          for (const o of objects) {
+            const b = buckets.get(o.colorId);
+            if (b) b.push(o);
+            else buckets.set(o.colorId, [o]);
+          }
+          const sorted = [...buckets.values()].flat();
+          // No-op when already color-consecutive (keeps undo history clean).
+          if (sorted.every((o, i) => o === objects[i])) return s;
+          return { project: { ...s.project, objects: sorted } };
+        }),
+
       groupObjects: (ids) =>
         set((s) => {
           if (ids.length < 2) return s;
@@ -343,6 +377,35 @@ export const useProjectStore = create<ProjectState>()(
           const objects = s.project.objects
             .map((o) => (o.id === first.id ? region : o))
             .filter((o) => o.id === region.id || !sel.has(o.id));
+          return { project: { ...s.project, objects }, selectedIds: [region.id] };
+        }),
+
+      booleanObjects: (ids, op) =>
+        set((s) => {
+          const sel = new Set(ids);
+          // Selected fills in document (stitch) order; the earliest is the base
+          // and later ones are the cutters (they sit "on top").
+          const picked = s.project.objects.filter(
+            (o) => sel.has(o.id) && o.type === "fill",
+          );
+          if (picked.length < 2) return s;
+          const base = picked[0];
+          // All cutter paths pooled into one region for the boolean.
+          const cutters = picked.slice(1).flatMap((o) => o.paths);
+          const result = booleanOp(base.paths, cutters, op);
+          if (result.length === 0) return s; // empty result would delete the shape — refuse
+          const region: EmbObject = {
+            ...base,
+            id: newId("obj"),
+            paths: result,
+            nodes: undefined,
+            satinCenterlines: undefined,
+            groupId: undefined,
+          };
+          const cutterIds = new Set(picked.slice(1).map((o) => o.id));
+          const objects = s.project.objects
+            .map((o) => (o.id === base.id ? region : o))
+            .filter((o) => !cutterIds.has(o.id));
           return { project: { ...s.project, objects }, selectedIds: [region.id] };
         }),
 

@@ -1,11 +1,53 @@
 import { describe, it, expect } from "vitest";
 import { motifFill } from "./fill";
+import { MOTIFS, motifById, motifsByGroup } from "./motifs";
 import { generateDesign } from "./index";
 import { makeObjectFromPaths } from "../objects";
 import { createEmptyProject } from "../project";
 import type { Path } from "../../types/project";
 
 const sq: Path = [{x:0,y:0},{x:40,y:0},{x:40,y:40},{x:0,y:40}];
+
+describe("motif library", () => {
+  it("every motif has finite, non-empty geometry and a unique id", () => {
+    const ids = new Set<string>();
+    for (const m of MOTIFS) {
+      expect(ids.has(m.id)).toBe(false);
+      ids.add(m.id);
+      expect(m.strokes.length).toBeGreaterThan(0);
+      expect(m.w).toBeGreaterThan(0);
+      expect(m.h).toBeGreaterThan(0);
+      for (const stroke of m.strokes) {
+        expect(stroke.length).toBeGreaterThanOrEqual(2);
+        for (const pt of stroke) {
+          expect(Number.isFinite(pt.x)).toBe(true);
+          expect(Number.isFinite(pt.y)).toBe(true);
+        }
+      }
+    }
+  });
+  it("groups partition the library with no lost or duplicated motifs", () => {
+    const grouped = motifsByGroup().flatMap((g) => g.motifs);
+    expect(grouped).toHaveLength(MOTIFS.length);
+  });
+  it("motifById falls back to the first motif for an unknown id", () => {
+    expect(motifById("does-not-exist")).toBe(MOTIFS[0]);
+  });
+  it("every motif tiles into a region and sews within safe stitch length", () => {
+    for (const m of MOTIFS) {
+      const o = makeObjectFromPaths("fill", [sq], "c1");
+      o.params.fillStyle = "motif";
+      o.params.motif = m.id;
+      const d = generateDesign({ ...createEmptyProject(), objects: [o] }, { lockStitches: true });
+      expect(d.some((s) => !s.jump && !s.trim)).toBe(true);
+      let longest = 0;
+      for (let i = 1; i < d.length; i++)
+        if (!d[i].jump && !d[i].trim && d[i].colorId === d[i - 1].colorId)
+          longest = Math.max(longest, Math.hypot(d[i].x - d[i - 1].x, d[i].y - d[i - 1].y));
+      expect(longest).toBeLessThanOrEqual(9.1);
+    }
+  });
+});
 
 describe("motif fill", () => {
   it("tiles motif strokes inside the region", () => {

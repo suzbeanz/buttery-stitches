@@ -24,6 +24,17 @@ describe("resize keeps the node model in sync", () => {
     // paths scale in lock-step with the nodes (≈2×), curve overshoot included.
     expect(Math.max(...scaled.paths[0].map((p) => p.x))).toBeCloseTo(before * 2, 1);
   });
+
+  it("scales authored satin centerlines together with paths (lettering survives resize)", () => {
+    const o = makeObjectFromPaths(
+      "fill",
+      [[{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }]],
+      "c1",
+    );
+    o.satinCenterlines = [[{ x: 0, y: 5 }, { x: 10, y: 5 }]];
+    const [scaled] = scaleAllPaths([o], 3, 3, { x: 0, y: 0 });
+    expect(scaled.satinCenterlines![0][1]).toMatchObject({ x: 30, y: 15 });
+  });
 });
 
 function square(x0: number, y0: number, s: number): EmbObject {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { useProjectStore } from "../store/projectStore";
 import { useEditorStore } from "../store/editorStore";
@@ -12,9 +12,18 @@ import {
 } from "../lib/layout";
 import { designFor } from "../lib/engine";
 import { validateDesign } from "../lib/engine/validate";
-import { THREAD_CHARTS, chartById } from "../lib/thread/catalog";
+import { planHoopSplit, buildTileProject, hoopingName } from "../lib/multihoop";
+import { downloadProject } from "../lib/embproj";
+import { THREAD_CHARTS, type ThreadChart } from "../lib/thread/catalog";
 import { matchColorsToChart } from "../lib/thread/match";
 import { reduceProjectColors } from "../lib/thread/reduce";
+import {
+  loadCustomCharts,
+  parseChartFile,
+  removeCustomChart,
+  saveCustomChart,
+} from "../lib/thread/customCharts";
+import { toast } from "../store/toastStore";
 import {
   FABRICS,
   DEFAULT_FABRIC,
@@ -92,6 +101,28 @@ export default function DesignPanel() {
 
   const hasDesign = size.w > 0;
 
+  // Multi-hooping: when the design is bigger than the hoop, offer to split it
+  // into hoop-sized part files (objects are assigned whole, by bbox center).
+  const overflowsHoop =
+    hasDesign && (size.w > hoop.wMm + 1e-6 || size.h > hoop.hMm + 1e-6);
+  const hoopTiles = useMemo(
+    () => (overflowsHoop ? planHoopSplit(objects, hoop) : []),
+    [overflowsHoop, objects, hoop],
+  );
+
+  function splitForHoop() {
+    for (const tile of hoopTiles) {
+      downloadProject(
+        buildTileProject(project, tile, hoopTiles),
+        hoopingName("design", tile, hoopTiles),
+      );
+    }
+    toast(
+      `Saved ${hoopTiles.length} hooping files. Stitch them in order — the alignment crosses sew first; line each re-hooping up on the previous crosses, then remove them.`,
+      "success",
+    );
+  }
+
   return (
     <div className="flex flex-col gap-3 border-b border-navy/25 p-3 text-sm">
       <div className="font-label text-xs font-semibold uppercase tracking-[0.1em] text-ink-deep">
@@ -101,18 +132,46 @@ export default function DesignPanel() {
       {/* Hoop */}
       <label className="flex flex-col gap-1">
         <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/60">Hoop</span>
-        <select
-          value={presetIndex === -1 ? "custom" : presetIndex}
-          onChange={(e) => onHoopPreset(e.target.value)}
-          className="select"
-        >
-          {HOOP_PRESETS.map((h, i) => (
-            <option key={h.name} value={i}>
-              {h.name}
-            </option>
-          ))}
-          <option value="custom">Custom…</option>
-        </select>
+        <div className="flex items-center gap-1.5">
+          <select
+            value={presetIndex === -1 ? "custom" : presetIndex}
+            onChange={(e) => onHoopPreset(e.target.value)}
+            className="select flex-1"
+          >
+            {HOOP_PRESETS.map((h, i) => (
+              <option key={h.name} value={i}>
+                {h.name}
+              </option>
+            ))}
+            <option value="custom">Custom…</option>
+          </select>
+          {/* Rotate: mount the same hoop sideways (a 5×7 becomes a 7×5). */}
+          <button
+            type="button"
+            disabled={hoop.wMm === hoop.hMm}
+            data-tip="Rotate hoop 90° (swap width and height)"
+            aria-label="Rotate hoop 90 degrees — swap width and height"
+            onClick={() =>
+              updateProject({
+                hoop: {
+                  wMm: hoop.hMm,
+                  hMm: hoop.wMm,
+                  name: hoop.name.endsWith(" (rotated)")
+                    ? hoop.name.slice(0, -" (rotated)".length)
+                    : `${hoop.name} (rotated)`,
+                },
+                widthMm: hoop.hMm,
+                heightMm: hoop.wMm,
+              })
+            }
+            className="tap-target grid h-9 w-9 shrink-0 place-items-center rounded-sm border-2 border-ink/50 text-ink hover:bg-butter-200 disabled:opacity-30"
+          >
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
+              <rect x="1.5" y="4.5" width="12" height="8" rx="1" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M11 1.5l2 2-2 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
       </label>
 
       {presetIndex === -1 && (
@@ -180,6 +239,21 @@ export default function DesignPanel() {
           >
             Fit to hoop
           </button>
+          {hoopTiles.length > 1 && (
+            <>
+              <button
+                onClick={splitForHoop}
+                className="rounded-sm border-2 border-ink px-3 py-1.5 font-label text-xs font-semibold uppercase tracking-[0.1em] text-ink hover:bg-butter-200"
+              >
+                Split for hoop ({hoopTiles.length} hoopings)
+              </button>
+              <p className="font-body text-[10px] leading-snug text-navy/50">
+                Too big for one hooping? Download one file per hooping, with
+                alignment crosses to line up each re-hooping. Objects are kept
+                whole, not cut.
+              </p>
+            </>
+          )}
         </>
       ) : (
         <p className="text-xs text-navy/70">Add a design to set its size.</p>
@@ -229,13 +303,31 @@ function ThreadsSection() {
   const colors = project.colors;
   const [chartId, setChartId] = useState(THREAD_CHARTS[0].id);
   const [reduceN, setReduceN] = useState(Math.max(1, colors.length));
+  // Built-in charts + the user's imported ones (CSV/JSON of the chart they own).
+  const [customCharts, setCustomCharts] = useState<ThreadChart[]>(() => loadCustomCharts());
+  const chartInput = useRef<HTMLInputElement>(null);
+  const allCharts = [...THREAD_CHARTS, ...customCharts];
 
   if (colors.length === 0) return null;
 
   const matchAll = () => {
-    const chart = chartById(chartId);
+    const chart = allCharts.find((c) => c.id === chartId);
     if (chart) updateProject({ colors: matchColorsToChart(colors, chart) });
   };
+
+  const importChart = async (file: File) => {
+    try {
+      const nameFromFile = file.name.replace(/\.(csv|tsv|txt|json)$/i, "");
+      const chart = parseChartFile(await file.text(), nameFromFile);
+      setCustomCharts(saveCustomChart(chart));
+      setChartId(chart.id);
+      toast(`Imported "${chart.name}" — ${chart.threads.length} threads`, "success");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't read that chart file.", "error");
+    }
+  };
+
+  const selectedCustom = customCharts.find((c) => c.id === chartId);
   const applyReduce = () => {
     const r = reduceProjectColors(project, Math.max(1, Math.min(reduceN, colors.length)));
     updateProject({ colors: r.colors, objects: r.objects });
@@ -261,17 +353,66 @@ function ThreadsSection() {
         ))}
       </ul>
 
-      <select value={chartId} onChange={(e) => setChartId(e.target.value)} className="select">
-        {THREAD_CHARTS.map((ch) => (
-          <option key={ch.id} value={ch.id}>{ch.name}</option>
-        ))}
-      </select>
+      <label className="flex flex-col gap-1 text-[12px] text-navy">
+        <span className="sr-only">Thread chart</span>
+        <select value={chartId} onChange={(e) => setChartId(e.target.value)} className="select">
+          {THREAD_CHARTS.map((ch) => (
+            <option key={ch.id} value={ch.id}>{ch.name}</option>
+          ))}
+          {customCharts.length > 0 && (
+            <optgroup label="Your charts">
+              {customCharts.map((ch) => (
+                <option key={ch.id} value={ch.id}>
+                  {ch.name} ({ch.threads.length})
+                </option>
+              ))}
+            </optgroup>
+          )}
+        </select>
+      </label>
       <button
         onClick={matchAll}
         className="rounded-sm border-2 border-ink bg-cream px-3 py-1.5 font-label text-xs font-semibold uppercase tracking-wide text-ink shadow-press-sm transition-transform hover:bg-ink hover:text-cream active:translate-y-[2px] active:shadow-none"
       >
         Match to thread chart
       </button>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => chartInput.current?.click()}
+          className="flex-1 rounded-sm border-2 border-ink/50 px-3 py-1 font-label text-[11px] font-semibold uppercase tracking-wide text-ink/80 hover:bg-butter-200"
+        >
+          Import chart (CSV / JSON)…
+        </button>
+        {selectedCustom && (
+          <button
+            onClick={() => {
+              setCustomCharts(removeCustomChart(selectedCustom.id));
+              setChartId(THREAD_CHARTS[0].id);
+              toast(`Removed "${selectedCustom.name}"`, "info");
+            }}
+            className="rounded-sm border-2 border-ink/50 px-2 py-1 font-label text-[11px] font-semibold uppercase tracking-wide text-stamp hover:bg-butter-200"
+          >
+            Remove
+          </button>
+        )}
+      </div>
+      <p className="font-body text-[10px] leading-snug text-navy/50">
+        Have your brand&apos;s chart (Madeira, Isacord…)? Import it as{" "}
+        <span className="font-mono">code, name, #hex</span> lines and matching uses real
+        order codes.
+      </p>
+      <input
+        ref={chartInput}
+        type="file"
+        accept=".csv,.tsv,.txt,.json"
+        className="hidden"
+        aria-label="Import a thread chart file"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void importChart(f);
+          e.target.value = "";
+        }}
+      />
 
       <div className="flex items-end gap-2">
         <label className="flex-1 text-[12px] text-navy">

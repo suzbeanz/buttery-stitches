@@ -13,7 +13,7 @@
  * stitches automatically). For a crisper edge the user can apply the existing
  * "Add satin outline" control to the resulting fill object afterwards.
  */
-import type { EmbObject, Path, Point } from "../../types/project";
+import type { EmbObject, GlyphTweak, Path, Point } from "../../types/project";
 import { makeObjectFromPaths } from "../objects";
 import { pathsBounds, polylineLength } from "../geometry";
 import { authoredAlphabet, type AuthoredAlphabet } from "./authored";
@@ -56,6 +56,13 @@ export interface TextLayoutOptions {
    *  object carries `satinCenterlines` so the engine sews the diagonal-junction
    *  glyphs from clean strokes instead of an auto skeleton. */
   fontId?: string;
+  /** Per-glyph manual tweaks keyed by VISIBLE glyph index: reading order across
+   *  all lines, counting ONLY glyphs that produce geometry (whitespace is
+   *  skipped) — see TextSpec.glyphTweaks. Each tweak is applied in the glyph's
+   *  LOCAL frame after normal layout (dx along the local baseline, dy along its
+   *  normal; rotate/scale about the glyph's own baseline anchor), in EVERY
+   *  baseline mode — straight, multiline, arch, circle, and path. */
+  glyphTweaks?: Record<number, GlyphTweak>;
 }
 
 /** A single opentype path command (the subset fonts actually emit). */
@@ -168,11 +175,22 @@ function commandsToRings(commands: OtCommand[], tol: number): Path[] {
   return rings;
 }
 
+/** Which rings of `object.paths` belong to one VISIBLE glyph (a contiguous
+ *  range — rings are emitted glyph by glyph in reading order). */
+export interface GlyphRange {
+  ringStart: number;
+  ringCount: number;
+}
+
 export interface TextLayoutResult {
   /** the single fill object containing all rings, centered on the origin. */
   object: EmbObject;
   /** total advance width of the typed text in mm (after scaling). */
   widthMm: number;
+  /** Ring ranges of `object.paths` per VISIBLE glyph (reading order across all
+   *  lines, whitespace skipped). The index into this array is exactly the key
+   *  used by `glyphTweaks` — it lets a UI hit-test / highlight single letters. */
+  glyphs?: GlyphRange[];
 }
 
 /**
@@ -197,46 +215,6 @@ function glyphsFor(font: Font, text: string) {
   } catch {
     return Array.from(text).map((ch) => font.charToGlyph(ch));
   }
-}
-
-/** Lay one line of glyphs flat (font units, pen from x=0). Returns its rings, any
- *  authored satin centerlines (mapped into each glyph's ink box, same space as the
- *  rings), and the total advance width. */
-function lineRings(
-  font: Font,
-  text: string,
-  emSize: number,
-  spacingUnits: number,
-  flattenTol: number,
-  authored: AuthoredAlphabet | null,
-): { rings: Path[]; strokes: Path[]; width: number } {
-  const rings: Path[] = [];
-  const strokes: Path[] = [];
-  let penX = 0;
-  // With an authored alphabet, iterate per character so each glyph's strokes line
-  // up with the right outline (Oswald has no ligatures, so this matches the shaped
-  // advance). Otherwise keep the shaped-glyph path.
-  const glyphs = authored
-    ? Array.from(text).map((ch) => ({ ch, glyph: font.charToGlyph(ch) }))
-    : glyphsFor(font, text).map((glyph) => ({ ch: undefined as string | undefined, glyph }));
-  for (const { ch, glyph } of glyphs) {
-    const path = glyph.getPath(penX, 0, emSize) as { commands: OtCommand[] };
-    const glyphRings = commandsToRings(path.commands, flattenTol);
-    rings.push(...glyphRings);
-    const spec = authored && ch ? authored[ch] : undefined;
-    if (spec && glyphRings.length) {
-      const b = pathsBounds(glyphRings);
-      if (b) {
-        const w = b.maxX - b.minX;
-        const h = b.maxY - b.minY;
-        for (const stroke of spec) {
-          strokes.push(stroke.map(([nx, ny]) => ({ x: b.minX + nx * w, y: b.minY + ny * h })));
-        }
-      }
-    }
-    penX += (glyph.advanceWidth ?? 0) + spacingUnits;
-  }
-  return { rings, strokes, width: penX };
 }
 
 /** Bend centered rings along a circular arc: +deg ∩, −deg ∪, 0 = straight. The
@@ -312,6 +290,7 @@ interface CircularOpts {
   side: "top" | "bottom";
   colorId: string;
   name?: string;
+  tweaks?: Record<number, GlyphTweak>;
 }
 
 /**
@@ -346,26 +325,39 @@ function layoutCircular(text: string, o: CircularOpts): TextLayoutResult {
 
   const rings: Path[] = [];
   const strokes: Path[] = [];
+  const ranges: GlyphRange[] = [];
+  let vis = 0; // VISIBLE glyph counter (whitespace renders nothing → skipped)
   for (const g of glyphs) {
+    const visible = g.rings.length > 0;
+    const tw = visible ? normTweak(o.tweaks?.[vis]) : null;
     const cxmm = g.cx * scale;
     const theta = (k * (cxmm - Wmm / 2)) / R; // arc-length → angle; centered at top/bottom
     const c = Math.cos(theta);
     const s = Math.sin(theta);
     const place = (p: Point): Point => {
-      const lx = p.x * scale - cxmm; // offset within the glyph (mm)
-      const ly = p.y * scale; // y-down: letter body is negative (above baseline)
+      let lx = p.x * scale - cxmm; // offset within the glyph (mm)
+      let ly = p.y * scale; // y-down: letter body is negative (above baseline)
+      if (tw) {
+        // LOCAL frame tweak: dx slides along the circular baseline, dy along
+        // the radius; rotate/scale about the glyph's baseline anchor (0,0).
+        const q = tweakLocal(lx, ly, tw);
+        lx = q.x;
+        ly = q.y;
+      }
       return bottom
         ? { x: R * s + lx * c + ly * s, y: R * c - lx * s + ly * c }
         : { x: R * s + lx * c - ly * s, y: -R * c + lx * s + ly * c };
     };
+    if (visible) ranges.push({ ringStart: rings.length, ringCount: g.rings.length });
     for (const r of g.rings) rings.push(r.map(place));
     for (const st of g.strokes) strokes.push(st.map(place));
+    if (visible) vis++;
   }
 
   const object = makeObjectFromPaths("fill", rings, o.colorId, o.name ?? "Text");
   object.params = { ...object.params, fillStyle: "satin" };
   if (strokes.length) object.satinCenterlines = strokes;
-  return { object, widthMm: Wmm };
+  return { object, widthMm: Wmm, glyphs: ranges };
 }
 
 /** Densify a polyline so no segment exceeds `step` mm — gives smooth tangents. */
@@ -407,6 +399,7 @@ interface PathLayoutOpts {
   provScale: number;
   colorId: string;
   name?: string;
+  tweaks?: Record<number, GlyphTweak>;
 }
 
 /**
@@ -431,28 +424,83 @@ function layoutOnPath(text: string, rawPath: Point[], o: PathLayoutOpts): TextLa
 
   const rings: Path[] = [];
   const strokes: Path[] = [];
+  const ranges: GlyphRange[] = [];
+  let vis = 0; // VISIBLE glyph counter (whitespace renders nothing → skipped)
   for (const g of glyphs) {
+    const visible = g.rings.length > 0;
+    const tw = visible ? normTweak(o.tweaks?.[vis]) : null;
     const cxmm = g.cx * scale;
     const { p, t } = sampleAt(path, cum, startS + cxmm);
     const place = (q: Point): Point => {
-      const lx = q.x * scale - cxmm; // along the path
-      const ly = q.y * scale; // y-down: letter body negative (stands on the left side)
+      let lx = q.x * scale - cxmm; // along the path
+      let ly = q.y * scale; // y-down: letter body negative (stands on the left side)
+      if (tw) {
+        // LOCAL frame tweak: dx slides along the path's tangent, dy along its
+        // normal; rotate/scale about the glyph's baseline anchor (0,0).
+        const w = tweakLocal(lx, ly, tw);
+        lx = w.x;
+        ly = w.y;
+      }
       return { x: p.x + lx * t.x - ly * t.y, y: p.y + lx * t.y + ly * t.x };
     };
+    if (visible) ranges.push({ ringStart: rings.length, ringCount: g.rings.length });
     for (const r of g.rings) rings.push(r.map(place));
     for (const st of g.strokes) strokes.push(st.map(place));
+    if (visible) vis++;
   }
 
   const object = makeObjectFromPaths("fill", rings, o.colorId, o.name ?? "Text");
   object.params = { ...object.params, fillStyle: "satin" };
   if (strokes.length) object.satinCenterlines = strokes;
-  return { object, widthMm: Wmm };
+  return { object, widthMm: Wmm, glyphs: ranges };
 }
 
 /** Finite value or the fallback (guards NaN/Infinity from a corrupt file or a
  *  half-typed UI field before it cascades into every coordinate). */
 const finiteOr = (v: number | undefined, def: number): number =>
   v !== undefined && Number.isFinite(v) ? v : def;
+
+/** A sanitized glyph tweak ready to apply (rotation precomputed as cos/sin).
+ *  Junk components (NaN, non-positive scale — from a hand-edited or corrupt
+ *  file) coerce to their identity value, and a fully-identity tweak returns
+ *  null so untweaked layout stays on the exact untouched code path. */
+interface NormTweak {
+  dx: number;
+  dy: number;
+  s: number;
+  c: number;
+  sn: number;
+}
+
+function normTweak(t: GlyphTweak | undefined): NormTweak | null {
+  if (!t) return null;
+  const dx = finiteOr(t.dx, 0);
+  const dy = finiteOr(t.dy, 0);
+  const rot = finiteOr(t.rotDeg, 0);
+  let s = finiteOr(t.scale, 1);
+  if (!(s > 0)) s = 1;
+  s = Math.max(0.1, Math.min(10, s));
+  if (dx === 0 && dy === 0 && rot === 0 && s === 1) return null;
+  const r = (rot * Math.PI) / 180;
+  return { dx, dy, s, c: Math.cos(r), sn: Math.sin(r) };
+}
+
+/** Apply a tweak to a point in the glyph's LOCAL frame (anchor at the origin,
+ *  x along the baseline, y down toward the descender side): scale + rotate
+ *  about the anchor, then nudge. Every baseline mode places the result with
+ *  its own rigid transform, so dx rides ALONG an arched/circular/path baseline
+ *  and dy along the local normal — never global x/y. */
+function tweakLocal(lx: number, ly: number, t: NormTweak): Point {
+  return {
+    x: t.s * (t.c * lx - t.sn * ly) + t.dx,
+    y: t.s * (t.sn * lx + t.c * ly) + t.dy,
+  };
+}
+
+/** True when the record holds at least one effective (non-identity) tweak. */
+function hasTweaks(tw: Record<number, GlyphTweak> | undefined): boolean {
+  return !!tw && Object.values(tw).some((t) => normTweak(t) !== null);
+}
 
 export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
   const {
@@ -493,6 +541,7 @@ export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
   if (cleanPath && cleanPath.length >= 2 && pathLen > 0.1) {
     return layoutOnPath(text.replace(/\n/g, " "), cleanPath, {
       font, emSize, spacingUnits, flattenTol, authored, heightMm, provScale, colorId, name,
+      tweaks: opts.glyphTweaks,
     });
   }
 
@@ -502,24 +551,47 @@ export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
     return layoutCircular(text.replace(/\n/g, " "), {
       font, emSize, spacingUnits, flattenTol, authored, heightMm, provScale,
       radius: opts.circleRadiusMm, side: opts.circleSide ?? "top", colorId, name,
+      tweaks: opts.glyphTweaks,
     });
   }
 
-  // One row per line; each centered on x=0 and stacked downward.
+  // One row per line; each centered on x=0 and stacked downward. Laid PER GLYPH
+  // so per-glyph tweaks can act in each glyph's own local frame.
   const lines = text.split("\n");
-  const laid = lines.map((ln) => lineRings(font, ln, emSize, spacingUnits, flattenTol, authored));
+  const laid = lines.map((ln) => glyphsFlat(font, ln, emSize, spacingUnits, flattenTol, authored));
   const lineHeightUnits = unitsPerEm * lineSpacing;
 
   // Authored satin centerlines ride through the SAME transforms as the rings so
   // they stay glued to their glyphs (per-line offset → global scale → arch).
+  // `placedGlyphs` tracks, per VISIBLE glyph (whitespace renders nothing and is
+  // skipped — reading order across lines), its contiguous ring/stroke ranges and
+  // its baseline anchor (advance-center) in the raw font-unit space.
   const rawRings: Path[] = [];
   const rawStrokes: Path[] = [];
-  laid.forEach(({ rings, strokes, width }, i) => {
+  const placedGlyphs: {
+    ringStart: number;
+    ringCount: number;
+    strokeStart: number;
+    strokeCount: number;
+    anchor: Point;
+  }[] = [];
+  laid.forEach(({ glyphs, width }, i) => {
     const dx = -width / 2; // center each line horizontally
     const dy = i * lineHeightUnits;
     const place = (p: Point) => ({ x: p.x + dx, y: p.y + dy });
-    for (const ring of rings) rawRings.push(ring.map(place));
-    for (const s of strokes) rawStrokes.push(s.map(place));
+    for (const g of glyphs) {
+      if (g.rings.length) {
+        placedGlyphs.push({
+          ringStart: rawRings.length,
+          ringCount: g.rings.length,
+          strokeStart: rawStrokes.length,
+          strokeCount: g.strokes.length,
+          anchor: { x: g.cx + dx, y: dy },
+        });
+      }
+      for (const ring of g.rings) rawRings.push(ring.map(place));
+      for (const s of g.strokes) rawStrokes.push(s.map(place));
+    }
   });
 
   const totalWidth = Math.max(...laid.map((l) => l.width), 0);
@@ -527,13 +599,14 @@ export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
     return {
       object: makeObjectFromPaths("fill", [], colorId, name ?? "Text"),
       widthMm: totalWidth * provScale,
+      glyphs: [],
     };
   }
 
   // Height reference = a single line's height (so multiline keeps letter size),
   // taken from the first line that has geometry.
-  const refLine = laid.find((l) => l.rings.length > 0);
-  const refBounds = refLine ? pathsBounds(refLine.rings) : null;
+  const refLine = laid.find((l) => l.glyphs.some((g) => g.rings.length > 0));
+  const refBounds = refLine ? pathsBounds(refLine.glyphs.flatMap((g) => g.rings)) : null;
   const refHeight = refBounds ? refBounds.maxY - refBounds.minY : 0;
   const bounds = pathsBounds(rawRings)!;
   const scale = refHeight > 0 ? heightMm / refHeight : provScale;
@@ -544,12 +617,40 @@ export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
   const scaled: Path[] = rawRings.map((ring) => ring.map(center));
   const scaledStrokes: Path[] = rawStrokes.map((s) => s.map(center));
 
-  // Bend rings AND strokes along the SAME arc (one radius from the rings' width),
-  // then re-center both by the arched rings' box so the object sits on the origin.
-  let rings = archRings(scaled, archDeg);
-  let strokes = archRings(scaledStrokes, archDeg, scaled);
+  // PER-GLYPH TWEAKS (mm, local frame), applied to the centered mm geometry
+  // BEFORE the arch bend: pre-arch x becomes arc length and y becomes the
+  // radial offset, so a dx nudge slides ALONG the arched baseline and a dy
+  // nudge along its local normal. Scale/centering above and the arch radius /
+  // recenter below are all derived from the UNTWEAKED rings, so every
+  // untouched glyph comes out byte-identical.
+  const anyTweaks = hasTweaks(opts.glyphTweaks);
+  let tweakedRings = scaled;
+  let tweakedStrokes = scaledStrokes;
+  if (anyTweaks) {
+    tweakedRings = scaled.slice();
+    tweakedStrokes = scaledStrokes.slice();
+    placedGlyphs.forEach((g, vi) => {
+      const tw = normTweak(opts.glyphTweaks?.[vi]);
+      if (!tw) return;
+      const a = center(g.anchor); // glyph anchor in the same centered mm space
+      const apply = (p: Point): Point => {
+        const q = tweakLocal(p.x - a.x, p.y - a.y, tw);
+        return { x: a.x + q.x, y: a.y + q.y };
+      };
+      for (let r = g.ringStart; r < g.ringStart + g.ringCount; r++)
+        tweakedRings[r] = tweakedRings[r].map(apply);
+      for (let s = g.strokeStart; s < g.strokeStart + g.strokeCount; s++)
+        tweakedStrokes[s] = tweakedStrokes[s].map(apply);
+    });
+  }
+
+  // Bend rings AND strokes along the SAME arc (one radius from the UNTWEAKED
+  // rings' width), then re-center both by the UNTWEAKED arched box so the
+  // object sits on the origin and a tweak moves only its own glyph.
+  let rings = archRings(tweakedRings, archDeg, scaled);
+  let strokes = archRings(tweakedStrokes, archDeg, scaled);
   if (archDeg) {
-    const ab = pathsBounds(rings);
+    const ab = pathsBounds(anyTweaks ? archRings(scaled, archDeg, scaled) : rings);
     if (ab) {
       const acx = (ab.minX + ab.maxX) / 2;
       const acy = (ab.minY + ab.maxY) / 2;
@@ -568,5 +669,9 @@ export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
   // Authored glyphs (flagship font): hand-decomposed satin column centerlines, in
   // the same object space as `paths`. The engine prefers these over auto-skeleton.
   if (strokes.length) object.satinCenterlines = strokes;
-  return { object, widthMm: totalWidth * scale };
+  return {
+    object,
+    widthMm: totalWidth * scale,
+    glyphs: placedGlyphs.map(({ ringStart, ringCount }) => ({ ringStart, ringCount })),
+  };
 }
