@@ -653,6 +653,9 @@ export function generateObjectRuns(
   const pushComp = p.pushComp * fabric.pullMul;
   // Underlay heaviness: a per-object override wins over the fabric default.
   const weight = p.underlayWeight === "auto" ? fabric.underlay : p.underlayWeight;
+  // Explicit underlay TYPE: "auto" keeps the width/weight tiering; anything else
+  // lays exactly the picked pass (see underlay.ts for the per-type mapping).
+  const underlayType = p.underlayType;
   // Pile rides longer stitches above its loops; other fabrics keep the drawn
   // length. (The MIN floor in resample still protects against sub-mm stitches.)
   const stitchLength = p.stitchLength * fabric.stitchLenMul;
@@ -684,7 +687,7 @@ export function generateObjectRuns(
     const [left, right] = object.paths;
     if (!left || !right) return runs;
     if (p.underlay) {
-      for (const run of satinUnderlay(left, right, weight)) {
+      for (const run of satinUnderlay(left, right, weight, underlayType)) {
         addRun(runs, dropShortStitches(run, SATIN_MIN_STITCH), true);
       }
     }
@@ -764,13 +767,14 @@ export function generateObjectRuns(
         ? columns.filter((c) => c.widthMm >= LINE_ART_SATIN_MIN_MM)
         : columns;
       const ulRuns = usingSatin
-        ? ulColumns.flatMap((c) => columnUnderlay(c.centerline, c.widthMm, weight))
-        : contour
+        ? ulColumns.flatMap((c) => columnUnderlay(c.centerline, c.widthMm, weight, underlayType))
+        : contour && underlayType === "auto"
           ? // A contour fill follows the shape's curve, so its underlay should too —
             // sparse echo loops that hug the band instead of a parallel pass that
-            // would bridge (and trim across) the hole of a ring.
+            // would bridge (and trim across) the hole of a ring. An explicit
+            // underlay type is the digitizer overruling that, so it falls through.
             contourFill(region, { density: Math.max(1.6, density * 3.5) })
-          : fillUnderlayRuns(region, fillAngle, weight);
+          : fillUnderlayRuns(region, fillAngle, weight, underlayType);
       for (const run of ulRuns) {
         for (const sub of splitLongTravels(run, travelMax)) {
           const u = dropShortStitches(sub);

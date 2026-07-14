@@ -29,6 +29,9 @@ export interface NodePt {
 }
 export type NodePath = NodePt[];
 
+/** Explicit underlay TYPE override. "auto" = the engine's width/weight tiering. */
+export type UnderlayType = "auto" | "center" | "edge" | "zigzag" | "double-zigzag" | "tatami";
+
 export interface EmbObjectParams {
   /** running: mm between needle penetrations (default 2.5). */
   stitchLength?: number;
@@ -60,6 +63,13 @@ export interface EmbObjectParams {
   /** how heavy the underlay is. "auto" follows the fabric; the rest override it
    *  per object (light → just an edge, heavy → edge + zig-zag/criss-cross). */
   underlayWeight?: "auto" | "light" | "standard" | "heavy";
+  /** WHICH underlay pass to lay. "auto" (default) keeps the engine's tiered
+   *  choice by column width / weight; the rest pick one explicitly, the way pro
+   *  software lets a digitizer override for special fabrics. Satin honors
+   *  center / edge / zigzag / double-zigzag; fills honor edge / tatami / zigzag
+   *  (center maps to edge, see underlay.ts). Inapplicable picks degrade to the
+   *  nearest sensible pass — never an error. */
+  underlayType?: UnderlayType;
   /** mm added to satin width to compensate for fabric pull (default 0.2). */
   pullComp?: number;
   /** mm trimmed off each satin column end to compensate for lengthwise fabric
@@ -240,6 +250,7 @@ export const DEFAULT_PARAMS: Required<EmbObjectParams> = {
   flowPath: null,
   underlay: true,
   underlayWeight: "auto",
+  underlayType: "auto",
   pullComp: 0.2,
   pushComp: 0.2,
   outline: true,
@@ -308,6 +319,7 @@ export function resolveParams(
     underlay:
       type === "running" ? false : (params.underlay ?? DEFAULT_PARAMS.underlay),
     underlayWeight: params.underlayWeight ?? DEFAULT_PARAMS.underlayWeight,
+    underlayType: params.underlayType ?? DEFAULT_PARAMS.underlayType,
     pullComp: safeSigned(params.pullComp, DEFAULT_PARAMS.pullComp, 5),
     pushComp: safeSigned(params.pushComp, DEFAULT_PARAMS.pushComp, 5),
     outline: params.outline ?? DEFAULT_PARAMS.outline,

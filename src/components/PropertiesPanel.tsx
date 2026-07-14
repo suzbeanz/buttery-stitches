@@ -36,6 +36,7 @@ import type {
   EmbObjectParams,
   Path,
   ThreadColor,
+  UnderlayType,
 } from "../types/project";
 import { newId } from "../lib/id";
 import { convertObjectType, satinWidthOf, setSatinWidth } from "../lib/objects";
@@ -702,6 +703,26 @@ function ObjectProperties({
             <option value="light">Light — edge only</option>
             <option value="standard">Standard</option>
             <option value="heavy">Heavy — extra support</option>
+          </select>
+        </Field>
+      )}
+
+      {object.type !== "running" && (p.underlay ?? DEFAULT_PARAMS.underlay) && (
+        <Field
+          label="Underlay type"
+          hint="Auto picks by column width — override for special fabrics."
+        >
+          <select
+            value={p.underlayType ?? DEFAULT_PARAMS.underlayType}
+            onChange={(e) => onParam({ underlayType: e.target.value as UnderlayType })}
+            className="select"
+          >
+            <option value="auto">Auto (recommended)</option>
+            <option value="center">Center run</option>
+            <option value="edge">Edge walk</option>
+            <option value="zigzag">Zigzag</option>
+            <option value="double-zigzag">Double zigzag</option>
+            <option value="tatami">Tatami (fills)</option>
           </select>
         </Field>
       )}

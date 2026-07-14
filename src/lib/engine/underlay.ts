@@ -1,4 +1,4 @@
-import type { Path } from "../../types/project";
+import type { Path, UnderlayType } from "../../types/project";
 import {
   centerlineOf,
   distance,
@@ -47,6 +47,8 @@ const SATIN_ZIGZAG_WIDTH = 4;
 /** How heavy the underlay should be (set by fabric, see §8). */
 export type UnderlayWeight = "light" | "standard" | "heavy";
 
+export type { UnderlayType };
+
 /** Mean rail-to-rail width of a satin column. */
 function meanColumnWidth(left: Path, right: Path): number {
   const n = Math.min(left.length, right.length);
@@ -78,15 +80,25 @@ function zigzag(left: Path, right: Path, spacing: number): Path {
  * Ordering matters: the zig-zag is laid BEFORE the edge walk. If the edge run
  * went down first, the later wide zig-zag would pull it inward and ruin the
  * crisp border — so we stitch zig-zag → edge → (top), the digitizer's rule.
+ *
+ * An explicit `type` (anything but "auto") overrides the tiering entirely and
+ * lays exactly the picked pass — the per-object control pro software exposes:
+ *   center        → the centerline run alone
+ *   edge          → the edge-walk pair alone
+ *   zigzag        → one zig-zag across the column
+ *   double-zigzag → the zig-zag twice, the second pass phase-shifted half a
+ *                   period (started from the opposite rail) so the throws cross
+ *   tatami        → doesn't apply to a rail column; degrades to zigzag
+ * A column too narrow for inset rails (they'd cross) degrades to the center
+ * run — an explicit pick never errors and never yields an empty underlay.
  */
 export function columnUnderlay(
   centerline: Path,
   widthMm: number,
   weight: UnderlayWeight = "standard",
+  type: UnderlayType = "auto",
 ): Path[] {
   if (centerline.length < 2) return [];
-  const runs: Path[] = [runningStitch(centerline, UNDERLAY_STITCH)];
-  if (weight === "light") return runs;
 
   // A thin/mid column (2–3 mm) qualifies for the edge walk, but the curve-safe
   // 0.6 mm inset leaves ~0.6 mm of each border with no underlay foundation, so the
@@ -96,8 +108,36 @@ export function columnUnderlay(
   // center-run only — its rails still cross.
   const edgeInset = widthMm < 3 ? 0.4 : SATIN_EDGE_INSET;
   const railWidth = widthMm - 2 * edgeInset; // rails just inside the edges
-  const wantEdge = railWidth > 0.5 && (widthMm >= SATIN_EDGE_WIDTH || weight === "heavy");
-  const wantZig = railWidth > 0.5 && (widthMm >= SATIN_ZIGZAG_WIDTH || weight === "heavy");
+  const railsOk = railWidth > 0.5;
+
+  if (type !== "auto") {
+    if (type === "center" || !railsOk) {
+      return [runningStitch(centerline, UNDERLAY_STITCH)];
+    }
+    const [l, r] = railsFromCenterline(centerline, railWidth);
+    if (type === "edge") {
+      return [
+        runningStitch(r, UNDERLAY_STITCH),
+        runningStitch([...l].reverse(), UNDERLAY_STITCH),
+      ];
+    }
+    // zigzag / double-zigzag / tatami (tatami has no meaning on a rail column —
+    // the nearest coverage pass is the zig-zag).
+    const runs: Path[] = [zigzag(l, r, UNDERLAY_STITCH)];
+    if (type === "double-zigzag") {
+      // Second pass with the rails swapped: it starts its throws from the
+      // opposite rail, i.e. phase-shifted half a period, so the two passes
+      // cross in the classic double-zigzag lattice.
+      runs.push(zigzag(r, l, UNDERLAY_STITCH));
+    }
+    return runs;
+  }
+
+  const runs: Path[] = [runningStitch(centerline, UNDERLAY_STITCH)];
+  if (weight === "light") return runs;
+
+  const wantEdge = railsOk && (widthMm >= SATIN_EDGE_WIDTH || weight === "heavy");
+  const wantZig = railsOk && (widthMm >= SATIN_ZIGZAG_WIDTH || weight === "heavy");
 
   if (wantZig) {
     const [l, r] = railsFromCenterline(centerline, railWidth);
@@ -145,14 +185,52 @@ function insetRing(outer: Path, inset: number): Path {
 /**
  * Fill underlay: an inset edge run + one (or two, for heavy) low-density parallel
  * passes the top rows can bite into. Returned as separate runs.
+ *
+ * An explicit `type` (anything but "auto") overrides the weight tiering and lays
+ * exactly the picked pass:
+ *   edge          → the inset edge run alone
+ *   tatami        → the low-density parallel pass alone
+ *   zigzag        → a parallel pass at the crossing (+45°) angle — the same
+ *                   second-angle pass style "heavy" already stacks on top
+ *   double-zigzag → the two crossing passes (+45° and +135°), a coarse lattice
+ *   center        → maps to edge. Fills have no cheap medial centerline here:
+ *                   the skeletonizer lives in engine/medial.ts, is grid-based and
+ *                   expensive, and this module only receives the region's rings —
+ *                   so the inset edge run is the honest nearest pass.
+ * If the picked pass degenerates on a tiny region (e.g. thinner than the inset,
+ * so the parallel rows vanish), the edge run is laid instead — an explicit pick
+ * never errors and never silently drops the underlay.
  */
 export function fillUnderlayRuns(
   rings: Path[],
   topAngle = 0,
   weight: UnderlayWeight = "standard",
+  type: UnderlayType = "auto",
 ): Path[] {
   const outer = rings[0];
   if (!outer || outer.length < 3) return [];
+  if (type !== "auto") {
+    let runs: Path[];
+    switch (type) {
+      case "tatami":
+        runs = parallelUnderlayRuns(rings, topAngle);
+        break;
+      case "zigzag":
+        runs = parallelUnderlayRuns(rings, topAngle + 45);
+        break;
+      case "double-zigzag":
+        runs = [
+          ...parallelUnderlayRuns(rings, topAngle + 45),
+          ...parallelUnderlayRuns(rings, topAngle + 135),
+        ];
+        break;
+      default: // "edge" and "center" (center → edge, see the doc comment above)
+        runs = [fillEdgeUnderlay(rings)];
+        break;
+    }
+    runs = runs.filter((r) => r.length >= 2);
+    return runs.length > 0 ? runs : [fillEdgeUnderlay(rings)].filter((r) => r.length >= 2);
+  }
   const runs: Path[] = [fillEdgeUnderlay(rings)];
   if (weight !== "light") {
     runs.push(...parallelUnderlayRuns(rings, topAngle));
@@ -207,16 +285,18 @@ export function fillParallelUnderlay(rings: Path[], topAngle = 0): Path {
 
 /**
  * Satin underlay for a rail pair, tiered by the column width and fabric weight.
- * Returns separate runs (centerline, edge-walk, zig-zag as warranted).
+ * Returns separate runs (centerline, edge-walk, zig-zag as warranted). An
+ * explicit `type` overrides the tiering (see columnUnderlay).
  */
 export function satinUnderlay(
   left: Path,
   right: Path,
   weight: UnderlayWeight = "standard",
+  type: UnderlayType = "auto",
 ): Path[] {
   if (left.length < 2 || right.length < 2) return [];
   const n = Math.max(left.length, right.length);
   const l = resampleByCount(left, n);
   const r = resampleByCount(right, n);
-  return columnUnderlay(centerlineOf(l, r), meanColumnWidth(l, r), weight);
+  return columnUnderlay(centerlineOf(l, r), meanColumnWidth(l, r), weight, type);
 }

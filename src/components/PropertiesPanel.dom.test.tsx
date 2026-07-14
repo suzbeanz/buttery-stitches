@@ -68,7 +68,22 @@ describe("PropertiesPanel", () => {
   it("shows the satin column-width control for a satin object", () => {
     seedSelectedSatin();
     render(<PropertiesPanel />);
-    expect(screen.getByText(/Column width/i)).toBeTruthy();
+    expect(screen.getByText("Column width (mm)")).toBeTruthy();
+  });
+
+  it("offers an explicit underlay type below the weight and stores the pick", () => {
+    const { fillId } = seedSelectedFill();
+    render(<PropertiesPanel />);
+    expect(screen.getByText("Underlay type")).toBeTruthy();
+    expect(
+      screen.getByText(/Auto picks by column width — override for special fabrics/i),
+    ).toBeTruthy();
+    const label = screen.getByText("Underlay type").closest("label")!;
+    const select = label.querySelector("select")!;
+    expect(select.value).toBe("auto"); // default keeps the tiered behavior
+    fireEvent.change(select, { target: { value: "double-zigzag" } });
+    const o = useProjectStore.getState().project.objects.find((x) => x.id === fillId)!;
+    expect(o.params.underlayType).toBe("double-zigzag");
   });
 
   it("converts geometry when the stitch type changes", () => {
@@ -85,7 +100,7 @@ describe("PropertiesPanel", () => {
   it("re-densifies satin rails when width changes", () => {
     const id = seedSelectedSatin();
     render(<PropertiesPanel />);
-    const label = screen.getByText(/Column width/i).closest("label")!;
+    const label = screen.getByText("Column width (mm)").closest("label")!;
     const input = label.querySelector("input")!;
     // Number fields commit on blur (not every keystroke).
     fireEvent.change(input, { target: { value: "9" } });
