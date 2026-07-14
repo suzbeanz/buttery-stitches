@@ -55,9 +55,19 @@
 >   validated, hairline-stroke warning); the biggest lettering-content gap is
 >   now user-fillable.
 >
-> Still open, in priority order: **sew-out calibration** (Tier 0.3 — needs a
-> real machine), multi-angle-line fill networks, photo-stitch, multi-hoop
-> splitting, per-pair kerning/per-glyph nudge, oracle scripts in scheduled CI.
+> **Progress log 4 — the fan-out waves.** Landed: multi-select transformer fix
+> + a shortcut for every tool; mobile bottom-strip tool rail; multi-hoop
+> splitting with world-aligned registration crosses; explicit underlay-type
+> override; TBF + T01 import/export with native DST/T01 import; user font
+> import; **photo-stitch** (tone-following scanline rows, 1-4 shades);
+> **per-glyph lettering tweaks** (nudge/rotate/scale in the glyph's local
+> frame); **multi-angle fill guides** (IDW-blended phase field over the
+> proven field-fill isoline machinery). All gated: 1,046 unit tests + e2e.
+>
+> Still open, in priority order: **sew-out calibration** (Tier 0.3 — the one
+> item needing a real machine; the swatch is ready), oracle scripts in
+> scheduled CI, stitch-geometry-splitting multi-hoop v2, ESA-style authored
+> centerlines for imported fonts.
 
 **Question asked:** can this be *as good as Wilcom / Hatch* for digitizing images into machine
 embroidery files?
