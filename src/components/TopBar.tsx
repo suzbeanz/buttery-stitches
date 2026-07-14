@@ -277,6 +277,8 @@ export default function TopBar({
     setShapeKind(kind);
     setTool("shape");
     setShowShapes(false);
+    // First-timers click a shape and wait — tell them the next gesture.
+    toast("Now drag on the canvas to place it (hold Shift for equal sides)", "info");
   }
 
   function saveCopy() {

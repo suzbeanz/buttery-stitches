@@ -75,10 +75,10 @@ export default function ToolRail() {
         <ToolBtn id="measure" label="Measure" shortcut="M" tip="Measure distance & angle" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Ruler size={20} />
         </ToolBtn>
-        <ToolBtn id="cut" label="Cut" tip="Cut a running line in two" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="cut" label="Cut" shortcut="X" tip="Cut a running line in two" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Slice size={20} />
         </ToolBtn>
-        <ToolBtn id="direction" label="Direction" tip="Set a fill's stitch direction" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="direction" label="Direction" shortcut="D" tip="Set a fill's stitch direction" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Compass size={20} />
         </ToolBtn>
       </Group>
@@ -91,7 +91,7 @@ export default function ToolRail() {
         <ToolBtn id="satin" label="Satin" shortcut="S" tip="Satin column — borders & lettering" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <SatinGlyph />
         </ToolBtn>
-        <ToolBtn id="satin2" label="Column" tip="Two-rail satin (variable width)" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="satin2" label="Column" shortcut="C" tip="Two-rail satin (variable width)" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Satin2Glyph />
         </ToolBtn>
         <ToolBtn id="fill" label="Fill" shortcut="F" tip="Fill a solid area" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
@@ -100,14 +100,15 @@ export default function ToolRail() {
         <ToolBtn id="pencil" label="Pencil" shortcut="B" tip="Freehand running line" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Pencil size={20} />
         </ToolBtn>
-        <ToolBtn id="brush" label="Brush" tip="Freehand filled area" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="brush" label="Brush" shortcut="E" tip="Freehand filled area" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Paintbrush size={20} />
         </ToolBtn>
-        <ToolBtn id="applique" label="Appliqué" tip="Appliqué — fabric patch" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
+        <ToolBtn id="applique" label="Appliqué" shortcut="A" tip="Appliqué — fabric patch" tool={tool} setTool={setTool} locked={locked} lockTip={lockTip}>
           <Scissors size={20} />
         </ToolBtn>
         <RailBtn
           label="Curve"
+          shortcut="Q"
           tip={locked ? lockTip : "Curved drawing — bends new strokes through their points"}
           active={smooth && !locked}
           disabled={locked}

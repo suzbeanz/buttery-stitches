@@ -265,9 +265,11 @@ node scripts/fetch-fonts.mjs   # re-vendors Latin woff2 + regenerates src/fonts.
 | `V` | Select | `⌘/Ctrl Z` / `⇧Z` | Undo / Redo |
 | `N` | Node edit | `⌘/Ctrl C` / `V` | Copy / Paste |
 | `R` `S` `F` | Running / Satin / Fill | `⌘/Ctrl D` | Duplicate |
-| `Enter` / `Esc` | Finish / cancel a shape | `⌘/Ctrl S` | Save `.embproj` |
-| `Del` | Delete selection | `P` | Toggle stitch view |
-| `?` | Shortcut help | `Space` | Play / pause simulation |
+| `C` `B` `E` | Column / Pencil / Brush | `⌘/Ctrl S` | Save `.embproj` |
+| `X` `D` `A` | Cut / Direction / Appliqué | `P` | Toggle stitch view |
+| `Q` | Curve toggle | `Space` | Play / pause simulation |
+| `Enter` / `Esc` | Finish / cancel a shape | `Del` | Delete selection |
+| `?` | Shortcut help (full list) | | |
 
 ## Hosting
 

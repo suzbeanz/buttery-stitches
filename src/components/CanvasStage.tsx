@@ -367,11 +367,17 @@ export default function CanvasStage() {
   useEffect(() => {
     const tr = trRef.current;
     if (!tr) return;
-    const node =
-      tool === "select" && selectedIds.length === 1
-        ? nodeRefs.current.get(selectedIds[0])
-        : undefined;
-    tr.nodes(node ? [node] : []);
+    // Attach EVERY selected object's node: a multi-selection gets one shared
+    // box with handles (scale/rotate together), exactly like single-select —
+    // each object bakes its own matrix on transformend. (This was previously
+    // gated to length === 1, so multi-select silently lost its handles.)
+    const nodes =
+      tool === "select"
+        ? selectedIds
+            .map((id) => nodeRefs.current.get(id))
+            .filter((n): n is Konva.Group => !!n)
+        : [];
+    tr.nodes(nodes);
     tr.getLayer()?.batchDraw();
   }, [tool, selectedIds, project.objects]);
 

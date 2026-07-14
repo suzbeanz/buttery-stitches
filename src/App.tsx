@@ -251,15 +251,21 @@ function useIsNarrow(): boolean {
   return narrow;
 }
 
+// Every tool has a key (discoverable as a badge on its rail button).
 const TOOL_KEYS: Record<string, Tool> = {
   v: "select",
   n: "node",
   h: "pan",
   m: "measure",
+  x: "cut",
+  d: "direction",
   r: "running",
   s: "satin",
+  c: "satin2", // Column; in the Points tool, C toggles corner↔curve instead
   f: "fill",
   b: "pencil",
+  e: "brush",
+  a: "applique",
 };
 
 /** Editor-wide keyboard shortcuts (see HelpOverlay for the full list). */
@@ -410,13 +416,20 @@ function useGlobalShortcuts(setShowHelp: (fn: (v: boolean) => boolean) => void) 
         }
         return;
       }
+      // Curve toggle — bends new strokes through their points.
+      if (e.key.toLowerCase() === "q" && editor.viewMode === "edit") {
+        editor.toggleSmooth();
+        return;
+      }
       // Tool selection. The hand (pan) works in either view (you pan the
-      // simulator too); the rest are edit-view tools.
+      // simulator too); the rest are edit-view tools. In the Points tool, C
+      // stays the corner↔curve toggle (handled by the canvas), not Column.
       const tool = TOOL_KEYS[e.key.toLowerCase()];
       if (tool === "pan") {
         editor.setTool("pan");
         return;
       }
+      if (tool === "satin2" && editor.tool === "node") return;
       if (tool && editor.viewMode === "edit") editor.setTool(tool);
     }
 
