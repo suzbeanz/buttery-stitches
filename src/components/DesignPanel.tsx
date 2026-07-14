@@ -12,6 +12,8 @@ import {
 } from "../lib/layout";
 import { designFor } from "../lib/engine";
 import { validateDesign } from "../lib/engine/validate";
+import { planHoopSplit, buildTileProject, hoopingName } from "../lib/multihoop";
+import { downloadProject } from "../lib/embproj";
 import { THREAD_CHARTS, type ThreadChart } from "../lib/thread/catalog";
 import { matchColorsToChart } from "../lib/thread/match";
 import { reduceProjectColors } from "../lib/thread/reduce";
@@ -98,6 +100,28 @@ export default function DesignPanel() {
   }
 
   const hasDesign = size.w > 0;
+
+  // Multi-hooping: when the design is bigger than the hoop, offer to split it
+  // into hoop-sized part files (objects are assigned whole, by bbox center).
+  const overflowsHoop =
+    hasDesign && (size.w > hoop.wMm + 1e-6 || size.h > hoop.hMm + 1e-6);
+  const hoopTiles = useMemo(
+    () => (overflowsHoop ? planHoopSplit(objects, hoop) : []),
+    [overflowsHoop, objects, hoop],
+  );
+
+  function splitForHoop() {
+    for (const tile of hoopTiles) {
+      downloadProject(
+        buildTileProject(project, tile, hoopTiles),
+        hoopingName("design", tile, hoopTiles),
+      );
+    }
+    toast(
+      `Saved ${hoopTiles.length} hooping files. Stitch them in order — the alignment crosses sew first; line each re-hooping up on the previous crosses, then remove them.`,
+      "success",
+    );
+  }
 
   return (
     <div className="flex flex-col gap-3 border-b border-navy/25 p-3 text-sm">
@@ -215,6 +239,21 @@ export default function DesignPanel() {
           >
             Fit to hoop
           </button>
+          {hoopTiles.length > 1 && (
+            <>
+              <button
+                onClick={splitForHoop}
+                className="rounded-sm border-2 border-ink px-3 py-1.5 font-label text-xs font-semibold uppercase tracking-[0.1em] text-ink hover:bg-butter-200"
+              >
+                Split for hoop ({hoopTiles.length} hoopings)
+              </button>
+              <p className="font-body text-[10px] leading-snug text-navy/50">
+                Too big for one hooping? Download one file per hooping, with
+                alignment crosses to line up each re-hooping. Objects are kept
+                whole, not cut.
+              </p>
+            </>
+          )}
         </>
       ) : (
         <p className="text-xs text-navy/70">Add a design to set its size.</p>
