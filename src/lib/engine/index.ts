@@ -434,7 +434,14 @@ function acceptableSatin(
           ? [{ x: b.minX + w * 0.18, y: cy }, { x: b.maxX - w * 0.18, y: cy }]
           : [{ x: cx, y: b.minY + h * 0.18 }, { x: cx, y: b.maxY - h * 0.18 }];
       const cols = columnsFromCenterlines(region, [centerline], { density, pullScale, cellMm });
-      if (cols.length) return cols;
+      // The block must PROVE it covers, same bar as the medial gate below. A
+      // true dot passes trivially — but a compact serpentine glyph (a 5mm S
+      // fills 55% of its bbox, enough to fool isSmallRoundFill) is NOT a dot:
+      // one straight block leaves its hooks bare and its throws crisscross the
+      // bends. Let it fall through to its medial columns instead.
+      if (cols.length && satinCoverage(region, cols.map((c) => c.throws), Math.min(0.5, cellMm * 2.5)) >= MIN_SATIN_COVERAGE) {
+        return cols;
+      }
     }
   }
   // Authored decomposition (flagship font): lay a column down each hand-placed
@@ -460,6 +467,52 @@ function acceptableSatin(
 
   const coverage = satinCoverage(region, columns.map((c) => c.throws));
   return coverage >= MIN_SATIN_COVERAGE ? columns : [];
+}
+
+/** Largest residual patch (mm, longest side) still sewn as one satin block
+ *  instead of tatami rows — junction cores and crossing wedges are ~1-4mm. */
+const PATCH_BLOCK_MAX_MM = 5;
+
+/**
+ * One clean satin block down a small residual patch's principal axis, or null
+ * when the patch is too big or the block doesn't actually cover it (then the
+ * caller lays tatami as before). The axis comes from the ring's covariance —
+ * junction wedges sit diagonally, so a bbox axis would miss the grain.
+ */
+function smallPatchSatinBlock(patch: Path, density: number, pullScale: number): Point[] | null {
+  const b = pathsBounds([patch]);
+  if (!b) return null;
+  if (Math.max(b.maxX - b.minX, b.maxY - b.minY) > PATCH_BLOCK_MAX_MM) return null;
+  let cx = 0, cy = 0;
+  for (const p of patch) { cx += p.x; cy += p.y; }
+  cx /= patch.length; cy /= patch.length;
+  let sxx = 0, syy = 0, sxy = 0;
+  for (const p of patch) {
+    const dx = p.x - cx, dy = p.y - cy;
+    sxx += dx * dx; syy += dy * dy; sxy += dx * dy;
+  }
+  const theta = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+  const ux = Math.cos(theta), uy = Math.sin(theta);
+  let tMin = Infinity, tMax = -Infinity;
+  for (const p of patch) {
+    const t = (p.x - cx) * ux + (p.y - cy) * uy;
+    if (t < tMin) tMin = t;
+    if (t > tMax) tMax = t;
+  }
+  if (!(tMax - tMin > 0.4)) return null;
+  // Inset the ends like the small-feature block so end throws stay inside.
+  const inset = (tMax - tMin) * 0.18;
+  const centerline: Point[] = [
+    { x: cx + ux * (tMin + inset), y: cy + uy * (tMin + inset) },
+    { x: cx + ux * (tMax - inset), y: cy + uy * (tMax - inset) },
+  ];
+  const cols = columnsFromCenterlines([patch], [centerline], { density, pullScale, cellMm: 0.15 });
+  if (!cols.length) return null;
+  const throws = cols.flatMap((c) => c.throws);
+  // The block must actually cover the patch — a bent or forked leftover where
+  // one straight block can't reach stays with tatami.
+  if (satinCoverage([patch], [throws], 0.3) < 0.8) return null;
+  return throws;
 }
 
 /** The object's authored satin centerlines whose mid-stroke point falls inside
@@ -978,12 +1031,20 @@ export function generateObjectRuns(
       // "hello") shows a hole. Laid first so the satin sits on top at the seams.
       // (Line-art renders as regularized stroke satin via lineArtFill and skips this path.)
       for (const patch of residualRegions(region, tops)) {
-        const fill = tatamiFill([patch], {
-          density,
-          angle: tatamiAngle,
-          stitchLength: fillStitchLength,
-          pullCompMm: pullComp,
-        });
+        // A SMALL patch — the junction core of a Y, a stroke-crossing wedge —
+        // sews far cleaner as ONE satin block down its principal axis than as
+        // a handful of jagged tatami rows at the object grain (which read as a
+        // scribble beside the neat columns around them). Bigger leftovers keep
+        // the tatami: a block across a broad or lanky patch would throw long.
+        const blockThrows = smallPatchSatinBlock(patch, density, fabric.pullMul);
+        const fill =
+          blockThrows ??
+          tatamiFill([patch], {
+            density,
+            angle: tatamiAngle,
+            stitchLength: fillStitchLength,
+            pullCompMm: pullComp,
+          });
         for (const sub of orderByNearest(splitLongTravels(fill, travelMax), cursor)) {
           const r = dropShortStitches(sub);
           addRun(runs, r, false, regionIdx, true);

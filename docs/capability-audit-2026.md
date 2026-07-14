@@ -68,6 +68,38 @@
 > item needing a real machine; the swatch is ready), oracle scripts in
 > scheduled CI, stitch-geometry-splitting multi-hoop v2, ESA-style authored
 > centerlines for imported fonts.
+>
+> **Progress log 5 (2026-07-14) — digitization quality, driven by a real
+> crest.** A user's 22-object digitization (St. Louis City SC) became the
+> test bench; four engine defects found and fixed, each with a regression
+> test derived from the crest's real geometry:
+> 1. **Junction-stub misfire** — a short REAL stroke (the T's 5mm crossbar)
+>    read as a junction stub because the junction balloon inflates the median
+>    width; only drop when BOTH ends are fat (a real stroke has a free
+>    terminal that pinches to the lean-quartile half). T coverage 0.66→1.00.
+> 2. **Contested-elbow chains** — in a Y, the tracer welds one arm onto the
+>    tail (~30° bend passes the chaining gate) and the kinked chain's satin
+>    fans while the other arm piles on top. Junction-cluster pixel noise
+>    makes trace-time detection unreliable; instead a Pass 1⅛ split in
+>    smoothed mm space breaks a chain that turns ≥25° exactly where another
+>    branch's terminal abuts. Y coverage 0.76→0.91, three clean columns;
+>    straight pass-throughs (T/K/X, crescent spines) untouched.
+> 3. **Serpentine glyphs flattened to "dots"** — a 4mm S fills >50% of its
+>    bbox and fooled `isSmallRoundFill`, so the whole letter sewed as ONE
+>    straight block with 4mm crisscross throws (the garbled small text).
+>    The dot shortcut now has to PROVE block coverage ≥ the satin gate or it
+>    falls through to the (perfect) medial columns. Max throw 4.2→1.15mm.
+> 4. **Junction patches sewed as scribble** — residual wedges at junction
+>    cores got a few jagged tatami rows at the object grain; small patches
+>    (≤5mm) now sew as one satin block down their principal (covariance)
+>    axis, with a coverage check falling back to tatami.
+> Plus: SVG imports now run the same 0.4mm `underlapObjects` gap-proofing as
+> the raster trace (color seams can't open hairlines under thread pull).
+> All gated: 1,053 unit tests + bench + e2e green.
+>
+> Newly known issue (visible, low risk): a junction block's edge that faces
+> the V-notch raycasts a sawtooth — structured, far better than the old
+> scribble, but a future junction-aware cap could smooth it.
 
 **Question asked:** can this be *as good as Wilcom / Hatch* for digitizing images into machine
 embroidery files?
