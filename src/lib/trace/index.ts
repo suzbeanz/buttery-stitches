@@ -2,6 +2,7 @@ import ImageTracer from "imagetracerjs";
 import type { EmbObject, Path, Point, ThreadColor } from "../../types/project";
 import { newId } from "../id";
 import { makeObjectFromPaths } from "../objects";
+import { pathsBounds } from "../geometry";
 import { smoothRingKeepingCorners } from "../smooth";
 import { douglasPeucker } from "./simplify";
 import { polygonArea, polygonPerimeter } from "./classify";
@@ -211,6 +212,13 @@ export function tracedataToObjects(
   // anti-alias blend hugging the subject's outline). Whole regions are never
   // deleted at this distance — only stroke-classified slivers.
   const BG_HALO_MAX_DIST2 = 150 * 150;
+  // Halo-ANNULUS gate (see the region loop): a background-coloured ring wrapping
+  // most of the canvas with almost no ink is page, not art. "Mostly hollow" —
+  // real filled art is far above this; a wrap-around band is far below it.
+  const HALO_MAX_INK_FRACTION = 0.35;
+  // …and it must span this fraction of the canvas in BOTH dimensions, so a
+  // compact ring-shaped charm or letter counter never qualifies.
+  const HALO_MIN_CANVAS_SPAN = 0.55;
   let bgIndex = -1;
   if (removeBackground) {
     const bg = opts.backgroundRgb;
@@ -341,6 +349,29 @@ export function tracedataToObjects(
       const inkArea = Math.max(0, area - holeArea);
       const wallWidth = perim + holePerim > 0 ? (2 * inkArea) / (perim + holePerim) : 0;
       const inkFraction = area > 0 ? inkArea / area : 1;
+      // HALO ANNULUS: a background-coloured RING that wraps (nearly) the whole
+      // canvas with almost no ink is the PAGE showing through between the subject
+      // and the removed background — an anti-alias halo at object scale, not
+      // artwork. It survives every other guard: it's interior (the image had a
+      // margin), and far wider than sliver scale, so it read as "deliberate
+      // light-coloured detail" and sewed ~2000 useless stitches that pad under
+      // the design's border and fringe outside it. The gate is deliberately
+      // narrow — strict colour match to the DETECTED background, annulus
+      // topology, mostly hollow, spanning most of the canvas in BOTH dimensions
+      // — so compact light lettering, a white ball on a white page, and small
+      // ring-shaped charms all still sew. (A deliberate white rim drawn around a
+      // full-canvas design is indistinguishable from the halo and is dropped
+      // too — the same accepted tradeoff as the border-touching page drop; a
+      // rim the user actually wants is one drawn shape away.)
+      if (isBackground && rawHoles.length > 0 && inkFraction < HALO_MAX_INK_FRACTION) {
+        const ob = pathsBounds([rawOuter]);
+        if (
+          ob &&
+          ob.maxX - ob.minX >= HALO_MIN_CANVAS_SPAN * (boundW - offsetX) &&
+          ob.maxY - ob.minY >= HALO_MIN_CANVAS_SPAN * (boundH - offsetY)
+        )
+          return;
+      }
       const isNetwork = wallWidth > 0 && wallWidth < NETWORK_MAX_WALL_MM && inkFraction < NETWORK_MAX_INK_FRACTION;
       // Line-art stroke = a thin holey NETWORK, OR thin AND long AND genuinely
       // ELONGATED (length ≫ width). The elongation test separates a true single

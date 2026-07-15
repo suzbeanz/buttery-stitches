@@ -171,6 +171,67 @@ describe("tracedataToObjects", () => {
     expect(polygonArea(ball!.paths[0])).toBeLessThan(500);
   });
 
+  it("drops a background-coloured HALO ANNULUS wrapping the canvas, keeps white details", () => {
+    // The shield-file failure: the white page showed through as a ~4mm ring
+    // between the subject and the dropped background — an annulus wrapping the
+    // whole design, background-coloured, almost no ink. It sewed ~2000 useless
+    // stitches under/around the border. Layer 0 (white): the border-touching
+    // page (dropped as background), the halo annulus (must ALSO drop), and a
+    // compact white letter island (must SURVIVE — light lettering is real art).
+    const td = {
+      width: 100,
+      height: 100,
+      palette: [
+        { r: 255, g: 255, b: 255, a: 255 }, // white: page + halo + lettering
+        { r: 20, g: 40, b: 90, a: 255 }, // navy field
+      ],
+      layers: [
+        [
+          sq(0, 0, 100, 100), // page (border-touching)
+          sq(4, 4, 96, 96, false, [2]), // halo annulus outer…
+          sq(8, 8, 92, 92, true), // …and its hole: 16% ink, spans 92% of canvas
+          sq(60, 30, 68, 42), // a white letterform inside the design
+        ],
+        [sq(10, 10, 50, 90)],
+      ],
+    } as unknown as Tracedata;
+
+    const { colors, objects } = tracedataToObjects(td, { mmPerPx: 1, backgroundRgb: [255, 255, 255] });
+    const white = colors.find((c) => c.rgb[0] === 255);
+    expect(white, "white kept for the lettering").toBeDefined();
+    const whiteObjs = objects.filter((o) => o.colorId === white!.id);
+    expect(whiteObjs.length).toBeGreaterThan(0);
+    // Everything white that survives is letter-scale — the 92mm halo is gone.
+    for (const o of whiteObjs) {
+      for (const ring of o.paths) {
+        const xs = ring.map((p) => p.x);
+        expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(30);
+      }
+    }
+    expect(objects.some((o) => o.colorId !== white!.id), "navy field kept").toBe(true);
+  });
+
+  it("keeps a COMPACT background-coloured ring (a donut charm is art, not halo)", () => {
+    // Same topology as a halo — annulus, background-coloured, hollow — but small:
+    // a white ring charm on a navy field. Only canvas-spanning bands are page.
+    const td = {
+      width: 100,
+      height: 100,
+      palette: [
+        { r: 255, g: 255, b: 255, a: 255 },
+        { r: 20, g: 40, b: 90, a: 255 },
+      ],
+      layers: [
+        [sq(0, 0, 100, 100), sq(40, 40, 62, 62, false, [2]), sq(46, 46, 56, 56, true)],
+        [sq(10, 10, 90, 90)],
+      ],
+    } as unknown as Tracedata;
+    const { colors, objects } = tracedataToObjects(td, { mmPerPx: 1, backgroundRgb: [255, 255, 255] });
+    const white = colors.find((c) => c.rgb[0] === 255);
+    expect(white, "white ring charm survives").toBeDefined();
+    expect(objects.some((o) => o.colorId === white!.id)).toBe(true);
+  });
+
   it("attaches holes to a fill object (even-odd)", () => {
     const td = {
       width: 100,
