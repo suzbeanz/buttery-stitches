@@ -82,6 +82,26 @@ function outwardNormal(ring: Path, i: number, ownPaths: Path[]): Point | null {
 
 const isStroke = (o: EmbObject) => o.params?.lineArt === true;
 
+/** Objects smaller than this (mm, longest side) are FEATURES — letters, dots,
+ *  small marks that sit ON a background. They never push: two glyphs of a word
+ *  sit 0.3-1.5mm apart by DESIGN, and a push (worse, a gap-bridge) welds them
+ *  into one blob. Their own seams are already backed by the background that
+ *  extends under them. */
+const FEATURE_MAX_MM = 15;
+
+function maxDimMm(o: EmbObject): number {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const ring of o.paths) {
+    for (const p of ring) {
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
+    }
+  }
+  return Math.max(maxX - minX, maxY - minY);
+}
+
 /**
  * Expand each earlier-sewn fill object under its later-sewn, differently-colored
  * neighbours by {@link UNDERLAP_MM}. Returns the same array; objects that abut a
@@ -91,6 +111,7 @@ export function underlapObjects(objects: EmbObject[], amountMm = UNDERLAP_MM): E
   for (let i = 0; i < objects.length; i++) {
     const obj = objects[i];
     if (obj.type !== "fill" || isStroke(obj)) continue;
+    if (maxDimMm(obj) < FEATURE_MAX_MM) continue; // features never push
     // ANY later neighbour counts — different colour is the classic seam case,
     // but a SAME-colour later neighbour matters just as much: a navy field
     // that stops short of the navy border ring leaves a boundary that either
@@ -101,7 +122,13 @@ export function underlapObjects(objects: EmbObject[], amountMm = UNDERLAP_MM): E
       .slice(i + 1)
       .filter((j) => j.type === "fill" || j.type === "satin");
     if (later.length === 0) continue;
+    // Long-reach bridging only targets BIG later neighbours (field-to-field,
+    // field-to-border seams). Small features still get the classic abutting
+    // tuck (first rung) but never pull a bridge across the visible gap that
+    // separates them from things around them.
+    const laterBig = later.filter((j) => maxDimMm(j) >= FEATURE_MAX_MM);
     const coveredByLater = (p: Point) => later.some((j) => pointInRings(p, j.paths));
+    const coveredByLaterBig = (p: Point) => laterBig.some((j) => pointInRings(p, j.paths));
 
     const originalPaths = obj.paths;
     obj.paths = obj.paths.map((ring) => {
@@ -117,7 +144,8 @@ export function underlapObjects(objects: EmbObject[], amountMm = UNDERLAP_MM): E
         if (!n) return 0;
         for (const d of [amountMm + 0.1, 0.7, 1.0, 1.4, 1.8]) {
           const probe = { x: p.x + n.x * d, y: p.y + n.y * d };
-          if (coveredByLater(probe)) return d - 0.1 + amountMm;
+          const covered = d <= amountMm + 0.1 ? coveredByLater(probe) : coveredByLaterBig(probe);
+          if (covered) return d - 0.1 + amountMm;
         }
         return 0;
       });
