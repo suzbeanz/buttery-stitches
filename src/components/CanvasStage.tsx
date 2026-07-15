@@ -1627,7 +1627,9 @@ export default function CanvasStage() {
             if (e.target === e.currentTarget) setStartDismissed(true);
           }}
         >
-          <div className="relative w-full max-w-md rounded-sm border-[2.5px] border-ink bg-cream p-6 shadow-press">
+          {/* max-h + scroll: the card must NEVER clip off the canvas edge on a
+              short phone viewport (it did — title and help line both cut off). */}
+          <div className="relative max-h-full w-full max-w-md overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-4 shadow-press sm:p-6">
             <button
               onClick={() => setStartDismissed(true)}
               aria-label="Close"
@@ -1635,11 +1637,11 @@ export default function CanvasStage() {
             >
               <X size={16} strokeWidth={2.25} />
             </button>
-            <div className="font-label uppercase tracking-[0.08em] text-2xl font-semibold">
+            <div className="font-label text-xl uppercase tracking-[0.08em] font-semibold sm:text-2xl">
               Let&apos;s make something 🧈
             </div>
             <p className="mt-1 text-sm text-navy/80">Pick how you&apos;d like to start.</p>
-            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:mt-4 sm:grid-cols-3">
               <StartButton
                 icon={ImageIcon}
                 label="Use an image"
@@ -1679,7 +1681,8 @@ export default function CanvasStage() {
             >
               Or load the calibration test swatch
             </button>
-            <p className="mt-2 text-xs text-navy/80">
+            {/* Keyboard hint — pointless on a phone, hidden there. */}
+            <p className="mt-2 hidden text-xs text-navy/80 sm:block">
               New here? Press <b>?</b> any time for help.
             </p>
           </div>
@@ -1736,14 +1739,19 @@ function StartButton({
   onClick: () => void;
 }) {
   return (
+    // Phones stack the three options, so each is a compact ROW (icon beside the
+    // words) — three tall stacked tiles pushed the card off-screen. From sm up
+    // they sit side by side as the classic stacked tiles.
     <button
       onClick={onClick}
-      className="flex flex-col items-center gap-1 rounded-sm border-2 border-ink bg-cream px-3 py-3 text-ink shadow-press-sm transition-transform hover:bg-butter-200 active:translate-y-[2px] active:shadow-none"
+      className="flex flex-row items-center gap-3 rounded-sm border-2 border-ink bg-cream px-3 py-2.5 text-left text-ink shadow-press-sm transition-transform hover:bg-butter-200 active:translate-y-[2px] active:shadow-none sm:flex-col sm:gap-1 sm:py-3 sm:text-center"
     >
-      <Icon size={26} strokeWidth={1.75} aria-hidden />
+      <Icon size={26} strokeWidth={1.75} aria-hidden className="shrink-0" />
 
-      <span className="font-label text-sm font-semibold uppercase tracking-wide">{label}</span>
-      <span className="font-body text-[11px] text-char/80">{hint}</span>
+      <span className="flex min-w-0 flex-col sm:items-center">
+        <span className="font-label text-sm font-semibold uppercase tracking-wide">{label}</span>
+        <span className="font-body text-[11px] text-char/80">{hint}</span>
+      </span>
     </button>
   );
 }

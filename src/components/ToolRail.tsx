@@ -11,6 +11,7 @@ import {
   Scissors,
   Slice,
   Compass,
+  Eye,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import {
@@ -47,6 +48,7 @@ export default function ToolRail() {
   const toggleSnap = useEditorStore((s) => s.toggleSnap);
   const toggleGuides = useEditorStore((s) => s.toggleGuides);
   const viewMode = useEditorStore((s) => s.viewMode);
+  const setViewMode = useEditorStore((s) => s.setViewMode);
   const locked = viewMode === "stitch"; // editing tools are inert in stitch view
   const drawing = isPointTool(tool) && draft.length > 0;
 
@@ -61,6 +63,30 @@ export default function ToolRail() {
       aria-label="Drawing tools"
       className="col-start-1 row-start-2 flex min-w-0 flex-row gap-0.5 overflow-x-auto border-t-2 border-ink bg-cream px-1 py-1 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:w-28 lg:flex-col lg:overflow-visible lg:border-r-2 lg:border-t-0 lg:px-0 lg:py-1.5"
     >
+      {/* Phones: the Edit/Stitch switch lives HERE (always in reach, first in
+          the strip) and the SimulatorBar row disappears in edit view — a whole
+          row was spent on this one toggle. At lg+ the switch stays in the
+          SimulatorBar as always. */}
+      <div className="flex shrink-0 items-center self-center px-1 lg:hidden">
+        <div className="flex overflow-hidden rounded-sm border-2 border-ink">
+          {([
+            { m: "edit" as const, label: "Edit", Icon: Pencil },
+            { m: "stitch" as const, label: "Stitch view", Icon: Eye },
+          ]).map(({ m, label, Icon }) => (
+            <button
+              key={m}
+              onClick={() => setViewMode(m)}
+              aria-label={label}
+              aria-pressed={viewMode === m}
+              className={`tap-target grid h-10 w-10 place-items-center ${
+                viewMode === m ? "bg-ink text-cream" : "bg-cream text-ink hover:bg-butter-200"
+              }`}
+            >
+              <Icon size={16} />
+            </button>
+          ))}
+        </div>
+      </div>
       {locked && (
         <div className="mx-1.5 w-24 shrink-0 self-center rounded-sm bg-butter-200 px-1 py-1 text-center font-label text-[9px] font-semibold uppercase leading-tight tracking-wide text-ink/70 lg:mb-1 lg:w-auto lg:self-auto">
           Stitch view — tools paused
@@ -268,8 +294,9 @@ function RailBtn({
           : "border-transparent text-ink hover:border-ink/30 hover:bg-butter-200/60"
       }`}
     >
+      {/* Keyboard badge — desktop only; on the touch strip it's just clutter. */}
       {shortcut && (
-        <kbd className="pointer-events-none absolute right-0.5 top-0.5 font-label text-[8px] font-semibold leading-none opacity-50">
+        <kbd className="pointer-events-none absolute right-0.5 top-0.5 hidden font-label text-[8px] font-semibold leading-none opacity-50 lg:block">
           {shortcut}
         </kbd>
       )}

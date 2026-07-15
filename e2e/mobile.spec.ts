@@ -22,3 +22,33 @@ test("studio loads and the layers drawer opens", async ({ page }) => {
   await page.getByRole("button", { name: /Show layers|Hide layers/ }).click();
   await expect(page.getByText(/Stitch Order/i)).toBeVisible();
 });
+
+test("phone layout: one-row top bar, unclipped quick-start, rail view toggle", async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) > 640, "phone-only layout rules");
+  await page.goto("/app");
+
+  // Top bar keeps to a single unwrapped row — it wrapped to two on phones once,
+  // halving the canvas. All nine controls must FIT (no sideways scroll), undo
+  // through the properties toggle included.
+  const header = page.locator("header");
+  const box = await header.boundingBox();
+  // One row ≈ 61px (44px coarse-pointer tap height + padding); a wrap ≈ 105px.
+  expect(box!.height).toBeLessThan(70);
+  const overflow = await header.evaluate((el) => el.scrollWidth - el.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+  await expect(page.getByRole("button", { name: /^Undo/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Show properties|Hide properties/ })).toBeVisible();
+
+  // The quick-start card sits fully inside the viewport — title and the
+  // calibration-swatch link were both clipped off-screen once.
+  const card = page.getByText(/Let's make something/i);
+  await expect(card).toBeInViewport();
+  await expect(page.getByRole("button", { name: /calibration test swatch/i })).toBeInViewport();
+
+  // The Edit/Stitch switch lives in the tool strip on phones (the SimulatorBar
+  // row hides in edit view to give the canvas its height back).
+  await expect(page.getByRole("button", { name: "Stitch view" })).toBeVisible();
+  await page.getByRole("button", { name: "Stitch view" }).click();
+  // Stitch view brings the playback row back.
+  await expect(page.getByRole("button", { name: /Play|Pause/ })).toBeVisible();
+});

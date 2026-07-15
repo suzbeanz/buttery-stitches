@@ -157,7 +157,7 @@ export default function ExportMenu({
         data-tip="Export a machine file (PES, DST…)"
         aria-label="Export a machine file"
         aria-expanded={open}
-        className="tap-target flex h-9 shrink-0 items-center gap-1.5 rounded-sm border-2 border-butter-200/70 px-2.5 font-label text-xs font-semibold uppercase tracking-[0.08em] text-butter-100 hover:bg-butter-200/15"
+        className="tap-target flex h-9 min-w-10 shrink-0 items-center gap-1.5 rounded-sm border-2 border-butter-200/70 px-2 font-label text-xs font-semibold uppercase tracking-[0.08em] text-butter-100 hover:bg-butter-200/15 sm:px-2.5"
       >
         <Download size={16} />
         <span className="hidden sm:inline">Export</span>
