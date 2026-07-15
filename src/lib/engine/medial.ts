@@ -720,6 +720,70 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
     prepped.push({ center, loop, straight: center.length === 2 });
   }
 
+  // Pass 1⅛ — split chained branches at CONTESTED junction kinks. In a Y the
+  // tracer welds one arm onto the tail (each bends only ~30°, inside the
+  // chaining threshold), leaving a KINKED chain: its satin throws fan into a
+  // spray at the elbow while the other arm's column piles on top — a scribble
+  // on fabric. Junction-cluster pixel noise makes this impossible to judge
+  // reliably at trace time, but down here in smoothed mm space the signature
+  // is unmistakable: the chain turns hard at the very point where ANOTHER
+  // branch's terminal abuts (the junction). A straight pass-through — a T's
+  // crossbar, a K or R stem, a crescent spine with rungs — has no kink there
+  // and is never touched. Split the chain at the elbow; each stroke then gets
+  // its own clean column and the residual fill patches the junction core.
+  {
+    const KINK_SPLIT_DEG = 25;
+    const KINK_WIN_MM = 1.5;
+    const ABUT_TOL_MM = Math.max(1.2, cellMm * 3);
+    // Direction of travel through vertex i: sampled ~KINK_WIN_MM behind (-1)
+    // or ahead (+1), so the pixel staircase can't fake a turn.
+    const travelDir = (path: Path, i: number, sign: 1 | -1): [number, number] | null => {
+      let dist = 0, j = i;
+      while (j + sign >= 0 && j + sign < path.length && dist < KINK_WIN_MM) {
+        dist += Math.hypot(path[j + sign].x - path[j].x, path[j + sign].y - path[j].y);
+        j += sign;
+      }
+      if (j === i) return null;
+      const dx = (path[j].x - path[i].x) * sign;
+      const dy = (path[j].y - path[i].y) * sign;
+      const l = Math.hypot(dx, dy) || 1;
+      return [dx / l, dy / l];
+    };
+    for (let pi = 0; pi < prepped.length; pi++) {
+      const p = prepped[pi];
+      if (p.loop || p.straight || p.center.length < 3) continue;
+      // Junction meeting points: every OTHER open branch's terminals.
+      const terminals: Point[] = [];
+      for (let qi = 0; qi < prepped.length; qi++) {
+        const q = prepped[qi];
+        if (qi === pi || q.loop) continue;
+        terminals.push(q.center[0], q.center[q.center.length - 1]);
+      }
+      if (!terminals.length) continue;
+      let splitAt = -1, worst = KINK_SPLIT_DEG;
+      for (let i = 1; i < p.center.length - 1; i++) {
+        const din = travelDir(p.center, i, -1);
+        const dout = travelDir(p.center, i, 1);
+        if (!din || !dout) continue;
+        const turn = (Math.acos(Math.max(-1, Math.min(1, din[0] * dout[0] + din[1] * dout[1]))) * 180) / Math.PI;
+        if (turn < worst) continue;
+        const v = p.center[i];
+        if (!terminals.some((t) => Math.hypot(t.x - v.x, t.y - v.y) <= ABUT_TOL_MM)) continue;
+        worst = turn;
+        splitAt = i;
+      }
+      if (splitAt < 0) continue;
+      const head = p.center.slice(0, splitAt + 1);
+      const tail = p.center.slice(splitAt);
+      if (polylineLength(head) < MIN_BRANCH_MM || polylineLength(tail) < MIN_BRANCH_MM) continue;
+      prepped[pi] = { center: maybeStraightSnap(head, !!opts.regularize), loop: false, straight: false };
+      prepped[pi].straight = prepped[pi].center.length === 2;
+      prepped.push({ center: maybeStraightSnap(tail, !!opts.regularize), loop: false, straight: false });
+      prepped[prepped.length - 1].straight = prepped[prepped.length - 1].center.length === 2;
+      pi--; // the shortened head may hide a second contested elbow
+    }
+  }
+
   // Pass 1¼ — ANNULUS detection (regularized line art only). A drawn ring — a
   // tire around its hub, a round window frame — has a circular HOLE with a
   // near-constant ink wall around it. The skeleton often chains the ring into
@@ -1150,8 +1214,20 @@ function buildColumn(
   // elongated (length < ~1.4× its own width) skip it — the strokes that cross
   // the junction already cover that patch. (Loops are always real; authored
   // strokes are trusted.)
+  //
+  // CRUCIAL REFINEMENT: the length test alone misfires on SHORT REAL STROKES.
+  // A T's crossbar or a serif is only ~1.5–2× as long as it is wide, and the
+  // junction balloon inflates the median width, so the naive test read it as a
+  // stub and silently dropped a third of the letter (coverage then failed and
+  // the whole glyph fell back to chewed tatami). The reliable distinction: a
+  // real stroke has at least one FREE TERMINAL at the glyph outline, where the
+  // width pinches back to the stroke's own half — a junction-center stub is
+  // ballooned at BOTH ends. Only drop when both ends are fat.
   if (dropStubs && !loop && medHalfDt > 0 && polylineLength(center) < 2 * medHalfDt * 1.4) {
-    return null;
+    // Robust "true stroke half": the lean quartile, immune to junction bloat.
+    const leanHalf = dtHalves[Math.floor(dtHalves.length * 0.25)] ?? medHalfDt;
+    const endFat = (i: number) => halves[i] - OVERSHOOT_MM > leanHalf * 1.3;
+    if (endFat(0) && endFat(halves.length - 1)) return null;
   }
 
   // Trim JUNCTION ends. A real stroke terminal sits at the glyph outline (small

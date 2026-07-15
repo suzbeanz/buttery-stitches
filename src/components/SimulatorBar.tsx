@@ -62,9 +62,15 @@ export default function SimulatorBar() {
   const shown = Math.min(Math.floor(simIndex), simTotal);
 
   return (
-    <div className="flex flex-wrap items-center gap-3 border-t-2 border-ink/20 bg-cream px-3 py-1.5">
-      {/* Edit / Stitch view toggle */}
-      <div className="flex overflow-hidden rounded-sm border-2 border-ink text-xs">
+    // Phones, edit view: this row is JUST the mode toggle — and that toggle
+    // lives in the tool strip below lg (ToolRail), so the whole row hides and
+    // gives its height back to the canvas. Stitch view keeps the row at every
+    // size (playback controls). At lg+ nothing changes.
+    <div
+      className={`${viewMode === "edit" ? "hidden lg:flex" : "flex"} flex-wrap items-center gap-3 border-t-2 border-ink/20 bg-cream px-3 py-1.5`}
+    >
+      {/* Edit / Stitch view toggle — lg+ only; the ToolRail strip hosts it below. */}
+      <div className="hidden overflow-hidden rounded-sm border-2 border-ink text-xs lg:flex">
         {([
           { m: "edit" as const, label: "Edit", Icon: Pencil },
           { m: "stitch" as const, label: "Stitch view", Icon: Eye },

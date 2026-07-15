@@ -41,6 +41,38 @@ describe("auto satin for narrow plain fills", () => {
     expect(acrossFraction(body, 30)).toBeLessThan(0.3);
   });
 
+  it("a tiny serpentine glyph is NOT flattened into one dot block", () => {
+    // A real 3.6×4.6mm 'S' from a crest's small lettering: single compact
+    // ring, ~roundish bbox stats — it FOOLS isSmallRoundFill, but one straight
+    // satin block across it leaves the hooks bare and crisscrosses the bends
+    // (this exact bug garbled the crest's 4mm text). The dot shortcut must
+    // prove coverage and fall through to the medial columns, which trace the
+    // serpentine cleanly.
+    const sGlyph: Path = [
+      { x: 1.16, y: 0.91 }, { x: 0.79, y: 1.1 }, { x: 0.6, y: 2.39 }, { x: 0.82, y: 3.67 },
+      { x: 1.21, y: 3.63 }, { x: 1.69, y: 0.61 }, { x: 1.95, y: 0.27 }, { x: 2.78, y: 0.1 },
+      { x: 3.4, y: 0.68 }, { x: 3.6, y: 2.85 }, { x: 3.43, y: 3.7 }, { x: 2.89, y: 4.38 },
+      { x: 2.47, y: 4.49 }, { x: 2.38, y: 4.15 }, { x: 2.87, y: 2.64 }, { x: 2.59, y: 1 },
+      { x: 2.25, y: 1.21 }, { x: 1.82, y: 4.23 }, { x: 1.51, y: 4.54 }, { x: 0.66, y: 4.59 },
+      { x: 0.07, y: 3.97 }, { x: 0, y: 0.93 }, { x: 0.83, y: 0 }, { x: 1.19, y: 0.03 },
+    ];
+    const o = makeObjectFromPaths("fill", [sGlyph], "c1");
+    o.params.fillStyle = "satin";
+    const runs = generateObjectRuns(o);
+    const body = runs.filter((r) => !r.underlay);
+    // The medial serpentine's throws never exceed the ~1mm stroke width (plus
+    // pull comp); the dot block's crisscross threw 4mm diagonals across the
+    // whole glyph (residual patches then hid the bare hooks from a coverage
+    // check — throw length is the honest signature).
+    let maxSeg = 0;
+    for (const r of body) {
+      for (let i = 1; i < r.pts.length; i++) {
+        maxSeg = Math.max(maxSeg, Math.hypot(r.pts[i].x - r.pts[i - 1].x, r.pts[i].y - r.pts[i - 1].y));
+      }
+    }
+    expect(maxSeg).toBeLessThanOrEqual(2);
+  });
+
   it("an explicit tatami choice is respected even on a narrow column", () => {
     const o = makeObjectFromPaths("fill", [rect(3, 50)], "c1");
     o.params = { fillStyle: "tatami" };

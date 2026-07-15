@@ -23,6 +23,7 @@ import {
   BadgeCheck,
   Check,
   MoreHorizontal,
+  Home,
   type LucideIcon,
 } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
@@ -286,6 +287,15 @@ export default function TopBar({
     toast("Project saved to your downloads", "success");
   }
 
+  function cleanUp() {
+    const { project: cleaned, report } = fixStitchesWithReport(project);
+    setProject(cleaned);
+    // Most fixes are invisible in edit view (params/order), so jump to the
+    // stitch preview where the result actually shows.
+    setViewMode("stitch");
+    toast(cleanupMessage(report), "success");
+  }
+
   function openWorksheet() {
     const ws = buildWorksheet(project);
     if (ws.totalStitches === 0) {
@@ -299,7 +309,10 @@ export default function TopBar({
   }
 
   return (
-    <header className="relative z-30 flex flex-wrap items-center gap-1 border-b border-navy-dark bg-navy px-2 py-2 text-butter-100 shadow-press">
+    // Phones: ONE row, never wrap — wrapping doubled the bar and crushed the
+    // canvas. If a tiny screen still can't fit the slimmed set, the row swipes
+    // sideways (popovers below anchor `fixed`, so nothing clips).
+    <header className="relative z-30 flex flex-nowrap items-center gap-0.5 overflow-x-auto border-b border-navy-dark bg-navy px-1 py-2 text-butter-100 shadow-press sm:flex-wrap sm:gap-1 sm:overflow-visible sm:px-2">
       <BarButton
         label={layersOpen ? "Hide layers" : "Show layers"}
         onClick={toggleLayers}
@@ -314,7 +327,9 @@ export default function TopBar({
         data-tip="Home"
         data-tip-side="bottom"
         aria-label="Home"
-        className="mx-1.5 flex shrink-0 select-none items-center gap-2 rounded px-1 hover:opacity-80"
+        // Phones drop the wordmark row-space entirely (Home lives in the More
+        // menu there) so undo/redo and the panel toggle stay on screen.
+        className="mx-0.5 hidden shrink-0 select-none items-center gap-2 rounded px-1 hover:opacity-80 sm:mx-1.5 sm:flex"
       >
         {/* Butter-stick mark — high contrast on the press-blue bar. */}
         <svg width="34" height="22" viewBox="0 0 40 26" fill="none" aria-hidden className="shrink-0">
@@ -367,7 +382,7 @@ export default function TopBar({
         </span>
       )}
 
-      <div className="mx-1.5 h-5 w-px shrink-0 bg-butter-200/20" />
+      <div className="mx-0.5 hidden h-5 w-px shrink-0 bg-butter-200/20 sm:mx-1.5 sm:block" />
 
       {/* Insert group — the single home for adding content (words, image, shapes). */}
       <BarButton label="Add words" onClick={() => setPendingStart("text")}>
@@ -389,7 +404,9 @@ export default function TopBar({
           <>
             {/* Presentational backdrop — dismiss is a mouse convenience; keyboard closes via the toggle button. */}
             <div aria-hidden className="fixed inset-0 z-20" onClick={() => setShowShapes(false)} />
-            <div className="anim-press-in absolute left-0 z-30 mt-1 grid w-44 max-w-[calc(100vw-1rem)] grid-cols-3 gap-1 rounded-sm border-2 border-ink bg-cream p-1.5 text-navy shadow-press">
+            {/* Phones: fixed under the bar (the header scrolls sideways and would
+                clip an absolute child); sm+: the classic anchored dropdown. */}
+            <div className="anim-press-in fixed inset-x-4 top-14 z-30 mx-auto grid w-auto max-w-xs grid-cols-3 gap-1 rounded-sm border-2 border-ink bg-cream p-1.5 text-navy shadow-press sm:absolute sm:inset-x-auto sm:left-0 sm:top-auto sm:mx-0 sm:mt-1 sm:w-44 sm:max-w-[calc(100vw-1rem)]">
               {SHAPES.map(({ kind, label, Icon }) => (
                 <button
                   key={kind}
@@ -406,20 +423,17 @@ export default function TopBar({
       </div>
 
       <ExportMenu open={exportOpen} onOpenChange={setExportOpen} />
-      <BarButton
-        label="Clean up the stitching — fix densities, fill styles, order & seams"
-        text="Clean up"
-        onClick={() => {
-          const { project: cleaned, report } = fixStitchesWithReport(project);
-          setProject(cleaned);
-          // Most fixes are invisible in edit view (params/order), so jump to the
-          // stitch preview where the result actually shows.
-          setViewMode("stitch");
-          toast(cleanupMessage(report), "success");
-        }}
-      >
-        <Wand2 size={18} />
-      </BarButton>
+      {/* Clean up rides inline from sm up; on phones it lives in the More menu
+          so the bar keeps to one un-scrolled row. */}
+      <div className="hidden sm:block">
+        <BarButton
+          label="Clean up the stitching — fix densities, fill styles, order & seams"
+          text="Clean up"
+          onClick={cleanUp}
+        >
+          <Wand2 size={18} />
+        </BarButton>
+      </div>
       {/* Check + Print — inline on wide screens; in the "More" menu on narrow. */}
       <div className="hidden items-center gap-1 lg:flex">
         <BarButton label="Check design — is it ready to stitch?" text="Check" onClick={() => setShowCheck(true)}>
@@ -438,12 +452,20 @@ export default function TopBar({
         {showMore && (
           <>
             <div aria-hidden className="fixed inset-0 z-20" onClick={() => setShowMore(false)} />
-            <div className="anim-press-in absolute left-0 z-30 mt-1 flex w-52 flex-col gap-0.5 rounded-sm border-2 border-ink bg-cream p-1.5 text-navy shadow-press">
+            <div className="anim-press-in fixed inset-x-4 top-14 z-30 mx-auto flex w-auto max-w-xs flex-col gap-0.5 rounded-sm border-2 border-ink bg-cream p-1.5 text-navy shadow-press sm:absolute sm:inset-x-auto sm:left-0 sm:top-auto sm:mx-0 sm:mt-1 sm:w-52 sm:max-w-none">
               <MoreItem icon={FilePlus2} label="New" onClick={() => { newProject(); setShowMore(false); }} />
               <MoreItem icon={FolderOpen} label="Open…" onClick={() => { fileInput.current?.click(); setShowMore(false); }} />
               <MoreItem icon={ImportIcon} label="Import & add…" onClick={() => { importInput.current?.click(); setShowMore(false); }} />
               <MoreItem icon={Save} label="Save a copy" onClick={() => { saveCopy(); setShowMore(false); }} />
               <div className="my-0.5 h-px bg-ink/15" />
+              {/* The wordmark (Home) is hidden on phones — its action lands here. */}
+              <div className="sm:hidden">
+                <MoreItem icon={Home} label="Home page" onClick={() => { onHome?.(); setShowMore(false); }} />
+              </div>
+              {/* Inline from sm up; here on phones (see the bar). */}
+              <div className="sm:hidden">
+                <MoreItem icon={Wand2} label="Clean up stitching" onClick={() => { cleanUp(); setShowMore(false); }} />
+              </div>
               <MoreItem icon={BadgeCheck} label="Check design" onClick={() => { setShowCheck(true); setShowMore(false); }} />
               <MoreItem icon={ClipboardList} label="Print thread list" onClick={() => { openWorksheet(); setShowMore(false); }} />
             </div>
@@ -451,7 +473,7 @@ export default function TopBar({
         )}
       </div>
 
-      <div className="mx-1.5 h-5 w-px shrink-0 bg-butter-200/20" />
+      <div className="mx-0.5 hidden h-5 w-px shrink-0 bg-butter-200/20 sm:mx-1.5 sm:block" />
 
       <BarButton
         label={pastStates.length ? `Undo (${pastStates.length})` : "Undo"}
@@ -477,9 +499,12 @@ export default function TopBar({
         {project.objects.length === 1 ? "" : "s"}
       </span>
 
-      <BarButton label="Keyboard shortcuts" onClick={onHelp} align="end">
-        <HelpCircle size={18} />
-      </BarButton>
+      {/* Keyboard-shortcut help is meaningless on a phone — hide it there. */}
+      <div className="hidden sm:block">
+        <BarButton label="Keyboard shortcuts" onClick={onHelp} align="end">
+          <HelpCircle size={18} />
+        </BarButton>
+      </div>
       <BarButton
         label={propertiesOpen ? "Hide properties" : "Show properties"}
         onClick={toggleProperties}
@@ -617,7 +642,10 @@ function BarButton({
       aria-pressed={popup ? undefined : active}
       aria-haspopup={popup ? "menu" : undefined}
       aria-expanded={popup ? active : undefined}
-      className={`tap-target flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg text-butter-100 transition-transform hover:bg-butter-200/15 active:translate-y-px active:bg-butter-200/25 disabled:cursor-not-allowed disabled:text-butter-200/40 disabled:hover:bg-transparent ${
+      // min-w-10 relaxes the coarse-pointer 44px tap floor to 40px for THIS row
+      // only — it's the one place nine controls must share a phone's width
+      // (40px still clears WCAG 2.2 target-size with room).
+      className={`tap-target flex h-9 min-w-10 shrink-0 items-center justify-center gap-1.5 rounded-lg text-butter-100 transition-transform hover:bg-butter-200/15 active:translate-y-px active:bg-butter-200/25 disabled:cursor-not-allowed disabled:text-butter-200/40 disabled:hover:bg-transparent ${
         text ? "px-2" : "w-9"
       } ${active ? "bg-butter-200/15 text-butter-200" : ""}`}
     >
