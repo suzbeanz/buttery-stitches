@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AlertTriangle, ChevronDown, Eye, EyeOff, Minus, Plus } from "lucide-react";
 import type { EmbObject, Hoop, Project, ThreadColor } from "../types/project";
 import { loadImageData } from "../lib/image";
@@ -395,7 +396,10 @@ export default function AutoDigitizeDialog({
     onApply(photoMode && !isSvg ? project : fixStitches(project));
   }
 
-  return (
+  return createPortal(
+    // Portaled to <body>: this dialog mounts inside the top bar, and any
+    // scroll/transform ancestor there silently clips a fixed overlay on iOS
+    // Safari (a header overflow once reduced this dialog to a title sliver).
     // Click-outside closes; keyboard users dismiss with Escape (useEscapeToClose).
     // eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
     <div
@@ -410,7 +414,7 @@ export default function AutoDigitizeDialog({
         aria-modal="true"
         tabIndex={-1}
         aria-label="Turn an image into stitches"
-        className="anim-press-in max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-3 shadow-press outline-none sm:p-5"
+        className="anim-press-in max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-3 shadow-press outline-none sm:p-5"
       >
         <h2 className="mb-3 font-label text-lg font-semibold uppercase tracking-[0.08em] text-navy">
           Turn an image into stitches
@@ -782,7 +786,8 @@ export default function AutoDigitizeDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

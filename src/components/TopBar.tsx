@@ -309,10 +309,13 @@ export default function TopBar({
   }
 
   return (
-    // Phones: ONE row, never wrap — wrapping doubled the bar and crushed the
-    // canvas. If a tiny screen still can't fit the slimmed set, the row swipes
-    // sideways (popovers below anchor `fixed`, so nothing clips).
-    <header className="relative z-30 flex flex-nowrap items-center gap-0.5 overflow-x-auto border-b border-navy-dark bg-navy px-1 py-2 text-butter-100 shadow-press sm:flex-wrap sm:gap-1 sm:overflow-visible sm:px-2">
+    // Phones ≥360px: ONE row, never wrap — wrapping doubled the bar and
+    // crushed the canvas. Tinier screens fall back to wrapping, NOT to a
+    // scroll container: overflow-x-auto here turned the header into a scroll
+    // container, and iOS Safari clips `position: fixed` descendants of
+    // scroll containers — every dialog mounted in this bar (image digitizer,
+    // words, check) collapsed to a clipped sliver on a real iPhone.
+    <header className="relative z-30 flex flex-wrap items-center gap-0.5 border-b border-navy-dark bg-navy px-1 py-2 text-butter-100 shadow-press xs:flex-nowrap sm:flex-wrap sm:gap-1 sm:px-2">
       <BarButton
         label={layersOpen ? "Hide layers" : "Show layers"}
         onClick={toggleLayers}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { EmbObject, GlyphTweak, Hoop, ThreadColor, Point } from "../types/project";
 import type { Font } from "opentype.js";
 import { FONTS, DEFAULT_FONT_ID, loadFont, invalidateFontCache } from "../lib/text/fonts";
@@ -305,7 +306,9 @@ export default function TextDialog({
     onClose();
   }
 
-  return (
+  return createPortal(
+    // Portaled to <body> — mounted in the top bar, where an ancestor scroll
+    // container would clip this fixed overlay on iOS Safari.
     // Click-outside closes; keyboard users dismiss with Escape (useEscapeToClose).
     // eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
     <div
@@ -320,7 +323,7 @@ export default function TextDialog({
         aria-modal="true"
         tabIndex={-1}
         aria-label={editObject ? "Edit text" : "Add text"}
-        className="anim-press-in max-h-[90vh] w-full max-w-md overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-4 shadow-press outline-none"
+        className="anim-press-in max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-4 shadow-press outline-none"
       >
         <h2 className="mb-3 font-label uppercase tracking-[0.08em] text-lg font-semibold text-ink-deep">
           {editObject ? "Edit text" : "Add text"}
@@ -611,7 +614,8 @@ export default function TextDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

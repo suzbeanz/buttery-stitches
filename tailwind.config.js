@@ -3,6 +3,12 @@ export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      screens: {
+        // Small-phone floor: ≥360px the top bar holds one row; below it the
+        // bar wraps instead of scrolling (a scroll container there breaks
+        // fixed-position dialogs on iOS Safari).
+        xs: "360px",
+      },
       colors: {
         // Butter-wrapper inks (Edition 01). Flat colors, printed on cream stock.
         ink: { DEFAULT: "#173A7A", deep: "#102A57" }, // Press Blue / Midnight Press

@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { createPortal } from "react-dom";
 import { CheckCircle2, AlertTriangle, X, Wand2, Sparkles, Download } from "lucide-react";
 import { useDialogFocus, useEscapeToClose } from "./useEscapeToClose";
 import { useProjectStore } from "../store/projectStore";
@@ -60,7 +61,9 @@ export default function DesignCheck({
       ? `${mmToInch(project.widthMm).toFixed(2)} × ${mmToInch(project.heightMm).toFixed(2)} in`
       : `${project.widthMm.toFixed(0)} × ${project.heightMm.toFixed(0)} mm`;
 
-  return (
+  return createPortal(
+    // Portaled to <body> — mounted in the top bar, where an ancestor scroll
+    // container would clip this fixed overlay on iOS Safari.
     // eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
     <div
       className="anim-scrim-in fixed inset-0 z-50 flex items-center justify-center bg-navy/30 p-4"
@@ -74,7 +77,7 @@ export default function DesignCheck({
         aria-modal="true"
         aria-label="Check design"
         tabIndex={-1}
-        className="anim-press-in max-h-[90vh] w-full max-w-md overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-5 text-navy shadow-press outline-none"
+        className="anim-press-in max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-5 text-navy shadow-press outline-none"
       >
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-label text-lg font-semibold uppercase tracking-[0.08em]">
@@ -162,7 +165,8 @@ export default function DesignCheck({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

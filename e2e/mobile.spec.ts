@@ -52,3 +52,29 @@ test("phone layout: one-row top bar, unclipped quick-start, rail view toggle", a
   // Stitch view brings the playback row back.
   await expect(page.getByRole("button", { name: /Play|Pause/ })).toBeVisible();
 });
+
+test("phone dialogs escape the top bar (iOS fixed-in-scroller regression)", async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) > 640, "phone-only layout rules");
+  await page.goto("/app");
+  await page.getByRole("button", { name: /^close$/i }).first().click();
+
+  // The header must NEVER be a scroll container: iOS Safari clips
+  // position:fixed descendants of overflow scrollers, which once reduced
+  // every top-bar dialog to a clipped sliver on a real iPhone.
+  const overflowX = await page
+    .locator("header")
+    .evaluate((el) => getComputedStyle(el).overflowX);
+  expect(["visible", "clip"]).toContain(overflowX);
+
+  // And a top-bar-mounted dialog opens fully on screen (portaled to <body>).
+  await page.getByRole("button", { name: /add words/i }).click();
+  const dialog = page.getByRole("dialog", { name: /add text/i });
+  await expect(dialog).toBeVisible();
+  const inBody = await dialog.evaluate((el) => el.closest("header") === null);
+  expect(inBody).toBe(true);
+  const box = (await dialog.boundingBox())!;
+  const vp = page.viewportSize()!;
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(vp.height + 1);
+  expect(box.width).toBeGreaterThan(vp.width * 0.7); // a real sheet, not a sliver
+});
