@@ -17,7 +17,6 @@ import { railsFromCenterline, pointInRing } from "../geometry";
 import { douglasPeucker } from "./simplify";
 import { polygonArea } from "./classify";
 import { nameForRgb } from "./colorname";
-import { underlapObjects } from "./underlap";
 import type { DigitizeResult } from "./index";
 
 export type RGB = [number, number, number];
@@ -274,11 +273,8 @@ export function svgShapesToObjects(shapes: SvgShape[], opts: SvgImportOptions): 
       objects.push(makeObjectFromPaths("fill", s.rings!, cid, cname));
     }
   }
-  // Gap-proof the color boundaries, exactly like the raster trace does. SVG
-  // shapes abut PERFECTLY in vector space — which is the worst case on fabric:
-  // pull draws both edges apart and a hairline of fabric grins through every
-  // seam (the crest's red stripes showed white slivers against the navy field).
-  // Extending each earlier fill under its later neighbors closes the seam the
-  // way a hand digitizer overlaps colors.
-  return { colors, objects: underlapObjects(objects) };
+  // Color-seam underlap now happens at STITCH time (generateDesign), so every
+  // project gets the same gap-proofing no matter how it was authored — the
+  // drawn shapes stay exactly what the SVG said.
+  return { colors, objects };
 }

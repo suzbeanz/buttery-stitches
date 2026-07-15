@@ -100,6 +100,27 @@
 > Newly known issue (visible, low risk): a junction block's edge that faces
 > the V-notch raycasts a sawtooth — structured, far better than the old
 > scribble, but a future junction-aware cap could smooth it.
+>
+> **Progress log 6 (2026-07-15) — "perfect digitally": the second crest pass.**
+> Driven by the same real crest at raw-stitch zoom. Landed:
+> 1. **Stitch-time color-seam underlap** — generateDesign now extends each
+>    earlier fill under (and across drawn gaps up to ~1.8mm to) later
+>    neighbours, same-color included, on stitch clones (drawn shapes never
+>    change; import-time underlap removed — one source of truth, never
+>    doubled). Every bare hairline at the crest's red/navy/white seams closed.
+> 2. **Turned-vs-field fill by MEASURED coverage** — the guidance field had
+>    fixed precedence and sewed the arch at 0.85 coverage (bare crown, webbed
+>    patches) while turningFill scored 1.00; the better one now wins per shape.
+> 3. **Anti-crossing satin fans** — where consecutive throws crossed at a
+>    bend, the inside endpoint now advances a minimum step (above the
+>    short-stitch floor, or the emitter dedupes the pivot into outer chords).
+> 4. **Rail low-pass for long traced bands** (≥40mm) — border rings and arches
+>    stop pulsing with the trace's edge noise; lettering keeps its 3-tap.
+> 5. **Sliver mends** — thin residual patches (curve-apex crescents) sew as
+>    quiet spine-following runs, not tatami webs against the grain; solo
+>    branches also got a relaxed width cap to reach their true edges at bends.
+> Remaining polish, noted honestly: loop-column corner pinwheels at the crest
+> shoulders, the Y junction block texture, arch lower-tip busy-ness.
 
 **Question asked:** can this be *as good as Wilcom / Hatch* for digitizing images into machine
 embroidery files?

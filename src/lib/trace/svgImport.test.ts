@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { svgShapesToObjects, type SvgShape } from "./svgImport";
-import { UNDERLAP_MM } from "./underlap";
 import { polygonArea } from "./classify";
 import { pathsBounds } from "../geometry";
 
@@ -157,11 +156,11 @@ describe("svgShapesToObjects", () => {
     expect(areas[0]).toBeGreaterThan(areas[1]); // hole smaller than outer
   });
 
-  it("underlaps abutting color regions like the raster trace does", () => {
-    // Two rects sharing the x=50 edge — perfectly abutting in vector space,
-    // which is the worst case on fabric (thread pull opens a bare hairline).
-    // The earlier-sewn shape must extend ~UNDERLAP_MM past the shared edge;
-    // the later (top) shape keeps its exact geometry.
+  it("keeps abutting regions EXACT — color-seam underlap happens at stitch time, not import", () => {
+    // Two rects sharing the x=50 edge. The drawn shapes must stay exactly what
+    // the SVG said (underlap is applied to stitch-time clones in generateDesign
+    // so every project gets the same seam-proofing regardless of origin — and
+    // it never runs twice).
     const shapes: SvgShape[] = [
       { rings: [[{ x: 0, y: 0 }, { x: 50, y: 0 }, { x: 50, y: 100 }, { x: 0, y: 100 }]], fill: [200, 30, 30] },
       { rings: [[{ x: 50, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 50, y: 100 }]], fill: [30, 30, 200] },
@@ -172,8 +171,8 @@ describe("svgShapesToObjects", () => {
     const edgeX = 50;
     const maxXa = Math.max(...res.objects[0].paths.flat().map((p) => p.x));
     const minXb = Math.min(...res.objects[1].paths.flat().map((p) => p.x));
-    expect(maxXa).toBeGreaterThanOrEqual(edgeX + UNDERLAP_MM - 0.05); // first sewn tucks under
-    expect(minXb).toBeCloseTo(edgeX, 1); // top shape untouched
+    expect(maxXa).toBeCloseTo(edgeX, 5); // drawn geometry untouched
+    expect(minXb).toBeCloseTo(edgeX, 5);
   });
 
   it("returns empty for no shapes or degenerate content box", () => {

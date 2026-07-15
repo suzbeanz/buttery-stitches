@@ -7,6 +7,7 @@ import type {
 } from "../../types/project";
 import { resolveParams, fabricProfile } from "../../types/project";
 import { effectiveProfile } from "./profile";
+import { underlapObjects } from "../trace/underlap";
 import { distance, railsFromCenterline, pathsBounds, offsetPolyline } from "../geometry";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
@@ -472,6 +473,84 @@ function acceptableSatin(
 /** Largest residual patch (mm, longest side) still sewn as one satin block
  *  instead of tatami rows — junction cores and crossing wedges are ~1-4mm. */
 const PATCH_BLOCK_MAX_MM = 5;
+
+/** A residual patch no wider than this (mm, across its principal axis) is a
+ *  thin SLIVER hugging a column edge or curve apex — mended with quiet running
+ *  passes along its spine. A satin block or tatami rows across it would lay
+ *  visible stitches FIGHTING the column direction (the crown of an arch grew a
+ *  sprayed web exactly this way). */
+const PATCH_SLIVER_MAX_W_MM = 1.6;
+
+/**
+ * Principal axis of a ring via covariance: unit axis, centroid, and the spans
+ * along (t) and across (s) the axis.
+ */
+function principalAxis(ring: Path): { ux: number; uy: number; cx: number; cy: number; spanT: number; spanS: number; tMin: number } {
+  let cx = 0, cy = 0;
+  for (const p of ring) { cx += p.x; cy += p.y; }
+  cx /= ring.length; cy /= ring.length;
+  let sxx = 0, syy = 0, sxy = 0;
+  for (const p of ring) {
+    const dx = p.x - cx, dy = p.y - cy;
+    sxx += dx * dx; syy += dy * dy; sxy += dx * dy;
+  }
+  const theta = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+  const ux = Math.cos(theta), uy = Math.sin(theta);
+  let tMin = Infinity, tMax = -Infinity, sMin = Infinity, sMax = -Infinity;
+  for (const p of ring) {
+    const t = (p.x - cx) * ux + (p.y - cy) * uy;
+    const s = -(p.x - cx) * uy + (p.y - cy) * ux;
+    if (t < tMin) tMin = t;
+    if (t > tMax) tMax = t;
+    if (s < sMin) sMin = s;
+    if (s > sMax) sMax = s;
+  }
+  return { ux, uy, cx, cy, spanT: tMax - tMin, spanS: sMax - sMin, tMin };
+}
+
+/**
+ * Mend a thin sliver patch with running passes down its spine (out and back —
+ * a bean-like double so it actually reads solid), or null when the patch is
+ * genuinely two-dimensional. The spine follows the sliver's own midline, so on
+ * a curved crescent (an arch crown) the mend hugs the curve.
+ */
+function sliverMendRun(patch: Path, stitchLength: number): Point[] | null {
+  const ax = principalAxis(patch);
+  if (ax.spanS > PATCH_SLIVER_MAX_W_MM || ax.spanT < ax.spanS * 2) return null;
+  // Enough passes that the mend actually reads solid (~0.45mm per thread).
+  const passes = Math.max(2, Math.ceil(ax.spanS / 0.45));
+  // Midline: bucket boundary points along the axis, midpoint of each bucket's
+  // across-extents — follows a curved sliver instead of cutting its chord.
+  const K = Math.max(2, Math.ceil(ax.spanT / 0.8));
+  const lo: number[] = new Array(K).fill(Infinity);
+  const hi: number[] = new Array(K).fill(-Infinity);
+  for (const p of patch) {
+    const t = (p.x - ax.cx) * ax.ux + (p.y - ax.cy) * ax.uy - ax.tMin;
+    const s = -(p.x - ax.cx) * ax.uy + (p.y - ax.cy) * ax.ux;
+    const k = Math.max(0, Math.min(K - 1, Math.floor((t / ax.spanT) * K)));
+    if (s < lo[k]) lo[k] = s;
+    if (s > hi[k]) hi[k] = s;
+  }
+  // One spine per pass, evenly spread across the sliver's width, alternating
+  // direction so they chain without jumps — a miniature turned fill that hugs
+  // the sliver's own curve.
+  const all: Point[] = [];
+  for (let j = 0; j < passes; j++) {
+    const frac = (j + 0.5) / passes;
+    const pass: Point[] = [];
+    for (let k = 0; k < K; k++) {
+      if (!isFinite(lo[k]) || !isFinite(hi[k])) continue;
+      const t = ax.tMin + ((k + 0.5) / K) * ax.spanT;
+      const s = lo[k] + (hi[k] - lo[k]) * frac;
+      pass.push({ x: ax.cx + ax.ux * t - ax.uy * s, y: ax.cy + ax.uy * t + ax.ux * s });
+    }
+    if (pass.length < 2) continue;
+    const run = runningStitch(pass, Math.min(stitchLength, 1.8));
+    if (j % 2 === 1) run.reverse();
+    all.push(...run);
+  }
+  return all.length >= 2 ? all : null;
+}
 
 /**
  * One clean satin block down a small residual patch's principal axis, or null
@@ -992,12 +1071,25 @@ export function generateObjectRuns(
       // turningFill kept as the fallback when the field declines (it self-validates
       // coverage). A branchy/organic shape still flows along its limbs (flowFill).
       const autoTurn = autoSingle ? turningFill(region, fillOpts) : null;
-      let turned =
-        multiAngle ??
-        userFlow ??
-        (autoTurn
-          ? (guidanceFieldFill(region, fillOpts) ?? autoTurn)
-          : (autoSingle ? flowFill(region, fillOpts) : null));
+      // When BOTH the guidance field and the spine-march accept the shape, the
+      // winner is decided by MEASURED coverage, not fixed precedence. The field
+      // wins ties (fewer long stitches — bench: crescent-field), but on a band
+      // with a hard bend (an arch) its harmonic sweep can develop a saddle and
+      // leave the crown sparse (this crest's arch: field 0.85 vs turning 1.00)
+      // — the turned rows must win there or the crown sews as a patched web.
+      let turned = multiAngle ?? userFlow ?? null;
+      if (!turned && autoTurn) {
+        const field = guidanceFieldFill(region, fillOpts);
+        if (field) {
+          const covField = satinCoverage(region, field);
+          const covTurn = satinCoverage(region, autoTurn);
+          turned = covField >= covTurn - 0.02 ? field : autoTurn;
+        } else {
+          turned = autoTurn;
+        }
+      } else if (!turned && autoSingle) {
+        turned = flowFill(region, fillOpts);
+      }
       // HARD coverage gate on every fancy fill: a turned/field/flow output that
       // leaves real bare area (a pathological ring — e.g. one deformed by the
       // color-underlap pass — can fool a fill's own self-validation) falls back
@@ -1010,9 +1102,16 @@ export function generateObjectRuns(
       // rows missed — the same residual-patch guarantee satin fills already have.
       if (turned) {
         // Lower area floor than satin's junction patching: a bare TIP is small
-        // (a couple of mm²) but sits at the shape's most visible feature.
+        // (a couple of mm²) but sits at the shape's most visible feature. Same
+        // mend ladder as satin patches: a thin sliver takes quiet spine runs, a
+        // compact wedge takes one block — tatami rows across a tip at the
+        // object grain read as a web fighting the turned rows around them.
         for (const patch of residualRegions(region, turned, 0.3, TIP_PATCH_MIN_MM2)) {
-          tops.push(tatamiFill([patch], fillOpts));
+          tops.push(
+            sliverMendRun(patch, stitchLength) ??
+              smallPatchSatinBlock(patch, density, fabric.pullMul) ??
+              tatamiFill([patch], fillOpts),
+          );
         }
       }
       tatamiNoBareTravel = true;
@@ -1031,14 +1130,16 @@ export function generateObjectRuns(
       // "hello") shows a hole. Laid first so the satin sits on top at the seams.
       // (Line-art renders as regularized stroke satin via lineArtFill and skips this path.)
       for (const patch of residualRegions(region, tops)) {
-        // A SMALL patch — the junction core of a Y, a stroke-crossing wedge —
-        // sews far cleaner as ONE satin block down its principal axis than as
-        // a handful of jagged tatami rows at the object grain (which read as a
-        // scribble beside the neat columns around them). Bigger leftovers keep
-        // the tatami: a block across a broad or lanky patch would throw long.
-        const blockThrows = smallPatchSatinBlock(patch, density, fabric.pullMul);
+        // A thin SLIVER (a curve apex's crescent, an edge-hugging trail) mends
+        // with quiet running passes along its own spine — a block or tatami
+        // across it sprays visible stitches against the column grain. A SMALL
+        // compact patch — the junction core of a Y, a stroke-crossing wedge —
+        // sews as ONE satin block down its principal axis. Bigger leftovers
+        // keep the tatami: a block across a broad or lanky patch would throw
+        // long.
         const fill =
-          blockThrows ??
+          sliverMendRun(patch, stitchLength) ??
+          smallPatchSatinBlock(patch, density, fabric.pullMul) ??
           tatamiFill([patch], {
             density,
             angle: tatamiAngle,
@@ -1354,8 +1455,20 @@ export function generateDesign(
   // run per region), keeping only runs that actually produce penetrations. Keep
   // the runs grouped per object so travel routing can reorder whole objects.
   const fabric = effectiveProfile(project.fabric, project.threadWeight);
-  const groups = project.objects
-    .filter((o) => o.visible)
+  // COLOR-SEAM UNDERLAP at stitch time: extend each earlier-sewn fill a
+  // fraction of a millimetre under (and, when the drawn regions don't quite
+  // meet, ACROSS to) its later-sewn different-colour neighbours, so thread
+  // pull can't open a bare-fabric hairline along any colour boundary. Applied
+  // to CLONES — the user's drawn shapes never change, only the stitches
+  // (exactly how the professional packages do overlap). Doing it here, not at
+  // import, gives every project the same seam guarantee: hand-drawn, traced,
+  // SVG or legacy files alike.
+  const seamProofed = underlapObjects(
+    project.objects
+      .filter((o) => o.visible)
+      .map((o) => ({ ...o, paths: o.paths.map((ring) => ring.map((p) => ({ ...p }))) })),
+  );
+  const groups = seamProofed
     .map((object) => ({
       object,
       runs: generateObjectRuns(object, fabric).filter((r) => r.pts.length > 0),
