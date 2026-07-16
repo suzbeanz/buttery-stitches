@@ -112,6 +112,11 @@ export default function AutoDigitizeDialog({
   // The live trace result. Re-runs (debounced) whenever the settings change.
   const [result, setResult] = useState<{ colors: ThreadColor[]; objects: EmbObject[] } | null>(null);
   const [keptIds, setKeptIds] = useState<Set<string>>(new Set());
+  // Objects the tracer flagged as possible leftover page background, excluded
+  // by default — a deliberate rim and a page halo look identical, so the USER
+  // decides here (a visible keep/skip chip) instead of the tracer silently
+  // deleting possible art.
+  const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set());
   // Per-color stitch style override (by colorId). "auto" = the trace's own
   // fill/line-art classification; otherwise force the whole color one way.
   const [styleById, setStyleById] = useState<Record<string, StitchStyle>>({});
@@ -262,6 +267,8 @@ export default function AutoDigitizeDialog({
         if (!alive) return;
         setResult({ colors, objects: finalObjects });
         setKeptIds(new Set(colors.map((c) => c.id))); // keep all by default each trace
+        // Suspected-background regions start EXCLUDED but visible as a chip.
+        setExcludedIds(new Set(finalObjects.filter((o) => o.suspectedBackground).map((o) => o.id)));
         setStyleById({}); // a fresh trace = fresh colorIds, so clear overrides
         // Offer the text-retype assist for any text-like clusters in the trace.
         setTextClusters(detectTextClusters(finalObjects));
@@ -319,10 +326,10 @@ export default function AutoDigitizeDialog({
     () =>
       result
         ? objectsWithText
-            .filter((o) => keptIds.has(o.colorId))
+            .filter((o) => keptIds.has(o.colorId) && !excludedIds.has(o.id))
             .map((o) => styleObject(o, styleById[o.colorId] ?? "auto"))
         : [],
-    [result, objectsWithText, keptIds, styleById],
+    [result, objectsWithText, keptIds, excludedIds, styleById],
   );
 
   const setColors = (n: number) => {
@@ -378,7 +385,10 @@ export default function AutoDigitizeDialog({
     if (!result) return;
     const colors = result.colors.filter((c) => keptIds.has(c.id));
     const objects = objectsWithText
-      .filter((o) => keptIds.has(o.colorId))
+      .filter((o) => keptIds.has(o.colorId) && !excludedIds.has(o.id))
+      // An explicit KEEP is a decision — clear the flag so Check design never
+      // re-nags about an object the user already ruled on.
+      .map((o) => (o.suspectedBackground ? { ...o, suspectedBackground: undefined } : o))
       .map((o) => styleObject(o, styleById[o.colorId] ?? "auto"));
     if (objects.length === 0) return;
     const project: Project = {
@@ -729,6 +739,49 @@ export default function AutoDigitizeDialog({
                 );
               })}
             </div>
+
+            {/* Suspected page-background regions: the tracer can't tell a wanted
+                rim from the page showing through, so it never decides silently —
+                each suspect is a visible keep/skip here, default skipped. */}
+            {result.objects.filter((o) => o.suspectedBackground).map((o) => {
+              const excluded = excludedIds.has(o.id);
+              return (
+                <div
+                  key={o.id}
+                  className={`mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-sm border-2 px-2 py-1.5 text-sm transition ${
+                    excluded ? "border-ink/25 bg-cream text-navy/60" : "border-ink bg-butter-200 text-navy"
+                  }`}
+                >
+                  <AlertTriangle size={15} className="shrink-0 text-stamp" aria-hidden />
+                  <span className="min-w-0 flex-1 basis-40 font-body text-[13px] leading-snug">
+                    &ldquo;{o.name}&rdquo; looks like leftover page background — {excluded ? "skipped" : "kept"}.
+                    {excluded ? " If this ring is part of your design, keep it." : ""}
+                  </span>
+                  <button
+                    onClick={() =>
+                      setExcludedIds((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(o.id)) next.delete(o.id);
+                        else next.add(o.id);
+                        return next;
+                      })
+                    }
+                    aria-pressed={!excluded}
+                    aria-label={`${o.name} — tap to ${excluded ? "keep" : "skip"}`}
+                    className="flex shrink-0 items-center gap-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
+                  >
+                    {excluded ? (
+                      <EyeOff size={15} className="text-navy/40" aria-hidden />
+                    ) : (
+                      <Eye size={15} className="text-navy/60" aria-hidden />
+                    )}
+                    <span className="w-8 font-label text-[10px] font-semibold uppercase tracking-wide">
+                      {excluded ? "Skip" : "Keep"}
+                    </span>
+                  </button>
+                </div>
+              );
+            })}
 
             {/* Power tools — per-color stitch style (above) plus palette merge/match
                 — stay tucked behind this toggle so the list reads calm by default. */}

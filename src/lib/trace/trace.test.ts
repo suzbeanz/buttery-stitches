@@ -207,13 +207,13 @@ describe("tracedataToObjects", () => {
     }
   });
 
-  it("drops a background-coloured HALO ANNULUS wrapping the canvas, keeps white details", () => {
-    // The shield-file failure: the white page showed through as a ~4mm ring
-    // between the subject and the dropped background — an annulus wrapping the
-    // whole design, background-coloured, almost no ink. It sewed ~2000 useless
-    // stitches under/around the border. Layer 0 (white): the border-touching
-    // page (dropped as background), the halo annulus (must ALSO drop), and a
-    // compact white letter island (must SURVIVE — light lettering is real art).
+  it("flags a background-coloured HALO ANNULUS as suspect — segregated, never silently dropped", () => {
+    // A page halo and a DELIBERATE white rim (a crest's ring) are geometrically
+    // identical, so the tracer must not decide alone: the annulus is kept as its
+    // OWN object carrying `suspectedBackground` (the dialog offers keep/skip and
+    // defaults to skip). Same-coloured real art — the letter island — must land
+    // in a separate, UNFLAGGED object. Layer 0 (white): border-touching page
+    // (still dropped: unambiguous), the halo annulus, and a letter island.
     const td = {
       width: 100,
       height: 100,
@@ -234,16 +234,20 @@ describe("tracedataToObjects", () => {
 
     const { colors, objects } = tracedataToObjects(td, { mmPerPx: 1, backgroundRgb: [255, 255, 255] });
     const white = colors.find((c) => c.rgb[0] === 255);
-    expect(white, "white kept for the lettering").toBeDefined();
-    const whiteObjs = objects.filter((o) => o.colorId === white!.id);
-    expect(whiteObjs.length).toBeGreaterThan(0);
-    // Everything white that survives is letter-scale — the 92mm halo is gone.
-    for (const o of whiteObjs) {
-      for (const ring of o.paths) {
-        const xs = ring.map((p) => p.x);
-        expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(30);
-      }
-    }
+    expect(white, "white colour kept").toBeDefined();
+    const flagged = objects.filter((o) => o.suspectedBackground);
+    expect(flagged.length).toBe(1); // the halo, present but flagged
+    expect(flagged[0].colorId).toBe(white!.id);
+    expect(flagged[0].name).toMatch(/background/i);
+    const span = (o: (typeof objects)[number]) => {
+      const xs = o.paths.flat().map((p) => p.x);
+      return Math.max(...xs) - Math.min(...xs);
+    };
+    expect(span(flagged[0])).toBeGreaterThan(80); // it IS the canvas-wide ring
+    // The lettering is a separate, unflagged white object — letter-scale only.
+    const letterObjs = objects.filter((o) => o.colorId === white!.id && !o.suspectedBackground);
+    expect(letterObjs.length).toBeGreaterThan(0);
+    for (const o of letterObjs) expect(span(o)).toBeLessThan(30);
     expect(objects.some((o) => o.colorId !== white!.id), "navy field kept").toBe(true);
   });
 
@@ -266,6 +270,8 @@ describe("tracedataToObjects", () => {
     const white = colors.find((c) => c.rgb[0] === 255);
     expect(white, "white ring charm survives").toBeDefined();
     expect(objects.some((o) => o.colorId === white!.id)).toBe(true);
+    // …and it isn't even flagged: only canvas-spanning bands raise suspicion.
+    expect(objects.every((o) => !o.suspectedBackground)).toBe(true);
   });
 
   it("attaches holes to a fill object (even-odd)", () => {

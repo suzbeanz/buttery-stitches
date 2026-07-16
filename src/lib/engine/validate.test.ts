@@ -44,3 +44,26 @@ describe("validateDesign: buried details", () => {
     expect(warnings.some((w) => /buried/i.test(w.message))).toBe(false);
   });
 });
+
+describe("validateDesign: suspected page background", () => {
+  it("warns once, with the object's id, for an undecided flagged ring", () => {
+    // A tracer-flagged ring that reached the project without a dialog decision
+    // (older save, programmatic import). It still sews — it may be a wanted rim
+    // — but the user should rule on it before spending stitches on the page.
+    const p = createEmptyProject();
+    const ring = makeObjectFromPaths("fill", [sq(5, 5, 90), sq(9, 9, 82)], p.colors[0].id);
+    ring.suspectedBackground = true;
+    p.objects = [ring];
+    const warnings = validateDesign(generateDesign(p), p).filter((w) => /page background/i.test(w.message));
+    expect(warnings.length).toBe(1);
+    expect(warnings[0].objectId).toBe(ring.id);
+  });
+
+  it("stays silent for the same ring once the flag is cleared (explicit keep)", () => {
+    const p = createEmptyProject();
+    const ring = makeObjectFromPaths("fill", [sq(5, 5, 90), sq(9, 9, 82)], p.colors[0].id);
+    p.objects = [ring];
+    const warnings = validateDesign(generateDesign(p), p);
+    expect(warnings.some((w) => /page background/i.test(w.message))).toBe(false);
+  });
+});
