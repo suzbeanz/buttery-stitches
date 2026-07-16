@@ -31,8 +31,12 @@ import type { Path, Point } from "../../types/project";
 import { booleanOp } from "../boolean";
 import { polygonArea, polygonPerimeter } from "./classify";
 
-/** A hole vertex this close to the outer is a weld candidate. */
-const WELD_GAP_MM = 1.0;
+/** A hole vertex this close to the outer is a weld candidate. Deliberately
+ *  wider than the acceptance mean below: a crescent's local bulges (measured
+ *  up to ~1.3 mm on a real crest) must snap WITH their run, or the leftovers
+ *  pinch off as unsewable pockets between welded stretches. Whether a run
+ *  welds at all is still decided by its MEAN being sub-two-rows. */
+const WELD_GAP_MM = 1.3;
 /** Candidate runs separated by less arc than this merge into one weld (a lone
  *  far vertex mid-crescent must not split the weld into oscillating fragments). */
 const WELD_BRIDGE_MM = 1.5;
