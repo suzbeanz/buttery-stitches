@@ -93,22 +93,48 @@ function dropSliverRings(o: EmbObject): EmbObject | null {
   return { ...o, paths: real };
 }
 
-/** Fraction of `b`'s outline vertices that land INSIDE fill `f`'s even-odd
- *  region — how much of `b` a later-sewn `f` would stitch over. Points in `f`'s
- *  holes count as outside (a detail in a ring's window is not covered). */
+/** Fraction of `b`'s INK that a later-sewn fill `f` would stitch over, by
+ *  sampling `b`'s even-odd region on a grid. It must be the BODY that counts,
+ *  not the outline: a field whose edge tucks 0.5 mm under a border ring, or a
+ *  stripe whose rim underlaps its knockout hole, has ~all of its outline
+ *  vertices inside `f` while its ink is barely covered — outline sampling
+ *  flagged exactly that correct underlap architecture as "buried". Points in
+ *  `f`'s holes count as outside (a detail in a ring's window is not covered).
+ *  Degenerate `b` (thinner than the grid — a hairline detail) falls back to
+ *  outline vertices, where burial genuinely is an outline question. */
 export function coveredFraction(b: EmbObject, f: EmbObject): number {
   if (f.type !== "fill" || f.paths.length === 0) return 0;
+  const bb = pathsBounds(b.paths);
+  if (!bb) return 0;
+  const stepX = Math.max(1.0, (bb.maxX - bb.minX) / 24);
+  const stepY = Math.max(1.0, (bb.maxY - bb.minY) / 24);
   let inside = 0;
   let total = 0;
-  for (const ring of b.paths) {
-    for (const p of ring) {
+  for (let y = bb.minY + stepY / 2; y < bb.maxY; y += stepY) {
+    for (let x = bb.minX + stepX / 2; x < bb.maxX; x += stepX) {
+      const p = { x, y };
+      let pb = 0;
+      for (const r of b.paths) if (pointInRing(p, r)) pb++;
+      if (pb % 2 === 0) continue; // not b's ink
       total++;
-      let parity = 0;
-      for (const fr of f.paths) if (pointInRing(p, fr)) parity++;
-      if (parity % 2 === 1) inside++;
+      let pf = 0;
+      for (const fr of f.paths) if (pointInRing(p, fr)) pf++;
+      if (pf % 2 === 1) inside++;
     }
   }
-  return total > 0 ? inside / total : 0;
+  if (total >= 8) return inside / total;
+  // Too thin for the grid: judge by the outline itself.
+  let vin = 0;
+  let vtotal = 0;
+  for (const ring of b.paths) {
+    for (const p of ring) {
+      vtotal++;
+      let parity = 0;
+      for (const fr of f.paths) if (pointInRing(p, fr)) parity++;
+      if (parity % 2 === 1) vin++;
+    }
+  }
+  return vtotal > 0 ? vin / vtotal : 0;
 }
 
 /** An object this covered by a LATER fill is effectively sewn over — buried. */

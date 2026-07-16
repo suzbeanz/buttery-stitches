@@ -29,7 +29,7 @@
  */
 import type { Path, Point } from "../../types/project";
 import { booleanOp } from "../boolean";
-import { polygonArea } from "./classify";
+import { polygonArea, polygonPerimeter } from "./classify";
 
 /** A hole vertex this close to the outer is a weld candidate. */
 const WELD_GAP_MM = 1.0;
@@ -206,9 +206,18 @@ export function weldSliverGaps(outer: Path, holes: Path[], opts: WeldOptions): P
 
   // Rebuild topology for real: post-snap the crescent has zero width, so the
   // raster boolean removes it and fuses the free stretch (the true divider)
-  // into one simple ring; interior holes re-emerge as holes.
+  // into one simple ring; interior holes re-emerge as holes. Rebuilt rings are
+  // also screened by MEAN WIDTH: a corner of the crescent can survive as a
+  // detached flake wide enough to pass the area floor yet still thinner than
+  // two fill rows — unsewable either as ink (a ridge) or as a hole (rows
+  // bridge it), so it never belongs in the output.
+  const meanWidthMm = (r: Path): number => {
+    const a = Math.abs(polygonArea(r));
+    const p = polygonPerimeter(r);
+    return p > 0 ? (2 * a) / p : 0;
+  };
   const rebuilt = booleanOp([outer], snapped, "subtract", WELD_BOOL_CELL_MM)
-    .filter((r) => Math.abs(polygonArea(r)) >= opts.minAreaMm2);
+    .filter((r) => Math.abs(polygonArea(r)) >= opts.minAreaMm2 && meanWidthMm(r) >= WELD_MEAN_GAP_MM);
   // Never destroy a region outright — an empty/failed boolean keeps originals.
   if (rebuilt.length === 0) return null;
   return rebuilt;
