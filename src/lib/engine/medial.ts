@@ -1448,13 +1448,16 @@ function buildColumn(
   // ANTI-CROSSING: on a tight bend (an arch crown, a hairpin) the inside rail
   // moves backward between successive throws, so neighbouring throws CROSS and
   // the bend sews as a sprayed X-hatch instead of satin. Where two consecutive
-  // throws intersect, pull the inside endpoint forward past the previous one
-  // by a small MINIMUM ADVANCE — the bend sews as a clean hand-digitized fan.
-  // The advance must stay ABOVE the emitter's short-stitch floor: a true
-  // shared pivot (advance 0) gets deduped by dropShortStitches downstream,
-  // which welds the fan into long outer-edge chords — a worse crisscross than
-  // the one being fixed.
-  const MIN_INNER_ADV_MM = 0.32;
+  // throws intersect, pin the inside endpoint just past the previous one — the
+  // bend sews as a clean hand-digitized fan sharing a near-pivot. The advance
+  // must stay TINY: a large forced step (0.32mm was tried) compounds around a
+  // sustained curve — each nudge pushes the inner point ahead of its natural
+  // position, the next throw crosses again, and the whole ladder progressively
+  // TILTS into a skewed lattice (a small C glyph's arm sheared this way). A
+  // near-zero step is safe for the zigzag: consecutive penetrations always
+  // alternate rails, so shared pivots are never adjacent in the sequence and
+  // the short-stitch dedup can't touch them.
+  const MIN_INNER_ADV_MM = 0.05;
   const chosenL = idx.map((i) => ({ ...left[i] }));
   const chosenR = idx.map((i) => ({ ...right[i] }));
   for (let k = 1; k < idx.length; k++) {
