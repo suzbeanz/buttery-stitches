@@ -39,8 +39,10 @@ const WELD_BRIDGE_MM = 1.5;
 /** A weld run must be at least this long — a point-approach is real geometry. */
 const WELD_MIN_RUN_MM = 2.5;
 /** …and its mean gap must be truly sub-thread. Two 0.4 mm fill rows need
- *  ~0.8 mm; below this the band can only sew as a ridge, never as coverage. */
-const WELD_MEAN_GAP_MM = 0.7;
+ *  0.8 mm, so any band whose MEAN is below that can only sew as a ridge, never
+ *  as coverage. (A real crest's crescent measured mean 0.73 mm — a 0.7 cutoff
+ *  missed it by a hair; the physical two-row line is the honest threshold.) */
+const WELD_MEAN_GAP_MM = 0.8;
 /** Refuse the weld when it would erase more than this share of the region's
  *  ink: then the thin band IS the region (a letter counter's bowl, a traced
  *  ring) and belongs to the line-art path, not to topology repair. */

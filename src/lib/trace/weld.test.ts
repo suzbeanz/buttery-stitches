@@ -66,6 +66,19 @@ describe("weldSliverGaps", () => {
     expect(netArea(welded!)).toBeLessThan((10000 - 30 * 30) * 1.02);
   });
 
+  it("welds the real crest's measured profile: gaps 0.5–0.95 mm, mean ≈ 0.73", () => {
+    // Taken from the user's actual file: the crescent's candidate gaps ranged
+    // 0.21–0.98 mm with mean 0.729 — a 0.7 mm cutoff missed it by a hair. The
+    // threshold is the physical two-row line (0.8): this profile must weld.
+    const outer = rect(0, 0, 100, 100);
+    const top: Path = [];
+    for (let x = 30; x <= 60; x += 1) top.push({ x, y: x % 2 === 0 ? 0.5 : 0.95 });
+    const hole: Path = [...top, { x: 60, y: 30 }, { x: 30, y: 30 }];
+    const out = weldSliverGaps(outer, [hole], OPTS);
+    expect(out).not.toBeNull();
+    expect(out!.length).toBe(1);
+  });
+
   it("bridges short excursions: an oscillating gap welds as ONE run", () => {
     const outer = rect(0, 0, 100, 100);
     // Top edge mostly 0.4 mm from the outer with brief 1.2 mm bumps (non-
