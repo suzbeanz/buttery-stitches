@@ -171,6 +171,42 @@ describe("tracedataToObjects", () => {
     expect(polygonArea(ball!.paths[0])).toBeLessThan(500);
   });
 
+  it("welds a crescent hole (hugging the outer) so no sub-thread fringe sews", () => {
+    // The recurring crest failure: red traces as (full shield) + (left-half
+    // hole) whose boundary runs 0.3–0.8 mm inside the outer along the shared
+    // perimeter — even-odd then sews an unsewable red crescent around the left
+    // side. The weld pass must rebuild the region as JUST the right half.
+    const outerPts: [number, number][] = [[10, 10], [90, 10], [90, 90], [10, 90]];
+    const holePts: [number, number][] = [[10.5, 10.3], [50, 10.6], [50, 89.5], [10.8, 89.4]];
+    const poly = (pts: [number, number][], isholepath = false, holechildren: number[] = []) => ({
+      segments: pts.map(([x, y], i) => {
+        const [nx, ny] = pts[(i + 1) % pts.length];
+        return { type: "L", x1: x, y1: y, x2: nx, y2: ny };
+      }),
+      isholepath,
+      holechildren,
+    });
+    const td = {
+      width: 100,
+      height: 100,
+      palette: [
+        { r: 255, g: 255, b: 255, a: 255 }, // background
+        { r: 220, g: 20, b: 60, a: 255 }, // red field with crescent topology
+      ],
+      layers: [[sq(0, 0, 100, 100)], [poly(outerPts, false, [1]), poly(holePts, true)]],
+    } as unknown as Tracedata;
+
+    const { objects } = tracedataToObjects(td, { mmPerPx: 1 });
+    const red = objects.find((o) => o.type === "fill");
+    expect(red, "red field kept").toBeDefined();
+    // Every surviving ring lives right of the divider — no crescent hugging the
+    // left perimeter, no hole ring at all (the divider fused into the outline).
+    expect(red!.paths.length).toBe(1);
+    for (const ring of red!.paths) {
+      expect(Math.min(...ring.map((p) => p.x))).toBeGreaterThan(44);
+    }
+  });
+
   it("drops a background-coloured HALO ANNULUS wrapping the canvas, keeps white details", () => {
     // The shield-file failure: the white page showed through as a ~4mm ring
     // between the subject and the dropped background — an annulus wrapping the

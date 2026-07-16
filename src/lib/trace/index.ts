@@ -18,6 +18,7 @@ import {
 import { underlapObjects } from "./underlap";
 import { stackSmallFeatures } from "./stack";
 import { nameForRgb } from "./colorname";
+import { weldSliverGaps } from "./weld";
 
 export * from "./simplify";
 export * from "./classify";
@@ -401,7 +402,15 @@ export function tracedataToObjects(
       // A thin stroke pinned along one image border is a capture artifact (a
       // screenshot frame line, resize edge shading) — never subject linework.
       if (isStroke && hugsImageEdge(pxOuter, td.width, td.height)) return;
-      const rings = [clean(rawOuter), ...rawHoles.map(clean)].map(clampToImage);
+      // WELD SLIVER GAPS (fills only): a hole tracking the outer at sub-thread
+      // distance leaves an unsewable "crescent" of ink that ridges under later
+      // colours. Snap those stretches onto the outer and rebuild the region so
+      // the crescent never exists; the straighten in clean() then smooths the
+      // rebuild. Returns null when nothing needed welding (the common case).
+      const welded = !isStroke && rawHoles.length > 0
+        ? weldSliverGaps(rawOuter, rawHoles, { minAreaMm2 })
+        : null;
+      const rings = (welded ?? [rawOuter, ...rawHoles]).map(clean).map(clampToImage);
       if (isStroke) {
         strokeRings.push(...rings);
         strokeArea += area;
