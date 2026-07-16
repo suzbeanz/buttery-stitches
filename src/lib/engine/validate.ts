@@ -171,5 +171,19 @@ export function validateDesign(design: EngineStitch[], project: Project): Warnin
     }
   }
 
+  // A traced region the auto-digitizer flagged as possible leftover page
+  // background, still undecided (the digitize dialog clears the flag on an
+  // explicit keep). It may be a wanted rim — so it sews — but the user should
+  // rule on it before spending ~2000 stitches on what might be the page.
+  for (const o of visible) {
+    if (o.suspectedBackground) {
+      warnings.push({
+        level: "warn",
+        objectId: o.id,
+        message: `"${o.name}" may be leftover page background traced as a ring — delete it if it isn't part of the design.`,
+      });
+    }
+  }
+
   return warnings;
 }

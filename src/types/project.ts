@@ -178,6 +178,13 @@ export interface EmbObject {
   text?: TextSpec;
   /** objects sharing a groupId select and move together. */
   groupId?: string;
+  /** Set by the auto-tracer on a region it suspects is leftover page background
+   *  (a background-coloured ring wrapping the canvas). The digitize dialog
+   *  offers it as an explicit keep/skip — a deliberate white rim and a page
+   *  halo are geometrically indistinguishable, so the USER decides instead of
+   *  the tracer silently deleting possible art. Cleared on an explicit keep;
+   *  harmless to persist (Check design warns if it reaches a project unseen). */
+  suspectedBackground?: boolean;
 }
 
 export interface ThreadColor {

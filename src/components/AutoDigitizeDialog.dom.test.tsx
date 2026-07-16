@@ -298,4 +298,37 @@ describe("AutoDigitizeDialog (live preview)", () => {
     const add = screen.getByRole("button", { name: /Add to design/ }) as HTMLButtonElement;
     expect(add.disabled).toBe(true);
   });
+
+  it("offers a suspected-background ring as keep/skip (default skip), clearing the flag on keep", async () => {
+    // The tracer can't tell a page halo from a deliberate rim, so it flags the
+    // region instead of deleting it. The chip defaults to SKIP (junk is the
+    // common case) but keeping it must be one tap — and an explicit keep clears
+    // the flag so Check design never re-nags a decision the user already made.
+    const ring = { ...obj("halo", "c1", 60), name: "Red ring (background?)", suspectedBackground: true };
+    vi.mocked(imageDataToObjects).mockReturnValue({ colors: COLORS, objects: [...OBJECTS, ring] });
+    const onApply = renderDialog();
+    await screen.findByRole("button", { name: /Red ring \(background\?\)/ }, { timeout: 2000 });
+    // Default: excluded from the live preview (3 of 4 objects) and from apply.
+    await waitFor(() => expect(previewCount()).toBe("3"));
+    // Keep it → preview includes it.
+    fireEvent.click(screen.getByRole("button", { name: /Red ring \(background\?\) — tap to keep/ }));
+    await waitFor(() => expect(previewCount()).toBe("4"));
+    fireEvent.click(screen.getByRole("button", { name: /Add to design/ }));
+    const project = onApply.mock.calls[0][0] as Project;
+    const applied = project.objects.find((o) => o.name === "Red ring (background?)");
+    expect(applied, "kept ring lands in the project").toBeDefined();
+    expect(applied!.suspectedBackground, "explicit keep clears the flag").toBeUndefined();
+  });
+
+  it("skipping a suspected-background ring keeps it out of the applied project", async () => {
+    const ring = { ...obj("halo", "c1", 60), name: "Red ring (background?)", suspectedBackground: true };
+    vi.mocked(imageDataToObjects).mockReturnValue({ colors: COLORS, objects: [...OBJECTS, ring] });
+    const onApply = renderDialog();
+    await screen.findByRole("button", { name: /Red ring \(background\?\)/ }, { timeout: 2000 });
+    await waitFor(() => expect(previewCount()).toBe("3"));
+    fireEvent.click(screen.getByRole("button", { name: /Add to design/ }));
+    const project = onApply.mock.calls[0][0] as Project;
+    expect(project.objects.some((o) => o.name === "Red ring (background?)")).toBe(false);
+    expect(project.objects).toHaveLength(3);
+  });
 });

@@ -317,8 +317,13 @@ export function tracedataToObjects(
       recognizeShape(r, 1.0)?.ring ?? smoothRingKeepingCorners(douglasPeucker(r, STRAIGHTEN_TOL_MM), 0.6);
     const fillRings: Path[] = [];
     const strokeRings: Path[] = [];
+    // Suspected page-background rings (the halo gate below) go into their OWN
+    // object so the flag never taints real art of the same colour (the white
+    // lettering that shares the white ring's layer).
+    const haloRings: Path[] = [];
     let fillArea = 0;
     let strokeArea = 0;
+    let haloArea = 0;
 
     layer.forEach((path) => {
       if (path.isholepath) return; // pulled in via a parent's holechildren
@@ -351,27 +356,30 @@ export function tracedataToObjects(
       const wallWidth = perim + holePerim > 0 ? (2 * inkArea) / (perim + holePerim) : 0;
       const inkFraction = area > 0 ? inkArea / area : 1;
       // HALO ANNULUS: a background-coloured RING that wraps (nearly) the whole
-      // canvas with almost no ink is the PAGE showing through between the subject
-      // and the removed background — an anti-alias halo at object scale, not
-      // artwork. It survives every other guard: it's interior (the image had a
-      // margin), and far wider than sliver scale, so it read as "deliberate
-      // light-coloured detail" and sewed ~2000 useless stitches that pad under
-      // the design's border and fringe outside it. The gate is deliberately
-      // narrow — strict colour match to the DETECTED background, annulus
-      // topology, mostly hollow, spanning most of the canvas in BOTH dimensions
-      // — so compact light lettering, a white ball on a white page, and small
-      // ring-shaped charms all still sew. (A deliberate white rim drawn around a
-      // full-canvas design is indistinguishable from the halo and is dropped
-      // too — the same accepted tradeoff as the border-touching page drop; a
-      // rim the user actually wants is one drawn shape away.)
+      // canvas with almost no ink is usually the PAGE showing through between
+      // the subject and the removed background — an anti-alias halo at object
+      // scale that once sewed ~2000 useless stitches padding under a design's
+      // border. But a DELIBERATE rim (a crest's white ring) is geometrically
+      // indistinguishable — a real user's design has exactly this signature —
+      // so the tracer must never silently decide. The region is SEGREGATED into
+      // its own flagged object (see haloRings) that the digitize dialog offers
+      // as an explicit keep/skip, default skipped-but-visible: the common case
+      // stays junk-free, and a wanted rim is one tap away instead of silently
+      // destroyed. The gate stays narrow — strict colour match to the DETECTED
+      // background, annulus topology, mostly hollow, spanning most of the
+      // canvas in BOTH dimensions — so lettering, a white ball on a white page,
+      // and small ring charms never even get flagged.
       if (isBackground && rawHoles.length > 0 && inkFraction < HALO_MAX_INK_FRACTION) {
         const ob = pathsBounds([rawOuter]);
         if (
           ob &&
           ob.maxX - ob.minX >= HALO_MIN_CANVAS_SPAN * (boundW - offsetX) &&
           ob.maxY - ob.minY >= HALO_MIN_CANVAS_SPAN * (boundH - offsetY)
-        )
+        ) {
+          haloRings.push(...[rawOuter, ...rawHoles].map(clean).map(clampToImage));
+          haloArea += area;
           return;
+        }
       }
       const isNetwork = wallWidth > 0 && wallWidth < NETWORK_MAX_WALL_MM && inkFraction < NETWORK_MAX_INK_FRACTION;
       // Line-art stroke = a thin holey NETWORK, OR thin AND long AND genuinely
@@ -441,6 +449,16 @@ export function tracedataToObjects(
       const strokeObj = makeObjectFromPaths("fill", strokeRings, colorId, `${colorName} outline`);
       strokeObj.params = { fillStyle: "satin", lineArt: true };
       built.push({ object: strokeObj, area: strokeArea, stroke: true });
+      used = true;
+    }
+    if (haloRings.length > 0) {
+      // Its OWN object, distinctively named + flagged: the dialog shows it as a
+      // keep/skip decision (default skip) and Check design warns if it ever
+      // reaches a project undecided. Kept separate so same-coloured real art
+      // (the lettering) stays unflagged and independently sewable.
+      const haloObj = makeObjectFromPaths("fill", haloRings, colorId, `${colorName} ring (background?)`);
+      haloObj.suspectedBackground = true;
+      built.push({ object: haloObj, area: haloArea, stroke: false });
       used = true;
     }
     if (used) colors.push(color);
