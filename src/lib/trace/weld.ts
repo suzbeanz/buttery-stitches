@@ -29,18 +29,24 @@
  */
 import type { Path, Point } from "../../types/project";
 import { booleanOp } from "../boolean";
-import { polygonArea } from "./classify";
+import { polygonArea, polygonPerimeter } from "./classify";
 
-/** A hole vertex this close to the outer is a weld candidate. */
-const WELD_GAP_MM = 1.0;
+/** A hole vertex this close to the outer is a weld candidate. Deliberately
+ *  wider than the acceptance mean below: a crescent's local bulges (measured
+ *  up to ~1.3 mm on a real crest) must snap WITH their run, or the leftovers
+ *  pinch off as unsewable pockets between welded stretches. Whether a run
+ *  welds at all is still decided by its MEAN being sub-two-rows. */
+const WELD_GAP_MM = 1.3;
 /** Candidate runs separated by less arc than this merge into one weld (a lone
  *  far vertex mid-crescent must not split the weld into oscillating fragments). */
 const WELD_BRIDGE_MM = 1.5;
 /** A weld run must be at least this long — a point-approach is real geometry. */
 const WELD_MIN_RUN_MM = 2.5;
 /** …and its mean gap must be truly sub-thread. Two 0.4 mm fill rows need
- *  ~0.8 mm; below this the band can only sew as a ridge, never as coverage. */
-const WELD_MEAN_GAP_MM = 0.7;
+ *  0.8 mm, so any band whose MEAN is below that can only sew as a ridge, never
+ *  as coverage. (A real crest's crescent measured mean 0.73 mm — a 0.7 cutoff
+ *  missed it by a hair; the physical two-row line is the honest threshold.) */
+const WELD_MEAN_GAP_MM = 0.8;
 /** Refuse the weld when it would erase more than this share of the region's
  *  ink: then the thin band IS the region (a letter counter's bowl, a traced
  *  ring) and belongs to the line-art path, not to topology repair. */
@@ -204,9 +210,18 @@ export function weldSliverGaps(outer: Path, holes: Path[], opts: WeldOptions): P
 
   // Rebuild topology for real: post-snap the crescent has zero width, so the
   // raster boolean removes it and fuses the free stretch (the true divider)
-  // into one simple ring; interior holes re-emerge as holes.
+  // into one simple ring; interior holes re-emerge as holes. Rebuilt rings are
+  // also screened by MEAN WIDTH: a corner of the crescent can survive as a
+  // detached flake wide enough to pass the area floor yet still thinner than
+  // two fill rows — unsewable either as ink (a ridge) or as a hole (rows
+  // bridge it), so it never belongs in the output.
+  const meanWidthMm = (r: Path): number => {
+    const a = Math.abs(polygonArea(r));
+    const p = polygonPerimeter(r);
+    return p > 0 ? (2 * a) / p : 0;
+  };
   const rebuilt = booleanOp([outer], snapped, "subtract", WELD_BOOL_CELL_MM)
-    .filter((r) => Math.abs(polygonArea(r)) >= opts.minAreaMm2);
+    .filter((r) => Math.abs(polygonArea(r)) >= opts.minAreaMm2 && meanWidthMm(r) >= WELD_MEAN_GAP_MM);
   // Never destroy a region outright — an empty/failed boolean keeps originals.
   if (rebuilt.length === 0) return null;
   return rebuilt;

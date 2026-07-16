@@ -43,6 +43,34 @@ describe("validateDesign: buried details", () => {
     const warnings = validateDesign(generateDesign(p), p);
     expect(warnings.some((w) => /buried/i.test(w.message))).toBe(false);
   });
+
+  it("does not flag correct UNDERLAP: a field tucked under a border ring, a stripe under its knockout", () => {
+    // The crest architecture: the red field's edge tucks 0.5mm under the navy
+    // border band; a stripe's rim extends 0.4mm beyond its knockout hole in the
+    // field above. In both, nearly ALL of the earlier object's OUTLINE sits
+    // inside the later fill while its INK is barely covered — coverage must be
+    // measured on the body, or the correct seam architecture reads as burial.
+    const p = createEmptyProject();
+    // Field 20..80; border band ring 18..82 outer with hole 20.5..79.5 — the
+    // field's outline (at 20/80) is inside the band; its body is not.
+    const field = makeObjectFromPaths("fill", [sq(20, 20, 60)], "red");
+    const band = makeObjectFromPaths(
+      "fill",
+      [sq(18, 18, 64), [{ x: 20.5, y: 20.5 }, { x: 79.5, y: 20.5 }, { x: 79.5, y: 79.5 }, { x: 20.5, y: 79.5 }]],
+      "navy",
+    );
+    // Stripe 40..60 sewn first; the covering field carves a knockout hole only
+    // 0.4mm smaller than the stripe — the rim underlaps, the body shows.
+    const stripe = makeObjectFromPaths("fill", [sq(40, 30, 20)], "white");
+    const over = makeObjectFromPaths(
+      "fill",
+      [sq(30, 25, 45), [{ x: 40.4, y: 30.4 }, { x: 59.6, y: 30.4 }, { x: 59.6, y: 49.6 }, { x: 40.4, y: 49.6 }]],
+      "green",
+    );
+    p.objects = [field, stripe, over, band]; // stripe under ONLY the knockout fill
+    const warnings = validateDesign(generateDesign(p), p);
+    expect(warnings.some((w) => /buried/i.test(w.message))).toBe(false);
+  });
 });
 
 describe("validateDesign: suspected page background", () => {
