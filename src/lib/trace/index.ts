@@ -15,7 +15,6 @@ import {
   borderIsSolidOpaque,
   removeInnerBackdrop,
 } from "./quantize";
-import { underlapObjects } from "./underlap";
 import { stackSmallFeatures } from "./stack";
 import { nameForRgb } from "./colorname";
 import { weldSliverGaps } from "./weld";
@@ -484,7 +483,7 @@ export function tracedataToObjects(
   // primitive would undo the expansion. Stacking runs first (a filled hole
   // needs no underlap), then the remaining boundaries get the underlap.
   if (opts.underlap === false) return { colors, objects: ordered };
-  return { colors, objects: underlapObjects(stackSmallFeatures(ordered)) };
+  return { colors, objects: stackSmallFeatures(ordered) };
 }
 
 /** A traced region thinner than this (mean width, mm) is line-art (a stroke), not

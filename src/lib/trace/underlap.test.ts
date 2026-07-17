@@ -62,12 +62,49 @@ describe("underlapObjects", () => {
     expect(JSON.stringify(a.paths)).toBe(before);
   });
 
-  it("skips same-color neighbours (no visible boundary to protect)", () => {
+  it("extends under a SAME-color later neighbour too (closes the seam with the right color)", () => {
+    // A navy field that stops short of the navy border ring: without underlap
+    // the boundary either shows fabric or gets filled by whatever EARLIER
+    // color reached across (a red hairline between two navy bands). Same-color
+    // extension is invisible and closes the seam correctly.
     const a = fill([rect(0, 0, 20, 20)], "red");
     const b = fill([rect(20, 0, 35, 20)], "red");
-    const before = JSON.stringify(a.paths);
     underlapObjects([a, b]);
-    expect(JSON.stringify(a.paths)).toBe(before);
+    expect(Math.max(...xs(a))).toBeGreaterThanOrEqual(20 + UNDERLAP_MM - 0.05);
+  });
+
+  it("bridges a small DRAWN GAP to a later neighbour (traced regions rarely abut exactly)", () => {
+    // 0.6mm of bare fabric between the drawn regions: the push must first
+    // cross the gap, then tuck under the neighbour.
+    const a = fill([rect(0, 0, 20, 20)], "red");
+    const b = fill([rect(20.6, 0, 35, 20)], "blue");
+    underlapObjects([a, b]);
+    expect(Math.max(...xs(a))).toBeGreaterThanOrEqual(20.6 + UNDERLAP_MM - 0.15);
+    // Open silhouette still pinned.
+    expect(Math.min(...xs(a))).toBeGreaterThanOrEqual(-0.05);
+  });
+
+  it("never pushes SMALL FEATURES — adjacent letters must not run together", () => {
+    // Two 5mm glyphs of a word, 0.6mm apart, sitting on a big background that
+    // is drawn to show between them. A push (worse, a gap-bridge) would weld
+    // the letters into one blob. Features sit ON things; the background that
+    // extends under them already owns their seams.
+    const bg = fill([rect(0, 0, 40, 20)], "red");
+    const s1 = fill([rect(10, 5, 15, 12)], "white"); // 5x7mm glyph
+    const s2 = fill([rect(15.6, 5, 20.6, 12)], "white"); // next glyph, 0.6mm gap
+    const beforeS1 = JSON.stringify(s1.paths);
+    underlapObjects([bg, s1, s2]);
+    expect(JSON.stringify(s1.paths)).toBe(beforeS1); // glyph untouched
+    // The background still tucks under the glyphs (classic abutting underlap).
+    expect(Math.max(...xs(bg))).toBeGreaterThanOrEqual(40 - 0.05);
+  });
+
+  it("does not BRIDGE a big fill toward a small feature across a visible gap", () => {
+    const a = fill([rect(0, 0, 30, 20)], "red");
+    const dot = fill([rect(31.0, 8, 35, 12)], "white"); // 4mm feature, 1mm past a's edge
+    underlapObjects([a, dot]);
+    // No long-reach push toward the feature; only same-edge geometry.
+    expect(Math.max(...xs(a))).toBeLessThanOrEqual(30 + UNDERLAP_MM + 0.05);
   });
 
   it("never expands the later object into the earlier one", () => {

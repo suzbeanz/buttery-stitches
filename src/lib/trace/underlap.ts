@@ -24,8 +24,10 @@ import type { EmbObject, Path, Point } from "../../types/project";
 /** How far (mm) an earlier region extends under a later neighbour. */
 export const UNDERLAP_MM = 0.4;
 /** Rings are resampled to this max segment length (mm) before pushing, so the
- *  expansion resolves partial adjacency instead of dragging whole edges. */
-const RESAMPLE_MM = 1.2;
+ *  expansion resolves partial adjacency instead of dragging whole edges. Fine
+ *  enough that a thin sliver trail along a curved boundary is tracked vertex
+ *  by vertex. */
+const RESAMPLE_MM = 0.8;
 
 /** Even-odd point-in-rings test (outer + holes). */
 function pointInRings(p: Point, rings: Path[]): boolean {
@@ -80,6 +82,26 @@ function outwardNormal(ring: Path, i: number, ownPaths: Path[]): Point | null {
 
 const isStroke = (o: EmbObject) => o.params?.lineArt === true;
 
+/** Objects smaller than this (mm, longest side) are FEATURES — letters, dots,
+ *  small marks that sit ON a background. They never push: two glyphs of a word
+ *  sit 0.3-1.5mm apart by DESIGN, and a push (worse, a gap-bridge) welds them
+ *  into one blob. Their own seams are already backed by the background that
+ *  extends under them. */
+const FEATURE_MAX_MM = 15;
+
+function maxDimMm(o: EmbObject): number {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const ring of o.paths) {
+    for (const p of ring) {
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
+    }
+  }
+  return Math.max(maxX - minX, maxY - minY);
+}
+
 /**
  * Expand each earlier-sewn fill object under its later-sewn, differently-colored
  * neighbours by {@link UNDERLAP_MM}. Returns the same array; objects that abut a
@@ -89,28 +111,63 @@ export function underlapObjects(objects: EmbObject[], amountMm = UNDERLAP_MM): E
   for (let i = 0; i < objects.length; i++) {
     const obj = objects[i];
     if (obj.type !== "fill" || isStroke(obj)) continue;
+    if (maxDimMm(obj) < FEATURE_MAX_MM) continue; // features never push
+    // ANY later neighbour counts — different colour is the classic seam case,
+    // but a SAME-colour later neighbour matters just as much: a navy field
+    // that stops short of the navy border ring leaves a boundary that either
+    // shows fabric or gets filled by whatever EARLIER colour reached across
+    // (a red hairline between two navy bands). Extending under a same-colour
+    // neighbour is invisible and closes the seam with the right colour.
     const later = objects
       .slice(i + 1)
-      .filter((j) => j.colorId !== obj.colorId && (j.type === "fill" || j.type === "satin"));
+      .filter((j) => j.type === "fill" || j.type === "satin");
     if (later.length === 0) continue;
+    // Long-reach bridging only targets BIG later neighbours (field-to-field,
+    // field-to-border seams). Small features still get the classic abutting
+    // tuck (first rung) but never pull a bridge across the visible gap that
+    // separates them from things around them.
+    const laterBig = later.filter((j) => maxDimMm(j) >= FEATURE_MAX_MM);
     const coveredByLater = (p: Point) => later.some((j) => pointInRings(p, j.paths));
+    const coveredByLaterBig = (p: Point) => laterBig.some((j) => pointInRings(p, j.paths));
 
-    const probeDist = amountMm + 0.1;
     const originalPaths = obj.paths;
     obj.paths = obj.paths.map((ring) => {
       const dense = resampleRing(ring, RESAMPLE_MM);
-      let pushed = 0;
-      const out = dense.map((p, vi) => {
+      // Per-vertex push distance. A neighbour found right at the edge gets the
+      // plain underlap; a traced/hand-drawn file whose regions DON'T quite meet
+      // (real drawn gaps up to ~1mm are common) needs the push to first CROSS
+      // the bare gap and then tuck under — so probe a short ladder outward and
+      // push far enough to land `amountMm` beyond wherever the neighbour was
+      // found. Silhouette stretches (no neighbour within reach) never move.
+      const push = dense.map((p, vi) => {
+        const n = outwardNormal(dense, vi, originalPaths);
+        if (!n) return 0;
+        for (const d of [amountMm + 0.1, 0.7, 1.0, 1.4, 1.8]) {
+          const probe = { x: p.x + n.x * d, y: p.y + n.y * d };
+          const covered = d <= amountMm + 0.1 ? coveredByLater(probe) : coveredByLaterBig(probe);
+          if (covered) return d - 0.1 + amountMm;
+        }
+        return 0;
+      });
+      if (!push.some((d) => d > 0)) return ring;
+      // Smooth the push profile so a ladder step (0.4 next to 1.3) can't
+      // sawtooth the expanded edge. MAX-preserving (plain averaging would
+      // halve an isolated push), and ONLY among pushed vertices: a vertex
+      // with no neighbour found sits on the open-fabric silhouette and must
+      // never move — bleeding a neighbour's push onto it would grow the
+      // outline (a square's corner drifted outside the design this way).
+      const sm = push.map((d, vi) => {
+        if (d <= 0) return 0;
+        const a = push[(vi - 1 + push.length) % push.length];
+        const b = push[(vi + 1) % push.length];
+        return Math.max(d, (a + 2 * d + b) / 4);
+      });
+      return dense.map((p, vi) => {
+        if (sm[vi] <= 0.02) return p;
         const n = outwardNormal(dense, vi, originalPaths);
         if (!n) return p;
-        const probe = { x: p.x + n.x * probeDist, y: p.y + n.y * probeDist };
-        if (!coveredByLater(probe)) return p;
-        pushed++;
-        return { x: p.x + n.x * amountMm, y: p.y + n.y * amountMm };
+        return { x: p.x + n.x * sm[vi], y: p.y + n.y * sm[vi] };
       });
-      // Keep the original (un-resampled) ring when nothing along it abuts a
-      // later neighbour — no reason to densify an untouched outline.
-      return pushed > 0 ? out : ring;
     });
   }
   return objects;

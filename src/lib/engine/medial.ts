@@ -469,6 +469,44 @@ function smoothWidths(halves: number[], closed: boolean): number[] {
 }
 
 /** 3-tap moving average over a rail, preserving open endpoints (loops wrap). */
+/** Index-preserving box smoothing over ±`win` samples — the heavy version for
+ *  long traced bands (see the call site). Open ends stay pinned. */
+function smoothRailWindowed(rail: Point[], closed: boolean, win: number): Point[] {
+  const n = rail.length;
+  if (n < 5) return rail;
+  const out: Point[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    if (!closed && (i === 0 || i === n - 1)) {
+      out[i] = { ...rail[i] };
+      continue;
+    }
+    // Near an open end, shrink the window so it stays symmetric (no drift).
+    const w = closed ? win : Math.min(win, i, n - 1 - i);
+    let sx = 0, sy = 0, c = 0;
+    for (let k = -w; k <= w; k++) {
+      const j = closed ? (i + k + n) % n : i + k;
+      sx += rail[j].x;
+      sy += rail[j].y;
+      c++;
+    }
+    out[i] = { x: sx / c, y: sy / c };
+  }
+  return out;
+}
+
+/** Do two satin throws (as segments) properly cross? Shared endpoints (an
+ *  already-collapsed fan pivot) don't count. */
+function throwsCross(a1: Point, a2: Point, b1: Point, b2: Point): boolean {
+  const d = (p: Point, q: Point, r: Point) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+  const eps = 1e-9;
+  const d1 = d(a1, a2, b1);
+  const d2 = d(a1, a2, b2);
+  const d3 = d(b1, b2, a1);
+  const d4 = d(b1, b2, a2);
+  return ((d1 > eps && d2 < -eps) || (d1 < -eps && d2 > eps)) &&
+         ((d3 > eps && d4 < -eps) || (d3 < -eps && d4 > eps));
+}
+
 function smoothRail(rail: Point[], closed: boolean): Point[] {
   const n = rail.length;
   if (n < 3) return rail;
@@ -1007,7 +1045,7 @@ export function medialColumns(rings: Path[], opts: MedialOptions): SatinColumn[]
   const higher: Path[] = [];
   for (const i of order) {
     const { center, loop, straight } = prepped[i];
-    const col = buildColumn(center, loop, oriented, grid, dt, cellMm, opts, true, true, miter ? higher.slice() : [], straight);
+    const col = buildColumn(center, loop, oriented, grid, dt, cellMm, opts, true, true, miter ? higher.slice() : [], straight, prepped.length === 1);
     if (col) columns.push(col);
     if (miter) higher.push(douglasPeucker(center, 0.5));
   }
@@ -1159,6 +1197,7 @@ function buildColumn(
   dropStubs: boolean,
   siblings: Path[] = [],
   straightBar = false,
+  soloBranch = false,
 ): SatinColumn | null {
   // Densely sample the centerline, build both rails, then place throws with
   // DENSITY COMPENSATION: advance until whichever rail (the outer one on a
@@ -1187,7 +1226,14 @@ function buildColumn(
   // the crossing column covers the junction blob. This is what kills the fan.
   const dtHalves = halves.map((h) => Math.max(0, h - OVERSHOOT_MM)).sort((a, b) => a - b);
   const medHalfDt = dtHalves[dtHalves.length >> 1] ?? 0;
-  const widthCap = medHalfDt > 0 ? medHalfDt * 1.4 : Infinity;
+  // The width cap exists to stop rays bolting across JUNCTION balloons. A
+  // SINGLE-branch region (an arch band, a lone stroke) has no junctions — but
+  // it does have bends, where the smoothed centerline cuts the corner and the
+  // true outer edge sits well past 1.4x the median half-width; the tight cap
+  // there clips the rail short and leaves a bare crescent along the apex. Give
+  // solo branches the slack to reach their real edge.
+  const capMul = soloBranch ? 2.2 : 1.4;
+  const widthCap = medHalfDt > 0 ? medHalfDt * capMul : Infinity;
   // A STRAIGHT-SNAPPED auto branch is a straight BAR (a ladder rail, a rung, a
   // window mullion): its true width is constant, and the per-sample DT widths
   // only carry the trace's boundary noise into the rails. Flatten to the
@@ -1364,8 +1410,21 @@ function buildColumn(
   // Lightly smooth each rail so the satin edge reads as a clean line instead of
   // a faintly wobbly one (the distance transform samples width on a grid). A
   // 3-tap average barely moves coverage but visibly crisps the column edges.
-  const left = smoothRail(leftRaw, loop);
-  const right = smoothRail(rightRaw, loop);
+  //
+  // LONG columns — a crest's border ring, an arch band — get a real low-pass on
+  // top: their edges come from a hand-drawn/traced outline whose ±0.2-0.3mm
+  // waviness reads as a LUMPY, beaded band when each rail sample rides the
+  // noise independently (both edges pulse, so the width pulses too). A ~1.6mm
+  // window redraws the edge as the clean curve the artist meant. Lettering
+  // strokes stay on the 3-tap: their width variation is deliberate (serifs,
+  // tapers) and their columns are far shorter than the threshold. The window
+  // is index-preserving, so throw i still spans left[i]-right[i].
+  const RAIL_LOWPASS_MIN_LEN_MM = 40;
+  const RAIL_LOWPASS_HALF_MM = 0.8;
+  const longBand = polylineLength(dense) >= RAIL_LOWPASS_MIN_LEN_MM;
+  const railWin = longBand ? Math.max(2, Math.round(RAIL_LOWPASS_HALF_MM / Math.max(0.05, density / 4))) : 0;
+  const left = railWin ? smoothRailWindowed(leftRaw, loop, railWin) : smoothRail(leftRaw, loop);
+  const right = railWin ? smoothRailWindowed(rightRaw, loop, railWin) : smoothRail(rightRaw, loop);
 
   // Auto-spacing: tighten rows on wide columns (narrow lettering strokes, the
   // common case, keep the drawn density — see autoSatinDensity).
@@ -1386,10 +1445,41 @@ function buildColumn(
   }
   if (idx[idx.length - 1] !== dense.length - 1) idx.push(dense.length - 1);
 
+  // ANTI-CROSSING: on a tight bend (an arch crown, a hairpin) the inside rail
+  // moves backward between successive throws, so neighbouring throws CROSS and
+  // the bend sews as a sprayed X-hatch instead of satin. Where two consecutive
+  // throws intersect, pin the inside endpoint just past the previous one — the
+  // bend sews as a clean hand-digitized fan sharing a near-pivot. The advance
+  // must stay TINY: a large forced step (0.32mm was tried) compounds around a
+  // sustained curve — each nudge pushes the inner point ahead of its natural
+  // position, the next throw crosses again, and the whole ladder progressively
+  // TILTS into a skewed lattice (a small C glyph's arm sheared this way). A
+  // near-zero step is safe for the zigzag: consecutive penetrations always
+  // alternate rails, so shared pivots are never adjacent in the sequence and
+  // the short-stitch dedup can't touch them.
+  const MIN_INNER_ADV_MM = 0.05;
+  const chosenL = idx.map((i) => ({ ...left[i] }));
+  const chosenR = idx.map((i) => ({ ...right[i] }));
+  for (let k = 1; k < idx.length; k++) {
+    if (!throwsCross(chosenL[k - 1], chosenR[k - 1], chosenL[k], chosenR[k])) continue;
+    const dl = Math.hypot(chosenL[k].x - chosenL[k - 1].x, chosenL[k].y - chosenL[k - 1].y);
+    const dr = Math.hypot(chosenR[k].x - chosenR[k - 1].x, chosenR[k].y - chosenR[k - 1].y);
+    // The outer side's direction is the trustworthy "forward" at a bend.
+    if (dl <= dr) {
+      const ux = (chosenR[k].x - chosenR[k - 1].x) / (dr || 1);
+      const uy = (chosenR[k].y - chosenR[k - 1].y) / (dr || 1);
+      chosenL[k] = { x: chosenL[k - 1].x + ux * MIN_INNER_ADV_MM, y: chosenL[k - 1].y + uy * MIN_INNER_ADV_MM };
+    } else {
+      const ux = (chosenL[k].x - chosenL[k - 1].x) / (dl || 1);
+      const uy = (chosenL[k].y - chosenL[k - 1].y) / (dl || 1);
+      chosenR[k] = { x: chosenR[k - 1].x + ux * MIN_INNER_ADV_MM, y: chosenR[k - 1].y + uy * MIN_INNER_ADV_MM };
+    }
+  }
+
   // Alternate the leading rail each throw so they chain into a zig-zag; split
   // any over-wide throw into scattered sub-stitches (split satin, no seam).
-  const pairs: [Point, Point][] = idx.map((i, k) =>
-    k % 2 === 0 ? [left[i], right[i]] : [right[i], left[i]],
+  const pairs: [Point, Point][] = idx.map((_, k) =>
+    k % 2 === 0 ? [chosenL[k], chosenR[k]] : [chosenR[k], chosenL[k]],
   );
   const capped = staggeredSatin(pairs, MAX_THROW_MM, true);
   if (capped.length < 2) return null;
