@@ -46,7 +46,16 @@ async function checkOnce(): Promise<void> {
   } catch {
     return;
   }
-  location.reload();
+  // Reload through a CACHE-BUSTING URL, not location.reload(): a plain reload
+  // is routinely answered by the same stale HTML from the browser or CDN edge
+  // — the one shot the guard allows gets wasted and the tab stays on the old
+  // bundle until the NEXT deploy (a phone sat on a day-old build this way).
+  // Varying the query string changes the cache key the whole way down, so the
+  // reload actually reaches the new deploy. startVersionWatch tidies the
+  // parameter back off the URL once the fresh bundle boots.
+  const url = new URL(location.href);
+  url.searchParams.set("fresh", id);
+  location.replace(url.toString());
 }
 
 /**
@@ -56,6 +65,17 @@ async function checkOnce(): Promise<void> {
  */
 export function startVersionWatch(): void {
   if (BUILD_ID === "dev") return;
+  // Strip the cache-buster once the fresh bundle is running, so the tidy URL
+  // is what gets bookmarked/shared and the next update can bust again.
+  try {
+    const url = new URL(location.href);
+    if (url.searchParams.has("fresh")) {
+      url.searchParams.delete("fresh");
+      history.replaceState(null, "", url.toString());
+    }
+  } catch {
+    // URL/history quirks never block the watcher itself.
+  }
   void checkOnce();
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") void checkOnce();
