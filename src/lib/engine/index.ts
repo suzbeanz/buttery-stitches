@@ -19,6 +19,8 @@ import { guidanceFieldFill, multiAngleFill } from "./field";
 import { isSmallRoundFill, meanStrokeWidthMm, isBroadlyThick } from "./classify";
 import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
 import { dropShortStitches, splitLongTravels } from "./resample";
+import { makeSatinFromRails } from "../objects";
+import { newId } from "../id";
 
 export * from "./running";
 export * from "./satin";
@@ -633,6 +635,68 @@ export function planSatinCenterlines(
     }
   }
   return out.length > 0 ? out : undefined;
+}
+
+/**
+ * "Break apart to satin columns": explode a satin-classified fill (with a
+ * persisted decomposition) into standalone editable pieces — one two-rail
+ * satin object per column plus one residual fill covering the junction wedges
+ * the columns leave. Full Wilcom-style break-apart: a ONE-WAY door (the
+ * medial relationship to the outline is severed; pieces are thereafter edited
+ * as independent objects).
+ *
+ * Uses the exact same decomposition the engine sews (`acceptableSatin` over
+ * the persisted/authored centerlines), so the exploded pieces reproduce the
+ * un-exploded stitch-out. Returns null when the object has no usable
+ * decomposition (caller leaves it untouched).
+ */
+export function explodeSatinColumns(
+  object: EmbObject,
+  fabric: FabricProfile = fabricProfile(undefined),
+): { satins: EmbObject[]; residual: EmbObject | null } | null {
+  if (object.type !== "fill" || !object.satinCenterlines?.length || !geometryIsSane(object.paths)) {
+    return null;
+  }
+  const p = resolveParams(object.type, object.params);
+  const density = Math.max(MIN_SAFE_DENSITY, p.density * fabric.densityMul);
+  const satins: EmbObject[] = [];
+  const residualRings: Path[] = [];
+  for (const region of splitFillRegions(object.paths)) {
+    const cols = acceptableSatin(region, density, fabric.pullMul, authoredForRegion(object, region), p.lineArt);
+    if (cols.length === 0) {
+      // No decomposition for this region — it stays fill geometry.
+      residualRings.push(...region);
+      continue;
+    }
+    for (const c of cols) {
+      if (c.left.length < 2 || c.right.length < 2) continue;
+      const satin = makeSatinFromRails(c.left, c.right, object.colorId);
+      satin.params = {
+        ...satin.params,
+        density: object.params.density,
+        pullComp: object.params.pullComp,
+        underlay: object.params.underlay,
+        underlayWeight: object.params.underlayWeight,
+        underlayType: object.params.underlayType,
+      };
+      satins.push(satin);
+    }
+    residualRings.push(...residualRegions(region, cols.map((c) => c.throws)));
+  }
+  if (satins.length === 0) return null;
+  const residual =
+    residualRings.length > 0
+      ? {
+          ...object,
+          id: newId("obj"),
+          name: `${object.name} residual`,
+          paths: residualRings,
+          nodes: undefined,
+          satinCenterlines: undefined,
+          params: { ...object.params, fillStyle: "tatami" as const, lineArt: false },
+        }
+      : null;
+  return { satins, residual };
 }
 
 /** The object's authored satin centerlines whose mid-stroke point falls inside

@@ -113,6 +113,9 @@ export default function ContextMenu({
     "sep",
     { label: "Merge regions", icon: Combine, disabled: !canMerge, run: wrap(() => { ps.mergeObjects(selectedIds); toast(`Merged ${n} regions`, "success"); }) },
     { label: "Split into pieces", icon: Split, disabled: !canSplit, run: wrap(() => { if (splitTarget) { const c = splitRegionComponents(splitTarget.paths).length; ps.splitRegion(splitTarget.id); toast(`Split into ${c} regions`, "success"); } }) },
+    // One-way door: the medial link to the outline is severed; the pieces are
+    // ordinary satin/fill objects from then on (undo restores the original).
+    { label: "Break apart to satin columns", icon: Split, disabled: !(splitTarget && splitTarget.satinCenterlines && splitTarget.satinCenterlines.length > 0), run: wrap(() => { if (splitTarget) { ps.explodeSatin(splitTarget.id); toast("Broke apart into editable satin columns (one-way; undo restores)", "success"); } }) },
     { label: "Weld to neighbors", icon: Magnet, disabled: !canWeld, run: wrap(() => { if (splitTarget) { ps.weldObject(splitTarget.id); toast("Welded edge to neighbors", "success"); } }) },
     { label: "Smooth", icon: Spline, disabled: n === 0, run: wrap(() => ps.smoothObjects(selectedIds)) },
     "sep",

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { useProjectStore } from "./projectStore";
 import { createEmptyProject } from "../lib/project";
 import { makeObject, makeNodeObject, cloneObject, makeObjectFromPaths } from "../lib/objects";
+import { planSatinCenterlines } from "../lib/engine";
 
 const line = [
   { x: 0, y: 0 },
@@ -403,5 +404,50 @@ describe("projectStore.moveObjects", () => {
     expect(moved.paths[0][0]).toEqual({ x: 5, y: 7 });
     expect(moved.nodes?.[0][0]).toMatchObject({ x: 5, y: 7 });
     expect(moved.nodes?.[0][1]).toMatchObject({ x: 15, y: 7 });
+  });
+});
+
+describe("projectStore.explodeSatin", () => {
+  beforeEach(() => {
+    useProjectStore.setState({ project: createEmptyProject(), selectedIds: [] });
+    useProjectStore.temporal.getState().clear();
+  });
+
+  it("explodes a satin fill into grouped satin objects, undoable in one step", () => {
+    const cId = useProjectStore.getState().project.colors[0].id;
+    const bar = makeObjectFromPaths(
+      "fill",
+      [[{ x: 10, y: 10 }, { x: 30, y: 10 }, { x: 30, y: 13 }, { x: 10, y: 13 }]],
+      cId,
+    );
+    bar.params = { ...bar.params, fillStyle: "satin" };
+    bar.satinCenterlines = planSatinCenterlines(bar);
+    expect(bar.satinCenterlines).toBeDefined();
+    useProjectStore.getState().addObjects([bar]);
+
+    useProjectStore.getState().explodeSatin(bar.id);
+    const { project, selectedIds } = useProjectStore.getState();
+    const satins = project.objects.filter((o) => o.type === "satin");
+    expect(satins.length).toBeGreaterThanOrEqual(1);
+    expect(project.objects.some((o) => o.id === bar.id)).toBe(false);
+    // All pieces share one fresh group and are selected.
+    const groups = new Set(project.objects.map((o) => o.groupId));
+    expect(groups.size).toBe(1);
+    expect(selectedIds).toEqual(project.objects.map((o) => o.id));
+
+    useProjectStore.temporal.getState().undo();
+    expect(useProjectStore.getState().project.objects.map((o) => o.id)).toEqual([bar.id]);
+  });
+
+  it("is a no-op for objects without a decomposition", () => {
+    const cId = useProjectStore.getState().project.colors[0].id;
+    const plain = makeObjectFromPaths(
+      "fill",
+      [[{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 40 }, { x: 0, y: 40 }]],
+      cId,
+    );
+    useProjectStore.getState().addObjects([plain]);
+    useProjectStore.getState().explodeSatin(plain.id);
+    expect(useProjectStore.getState().project.objects.map((o) => o.id)).toEqual([plain.id]);
   });
 });

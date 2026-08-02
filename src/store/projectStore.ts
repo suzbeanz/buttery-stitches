@@ -17,6 +17,8 @@ import { smoothPath, smoothRingKeepingCorners } from "../lib/smooth";
 import { mergeRegionPaths, splitRegionComponents, weldToNeighbors } from "../lib/regions";
 import { booleanOp } from "../lib/boolean";
 import { newId } from "../lib/id";
+import { explodeSatinColumns } from "../lib/engine";
+import { effectiveProfile } from "../lib/engine/profile";
 
 /**
  * Round an object's corners into flowing curves. Node-backed objects flip every
@@ -99,6 +101,9 @@ export interface ProjectState {
   /** Separate a fill's disconnected pieces into one object each. No-op unless the
    *  object is a fill with 2+ components. */
   splitRegion: (id: string) => void;
+  /** Break a satin-classified fill apart into standalone satin-column objects
+   *  (+ a residual fill for junction wedges). One-way door. */
+  explodeSatin: (id: string) => void;
   /** Weld a fill's edge to its neighbouring fills (seamless trapped seam). No-op
    *  unless it's a fill with an adjacent fill. */
   weldObject: (id: string) => void;
@@ -407,6 +412,33 @@ export const useProjectStore = create<ProjectState>()(
             .map((o) => (o.id === base.id ? region : o))
             .filter((o) => !cutterIds.has(o.id));
           return { project: { ...s.project, objects }, selectedIds: [region.id] };
+        }),
+
+      explodeSatin: (id) =>
+        set((s) => {
+          const idx = s.project.objects.findIndex((o) => o.id === id);
+          if (idx < 0) return s;
+          const o = s.project.objects[idx];
+          const exploded = explodeSatinColumns(o, effectiveProfile(s.project.fabric, s.project.threadWeight));
+          if (!exploded) return s;
+          // One shared group keeps the pieces moving/sequencing together; the
+          // residual fill sews FIRST (under the columns) at the source z-slot.
+          const groupId = newId("group");
+          const parts: EmbObject[] = [
+            ...(exploded.residual ? [exploded.residual] : []),
+            ...exploded.satins,
+          ].map((p, i) => ({
+            ...p,
+            name: p.name?.includes("residual") ? p.name : `${o.name} column ${i}`,
+            groupId,
+            visible: true,
+          }));
+          const objects = [...s.project.objects];
+          objects.splice(idx, 1, ...parts);
+          return {
+            project: { ...s.project, objects },
+            selectedIds: parts.map((p) => p.id),
+          };
         }),
 
       splitRegion: (id) =>
