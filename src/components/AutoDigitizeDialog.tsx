@@ -380,6 +380,44 @@ export default function AutoDigitizeDialog({
     setNumColors(Math.max(MIN_COLORS, Math.min(MAX_COLORS, n)));
   };
 
+  // AUTO-TUNE: run the deterministic (colors × detail) grid search scored by
+  // the fidelity metric, then adopt the measured winner. Setting the states
+  // triggers the normal re-trace; the userSetColors latch stops the suggester
+  // from overriding the tuned choice.
+  const [tuning, setTuning] = useState(false);
+  const [tuneProgress, setTuneProgress] = useState("");
+  const [tuneSummary, setTuneSummary] = useState<string | null>(null);
+  const runAutoTune = async () => {
+    if (!imageData || tuning) return;
+    setTuning(true);
+    setTuneSummary(null);
+    try {
+      const { autoTune } = await import("../lib/trace/autotune");
+      const result = await autoTune(
+        imageData,
+        {
+          hoopWmm: hoop.wMm,
+          hoopHmm: hoop.hMm,
+          removeBackground,
+          minColors: MIN_COLORS,
+          maxColors: MAX_COLORS,
+        },
+        (done, total) => setTuneProgress(`${done}/${total}`),
+        true, // yield between candidates so the button label ticks
+      );
+      setUserSetColors(true);
+      setNumColors(result.colors);
+      setDetail(result.detail);
+      setTuneSummary(
+        `Best of ${result.candidates.length}: ${result.colors} colors, ${result.detail} (fidelity ${Math.round(result.score)})`,
+      );
+    } catch {
+      setTuneSummary("Auto-tune failed — settings unchanged");
+    } finally {
+      setTuning(false);
+    }
+  };
+
   const toggleColor = (id: string) =>
     setKeptIds((prev) => {
       const next = new Set(prev);
@@ -640,6 +678,25 @@ export default function AutoDigitizeDialog({
             Smoother keeps it bold and drops tiny stray pieces; Detailed catches fine lines and small
             features (more stitches and thread stops). The preview updates as you change this.
           </p>
+
+          {/* Fidelity-driven AUTO-TUNE: score every (colors × detail) candidate
+              against the source image and land on the measured best — the
+              self-checking move a one-shot auto-digitizer can't make. */}
+          {!photoMode && !isSvg && (
+            <div className="mb-3 flex items-center gap-2">
+              <button
+                onClick={runAutoTune}
+                disabled={tuning || updating || !imageData}
+                title={tuneSummary ?? "Try every color-count and detail combination and keep the one that reproduces your image best (takes a few seconds)"}
+                className="rounded-sm border-2 border-ink/40 px-2.5 py-1 font-label text-[11px] font-semibold uppercase tracking-wide text-navy/80 hover:bg-butter-200 hover:text-navy disabled:opacity-40"
+              >
+                {tuning ? `Auto-tuning ${tuneProgress}…` : "Auto-tune"}
+              </button>
+              {tuneSummary && !tuning && (
+                <span className="text-[11px] text-navy/60">{tuneSummary}</span>
+              )}
+            </div>
+          )}
 
           <label className="flex items-center gap-2 text-sm text-navy">
             <input type="checkbox" checked={removeBackground} onChange={(e) => setRemoveBackground(e.target.checked)} className="accent-ink" />
