@@ -6,6 +6,30 @@ import { createEmptyProject, parseProject } from "../project";
 import { consolidateFringeColors } from "../thread/reduce";
 import { fixStitches } from "../fix";
 import { corpusImages } from "./imagecorpus";
+import { fidelityScore } from "./fidelity";
+
+/**
+ * FIDELITY RATCHET — the measured "did the stitches capture the image?" score
+ * (region IoU + boundary chamfer + thread ΔE + spill, see fidelity.ts) for the
+ * current pipeline on each corpus image. A change may move these UP (update the
+ * baseline in the same PR, celebrate); a drop of more than the tolerance fails
+ * CI. Low absolute values are structural, not bugs: line-art scores low because
+ * a sewable satin column is necessarily wider than a hairline source stroke,
+ * and gradient-blob because a gradient can't be reproduced with discrete
+ * threads — the ratchet only guards against REGRESSION per image.
+ */
+const FIDELITY_BASELINE: Record<string, number> = {
+  "flat-logo": 76.2,
+  "card-clipart": 72.8,
+  "noisy-clipart": 75.3,
+  "line-art": 43.4,
+  "many-color": 74.1,
+  "tiny-features": 74.3,
+  "border-touching": 74.6,
+  "gradient-blob": 34.8,
+  "tiny-icon": 74.2,
+};
+const FIDELITY_TOLERANCE = 1;
 
 /**
  * END-TO-END pipeline gates over the image corpus, run through the PRODUCT
@@ -80,6 +104,16 @@ describe("image pipeline corpus gates", () => {
         // pipeline shattered a region.
         const trims = design.filter((s) => s.trim).length;
         expect((1000 * trims) / sewn.length).toBeLessThanOrEqual(10);
+      });
+
+      it("holds the fidelity ratchet (stitches keep capturing the image)", () => {
+        const f = fidelityScore(c.image, design, project.colors, c.mmPerPx, {
+          removeBackground: c.removeBackground,
+        });
+        expect(f).not.toBeNull();
+        const baseline = FIDELITY_BASELINE[c.name];
+        expect(baseline, `add a FIDELITY_BASELINE entry for new corpus image "${c.name}"`).toBeDefined();
+        expect(f!.score).toBeGreaterThanOrEqual(baseline - FIDELITY_TOLERANCE);
       });
 
       it("keeps every stitch machine-safe", () => {

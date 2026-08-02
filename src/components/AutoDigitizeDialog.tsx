@@ -24,6 +24,7 @@ import { matchColorsToChart } from "../lib/thread/match";
 import { THREAD_CHARTS } from "../lib/thread/catalog";
 import { pathsBounds } from "../lib/geometry";
 import { generateDesign } from "../lib/engine";
+import { fidelityScore, type FidelityResult } from "../lib/bench/fidelity";
 import { designToSegments } from "../lib/engine/render";
 import { drawStitches } from "../lib/render-stitches";
 import { createEmptyProject } from "../lib/project";
@@ -332,6 +333,48 @@ export default function AutoDigitizeDialog({
     [result, objectsWithText, keptIds, excludedIds, styleById],
   );
 
+  // FIDELITY: score how faithfully the stitches (as the engine would sew the
+  // kept objects) reproduce the uploaded image — the honest number no
+  // commercial digitizer shows. Deferred + coarse-celled so it never blocks the
+  // interactive preview; raster sources only (SVG has no pixel ground truth,
+  // photo rows are a deliberate artistic transform).
+  const [fidelity, setFidelity] = useState<FidelityResult | null>(null);
+  useEffect(() => {
+    if (!imageData || photoMode || isSvg || keptObjects.length === 0 || !result) {
+      setFidelity(null);
+      return;
+    }
+    let alive = true;
+    const handle = setTimeout(() => {
+      try {
+        const fit = 0.92;
+        const mmPerPx = Math.min(hoop.wMm / imageData.width, hoop.hMm / imageData.height) * fit;
+        const offsetX = (hoop.wMm - imageData.width * mmPerPx) / 2;
+        const offsetY = (hoop.hMm - imageData.height * mmPerPx) / 2;
+        const design = generateDesign({
+          ...createEmptyProject(),
+          colors: result.colors,
+          objects: keptObjects.map((o) => ({ ...o, visible: true })),
+        });
+        if (!alive) return;
+        setFidelity(
+          fidelityScore(imageData, design, result.colors, mmPerPx, {
+            cellMm: 0.3,
+            removeBackground,
+            offsetX,
+            offsetY,
+          }),
+        );
+      } catch {
+        if (alive) setFidelity(null);
+      }
+    }, 400);
+    return () => {
+      alive = false;
+      clearTimeout(handle);
+    };
+  }, [imageData, photoMode, isSvg, keptObjects, result, hoop, removeBackground]);
+
   const setColors = (n: number) => {
     setUserSetColors(true);
     setNumColors(Math.max(MIN_COLORS, Math.min(MAX_COLORS, n)));
@@ -442,8 +485,17 @@ export default function AutoDigitizeDialog({
             </div>
           </figure>
           <figure className="m-0">
-            <figcaption className="mb-1 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/50">
-              Stitch preview
+            <figcaption className="mb-1 flex items-baseline justify-between font-label text-[10px] font-semibold uppercase tracking-wide text-navy/50">
+              <span>Stitch preview</span>
+              {fidelity && !updating && (
+                <span
+                  data-fidelity-score={Math.round(fidelity.score)}
+                  title={`How faithfully the stitches reproduce your image (region match ${(fidelity.regionIoU * 100).toFixed(0)}%, edge accuracy ±${fidelity.chamferMm.toFixed(1)}mm, thread color ΔE ${fidelity.deltaE.toFixed(0)}, spill ${(fidelity.spill * 100).toFixed(0)}%)`}
+                  className="normal-case tracking-normal text-navy/70"
+                >
+                  Fidelity {Math.round(fidelity.score)}
+                </span>
+              )}
             </figcaption>
             <DigitizePreview objects={keptObjects} colorById={colorById} updating={updating} photo={photoMode && !isSvg} />
           </figure>
