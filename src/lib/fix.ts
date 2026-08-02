@@ -1,5 +1,7 @@
 import type { EmbObject, Path, Project } from "../types/project";
 import { classifyRegion, isBroadlyThick, isSmallRoundFill } from "./engine/classify";
+import { planSatinCenterlines } from "./engine";
+import { effectiveProfile } from "./engine/profile";
 
 import { knockdown, seamTrap } from "./boolean";
 import { STACK_MAX_FEATURE_MM2 } from "./trace/stack";
@@ -404,7 +406,24 @@ export function fixStitches(project: Project): Project {
 /** Like `fixStitches`, but also reports what changed (for user feedback). */
 export function fixStitchesWithReport(project: Project): { project: Project; report: CleanupReport } {
   const original = project.objects;
-  const fixed = original.map(fixObjectStitches);
+  const fabric = effectiveProfile(project.fabric, project.threadWeight);
+  const fixed = original.map((o) => {
+    const f = fixObjectStitches(o);
+    // Persist the engine's auto-satin decomposition as editable centerlines the
+    // first time a fill classifies as satin/line-art. Never overwrites an
+    // existing decomposition (authored lettering, or one the user has edited);
+    // the engine's authored-centerline path then reuses exactly these strokes,
+    // so what the user can grab IS what sews.
+    if (
+      f.type === "fill" &&
+      !f.satinCenterlines &&
+      (f.params.fillStyle === "satin" || f.params.lineArt)
+    ) {
+      const planned = planSatinCenterlines(f, fabric);
+      if (planned) return { ...f, satinCenterlines: planned };
+    }
+    return f;
+  });
 
   let fillStylesSet = 0;
   let densityFixed = 0;

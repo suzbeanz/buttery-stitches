@@ -594,6 +594,47 @@ function smallPatchSatinBlock(patch: Path, density: number, pullScale: number): 
   return throws;
 }
 
+/**
+ * The satin decomposition the engine would auto-derive for this fill object,
+ * as PERSISTABLE centerlines — the bridge from "the engine skeletonizes at
+ * stitch time" to "auto-satin is an editable object property". Persist the
+ * result on `EmbObject.satinCenterlines` and: (a) the decomposition becomes
+ * stable across compiles, (b) every existing transform (move/scale/rotate)
+ * carries it, and (c) the engine's authored-centerline path picks it up via
+ * `authoredForRegion`, so a user-edited centerline reshapes the sewn column.
+ *
+ * Returns undefined when the object isn't satin-classified or no region
+ * passes the engine's own decomposition gates (those regions keep falling
+ * back to tatami exactly as before). Same helpers, same gates, same
+ * parameters as `generateObjectRuns` — this cannot disagree with the engine.
+ */
+export function planSatinCenterlines(
+  object: EmbObject,
+  fabric: FabricProfile = fabricProfile(undefined),
+): Path[] | undefined {
+  if (object.type !== "fill" || !geometryIsSane(object.paths)) return undefined;
+  const p = resolveParams(object.type, object.params);
+  // Only the clear satin cases (classified satin, or traced line art). Auto
+  // narrow-region satin stays an engine-time decision — planning it here would
+  // skeletonize every blob the gates are about to reject.
+  if (p.fillStyle !== "satin" && !p.lineArt) return undefined;
+  const density = Math.max(MIN_SAFE_DENSITY, p.density * fabric.densityMul);
+  const out: Path[] = [];
+  for (const region of splitFillRegions(object.paths)) {
+    const cols = acceptableSatin(
+      region,
+      density,
+      fabric.pullMul,
+      authoredForRegion(object, region),
+      p.lineArt,
+    );
+    for (const c of cols) {
+      if (c.centerline.length >= 2) out.push(c.centerline.map((q) => ({ x: q.x, y: q.y })));
+    }
+  }
+  return out.length > 0 ? out : undefined;
+}
+
 /** The object's authored satin centerlines whose mid-stroke point falls inside
  *  `region` (so each glyph's hand-authored strokes are matched to its own fill
  *  region). Uses the point at HALF the seed's arc length — not an endpoint, which
