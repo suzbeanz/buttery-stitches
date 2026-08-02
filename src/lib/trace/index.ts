@@ -78,12 +78,16 @@ export interface DigitizeOptions {
   /** extend earlier-sewn regions under later neighbours so color boundaries
    *  can't open bare-fabric gaps when the thread pulls. Default on. */
   underlap?: boolean;
-  /** boundary extractor. "native" is the first-party crack tracer (shared
-   *  boundaries between colors, subpixel edge recovery) — extraction-exact,
-   *  but until its curve-fitting stage lands, the downstream simplify chain
-   *  treats its raw polylines worse than imagetracerjs's pre-fit curves, so
-   *  the legacy path remains the DEFAULT. Tracked by the tracer A/B test. */
+  /** boundary extractor. "native" (the DEFAULT) is the first-party crack
+   *  tracer: shared boundaries between touching colors, subpixel edge
+   *  recovery, and least-squares curve fitting on anti-aliased sources.
+   *  Flipped to default after every corpus image measured within tolerance
+   *  of (and five above) the legacy baselines — see tracer-ab.test.ts.
+   *  "legacy" keeps imagetracerjs available as a fallback for one release. */
   tracer?: "native" | "legacy";
+  /** internal (set by imageDataToObjects): true when the native tracer applied
+   *  curve fitting, so the downstream simplify chain must go light. */
+  fitted?: boolean;
 }
 
 /** Detail level for auto-digitize: bolder & cleaner ↔ finer & busier. */
@@ -189,12 +193,13 @@ export function tracedataToObjects(
     removeBackground = true,
   } = opts;
 
-  // Native-fitted rings arrive already denoised by least-squares fitting —
+  // Native-FITTED rings arrive already denoised by least-squares fitting —
   // Douglas–Peucker at the full tolerance would re-anchor on whatever residual
   // ripple remains (DP keeps max-deviation vertices, i.e. noise peaks) and
-  // undo the fit. They get a light cleanup pass only; legacy rings keep the
-  // full-tolerance simplification they were tuned with.
-  const prefit = opts.tracer === "native";
+  // undo the fit. They get a light cleanup pass only. Everything else —
+  // legacy rings AND native raw cracks from hard-edged sources — keeps the
+  // full-tolerance simplify + straighten/smooth chain it was tuned with.
+  const prefit = opts.fitted === true;
   const simp = (pts: Point[]): Path =>
     douglasPeucker(toMm(pts, mmPerPx, offsetX, offsetY), prefit ? Math.min(0.1, simplifyTolMm / 3) : simplifyTolMm);
 
@@ -752,11 +757,17 @@ export function imageDataToObjects(
   // Detail level steers trace smoothing/omission AND the downstream
   // simplify/despeckle defaults together. Explicit opts still override the preset.
   const preset = DETAIL_PRESETS[opts.detail ?? "balanced"];
-  // Boundary extraction: imagetracerjs (default) or the first-party crack
-  // tracer (`tracer: "native"`) — see the DigitizeOptions.tracer docs for why
-  // the default hasn't flipped yet.
+  // Boundary extraction: the first-party crack tracer (default) or legacy
+  // imagetracerjs (`tracer: "legacy"`, fallback for one release).
+  // Native path policy: subpixel snap + curve fitting ONLY when the source is
+  // anti-aliased — that's when the original pixels hold sub-pixel edge truth
+  // for the snap to recover and the fit to average. A hard-edged source's
+  // cracks are pure staircase with no hidden truth; they keep raw polylines
+  // and take the legacy straighten/smooth chain, which was built for exactly
+  // that input.
+  const aaSource = hasAntiAliasing(source);
   const td =
-    opts.tracer !== "native"
+    opts.tracer === "legacy"
       ? (ImageTracer.imagedataToTracedata(
           { width: flat.width, height: flat.height, data: flat.data } as ImageData,
           {
@@ -773,27 +784,36 @@ export function imageDataToObjects(
             numberofcolors: pal.length,
           },
         ) as Tracedata)
-      : traceLabelMap(flat, hasAntiAliasing(source) ? source : null, {
+      : traceLabelMap(flat, aaSource ? source : null, {
           pathomitPx: preset.pathomit * factor,
           // Least-squares fitting at the preset's fidelity budget: tolerance in
           // px of the (possibly upscaled) trace raster. The corner window is
           // physical (~1.2 mm) so corner detection is resolution-independent;
           // fitted curves resample at ~0.3 mm chords (sagitta far below any
           // stitch-visible scale).
-          fit: {
-            // Half the preset budget: the fit is a denoiser, and the crack/snap
-            // jitter it must average is ±half a pixel — tolerance below ~1.2 px
-            // makes the fit chase noise, above ~half the preset it blurs detail.
-            tolPx: Math.max(1.2, preset.simplifyTolMm / 2 / opts.mmPerPx),
-            cornerWindowPx: Math.max(3, 1.2 / opts.mmPerPx),
-            cornerAngleDeg: 38,
-            samplePx: Math.max(1.5, 0.3 / opts.mmPerPx),
-          },
+          fit: aaSource
+            ? {
+                // Half the preset budget: the fit is a denoiser, and the
+                // crack/snap jitter it must average is ±half a pixel —
+                // tolerance below ~1.2 px makes the fit chase noise, above
+                // ~half the preset it blurs detail.
+                tolPx: Math.max(1.2, preset.simplifyTolMm / 2 / opts.mmPerPx),
+                cornerWindowPx: Math.max(3, 1.2 / opts.mmPerPx),
+                cornerAngleDeg: 38,
+                samplePx: Math.max(1.5, 0.3 / opts.mmPerPx),
+                // Components with walls thinner than ~the network-
+                // classification cap keep raw cracks — fitting rounds their
+                // missed corners and flips them from centerline-stitched line
+                // art into solid fills.
+                minFitWallPx: 3.2 / opts.mmPerPx,
+              }
+            : undefined,
         });
   return tracedataToObjects(td, {
     simplifyTolMm: preset.simplifyTolMm,
     minAreaMm2: preset.minAreaMm2,
     ...opts,
+    fitted: opts.tracer !== "legacy" ? aaSource : undefined,
     backgroundRgb,
     // A stripped card's colour still counts as the background downstream, so the
     // sliver-drop erases the anti-alias halo the card left around the subject

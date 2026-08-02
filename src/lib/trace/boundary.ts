@@ -82,7 +82,19 @@ interface Loop {
 export function traceLabelMap(
   flat: QuantizedImage,
   source: RasterImage | null,
-  opts: { pathomitPx?: number; fit?: Omit<FitOptions, "forced"> } = {},
+  opts: {
+    pathomitPx?: number;
+    /** Curve-fitting options; components whose hole-aware wall width falls
+     *  below `minFitWallPx` SKIP fitting and keep the raw snapped cracks —
+     *  thin stroke networks (2–3 mm walls) are exactly where the corner
+     *  window straddles the opposite wall corner, corners get missed, and
+     *  the fitted (shorter) perimeter flips the downstream network/stroke
+     *  classification into a solid fill. Raw staircase perimeter is the
+     *  CONSERVATIVE direction for that classification, and the medial
+     *  skeletonizer rasterizes the region anyway, so thin components lose
+     *  nothing by staying raw. */
+    fit?: Omit<FitOptions, "forced"> & { minFitWallPx?: number };
+  } = {},
 ): Tracedata {
   const { width, height, palette } = flat;
   const pathomitPx = opts.pathomitPx ?? 8;
@@ -219,16 +231,28 @@ export function traceLabelMap(
     const outer = loops.find((l) => l.area2 > 0);
     if (!outer || perimeterOf(outer) < pathomitPx) continue; // despeckled
     const holes = loops.filter((l) => l !== outer && perimeterOf(l) >= pathomitPx);
+    // Thin-component fit opt-out (see the opts.fit doc above): hole-aware wall
+    // width from the component's own raw loops, in px.
+    let fit = opts.fit;
+    if (fit?.minFitWallPx) {
+      const aOuter = outer.area2 / 2;
+      const aHoles = loops
+        .filter((l) => l.area2 < 0)
+        .reduce((s, l) => s + Math.abs(l.area2) / 2, 0);
+      const pAll = loops.reduce((s, l) => s + perimeterOf(l), 0);
+      const wallPx = (2 * Math.max(0, aOuter - aHoles)) / Math.max(1, pAll);
+      if (wallPx < fit.minFitWallPx) fit = undefined;
+    }
     const holechildren: number[] = [];
     layer.push({
-      segments: loopToSegments(outer, snap, isJunction, opts.fit),
+      segments: loopToSegments(outer, snap, isJunction, fit),
       isholepath: false,
       holechildren,
     });
     for (const h of holes) {
       holechildren.push(layer.length);
       layer.push({
-        segments: loopToSegments(h, snap, isJunction, opts.fit),
+        segments: loopToSegments(h, snap, isJunction, fit),
         isholepath: true,
         holechildren: [],
       });

@@ -66,12 +66,11 @@ it("A/B: native tracer stays within striking distance of legacy on an AA logo", 
     scores[tracer] = f.score;
     console.log(tracer, `score=${f.score.toFixed(2)} iou=${f.regionIoU.toFixed(3)} chamfer=${f.chamferMm.toFixed(3)} spill=${f.spill.toFixed(3)}`);
   }
-  // Measured 2026-08: legacy 71.3, native 70.4 (was 65.2 before the fitting
-  // stage; chamfer already beats legacy here). Remaining blockers to flipping
-  // the default, measured on the corpus: line-art drops ~7 pts under fitting
-  // (thin-stroke networks need a no-fit or line-biased path) and card-clipart/
-  // many-color dip 2-3. Rot guard for both paths; tighten to
-  // `native > legacy` when those close.
+  // NATIVE IS THE DEFAULT (flipped 2026-08 when every corpus image measured
+  // within 1pt of — and five above — the legacy baselines, with fitting gated
+  // to anti-aliased sources and thin networks kept raw). Here: legacy 71.3,
+  // native 70.4, chamfer better on native. Both paths rot-guarded; the next
+  // target is native STRICTLY beating legacy here (close the ~0.9 iou gap).
   expect(scores.legacy).toBeGreaterThan(68);
-  expect(scores.native).toBeGreaterThan(67);
+  expect(scores.native).toBeGreaterThan(scores.legacy - 1);
 }, 300000);

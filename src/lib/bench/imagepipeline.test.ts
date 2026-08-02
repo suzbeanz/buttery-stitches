@@ -18,15 +18,20 @@ import { fidelityScore } from "./fidelity";
  * and gradient-blob because a gradient can't be reproduced with discrete
  * threads — the ratchet only guards against REGRESSION per image.
  */
+// Baselines re-ratcheted 2026-08 when the native tracer became the default:
+// raised where it won (flat-logo, noisy, line-art, tiny-features, border,
+// gradient-blob); card-clipart/many-color/tiny-icon keep their higher legacy
+// values (native sits ~0.4-0.7 below, inside tolerance) so the pressure to
+// recover them stays visible.
 const FIDELITY_BASELINE: Record<string, number> = {
-  "flat-logo": 76.2,
+  "flat-logo": 77.3,
   "card-clipart": 72.8,
-  "noisy-clipart": 75.3,
-  "line-art": 43.4,
+  "noisy-clipart": 75.9,
+  "line-art": 43.6,
   "many-color": 74.1,
-  "tiny-features": 74.3,
-  "border-touching": 74.6,
-  "gradient-blob": 34.8,
+  "tiny-features": 74.6,
+  "border-touching": 74.8,
+  "gradient-blob": 36.1,
   "tiny-icon": 74.2,
 };
 const FIDELITY_TOLERANCE = 1;
