@@ -114,9 +114,11 @@ export default function ExportMenu({
     setError(null);
     try {
       const plan = planFromDesign(design, project.colors);
-      await exportAndDownload(plan, `buttery-stitches-${buildTag()}`, {
+      const name = `buttery-stitches-${buildTag()}`;
+      await exportAndDownload(plan, name, {
         format,
         pesVersion,
+        label: name,
         onStage: setStage,
       });
       setOpen(false);
@@ -135,7 +137,11 @@ export default function ExportMenu({
     setError(null);
     try {
       const plan = planFromDesign(design, project.colors);
-      const zip = await exportBundle(plan, EMB_FORMATS, { pesVersion, onStage: setStage });
+      const zip = await exportBundle(plan, EMB_FORMATS, {
+        pesVersion,
+        label: `buttery-stitches-${buildTag()}`,
+        onStage: setStage,
+      });
       downloadBytes(zip, `buttery-stitches-${buildTag()}.zip`, "application/zip");
       setOpen(false);
       toast(`Exported all ${EMB_FORMATS.length} formats as a .zip`, "success");

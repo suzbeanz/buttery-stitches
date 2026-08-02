@@ -3,6 +3,7 @@ import { resolveParams } from "../../types/project";
 import { distance } from "../geometry";
 import { buriedPairs } from "../fix";
 import { polygonArea } from "../trace/classify";
+import { fillCoverage } from "../bench/metrics";
 import { resampleByCount } from "./resample";
 import { SATIN_MAX_WIDTH } from "./satin";
 import { countStitches, type EngineStitch } from "./index";
@@ -13,11 +14,23 @@ export const LIMITS = {
   // Note: satin and dense fills legitimately run ~0.3–0.4 mm rows, which is NOT a
   // skip risk; only a near-same-hole (< 0.25 mm) punch is. The engine already
   // floors stitches at 0.3 mm, so this warns only if something truly tiny slips in.
-  maxStitch: 12, // mm — above this stitches are loose and snag
+  //
+  // maxStitch: professionally digitized files top out ~7 mm on satin (see
+  // docs/pes-benchmark.md), and the engine caps its own output at 6.5 mm — so
+  // this warning fires only on RAW stitches (imported machine files, photo
+  // mode), which bypass the engine cap. The previous 12 mm value was
+  // unreachable even for those in practice and the warning was dead code.
+  maxStitch: 7, // mm — above this stitches are loose and snag
   minDensity: 0.3, // mm/row — denser than this risks puckering
   maxStitchCount: 25000,
   maxSatinWidth: SATIN_MAX_WIDTH, // mm — wider satin sews loose; use a fill
   largeFillAreaMm2: 200, // mm² — a fill this big really wants underlay
+  // Measured (not parameter-derived) quality gates over the compiled stream:
+  /** fills covering less than this fraction of their region show fabric gaps. */
+  minFillCoverage: 0.97,
+  /** penetrations landing in one 1 mm² cell beyond this is a thread pile-up
+   *  (pucker / thread-nest risk) regardless of what the parameters claim. */
+  maxPenetrationsPerMm2: 25,
 };
 
 export interface Warning {
@@ -26,6 +39,32 @@ export interface Warning {
   /** The object at fault, when one can be pinpointed — lets the UI select it on
    *  click. Omitted for design-wide warnings (e.g. total stitch count). */
   objectId?: string;
+}
+
+/** Worst 1 mm² penetration pile-up in the design: bin real penetrations into a
+ *  1 mm grid and return the fullest cell (with a resident object for the UI to
+ *  select). Pure over the stream, O(n). */
+export function penetrationPileup(
+  design: EngineStitch[],
+): { count: number; x: number; y: number; objectId?: string } | null {
+  const cells = new Map<string, { count: number; objectId?: string }>();
+  let worst: { count: number; x: number; y: number; objectId?: string } | null = null;
+  for (const s of design) {
+    if (s.jump) continue;
+    const cx = Math.floor(s.x);
+    const cy = Math.floor(s.y);
+    const key = `${cx},${cy}`;
+    let cell = cells.get(key);
+    if (!cell) {
+      cell = { count: 0, objectId: s.objectId };
+      cells.set(key, cell);
+    }
+    cell.count++;
+    if (!worst || cell.count > worst.count) {
+      worst = { count: cell.count, x: cx + 0.5, y: cy + 0.5, objectId: cell.objectId };
+    }
+  }
+  return worst;
 }
 
 /** Mean rail-to-rail width (mm) of a satin object's two rails. */
@@ -132,6 +171,28 @@ export function validateDesign(design: EngineStitch[], project: Project): Warnin
         message: `"${o.name}" is a large fill with underlay off — may pucker and sit flat. Turn underlay on.`,
       });
     }
+  }
+
+  // MEASURED coverage of the fills — the parameter checks above trust what the
+  // params claim; this checks what the compiled stitches actually deliver.
+  // Coarser cell than the bench harness (0.3 vs 0.15 mm) keeps it interactive.
+  const coverage = fillCoverage(project, design, 0.3);
+  if (coverage !== null && coverage < LIMITS.minFillCoverage) {
+    warnings.push({
+      level: "warn",
+      message: `Fills cover ${(coverage * 100).toFixed(1)}% of their regions — gaps may show fabric. Check fill density and shape.`,
+    });
+  }
+
+  // MEASURED penetration pile-up: too many needle punches in one spot puckers
+  // the fabric and nests thread no matter what the per-object densities say.
+  const pileup = penetrationPileup(design);
+  if (pileup && pileup.count > LIMITS.maxPenetrationsPerMm2) {
+    warnings.push({
+      level: "warn",
+      objectId: pileup.objectId,
+      message: `${pileup.count} needle penetrations land within 1 mm² near (${pileup.x.toFixed(0)}, ${pileup.y.toFixed(0)}) mm — pile-up puckers fabric and can nest thread.`,
+    });
   }
 
   // Overall stitch count.

@@ -16,7 +16,7 @@ import { pathsBounds, pointInRing } from "./geometry";
  * Rules:
  *  - running: stitch length clamped to a safe 1–4 mm.
  *  - satin:   density clamped to 0.3–0.5 mm, pull comp 0–0.6 mm, underlay on.
- *  - fill:    density clamped to 0.35–0.5 mm, underlay on, and a SMART stitch
+ *  - fill:    density clamped to 0.3–0.5 mm, underlay on, and a SMART stitch
  *             type — text and narrow strokes become satin columns (smooth +
  *             shiny lettering), broad areas stay tatami.
  *  - project: objects grouped by color (stable) so the machine trims less, and

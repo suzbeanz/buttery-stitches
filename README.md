@@ -100,7 +100,8 @@ reads the *shape* of each region and picks the stitch a hand digitizer would:
   **spiral**. A test crest's hot-dog dropped from 27 trims to 3 (only the
   unavoidable colour changes) — matching the ~1 trim / 1000 stitches of pro files.
 - **Mitered satin junctions, short-stitched curves, knockdown/trapping** where
-  fills meet, and **travel-optimized** sewing order (2-opt) to cut jumps.
+  fills meet, and **travel-optimized** sewing order (nearest-neighbor + Or-opt
+  with direction flips) to cut jumps.
 
 The reasoning is written up in
 [`docs/embroidery-quality.md`](docs/embroidery-quality.md) and
@@ -177,8 +178,9 @@ lay concentric offset rings at `density` spacing and sew outer→inner as one sp
 repeats per segment (`src/lib/engine/*`).
 
 **8 · Density, underlay & compensation** — `density` is the **gap in mm between
-rows/stitches**, so stitches-per-mm `= 1 / density`; defaults are 0.35 mm (fill) and
-0.4 mm (satin), clamped to a machine-safe **0.3–0.5 mm** (`src/lib/fix.ts`). A
+rows/stitches**, so stitches-per-mm `= 1 / density`; defaults are 0.32 mm (fill,
+0.4 for traced line art) and 0.4 mm (satin), clamped to a machine-safe
+**0.3–0.5 mm** (`src/lib/fix.ts`). A
 low-density **underlay** pass is added (inset so it never peeks past the top), and a
 **fabric preset** bends the numbers — knit packs rows `×0.9` and pulls `×1.5`, sheer
 the opposite (`FABRICS`, `src/types/project.ts`). A **min-stitch filter** drops
@@ -186,7 +188,8 @@ sub-0.3 mm stitches so the needle doesn't jam, and **tie-in/tie-off** locks
 (amplitude 0.8 mm, 3 stitches) anchor every thread end.
 
 **9 · Order & trim economy** — within a colour, object order is optimised with
-**2-opt** to cut jumps; before any same-colour move would cut the thread, an **A\***
+**nearest-neighbor + Or-opt** (relocating chains with direction flips) to cut
+jumps; before any same-colour move would cut the thread, an **A\***
 search over a 1 mm coverage grid looks for a route buried *under* existing stitches
 (up to a ~60 mm detour) and travels there instead of trimming — the way a hand
 digitizer hides a jump (`src/lib/engine/index.ts`). A real file lands near

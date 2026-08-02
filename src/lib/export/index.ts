@@ -3,6 +3,7 @@ import { workerAvailable, exportViaWorker, importViaWorker } from "../pyodide/wo
 import { encodeDst, encodeT01 } from "./native/dst";
 import { decodeTernaryPlan } from "./native/ternary-decode";
 import { encodePes } from "./native/pes";
+import { verifyTernaryBytes, verifyPesBytes } from "./native/verify";
 import embroideryPy from "./embroidery.py?raw";
 import type { Project, ThreadColor } from "../../types/project";
 import { mmToTenths } from "../units";
@@ -234,6 +235,8 @@ async function ensurePython(pyodide: PyodideInterface): Promise<void> {
 export interface ExportOptions {
   format: EmbFormat;
   pesVersion?: PesVersion;
+  /** Design name written into format headers (DST `LA:`, PEC label). */
+  label?: string;
   onStage?: (stage: LoadStage) => void;
 }
 
@@ -242,23 +245,28 @@ export interface ExportOptions {
 // would clobber each other's plan. Serialize them through a single chain.
 let exportChain: Promise<unknown> = Promise.resolve();
 
-/** True if a plan contains an appliqué STOP (the native DST writer can't yet
- *  encode it, so those plans take the Python path). */
+/** True if a plan contains an appliqué STOP. The native PES v1 writer can't
+ *  encode it yet, so those plans take the Python path (DST/T01 encode STOP
+ *  natively as the family's color-change pause). */
 function planHasStop(plan: StitchPlan): boolean {
   return plan.blocks.some((b) => b.cmds.some((c) => c[0] === "stop"));
 }
 
 export async function exportToBytes(
   plan: StitchPlan,
-  { format, pesVersion = 1, onStage }: ExportOptions,
+  { format, pesVersion = 1, label, onStage }: ExportOptions,
 ): Promise<Uint8Array> {
   // Native, runtime-free path for DST (universal format). No Pyodide download —
   // works on memory-constrained mobile browsers where the Python runtime fails.
-  // Validated sew-equivalent to pyembroidery (scripts/oracle-dst.ts). STOPs fall
-  // through to Python until the native writer encodes them.
-  if (format === "dst" && !planHasStop(plan)) {
+  // Validated sew-equivalent to pyembroidery (scripts/oracle-dst.ts). STOPs
+  // encode as the DST-family color-change pause, so appliqué exports natively.
+  // Every native export is decoded back and checked before it leaves.
+  if (format === "dst") {
     onStage?.("ready");
-    return encodeDst(splitPlanForFormat(plan, "dst"));
+    const safe = splitPlanForFormat(plan, "dst");
+    const bytes = encodeDst(safe, { label });
+    verifyTernaryBytes(bytes, safe);
+    return bytes;
   }
 
   // Native PES version 1 — the format the user's Brother machine reads. Same
@@ -268,7 +276,10 @@ export async function exportToBytes(
   // STOP-bearing plans stay on the Python path.
   if (format === "pes" && pesVersion === 1 && !planHasStop(plan)) {
     onStage?.("ready");
-    return encodePes(splitPlanForFormat(plan, "pes"));
+    const safe = splitPlanForFormat(plan, "pes");
+    const bytes = encodePes(safe, { label });
+    verifyPesBytes(bytes, safe);
+    return bytes;
   }
 
   // Native T01 — always: pyembroidery 1.5.1 has no T01 writer, and the format
@@ -277,7 +288,10 @@ export async function exportToBytes(
   // DST-family color-change pause.
   if (format === "t01") {
     onStage?.("ready");
-    return encodeT01(splitPlanForFormat(plan, "t01"));
+    const safe = splitPlanForFormat(plan, "t01");
+    const bytes = encodeT01(safe);
+    verifyTernaryBytes(bytes, safe);
+    return bytes;
   }
 
   // Split any over-long stitch/jump for the target format before serializing,
@@ -329,15 +343,16 @@ export async function exportToBytes(
 export async function exportBundle(
   plan: StitchPlan,
   formats: readonly EmbFormat[],
-  { pesVersion = 1, onStage, baseName = "buttery-stitches" }: {
+  { pesVersion = 1, label, onStage, baseName = "buttery-stitches" }: {
     pesVersion?: PesVersion;
+    label?: string;
     onStage?: (stage: LoadStage) => void;
     baseName?: string;
   } = {},
 ): Promise<Uint8Array> {
   const entries: { name: string; data: Uint8Array }[] = [];
   for (const format of formats) {
-    const data = await exportToBytes(plan, { format, pesVersion, onStage });
+    const data = await exportToBytes(plan, { format, pesVersion, label, onStage });
     entries.push({ name: `${baseName}.${format}`, data });
   }
   return zipStore(entries);

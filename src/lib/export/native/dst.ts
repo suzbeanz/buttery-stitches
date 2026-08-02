@@ -179,10 +179,13 @@ function encodeTernaryStream(plan: StitchPlan, stopAsColorChange: boolean): Tern
   return { records, stitchCount, colorChanges, minX, maxX, minY, maxY, px: cx, py: cy };
 }
 
-/** Encode a stitch plan as DST file bytes (512-byte header + ternary records). */
+/** Encode a stitch plan as DST file bytes (512-byte header + ternary records).
+ *  Machine STOPs (appliqué pauses) encode as color-change records — the
+ *  DST-family pause convention, same as {@linkcode encodeT01} — so appliqué
+ *  designs export natively without the Python runtime. */
 export function encodeDst(plan: StitchPlan, info: DstHeaderInfo = {}): Uint8Array {
   const { records, stitchCount, colorChanges, minX, maxX, minY, maxY, px, py } =
-    encodeTernaryStream(plan, false);
+    encodeTernaryStream(plan, true);
 
   // Header (512 bytes, space-padded). Field formats mirror pyembroidery/Tajima.
   const header = new Uint8Array(HEADER_SIZE).fill(0x20);

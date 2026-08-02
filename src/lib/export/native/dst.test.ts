@@ -103,7 +103,33 @@ describe("encodeDst", () => {
     expect(co?.[1]).toBe("1");
   });
 
-  it("throws on an appliqué STOP (caller routes those to the Python path)", () => {
-    expect(() => encodeDst({ blocks: [{ rgb: 0, cmds: [["s", 0, 0], ["stop"]] }] })).toThrow();
+  it("encodes an appliqué STOP as the DST-family color-change pause", () => {
+    // placement run → STOP → tackdown run, one thread color throughout.
+    const plan: StitchPlan = {
+      blocks: [{ rgb: 0xcc0000, cmds: [["s", 0, 0], ["s", 100, 0], ["stop"], ["s", 100, 100], ["s", 0, 100]] }],
+    };
+    const bytes = encodeDst(splitPlanForFormat(plan, "dst"));
+    // The machine pauses at a color-change record; the operator places the
+    // appliqué and restarts. One STOP → one color-change record, counted in CO:.
+    let changes = 0;
+    for (let i = HEADER; i + 3 <= bytes.length; i += 3) {
+      if (bytes[i] === 0 && bytes[i + 1] === 0 && bytes[i + 2] === 0xf3) break;
+      // A color-change record sets BOTH high bits (b2 |= 0xC0); a plain jump
+      // (incl. the trim sentinel) sets only 0x80.
+      const { jump, color } = decodeRecord(bytes[i], bytes[i + 1], bytes[i + 2]);
+      if (jump && color) changes++;
+    }
+    expect(changes).toBe(1);
+    expect(headerText(bytes).match(/CO:\s*(\d+)/)?.[1]).toBe("1");
+    // All four penetrations still present around the pause.
+    expect(decodeStitches(bytes).length).toBe(4);
+  });
+
+  it("writes the design label into the LA: header field", () => {
+    const bytes = encodeDst(
+      { blocks: [{ rgb: 0, cmds: [["s", 0, 0], ["s", 50, 0]] }] },
+      { label: "rocket-logo" },
+    );
+    expect(headerText(bytes).startsWith("LA:rocket-logo")).toBe(true);
   });
 });

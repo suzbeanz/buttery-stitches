@@ -653,7 +653,7 @@ function upscaleNearest(img: { width: number; height: number; data: Uint8Clamped
 }
 
 /**
- * Full auto-digitize: a raster segmentation pre-pass (median-cut quantization
+ * Full auto-digitize: a raster segmentation pre-pass (k-means quantization
  * flattens the photo/logo to N solid colors) followed by tracing each color into
  * a solid fill. Flattening first is what makes the result look like real
  * embroidery instead of a fringe of sliver outlines. `numberOfColors` is
