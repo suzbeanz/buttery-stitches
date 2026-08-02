@@ -537,17 +537,18 @@ function writePesBlocks(
   bottom: number,
   cx: number,
   cy: number,
-): void {
-  if (stitches.length === 0) return;
+): [number, number][] {
+  if (stitches.length === 0) return [];
   writePesString16(w, "CEmbOne");
   const placeholder = writePesSewSegHeader(w, left, top, right, bottom);
   w.u16(0xffff);
   w.u16(0x0000); // FFFF0000 means more blocks exist
   writePesString16(w, "CSewSeg");
-  const { sections } = writePesEmbSewSegSegments(w, stitches, threadCodes, left, bottom, cx, cy);
+  const { sections, colorlog } = writePesEmbSewSegSegments(w, stitches, threadCodes, left, bottom, cx, cy);
   w.patchU16(placeholder, sections);
   w.u16(0x0000);
   w.u16(0x0000); // 00000000 means no more blocks
+  return colorlog; // v6 appends its node/tree/order table from this
 }
 
 // ---------------------------------------------------------------------------
@@ -761,24 +762,27 @@ function pecEncode(w: ByteWriter, stitches: Stitch[]): void {
 /** write_pec_header: LA label, palette stride/height, the colour palette, and
  *  the fixed padding to a 512-byte-aligned-ish header. Returns the per-thread
  *  chart indices (for the colour-change byte sequence count). */
-function writePecHeader(w: ByteWriter, label: string, threadRgbs: number[]): void {
+function writePecHeader(w: ByteWriter, label: string, threadRgbs: number[]): number[] {
   const name = label.slice(0, 8);
   w.ascii(`LA:${name.padEnd(16, " ")}\r`);
   w.bytes([0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0xff, 0x00]);
   w.u8(Math.trunc(48 / 8)); // PEC byte stride (icon width 48)
   w.u8(PEC_ICON_HEIGHT);
 
-  const colorIndexList = buildUniquePalette(threadRgbs);
+  let colorIndexList = buildUniquePalette(threadRgbs);
   const currentThreadCount = colorIndexList.length;
   if (currentThreadCount !== 0) {
     w.bytes([0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20]);
-    const list = [currentThreadCount - 1, ...colorIndexList];
-    if (list[0] >= 255) throw new Error("native PES: too many color changes");
-    w.bytes(list);
+    // Matches pyembroidery: the count-1 prefix is PART of the returned
+    // color_index_list (the v6 addendum re-emits it verbatim).
+    colorIndexList = [currentThreadCount - 1, ...colorIndexList];
+    if (colorIndexList[0] >= 255) throw new Error("native PES: too many color changes");
+    w.bytes(colorIndexList);
   } else {
     w.bytes([0x20, 0x20, 0x20, 0x20, 0x64, 0x20, 0x00, 0x20, 0x00, 0x20, 0x20, 0x20, 0xff]);
   }
   for (let i = currentThreadCount; i < 463; i++) w.u8(0x20);
+  return colorIndexList;
 }
 
 /** write_pec_block: the stitch-data sub-block (length-prefixed) holding the
@@ -803,17 +807,113 @@ function writePecBlock(
   w.patchU24(start + 2, blockLength);
 }
 
-/** write_pec (called from PES after the vector sections). */
+/** write_pec (called from PES after the vector sections). Returns the
+ *  color_info pair the v6 addendum re-emits. */
 function writePec(
   w: ByteWriter,
   stitches: Stitch[],
   threadRgbs: number[],
   label: string,
-): void {
+): { colorIndexList: number[]; rgbList: number[] } {
   const ext = bounds(stitches);
-  writePecHeader(w, label, threadRgbs);
+  const colorIndexList = writePecHeader(w, label, threadRgbs);
   writePecBlock(w, stitches, ext);
   writePecGraphics(w, stitches, ext);
+  return { colorIndexList, rgbList: threadRgbs };
+}
+
+/** write_pes_string_8: u8 length + utf8 bytes (empty → single 0). */
+function writePesString8(w: ByteWriter, s: string | undefined): void {
+  if (!s) {
+    w.u8(0);
+    return;
+  }
+  const t = s.slice(0, 255);
+  w.u8(t.length);
+  w.ascii(t);
+}
+
+/** Optional real-thread metadata for the v6 thread list (per plan block). */
+export interface PesThreadMeta {
+  /** thread catalog number, e.g. "1147" */
+  code?: string;
+  /** human name, e.g. "Deep Red" */
+  name?: string;
+  /** brand, e.g. "Madeira Polyneon" */
+  brand?: string;
+}
+
+/** write_pes_thread: catalog string, RGB, and description/brand/chart strings —
+ *  the reason v6 exists: TRUE thread colors survive the file. */
+function writePesThread(w: ByteWriter, rgb: number, meta: PesThreadMeta | undefined): void {
+  writePesString8(w, meta?.code);
+  w.u8((rgb >> 16) & 0xff);
+  w.u8((rgb >> 8) & 0xff);
+  w.u8(rgb & 0xff);
+  w.u8(0); // unknown
+  w.u32(0xa); // 0xA = custom color
+  writePesString8(w, meta?.name);
+  writePesString8(w, meta?.brand);
+  writePesString8(w, meta?.brand); // chart — pyembroidery writes thread.chart; brand chart name
+}
+
+/** write_pes_header_v6: hoop + design-page settings block, the five metadata
+ *  strings (name ← the export label), and the REAL thread list. */
+function writePesHeaderV6(
+  w: ByteWriter,
+  label: string | undefined,
+  threads: number[],
+  threadMeta: (PesThreadMeta | undefined)[],
+  distinctBlocks: number,
+): void {
+  w.u16(0x01); // 0 = 100x100, 130x180 hoop
+  w.ascii("02"); // 2-digit ascii subversion
+  writePesString8(w, label);
+  writePesString8(w, undefined); // category
+  writePesString8(w, undefined); // author
+  writePesString8(w, undefined); // keywords
+  writePesString8(w, undefined); // comments
+  w.u16(0); // OptimizeHoopChange
+  w.u16(0); // DesignPageIsCustom
+  w.u16(0x64); // hoop width
+  w.u16(0x64); // hoop height
+  w.u16(0); // UseExistingDesignArea
+  w.u16(0xc8); // designWidth
+  w.u16(0xc8); // designHeight
+  w.u16(0x64); // designPageSectionWidth
+  w.u16(0x64); // designPageSectionHeight
+  w.u16(0x64); // p6
+  w.u16(0x07); // designPageBackgroundColor
+  w.u16(0x13); // designPageForegroundColor
+  w.u16(0x01); // ShowGrid
+  w.u16(0x01); // WithAxes
+  w.u16(0x00); // SnapToGrid
+  w.u16(100); // GridInterval
+  w.u16(0x01); // p9 curves?
+  w.u16(0x00); // OptimizeEntryExitPoints
+  w.u8(0); // fromImageStringLength
+  w.f32(1);
+  w.f32(0);
+  w.f32(0);
+  w.f32(1);
+  w.f32(0);
+  w.f32(0);
+  w.u16(0); // programmable fill patterns
+  w.u16(0); // motif patterns
+  w.u16(0); // feather pattern count
+  w.u16(threads.length); // numberOfColors
+  threads.forEach((rgb, i) => writePesThread(w, rgb, threadMeta[i]));
+  w.u16(distinctBlocks);
+}
+
+/** write_pes_addendum: the PEC color assignment replayed for v6 readers. */
+function writePesAddendum(w: ByteWriter, colorIndexList: number[], rgbList: number[]): void {
+  w.bytes(colorIndexList);
+  for (let i = colorIndexList.length; i < 128; i++) w.u8(0x20);
+  for (let i = 0; i < rgbList.length; i++) {
+    for (let k = 0; k < 0x90; k++) w.u8(0);
+  }
+  for (const rgb of rgbList) w.u24(rgb);
 }
 
 /**
@@ -861,6 +961,72 @@ export function encodePes(plan: StitchPlan, info: PesHeaderInfo = {}): Uint8Arra
 
   w.patchU32(pecPointerPos, w.length);
   writePec(w, stitches, threads, label);
+
+  return w.toUint8Array();
+}
+
+/**
+ * Encode a stitch plan as Brother PES **version 6** (`#PES0060`) file bytes —
+ * the version whose header carries a REAL thread list (catalog number, exact
+ * RGB, brand), so the user's thread choices survive the file instead of
+ * snapping to the Brother-64 chart (the PEC block inside still snaps — that's
+ * the format's design; v6 readers prefer the thread list). Mirrors
+ * pyembroidery's write_pes(pattern, f, {"version": 6}) byte-for-byte for
+ * metadata-free threads (the oracle gate); `threadMeta` adds the catalog
+ * strings pyembroidery would take from EmbThread.
+ */
+export function encodePesV6(
+  plan: StitchPlan,
+  info: PesHeaderInfo & { threadMeta?: (PesThreadMeta | undefined)[] } = {},
+): Uint8Array {
+  const { stitches, threads } = flattenPlan(plan);
+  // The v6 header name string mirrors pyembroidery's metadata "name": ABSENT
+  // (empty string) unless a label was explicitly given; the PEC LA: field
+  // below always defaults to "Untitled" (both writers do).
+  const headerName = info.label;
+  const label = info.label ?? "Untitled";
+  const threadMeta = info.threadMeta ?? [];
+
+  // v6 colors the vector segments against the REAL thread list (chart =
+  // pattern.threadlist): an exact-match nearest lookup is the thread's own
+  // first index.
+  const threadCodes = threads.map((rgb) => threads.indexOf(rgb));
+
+  const w = new ByteWriter();
+  w.ascii("#PES0060");
+  const pecPointerPos = w.length;
+  w.u32(0); // PEC block pointer placeholder
+
+  const [minX, minY, maxX, maxY] = bounds(stitches);
+  const cx = (maxX + minX) / 2;
+  const cy = (maxY + minY) / 2;
+  const left = minX - cx;
+  const top = minY - cy;
+  const right = maxX - cx;
+  const bottom = maxY - cy;
+
+  if (stitches.length === 0) {
+    writePesHeaderV6(w, headerName, threads, threadMeta, 0);
+    w.u16(0x0000);
+    w.u16(0x0000);
+  } else {
+    writePesHeaderV6(w, headerName, threads, threadMeta, 1);
+    w.u16(0xffff);
+    w.u16(0x0000);
+    const log = writePesBlocks(w, stitches, threadCodes, left, top, right, bottom, cx, cy);
+    // "In version 6 there is some node, tree, order thing."
+    w.u32(0);
+    w.u32(0);
+    for (let i = 0; i < log.length; i++) {
+      w.u32(i);
+      w.u32(0);
+    }
+  }
+
+  w.patchU32(pecPointerPos, w.length);
+  const { colorIndexList, rgbList } = writePec(w, stitches, threads, label);
+  writePesAddendum(w, colorIndexList, rgbList);
+  w.u16(0x0000); // found in version 6, not 5/4
 
   return w.toUint8Array();
 }

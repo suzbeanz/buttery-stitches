@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { encodeDst, encodeT01 } from "./dst";
-import { encodePes } from "./pes";
+import { encodePes, encodePesV6 } from "./pes";
 import { decodePecStitches } from "./pec-decode";
 import { decodeTernaryPlan, decodeTernaryStitches } from "./ternary-decode";
 import type { StitchPlan } from "../index";
@@ -165,5 +165,25 @@ describe("PEC decoder robustness (malformed bytes must not hang or corrupt)", ()
       const out = decodePecStitches(junk); // must terminate
       expect(out.length).toBeLessThan(600);
     }
+  });
+});
+
+describe("PES v6 reference (pyembroidery write_pes version 6)", () => {
+  const refPes6 = new Uint8Array(readFileSync(join(FIX, "reference-v6.pes")));
+
+  it("our native v6 encoder is byte-identical to the reference for the plan", () => {
+    const ours = encodePesV6(plan);
+    expect(ours.length).toBe(refPes6.length);
+    for (let i = 0; i < refPes6.length; i++) {
+      if (ours[i] !== refPes6[i]) {
+        throw new Error(
+          `PES v6 differs at byte ${i} (0x${i.toString(16)}): ours=0x${ours[i].toString(16)} ref=0x${refPes6[i].toString(16)}`,
+        );
+      }
+    }
+  });
+
+  it("the decoded PEC stitch stream of our v6 matches the plan", () => {
+    expect(normalizedPenetrations(encodePesV6(plan))).toEqual(planPenetrations);
   });
 });

@@ -2,7 +2,7 @@ import { getPyodide, type LoadStage, type PyodideInterface } from "../pyodide/lo
 import { workerAvailable, exportViaWorker, importViaWorker } from "../pyodide/workerClient";
 import { encodeDst, encodeT01 } from "./native/dst";
 import { decodeTernaryPlan } from "./native/ternary-decode";
-import { encodePes } from "./native/pes";
+import { encodePes, encodePesV6 } from "./native/pes";
 import { verifyTernaryBytes, verifyPesBytes } from "./native/verify";
 import embroideryPy from "./embroidery.py?raw";
 import type { Project, ThreadColor } from "../../types/project";
@@ -269,15 +269,16 @@ export async function exportToBytes(
     return bytes;
   }
 
-  // Native PES version 1 — the format the user's Brother machine reads. Same
-  // motivation as DST: no Pyodide download on memory-constrained phones.
-  // Validated functionally equivalent to pyembroidery's write_pes(...,{"version":1})
-  // (scripts/oracle-pes.ts — stitches + colors gate the check). v6 and
+  // Native PES (versions 1 and 6) — the formats the user's Brother machine
+  // reads. Same motivation as DST: no Pyodide download on memory-constrained
+  // phones. Validated functionally equivalent to pyembroidery's
+  // write_pes(..., {"version": 1|6}) (scripts/oracle-pes.ts — stitches +
+  // colors gate the check). v6 additionally carries the TRUE thread list.
   // STOP-bearing plans stay on the Python path.
-  if (format === "pes" && pesVersion === 1 && !planHasStop(plan)) {
+  if (format === "pes" && !planHasStop(plan)) {
     onStage?.("ready");
     const safe = splitPlanForFormat(plan, "pes");
-    const bytes = encodePes(safe, { label });
+    const bytes = pesVersion === 6 ? encodePesV6(safe, { label }) : encodePes(safe, { label });
     verifyPesBytes(bytes, safe);
     return bytes;
   }

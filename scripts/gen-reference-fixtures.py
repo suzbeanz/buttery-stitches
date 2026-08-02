@@ -88,6 +88,11 @@ pe.write_pes(pattern, pes, {"pes version": 1})
 with open(os.path.join(OUT, "reference-v1.pes"), "wb") as f:
     f.write(pes.getvalue())
 
+pes6 = io.BytesIO()
+pe.write_pes(pattern, pes6, {"version": 6})
+with open(os.path.join(OUT, "reference-v6.pes"), "wb") as f:
+    f.write(pes6.getvalue())
+
 tbf = io.BytesIO()
 pe.write_tbf(pattern, tbf)
 with open(os.path.join(OUT, "reference.tbf"), "wb") as f:
