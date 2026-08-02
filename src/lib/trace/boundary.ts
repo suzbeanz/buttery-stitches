@@ -1,5 +1,6 @@
 import type { QuantizedImage, RasterImage } from "./quantize";
 import type { Tracedata } from "./index";
+import { fitClosedPolyline, type FitOptions } from "./fitcurve";
 
 /**
  * FIRST-PARTY boundary extractor — replaces imagetracerjs for raster tracing.
@@ -81,7 +82,7 @@ interface Loop {
 export function traceLabelMap(
   flat: QuantizedImage,
   source: RasterImage | null,
-  opts: { pathomitPx?: number } = {},
+  opts: { pathomitPx?: number; fit?: Omit<FitOptions, "forced"> } = {},
 ): Tracedata {
   const { width, height, palette } = flat;
   const pathomitPx = opts.pathomitPx ?? 8;
@@ -219,10 +220,18 @@ export function traceLabelMap(
     if (!outer || perimeterOf(outer) < pathomitPx) continue; // despeckled
     const holes = loops.filter((l) => l !== outer && perimeterOf(l) >= pathomitPx);
     const holechildren: number[] = [];
-    layer.push({ segments: loopToSegments(outer, snap, isJunction), isholepath: false, holechildren });
+    layer.push({
+      segments: loopToSegments(outer, snap, isJunction, opts.fit),
+      isholepath: false,
+      holechildren,
+    });
     for (const h of holes) {
       holechildren.push(layer.length);
-      layer.push({ segments: loopToSegments(h, snap, isJunction), isholepath: true, holechildren: [] });
+      layer.push({
+        segments: loopToSegments(h, snap, isJunction, opts.fit),
+        isholepath: true,
+        holechildren: [],
+      });
     }
   }
 
@@ -260,13 +269,15 @@ function perimeterOf(loop: Loop): number {
 
 /**
  * Compress exactly-collinear crack runs (bounded at {@link MAX_RUN_PX}), snap
- * each surviving vertex, smooth the residual wobble (junctions pinned), and
- * emit line segments.
+ * each surviving vertex, optionally fit the ring with least-squares cubics
+ * (junctions as forced breakpoints, so shared sections fit identically on
+ * both sides), and emit line segments.
  */
 function loopToSegments(
   loop: Loop,
   snap: Snapper | null,
   isJunction: (vx: number, vy: number) => boolean,
+  fit?: Omit<FitOptions, "forced">,
 ): TraceSegment[] {
   const n = loop.xs.length;
   // Keep a vertex when direction changes, the run hits the cap, or the outside
@@ -291,13 +302,15 @@ function loopToSegments(
   }
   if (keep.length < 3) return [];
 
-  const pts = keep.map((i) => {
+  const junction = keep.map((i) => isJunction(loop.xs[i], loop.ys[i]));
+  let pts = keep.map((i, k) => {
     const vx = loop.xs[i];
     const vy = loop.ys[i];
     // Junction vertices (3+ labels) stay on the lattice even when snapping —
     // every ring passing through them must agree exactly.
-    return snap && !isJunction(vx, vy) ? snap(vx, vy) : { x: vx, y: vy };
+    return snap && !junction[k] ? snap(vx, vy) : { x: vx, y: vy };
   });
+  if (fit) pts = fitClosedPolyline(pts, { ...fit, forced: junction });
   const segs: TraceSegment[] = [];
   for (let i = 0; i < pts.length; i++) {
     const a = pts[i];
@@ -384,7 +397,14 @@ function makeSnapper(
         const nx = gx / gl;
         const ny = gy / gl;
         // Fraction-of-A along the normal at each offset: 1 deep inside A,
-        // 0 deep inside B. Transparent (−1) reads through alpha.
+        // 0 deep inside B. Transparent (−1) reads through alpha. The axis
+        // endpoints are the palette (cluster-mean) colors: blend pixels pull
+        // cluster means slightly toward each other, so this reference carries
+        // a sub-0.05 mm systematic edge bias — but it is the SAME reference
+        // the quantizer, the legacy tracer, and the fidelity metric use, and
+        // the bias is far below stitch-visible scale. (Measured: swapping in
+        // locally-sampled deep-side colors lands areas closer to geometric
+        // truth but scores worse against the shared reference.)
         const cA = A >= 0 ? palette[A] : null;
         const cB = B >= 0 ? palette[B] : null;
         const fracA = (o: number): number => {

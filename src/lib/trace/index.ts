@@ -189,8 +189,14 @@ export function tracedataToObjects(
     removeBackground = true,
   } = opts;
 
+  // Native-fitted rings arrive already denoised by least-squares fitting —
+  // Douglas–Peucker at the full tolerance would re-anchor on whatever residual
+  // ripple remains (DP keeps max-deviation vertices, i.e. noise peaks) and
+  // undo the fit. They get a light cleanup pass only; legacy rings keep the
+  // full-tolerance simplification they were tuned with.
+  const prefit = opts.tracer === "native";
   const simp = (pts: Point[]): Path =>
-    douglasPeucker(toMm(pts, mmPerPx, offsetX, offsetY), simplifyTolMm);
+    douglasPeucker(toMm(pts, mmPerPx, offsetX, offsetY), prefit ? Math.min(0.1, simplifyTolMm / 3) : simplifyTolMm);
 
   // The artwork can never legitimately exceed its own raster: a snapped
   // primitive (an ellipse fitted to a region touching the image edge) can
@@ -320,7 +326,10 @@ export function tracedataToObjects(
     // more and survive DP), then corner-aware smooth so genuine curves stay smooth.
     // This is what kills the "shakily drawn" look regardless of the detail preset.
     const clean = (r: Path) =>
-      recognizeShape(r, 1.0)?.ring ?? smoothRingKeepingCorners(douglasPeucker(r, STRAIGHTEN_TOL_MM), 0.6);
+      prefit
+        ? recognizeShape(r, 1.0)?.ring ?? r // fitted rings are already smooth+straightened
+        : recognizeShape(r, 1.0)?.ring ??
+          smoothRingKeepingCorners(douglasPeucker(r, STRAIGHTEN_TOL_MM), 0.6);
     const fillRings: Path[] = [];
     const strokeRings: Path[] = [];
     // Suspected page-background rings (the halo gate below) go into their OWN
@@ -766,6 +775,20 @@ export function imageDataToObjects(
         ) as Tracedata)
       : traceLabelMap(flat, hasAntiAliasing(source) ? source : null, {
           pathomitPx: preset.pathomit * factor,
+          // Least-squares fitting at the preset's fidelity budget: tolerance in
+          // px of the (possibly upscaled) trace raster. The corner window is
+          // physical (~1.2 mm) so corner detection is resolution-independent;
+          // fitted curves resample at ~0.3 mm chords (sagitta far below any
+          // stitch-visible scale).
+          fit: {
+            // Half the preset budget: the fit is a denoiser, and the crack/snap
+            // jitter it must average is ±half a pixel — tolerance below ~1.2 px
+            // makes the fit chase noise, above ~half the preset it blurs detail.
+            tolPx: Math.max(1.2, preset.simplifyTolMm / 2 / opts.mmPerPx),
+            cornerWindowPx: Math.max(3, 1.2 / opts.mmPerPx),
+            cornerAngleDeg: 38,
+            samplePx: Math.max(1.5, 0.3 / opts.mmPerPx),
+          },
         });
   return tracedataToObjects(td, {
     simplifyTolMm: preset.simplifyTolMm,
