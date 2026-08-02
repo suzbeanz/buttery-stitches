@@ -204,13 +204,93 @@ export function turningFill(rings: Path[], opts: FillOptions): Path[] | null {
   const comp = Math.max(0, opts.pullCompMm ?? 0);
   const half = bboxDiag(oriented);
 
-  const { runs, breaks } = marchSpine(spine, oriented, density, stitch, comp, half);
+  // Extend the spine through the caps: the medial skeleton stops ~one local
+  // radius short of each tip, so without this the last rows never reach the
+  // ends and the caps stay bare (the old end-gap coverage loss). Stations
+  // that land past the boundary clip to nothing and simply end the run.
+  const { runs, breaks } = marchSpine(extendSpine(spine, 6), oriented, density, stitch, comp, half);
   if (runs.length === 0 || breaks > TURN_MAX_BREAKS) return null;
   // Safety net: if any row connector left the region (a notch the rows jumped),
   // this shape isn't a clean band — bail so the caller uses the concavity-aware
   // tatami instead. Turning fill must never introduce a slash.
   if (hasExposedSegment(runs, oriented)) return null;
   return runs;
+}
+
+/**
+ * Place row stations along the spine with curvature-adaptive spacing: the
+ * along-spine step shrinks where the spine bends so the OUTER edge's row
+ * pitch never exceeds `density`. Curvature comes from circumradius over a
+ * ±2-sample window (smoothed over 3 stations so a noisy skeleton can't make
+ * the spacing oscillate); the local half-width comes from the same
+ * cross-shape cast the rows use.
+ */
+function adaptiveStations(spine: Path, oriented: Path[], density: number, half: number): Path {
+  const fineStep = Math.max(0.1, density / 4);
+  const fine = resampleByDistance(spine, fineStep);
+  if (fine.length < 3) return resampleByDistance(spine, density);
+
+  // Curvature per fine sample (circumradius of the ±2 triangle).
+  const kRaw = new Float64Array(fine.length);
+  for (let i = 2; i < fine.length - 2; i++) {
+    const a = fine[i - 2];
+    const b = fine[i];
+    const c = fine[i + 2];
+    const ab = distance(a, b);
+    const bc = distance(b, c);
+    const ca = distance(c, a);
+    const area2 = Math.abs((b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y));
+    kRaw[i] = ab * bc * ca > 1e-9 ? (2 * area2) / (ab * bc * ca) : 0;
+  }
+  // 3-tap smoothing keeps the step from oscillating on skeleton jitter.
+  const kappa = new Float64Array(fine.length);
+  for (let i = 0; i < fine.length; i++) {
+    kappa[i] = (kRaw[Math.max(0, i - 1)] + kRaw[i] + kRaw[Math.min(fine.length - 1, i + 1)]) / 3;
+  }
+  // Local half-width per fine sample (sparse casts, carried between hits).
+  const halfW = new Float64Array(fine.length);
+  let lastW = density; // conservative default until the first hit
+  for (let i = 0; i < fine.length; i++) {
+    if (i % 4 === 0) {
+      const a = fine[Math.max(0, i - 1)];
+      const b = fine[Math.min(fine.length - 1, i + 1)];
+      const tl = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      const n = { x: -(b.y - a.y) / tl, y: (b.x - a.x) / tl };
+      const span = clipAcross(fine[i], n, oriented, half);
+      if (span) lastW = distance(span[0], span[1]) / 2;
+    }
+    halfW[i] = lastW;
+  }
+
+  // Walk with EXACT interpolation between fine samples — snapping stations to
+  // the fine grid overshoots the step by up to a full fine-step (25%), which
+  // reads directly as outer-edge pitch over density (visible row gaps).
+  const out: Path = [fine[0]];
+  let acc = 0;
+  for (let i = 1; i < fine.length; i++) {
+    let segLen = distance(fine[i - 1], fine[i]);
+    let segStart = fine[i - 1];
+    for (;;) {
+      const step = Math.max(0.35 * density, density / (1 + kappa[i] * halfW[i]));
+      const need = step - acc;
+      if (segLen < need) {
+        acc += segLen;
+        break;
+      }
+      const t = need / segLen;
+      const P = {
+        x: segStart.x + (fine[i].x - segStart.x) * t,
+        y: segStart.y + (fine[i].y - segStart.y) * t,
+      };
+      out.push(P);
+      segStart = P;
+      segLen -= need;
+      acc = 0;
+    }
+  }
+  const tail = fine[fine.length - 1];
+  if (distance(out[out.length - 1], tail) > 0.25 * density) out.push(tail);
+  return out;
 }
 
 /**
@@ -227,8 +307,14 @@ function marchSpine(
   comp: number,
   half: number,
 ): { runs: Path[]; breaks: number } {
-  // Row stations marched along the spine at the row spacing.
-  const stations = resampleByDistance(spine, density);
+  // Row stations marched along the spine — CURVATURE-ADAPTIVE spacing. On a
+  // bend, rows spaced at `density` along the spine fan out to
+  // density·(1 + d/ρ) at the outer edge (up to ~2× on a crescent's inner
+  // radius), leaving visible inter-row gaps. Advance by
+  // density / (1 + κ·halfWidth) instead, clamped so the spacing never
+  // collapses below 0.35·density (the coincident-collapse and min-spacing
+  // safeties thin the inner edge where rows converge).
+  const stations = adaptiveStations(spine, oriented, density, half);
   if (stations.length < 2) return { runs: [], breaks: 0 };
 
   // Pass 1: compute each station's perpendicular row span across the shape.
@@ -266,10 +352,35 @@ function marchSpine(
   const lineTurn = (a: Point, b: Point) =>
     Math.acos(Math.min(1, Math.abs(a.x * b.x + a.y * b.y))) * (180 / Math.PI);
 
-  for (const span of spans) {
-    if (!span || (medianL > 0 && span.L > maxL)) {
-      flush(); // a gap or degenerate cap row ends the continuous run
+  for (const [si, rawSpan] of spans.entries()) {
+    if (!rawSpan) {
+      flush(); // a gap (station outside / at a pinch) ends the continuous run
       continue;
+    }
+    let span = rawSpan;
+    if (medianL > 0 && span.L > maxL) {
+      // The perpendicular grazed a cap and returned a long diagonal chord.
+      // Dropping the row (the old behavior) left the cap bare — instead
+      // TRUNCATE it symmetrically about the station to the typical width.
+      // The full chord lies inside the region (clipAcross returns the
+      // nearest crossing pair around the station), so the truncated row is
+      // inside too; the flip guard below still rejects a crossing direction.
+      const P = stations[si];
+      const clampEnd = (E: Point): Point => {
+        const d = distance(P, E);
+        const lim = maxL / 2;
+        if (d <= lim) return E;
+        const s = lim / d;
+        return { x: P.x + (E.x - P.x) * s, y: P.y + (E.y - P.y) * s };
+      };
+      const A = clampEnd(span.A);
+      const B = clampEnd(span.B);
+      const L2 = distance(A, B);
+      if (L2 < 1e-6) {
+        flush();
+        continue;
+      }
+      span = { A, B, L: L2 };
     }
     const L = span.L;
     const ux = (span.B.x - span.A.x) / L;

@@ -1589,6 +1589,63 @@ export function satinCoverage(rings: Path[], runs: Path[], cellMm = 0.5): number
 }
 
 /**
+ * STRICT thread-width coverage: like {@link satinCoverage} but with the honest
+ * physical model — a capsule of `threadWidthMm` around each stitched segment,
+ * no halo — at a cell fine enough to see the gap a row pitch wider than the
+ * thread leaves. `satinCoverage`'s one-cell halo (~±0.45 mm effective) is the
+ * right PASS/FAIL self-check for a fill, but it saturates near 1.0 and cannot
+ * ARBITRATE between two fills that both pass: two candidates can read
+ * 1.000 vs 0.9998 by halo while differing by 5+ points of real thread-on-
+ * fabric coverage. Use this one to pick winners.
+ */
+export function strictCoverage(
+  rings: Path[],
+  runs: Path[],
+  cellMm = 0.15,
+  threadWidthMm = 0.3,
+): number {
+  const oriented = orientByDepth(rings);
+  const grid = rasterize(oriented, cellMm);
+  if (!grid) return 0;
+  const { w, h, ox, oy, cells } = grid;
+  let total = 0;
+  for (let i = 0; i < cells.length; i++) if (cells[i]) total++;
+  if (total === 0) return 0;
+
+  const half = threadWidthMm / 2;
+  const covered = new Uint8Array(w * h);
+  for (const run of runs) {
+    for (let i = 1; i < run.length; i++) {
+      const a = run[i - 1];
+      const b = run[i];
+      const c0 = Math.max(0, Math.floor((Math.min(a.x, b.x) - half - ox) / cellMm));
+      const c1 = Math.min(w - 1, Math.floor((Math.max(a.x, b.x) + half - ox) / cellMm));
+      const r0 = Math.max(0, Math.floor((Math.min(a.y, b.y) - half - oy) / cellMm));
+      const r1 = Math.min(h - 1, Math.floor((Math.max(a.y, b.y) + half - oy) / cellMm));
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const L2 = dx * dx + dy * dy;
+      for (let r = r0; r <= r1; r++) {
+        const y = oy + (r + 0.5) * cellMm;
+        for (let c = c0; c <= c1; c++) {
+          const idx = r * w + c;
+          if (covered[idx]) continue;
+          const x = ox + (c + 0.5) * cellMm;
+          let t = L2 > 1e-12 ? ((x - a.x) * dx + (y - a.y) * dy) / L2 : 0;
+          t = t < 0 ? 0 : t > 1 ? 1 : t;
+          const qx = x - (a.x + t * dx);
+          const qy = y - (a.y + t * dy);
+          if (qx * qx + qy * qy <= half * half) covered[idx] = 1;
+        }
+      }
+    }
+  }
+  let hit = 0;
+  for (let i = 0; i < cells.length; i++) if (cells[i] && covered[i]) hit++;
+  return hit / total;
+}
+
+/**
  * The parts of a region the satin DIDN'T cover, as polygons (mm) — the small
  * patches at stroke crossings and junctions where columns are trimmed back so
  * they don't fan. The engine tatami-fills these so a self-crossing script loop

@@ -39,8 +39,12 @@ Deterministic geometry + ids so a metric delta means an engine change, not noise
 This is step **(b)** of the "surpass the commercial tools" plan — measure first. Early signals
 the baseline already surfaces:
 
-- `crescent-turning` covers **97.6%**, not 100% — the turning fill leaves small
-  end-gaps. A coverage target the directional-field work should close.
+- `crescent-turning` covers **95.8%** under the honest 0.3 mm-thread metric
+  (was 93.0 before cap closure, curvature-adaptive row pitch, and the
+  short-stitch floor fix; the historical "97.6%" figure predates the honest
+  metric). The remaining gap is the inner-edge thinning the 0.3 mm
+  penetration-spacing floor requires — the flat-row ceiling is ~0.977
+  (`rect-fill`).
 - `satin-band` runs **27% short** stitches — expected for tight satin, but the
   metric to watch when curvature compensation changes.
 - `travel%` is low on this corpus (single regions); it becomes the headline

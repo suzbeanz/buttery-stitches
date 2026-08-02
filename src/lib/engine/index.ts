@@ -13,7 +13,7 @@ import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
 import { tatamiFill, tatamiConcaveRuns, multiBlendFill, motifFill, motifRunAlong, carvePoints, splitFillRegions, autoFillAngleForRegions } from "./fill";
 import { contourFill } from "./contour";
-import { medialColumns, columnsFromCenterlines, satinCoverage, residualRegions, type SatinColumn } from "./medial";
+import { medialColumns, columnsFromCenterlines, satinCoverage, strictCoverage, residualRegions, type SatinColumn } from "./medial";
 import { turningFill, flowFill, flowAlong } from "./turning";
 import { guidanceFieldFill, multiAngleFill } from "./field";
 import { isSmallRoundFill, meanStrokeWidthMm, isBroadlyThick } from "./classify";
@@ -1010,7 +1010,7 @@ export function generateObjectRuns(
     const contour = !usingSatin && p.fillStyle === "contour";
     const travelMax = usingSatin ? 8 : 6;
     // Satin and contour rows are dense like satin; tatami uses the general floor.
-    const minStitch = usingSatin || contour ? SATIN_MIN_STITCH : undefined;
+    let minStitch = usingSatin || contour ? SATIN_MIN_STITCH : undefined;
     // Tatami flows along the object's shared grain. Underlay follows the same angle.
     const fillAngle = usingSatin ? p.angle : tatamiAngle;
 
@@ -1186,8 +1186,13 @@ export function generateObjectRuns(
       if (!turned && autoTurn) {
         const field = guidanceFieldFill(region, fillOpts);
         if (field) {
-          const covField = satinCoverage(region, field);
-          const covTurn = satinCoverage(region, autoTurn);
+          // Arbitrate with the STRICT thread-width metric: the halo-based
+          // satinCoverage saturates near 1.0 once both candidates pass, and
+          // its "tie" hid a 5+ point real coverage difference (bench
+          // crescent: field 0.92 vs turned rows 0.98 honest). Field still
+          // wins genuine ties (fewer long stitches).
+          const covField = strictCoverage(region, field);
+          const covTurn = strictCoverage(region, autoTurn);
           turned = covField >= covTurn - 0.02 ? field : autoTurn;
         } else {
           turned = autoTurn;
@@ -1201,6 +1206,13 @@ export function generateObjectRuns(
       // to the concavity-aware tatami, which always covers.
       if (turned && satinCoverage(region, turned) < MIN_TURNED_COVERAGE) turned = null;
       tops = turned ?? tatamiConcaveRuns(region, fillOpts);
+      // Turned/field rows advance by the (curvature-adaptive) row pitch —
+      // 0.25–0.3 mm. The default 0.5 mm short-stitch floor was eating every
+      // row's first penetration at the turnaround, systematically shaving the
+      // row ends along alternating edges (the long-standing crescent edge
+      // loss). Dense-row fills use the same floor satin rows do; the assembly
+      // min-spacing safety still thins the truly-crowded inner-curve side.
+      if (turned) minStitch = SATIN_MIN_STITCH;
       // A turned/field/flow fill can leave a POINTED TIP bare: where the shape
       // narrows below the row spacing (a pennant's point, a leaf's tip), the last
       // row stops short and the extreme tip never gets thread. Patch what the

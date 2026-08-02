@@ -19,6 +19,16 @@ describe("curved-fill coverage", () => {
     expect(cov!).toBeGreaterThan(0.92);
   });
 
+  it("the turned-row crescent covers ≥0.95 (cap closure + adaptive row pitch)", () => {
+    // Was 0.930: caps lost their last rows to the long-chord reject, the outer
+    // edge starved on the bend (fixed stations along the spine), and the 0.5mm
+    // short-stitch floor ate every row's turnaround penetration. The strict-
+    // coverage arbitration now also lets these rows beat the field fill when
+    // they genuinely cover more.
+    const proj = CORPUS.find((c) => c.name === "crescent-turning")!.project;
+    expect(benchMetrics(proj).fillCoverage!).toBeGreaterThan(0.95);
+  });
+
   it("flat fills stay essentially fully covered", () => {
     const proj = CORPUS.find((c) => c.name === "rect-fill")!.project;
     expect(benchMetrics(proj).fillCoverage!).toBeGreaterThan(0.97);
