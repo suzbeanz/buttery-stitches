@@ -139,6 +139,21 @@ export function minPointsFor(type: StitchType): number {
 }
 
 /**
+ * The store patch for committing edited paths (and optionally edited satin
+ * centerlines). An omitted `satinCenterlines` PRESERVES the object's existing
+ * decomposition — a plain vertex drag or point insert must never erase the
+ * persisted auto-satin strokes (writing the key as `undefined` deletes it in
+ * the store's shallow merge, which is exactly the bug this helper fixes).
+ */
+export function commitPathsPatch(
+  existing: Pick<EmbObject, "satinCenterlines"> | undefined,
+  paths: Path[],
+  satinCenterlines?: Path[],
+): Pick<EmbObject, "paths" | "satinCenterlines"> {
+  return { paths, satinCenterlines: satinCenterlines ?? existing?.satinCenterlines };
+}
+
+/**
  * Build a satin column from two user-drawn rails (the classic "Input B" method). railB is
  * flipped if it runs opposite to railA, so corresponding points pair up and the
  * column doesn't twist into a bow-tie. Rails are kept verbatim, so the width can

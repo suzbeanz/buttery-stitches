@@ -8,6 +8,7 @@ import {
   satinWidthOf,
   setSatinWidth,
   convertObjectType,
+  commitPathsPatch,
   DEFAULT_SATIN_WIDTH,
 } from "./objects";
 import type { EmbObject, Path } from "../types/project";
@@ -194,5 +195,27 @@ describe("convertObjectType", () => {
     const patch = convertObjectType(degenerate, "satin");
     expect(patch.type).toBe("satin");
     expect(patch.paths).toBeUndefined(); // keeps original geometry, no [[],[]]
+  });
+});
+
+describe("commitPathsPatch", () => {
+  const paths = [[{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 3 }]];
+  const persisted = [[{ x: 1, y: 1.5 }, { x: 9, y: 1.5 }]];
+
+  it("preserves existing satinCenterlines when the caller omits them (vertex drag)", () => {
+    const patch = commitPathsPatch({ satinCenterlines: persisted }, paths);
+    expect(patch.paths).toBe(paths);
+    expect(patch.satinCenterlines).toBe(persisted);
+  });
+
+  it("replaces satinCenterlines when the caller passes them (spine-handle drag)", () => {
+    const edited = [[{ x: 1, y: 2 }, { x: 9, y: 2 }]];
+    const patch = commitPathsPatch({ satinCenterlines: persisted }, paths, edited);
+    expect(patch.satinCenterlines).toBe(edited);
+  });
+
+  it("stays undefined for objects that never had a decomposition", () => {
+    expect(commitPathsPatch({ satinCenterlines: undefined }, paths).satinCenterlines).toBeUndefined();
+    expect(commitPathsPatch(undefined, paths).satinCenterlines).toBeUndefined();
   });
 });

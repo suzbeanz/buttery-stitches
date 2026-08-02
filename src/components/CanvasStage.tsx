@@ -26,7 +26,7 @@ import type Konva from "konva";
 import { useProjectStore } from "../store/projectStore";
 import { useEditorStore, isDrawTool, isPointTool } from "../store/editorStore";
 import type { EmbObject, Path, Point, ThreadColor } from "../types/project";
-import { makeObject, makeObjectFromPaths, makeNodeObject, makeSatinFromRails, minPointsFor, pathsFromNodes, satinPathsFromNodes, satinWidthOf, isClosedType } from "../lib/objects";
+import { makeObject, makeObjectFromPaths, makeNodeObject, makeSatinFromRails, minPointsFor, commitPathsPatch, pathsFromNodes, satinPathsFromNodes, satinWidthOf, isClosedType } from "../lib/objects";
 import { densifyRing, insertNode, moveNode, deleteNode, toggleNodeSmooth, translateNodes, impliedHandles, setNodeHandle, type NodePath } from "../lib/nodes";
 import { shapeFromDrag, shapeRings, type ShapeKind } from "../lib/shapes";
 import { bucketFill } from "../lib/paintbucket";
@@ -320,7 +320,11 @@ export default function CanvasStage() {
     store.setSelection(cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
   }, []);
   const handleCommitPaths = useCallback((id: string, paths: Path[], satinCenterlines?: Path[]) => {
-    useProjectStore.getState().updateObject(id, { paths, satinCenterlines });
+    // An omitted third argument PRESERVES the object's persisted satin
+    // decomposition (see commitPathsPatch) — a plain vertex drag or point
+    // insert must never erase `satinCenterlines`.
+    const existing = useProjectStore.getState().project.objects.find((x) => x.id === id);
+    useProjectStore.getState().updateObject(id, commitPathsPatch(existing, paths, satinCenterlines));
   }, []);
   const handleCommitNodes = useCallback((id: string, nodes: NodePath[]) => {
     const o = useProjectStore.getState().project.objects.find((x) => x.id === id);
@@ -2153,6 +2157,10 @@ const ObjectShape = memo(function ObjectShape({
   // a node-drag is a single undo step and the outline follows the handle).
   const [livePaths, setLivePaths] = useState<Path[] | null>(null);
   const paths = livePaths ?? object.paths;
+  // Live satin-centerline geometry during a spine-handle drag (same one-undo-
+  // step pattern as livePaths).
+  const [liveCenters, setLiveCenters] = useState<Path[] | null>(null);
+  const centerlines = liveCenters ?? object.satinCenterlines;
   // Editable control nodes (running/fill/satin). Absent → legacy polyline editing.
   const nodeRings = object.nodes;
   const closedRings = object.type === "fill";
@@ -2556,6 +2564,59 @@ const ObjectShape = memo(function ObjectShape({
             );
           }),
         )}
+
+      {/* Persisted auto-satin CENTERLINES of a satin-classified fill — the
+          editable spine of each sewn column. Dashed strokes + small hollow
+          handles, visually distinct from the outline's path nodes. Dragging a
+          handle reshapes the sewn column: the engine's authored-centerline
+          path (authoredForRegion → columnsFromCenterlines) re-derives the
+          rails from these strokes on every compile. Absolute mm inside the
+          object's Group, so the object transform applies exactly once. */}
+      {editingNodes && isFill && centerlines && centerlines.length > 0 && (
+        <>
+          {centerlines.map((cl, ci) => (
+            <Line
+              key={`cl-${ci}`}
+              points={cl.flatMap((p) => [px(p.x), py(p.y)])}
+              stroke={C.salted}
+              strokeWidth={1.5}
+              dash={[5, 4]}
+              listening={false}
+              perfectDrawEnabled={false}
+            />
+          ))}
+          {centerlines.map((cl, ci) =>
+            cl.map((p, vi) => (
+              <Circle
+                key={`clh-${ci}-${vi}`}
+                x={px(p.x)}
+                y={py(p.y)}
+                radius={3.5}
+                fill={C.cream}
+                stroke={C.salted}
+                strokeWidth={2}
+                draggable
+                onDragStart={() =>
+                  setLiveCenters(object.satinCenterlines!.map((s) => s.map((q) => ({ ...q }))))
+                }
+                onDragMove={(e) => {
+                  const m = toMm(e.target.x(), e.target.y());
+                  setLiveCenters((prev) => {
+                    const base = prev ?? object.satinCenterlines!;
+                    return base.map((s, si) =>
+                      si === ci ? s.map((q, qi) => (qi === vi ? m : q)) : s,
+                    );
+                  });
+                }}
+                onDragEnd={() => {
+                  if (liveCenters) onCommitPaths(object.id, object.paths, liveCenters);
+                  setLiveCenters(null);
+                }}
+              />
+            )),
+          )}
+        </>
+      )}
     </Group>
   );
 });
