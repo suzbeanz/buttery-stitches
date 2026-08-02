@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
+
+const CalibrateDialog = lazy(() => import("./CalibrateDialog"));
 import { useProjectStore } from "../store/projectStore";
 import { useEditorStore } from "../store/editorStore";
 import { mmToInch, inchToMm } from "../lib/units";
@@ -198,6 +200,8 @@ export default function DesignPanel() {
       <FabricTypePicker />
 
       <ThreadWeightPicker />
+
+      <CalibrationRow />
 
       <FabricPicker />
 
@@ -473,6 +477,42 @@ function FabricTypePicker() {
         ))}
       </select>
     </label>
+  );
+}
+
+/** Fabric calibration: launch the guided sew-and-measure wizard, and show the
+ *  applied state (with a one-click clear) when this project carries fitted
+ *  physics. See lib/calibration.ts. */
+function CalibrationRow() {
+  const calibration = useProjectStore((s) => s.project.calibration);
+  const updateProject = useProjectStore((s) => s.updateProject);
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={() => setOpen(true)}
+        className="rounded-sm border-2 border-ink/40 px-2 py-1 font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/70 hover:bg-butter-200 hover:text-ink"
+      >
+        Calibrate fabric…
+      </button>
+      {calibration && (
+        <span className="flex items-center gap-1 text-[11px] text-navy/70">
+          calibrated ✓
+          <button
+            onClick={() => updateProject({ calibration: undefined })}
+            className="text-navy/40 underline hover:text-navy"
+            aria-label="Clear fabric calibration"
+          >
+            clear
+          </button>
+        </span>
+      )}
+      {open && (
+        <Suspense fallback={null}>
+          <CalibrateDialog onClose={() => setOpen(false)} />
+        </Suspense>
+      )}
+    </div>
   );
 }
 
