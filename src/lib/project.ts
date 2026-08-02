@@ -57,10 +57,25 @@ export function parseProject(value: unknown): Project {
     hoop: normalizeHoop(p.hoop),
     colors: (p.colors as unknown[]).map(normalizeColor),
     objects: (p.objects as unknown[]).map(normalizeObject),
+    calibration: normalizeCalibration(p.calibration),
   };
   // Continue numbering new objects from where the opened document left off.
   syncObjectCounter(project.objects);
   return project;
+}
+
+/** A fabric calibration survives only when both constants are finite and in
+ *  the physically plausible range the fitter searches — a hand-edited file
+ *  can't smuggle in physics that would warp the design absurdly. */
+function normalizeCalibration(v: unknown): Project["calibration"] {
+  if (typeof v !== "object" || v === null) return undefined;
+  const c = v as { pullStrain?: unknown; backing?: unknown };
+  const p = c.pullStrain;
+  const b = c.backing;
+  if (typeof p !== "number" || typeof b !== "number") return undefined;
+  if (!Number.isFinite(p) || !Number.isFinite(b)) return undefined;
+  if (p < 0 || p > 0.3 || b < 0.01 || b > 0.5) return undefined;
+  return { pullStrain: p, backing: b };
 }
 
 /** A finite document dimension (mm) in [1, 100000]; non-finite → the default.

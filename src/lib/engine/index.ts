@@ -21,6 +21,7 @@ import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
 import { dropShortStitches, splitLongTravels } from "./resample";
 import { makeSatinFromRails } from "../objects";
 import { newId } from "../id";
+import { applyPrecompensation } from "../bench/distortion";
 
 export * from "./running";
 export * from "./satin";
@@ -1996,12 +1997,22 @@ export function generateDesign(
     pushTie(out, prevPoint, toward, { id: lastObj.id, colorId: lastObj.colorId });
   }
 
+  // Calibrated predictive pull compensation: when the project carries fitted
+  // per-fabric physics (from the user's own swatch sew-out — see
+  // lib/calibration.ts), pre-warp the stream so the SEWN result lands on the
+  // digitized intent. Runs before the safety passes so spacing/length floors
+  // re-validate the shifted coordinates. Projects without a calibration
+  // (including every woven default, which measured dead-on) are untouched.
+  const compensated = project.calibration
+    ? applyPrecompensation(out, 6, project.calibration)
+    : out;
+
   // Hoop clamp runs FIRST so the spacing/coincidence safety passes apply to the
   // clamped coordinates (snapping two edge stitches onto the boundary line can
   // otherwise compress their gap below the jam floor).
   return capStitchLength(
     levelInnerTurns(
-      enforceMinSpacing(collapseCoincident(clampCompToHoop(out, project.widthMm, project.heightMm))),
+      enforceMinSpacing(collapseCoincident(clampCompToHoop(compensated, project.widthMm, project.heightMm))),
     ),
   );
 }

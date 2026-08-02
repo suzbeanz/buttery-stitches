@@ -268,6 +268,12 @@ export interface Project {
    *  image is imported). Lets the app warn when a stored design predates the
    *  current digitizer — re-exporting never re-traces. */
   digitizedBuild?: string;
+  /** Fitted per-fabric distortion physics from the user's own calibration
+   *  sew-out (lib/calibration.ts). Present ⇒ the engine pre-warps the stream
+   *  so the sewn result lands on the digitized intent; absent (every woven
+   *  default) ⇒ untouched. Serialized with the project so preview and export
+   *  can never disagree about compensation. */
+  calibration?: { pullStrain: number; backing: number };
   colors: ThreadColor[];
   /** ORDER = stitch sequence. The first object is stitched first. */
   objects: EmbObject[];

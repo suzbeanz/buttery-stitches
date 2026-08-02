@@ -32,11 +32,19 @@ import type { EngineStitch } from "../engine";
  * fleece before wiring compensation into the pipeline for those profiles.
  */
 
-/** Thread contraction: a stitch's rest length is (1 − strain) × its drawn length. */
+/** Thread contraction: a stitch's rest length is (1 − strain) × its drawn length.
+ *  Default; per-fabric calibrations (src/lib/calibration.ts) override per call. */
 export const PULL_STRAIN = 0.06;
 /** Fabric/backing stiffness: per-iteration fraction a node is pulled back toward
- *  its placed (anchor) position. Higher = stiffer fabric = less distortion. */
+ *  its placed (anchor) position. Higher = stiffer fabric = less distortion.
+ *  Default; per-fabric calibrations override per call. */
 export const BACKING = 0.08;
+
+/** Per-call physics overrides — the fitted constants of a fabric calibration. */
+export interface DistortionOpts {
+  pullStrain?: number;
+  backing?: number;
+}
 /** Relaxation iterations (equilibrium of a few-thousand-node network is cheap). */
 export const RELAX_ITERS = 80;
 /** Penetrations closer than this (mm) are the same fabric node (ties, overlaps). */
@@ -61,12 +69,14 @@ interface Network {
   /** placed (digitized target) position per fabric node. */
   nodes: Point[];
   springs: Spring[];
+  /** fabric-node index per design entry (−1 for jumps/trims/stops). */
+  stitchNode: Int32Array;
 }
 
 /** Merge near-coincident penetrations into shared fabric nodes and make a spring
  *  (rest length PULL_STRAIN under the drawn length) per consecutive same-colour
  *  stitch. */
-function buildNetwork(design: EngineStitch[]): Network {
+function buildNetwork(design: EngineStitch[], pullStrain = PULL_STRAIN): Network {
   const cell = NODE_MERGE_MM;
   const key = (x: number, y: number) => `${Math.round(x / cell)},${Math.round(y / cell)}`;
   const nodeOf = new Map<string, number>();
@@ -78,27 +88,29 @@ function buildNetwork(design: EngineStitch[]): Network {
     return i;
   };
   const springs: Spring[] = [];
+  const stitchNode = new Int32Array(design.length).fill(-1);
   let prev: EngineStitch | null = null;
-  for (const s of design) {
+  design.forEach((s, si) => {
     if (isReal(s)) {
       const ni = nodeIndex(s);
+      stitchNode[si] = ni;
       if (prev && isReal(prev) && prev.colorId === s.colorId) {
         const a = nodeIndex(prev);
         if (a !== ni) {
           const L = Math.hypot(s.x - prev.x, s.y - prev.y);
-          springs.push({ a, b: ni, rest: L * (1 - PULL_STRAIN) });
+          springs.push({ a, b: ni, rest: L * (1 - pullStrain) });
         }
       }
     }
     prev = s;
-  }
-  return { nodes, springs };
+  });
+  return { nodes, springs, stitchNode };
 }
 
 /** Relax the network to equilibrium: spring distance constraints toward each rest
  *  length, plus a backing pull of every node toward its `anchor` (where the needle
  *  placed it). `start` is the initial guess. Returns the landed positions. */
-function relax(start: Point[], anchorX: Float64Array, anchorY: Float64Array, springs: Spring[]): { x: Float64Array; y: Float64Array } {
+function relax(start: Point[], anchorX: Float64Array, anchorY: Float64Array, springs: Spring[], backing = BACKING): { x: Float64Array; y: Float64Array } {
   const n = start.length;
   const px = new Float64Array(n), py = new Float64Array(n);
   for (let i = 0; i < n; i++) { px[i] = start[i].x; py[i] = start[i].y; }
@@ -113,21 +125,21 @@ function relax(start: Point[], anchorX: Float64Array, anchorY: Float64Array, spr
       px[sp.b] -= ox; py[sp.b] -= oy;
     }
     for (let i = 0; i < n; i++) {
-      px[i] += BACKING * (anchorX[i] - px[i]);
-      py[i] += BACKING * (anchorY[i] - py[i]);
+      px[i] += backing * (anchorX[i] - px[i]);
+      py[i] += backing * (anchorY[i] - py[i]);
     }
   }
   return { x: px, y: py };
 }
 
 /** Predict the fabric pull for a compiled stitch stream. Pure; deterministic. */
-export function simulateDistortion(design: EngineStitch[]): DistortionResult {
-  const { nodes, springs } = buildNetwork(design);
+export function simulateDistortion(design: EngineStitch[], opts: DistortionOpts = {}): DistortionResult {
+  const { nodes, springs } = buildNetwork(design, opts.pullStrain);
   const n = nodes.length;
   if (n === 0 || springs.length === 0) return { meanMm: 0, maxMm: 0, pullInMm: 0 };
   const ax = new Float64Array(n), ay = new Float64Array(n);
   for (let i = 0; i < n; i++) { ax[i] = nodes[i].x; ay[i] = nodes[i].y; }
-  const { x: px, y: py } = relax(nodes, ax, ay, springs);
+  const { x: px, y: py } = relax(nodes, ax, ay, springs, opts.backing);
 
   let cx = 0, cy = 0;
   for (let i = 0; i < n; i++) { cx += nodes[i].x; cy += nodes[i].y; }
@@ -141,6 +153,32 @@ export function simulateDistortion(design: EngineStitch[]): DistortionResult {
     if (tl > 1e-6) pullIn += (dx * txx + dy * tyy) / tl;
   }
   return { meanMm: sum / n, maxMm: max, pullInMm: pullIn / n };
+}
+
+/**
+ * The landed position of every REAL penetration when the needle places the
+ * design exactly as digitized — the raw simulation output the calibration fit
+ * compares against ruler measurements. Returns an array parallel to `design`
+ * (null for jumps/trims/stops), so a caller can group landed positions by
+ * `objectId` and measure a landed shape the way a user measures the sew-out.
+ */
+export function landedStitchPositions(
+  design: EngineStitch[],
+  opts: DistortionOpts = {},
+): (Point | null)[] {
+  const { nodes, springs, stitchNode } = buildNetwork(design, opts.pullStrain);
+  if (nodes.length === 0 || springs.length === 0) {
+    return design.map((s) => (isReal(s) ? { x: s.x, y: s.y } : null));
+  }
+  const ax = new Float64Array(nodes.length), ay = new Float64Array(nodes.length);
+  for (let i = 0; i < nodes.length; i++) { ax[i] = nodes[i].x; ay[i] = nodes[i].y; }
+  const { x, y } = relax(nodes, ax, ay, springs, opts.backing);
+  return design.map((s, si) => {
+    const ni = stitchNode[si];
+    if (ni < 0) return null;
+    // The node landed at (x,y); this stitch rides the node's displacement.
+    return { x: s.x + (x[ni] - nodes[ni].x), y: s.y + (y[ni] - nodes[ni].y) };
+  });
 }
 
 export interface PrecompResult {
@@ -162,8 +200,8 @@ export interface PrecompResult {
  * before (the raw pull) and after (≈0), so the benefit is measured, not assumed.
  * The returned `placed` positions are the pre-warped geometry the engine would sew.
  */
-export function precompensate(design: EngineStitch[], iters = 6): PrecompResult {
-  const { nodes: target, springs } = buildNetwork(design);
+export function precompensate(design: EngineStitch[], iters = 6, opts: DistortionOpts = {}): PrecompResult {
+  const { nodes: target, springs } = buildNetwork(design, opts.pullStrain);
   const n = target.length;
   if (n === 0 || springs.length === 0) return { beforeMm: 0, afterMm: 0, target, placed: target };
   const tx = new Float64Array(n), ty = new Float64Array(n);
@@ -173,7 +211,7 @@ export function precompensate(design: EngineStitch[], iters = 6): PrecompResult 
   const land = (placed: Point[]) => {
     const ax = new Float64Array(n), ay = new Float64Array(n);
     for (let i = 0; i < n; i++) { ax[i] = placed[i].x; ay[i] = placed[i].y; }
-    return relax(placed, ax, ay, springs);
+    return relax(placed, ax, ay, springs, opts.backing);
   };
   const errorVs = (lx: Float64Array, ly: Float64Array) => {
     let s = 0;
@@ -199,13 +237,15 @@ export function precompensate(design: EngineStitch[], iters = 6): PrecompResult 
  * its nearest fabric node, so the sewn-out result lands on the digitized intent.
  * This is what an engine would emit once predictive compensation is enabled.
  *
- * NOTE: the model constants (PULL_STRAIN, BACKING) are physically plausible but not
- * yet CALIBRATED to a real sew-out, so this is provided as the proven pipeline /
- * opt-in path — turning it on by default should wait on calibration and on
- * reconciling with the engine's existing heuristic pullComp (don't double-count).
+ * NOTE: the July 2026 woven sew-out measured DEAD-ON with the engine's heuristic
+ * allowances alone, so this stays OFF for woven defaults. It runs only for a
+ * project carrying an explicit per-fabric calibration (Project.calibration,
+ * fitted from the user's own swatch sew-out via src/lib/calibration.ts) — the
+ * fitted constants describe the RESIDUAL the heuristics missed on that fabric,
+ * so applying the correction on top does not double-count.
  */
-export function applyPrecompensation(design: EngineStitch[], iters = 6): EngineStitch[] {
-  const { target, placed } = precompensate(design, iters);
+export function applyPrecompensation(design: EngineStitch[], iters = 6, opts: DistortionOpts = {}): EngineStitch[] {
+  const { target, placed } = precompensate(design, iters, opts);
   if (target.length === 0) return design;
   // Correction field, indexed by the same NODE_MERGE_MM grid buildNetwork used.
   const cell = NODE_MERGE_MM;
