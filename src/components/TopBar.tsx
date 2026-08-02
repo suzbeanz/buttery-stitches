@@ -29,7 +29,7 @@ import {
 import { useShallow } from "zustand/react/shallow";
 import { useProjectStore, useTemporalStore } from "../store/projectStore";
 import { useEditorStore } from "../store/editorStore";
-import { downloadProject, loadProjectFromFile } from "../lib/embproj";
+import { downloadProject, loadProjectFromFile, safeFileBase } from "../lib/embproj";
 import { buildWorksheet, worksheetHtml } from "../lib/worksheet";
 import { fixStitchesWithReport, type CleanupReport } from "../lib/fix";
 import { type ShapeKind } from "../lib/shapes";
@@ -87,6 +87,7 @@ export default function TopBar({
   saveStatus?: SaveStatus;
 }) {
   const project = useProjectStore((s) => s.project);
+  const updateProject = useProjectStore((s) => s.updateProject);
   const newProject = useProjectStore((s) => s.newProject);
   const setProject = useProjectStore((s) => s.setProject);
   const addObject = useProjectStore((s) => s.addObject);
@@ -283,7 +284,7 @@ export default function TopBar({
   }
 
   function saveCopy() {
-    downloadProject(project);
+    downloadProject(project, safeFileBase(project.name) ?? "design");
     toast("Project saved to your downloads", "success");
   }
 
@@ -344,6 +345,17 @@ export default function TopBar({
           Buttery&nbsp;Stitches
         </span>
       </button>
+
+      {/* Design name — inline-editable; becomes the .embproj filename, the
+          machine-file base name, and the label sewn into DST/PES headers. */}
+      <input
+        value={project.name ?? ""}
+        onChange={(e) => updateProject({ name: e.target.value.slice(0, 64) || undefined })}
+        placeholder="Untitled design"
+        aria-label="Design name"
+        spellCheck={false}
+        className="mx-1 hidden w-32 shrink rounded-sm border border-transparent bg-transparent px-1.5 py-0.5 font-body text-sm text-cream placeholder:text-cream/50 hover:border-cream/30 focus:border-cream/60 focus:outline-none md:block lg:w-40"
+      />
 
       {/* File group — inline on wide screens; tucked into the "More" menu on narrow. */}
       <div className="hidden items-center gap-1 lg:flex">

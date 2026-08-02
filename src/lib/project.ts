@@ -58,6 +58,7 @@ export function parseProject(value: unknown): Project {
     colors: (p.colors as unknown[]).map(normalizeColor),
     objects: (p.objects as unknown[]).map(normalizeObject),
     calibration: normalizeCalibration(p.calibration),
+    name: typeof p.name === "string" && p.name.trim() ? p.name.trim().slice(0, 64) : undefined,
   };
   // Continue numbering new objects from where the opened document left off.
   syncObjectCounter(project.objects);

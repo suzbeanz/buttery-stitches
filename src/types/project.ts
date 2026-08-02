@@ -268,6 +268,9 @@ export interface Project {
    *  image is imported). Lets the app warn when a stored design predates the
    *  current digitizer — re-exporting never re-traces. */
   digitizedBuild?: string;
+  /** User-visible design name: the .embproj filename, the machine-file base
+   *  name, and the label sewn into DST/PES headers. Absent = untitled. */
+  name?: string;
   /** Fitted per-fabric distortion physics from the user's own calibration
    *  sew-out (lib/calibration.ts). Present ⇒ the engine pre-warps the stream
    *  so the sewn result lands on the digitized intent; absent (every woven

@@ -5,6 +5,30 @@ Grounded in a full read of `src/lib/engine/`, `src/lib/trace/`, `src/lib/text/`,
 `src/lib/export/`, and the editor (`src/components/`). File references are the
 evidence; the goal is a **prioritized, measurable** path — not a feature wishlist.
 
+## 2026-08 status update (parity tranches 1–3)
+
+Landed since the audit below was written — the audit's per-row detail is kept for
+history, read it with these on top:
+
+- **First-party tracer is the DEFAULT** (`trace/boundary.ts` + `fitcurve.ts`): crack-lattice
+  extraction with SHARED boundaries between touching colors, subpixel edge recovery and
+  least-squares fitting on anti-aliased sources, thin networks kept raw. imagetracerjs
+  remains a `tracer: "legacy"` fallback. Measured per corpus image by the fidelity ratchet
+  (`bench/imagepipeline.test.ts`); the AA A/B (`bench/tracer-ab.test.ts`) has legacy 0.9 pt
+  ahead on composite, native ahead on boundary chamfer.
+- **Fidelity metric** (`bench/fidelity.ts`): region IoU + boundary chamfer + thread ΔE +
+  spill → one 0–100 score; CI ratchet per corpus image; live badge in the digitize dialog;
+  **auto-tune** (`trace/autotune.ts`) grid-searches (colors × detail) against it.
+- **Editable auto-satin**: decomposition persisted on `satinCenterlines` at fix time,
+  draggable spine handles in the Points tool, and a "Break apart to satin columns" command.
+- **Export**: export-time decode-back verification for every native file; native **PES v6**
+  byte-identical to pyembroidery (true thread list); DST appliqué STOP native; design name
+  flows from the TopBar title into filenames and DST/PES headers.
+- **Calibration loop shipped** (`lib/calibration.ts` + Calibrate-fabric wizard): sew the
+  swatch, enter ruler measurements, deterministic least-squares fit of the pull physics,
+  per-fabric profiles, `Project.calibration` pre-warps the compiled stream. Woven stays
+  uncompensated (measured dead-on July 2026); knit/fleece await the user's real sew-outs.
+
 ## How to read this
 
 Each area lists what *this* engine does (with a file anchor), what the commercial leaders do, the
@@ -65,7 +89,7 @@ gathering, is the next real milestone.
 |---|---|---|---|---|
 | Tatami, concavity-aware | Boustrophedon cells + geodesic (Dijkstra) connectors, ¼-brick + jitter stagger (`fill.ts:463,876`) | Same class | none | `coverage`, `lenCV` ✓ |
 | Contour / echo | Distance-transform iso-contours, spiral order (`contour.ts:120`) | Contour/spiral | none | `coverage` ✓ |
-| Turning / flow | Rows ⟂ medial spine; multi-limb flow (`turning.ts:176,341`) | Stitch-along-form | **leaves end-gaps** | `coverage` = **97.6%** on crescent |
+| Turning / flow | Rows ⟂ medial spine (curvature-adaptive pitch, cap closure, strict-metric arbitration vs field); multi-limb flow (`turning.ts`) | Stitch-along-form | inner-edge thinning only (safety-floor limit) | `coverage` = **95.8%** honest-metric on crescent (was 93.0; flat-row ceiling ≈97.7) |
 | Gradient, blend, motif, carve, line-art | All present (`fill.ts`, `index.ts:707,783,792`) | All present | none–minor | `coverage`, `short%` |
 | Programmable/fancy/“stamp” fills | motif + carve only | Large pattern library | **content** | `needs metric` |
 

@@ -17,6 +17,7 @@ import {
 import { designFor, countStitches, countColorChanges } from "../lib/engine";
 import { validateDesign } from "../lib/engine/validate";
 import { buildTag } from "../lib/version";
+import { safeFileBase } from "../lib/embproj";
 
 /**
  * Export menu. Runs the stitch engine on the current project, shows a quick
@@ -114,7 +115,9 @@ export default function ExportMenu({
     setError(null);
     try {
       const plan = planFromDesign(design, project.colors);
-      const name = `buttery-stitches-${buildTag()}`;
+      // The design's own name leads; the build-tagged default remains for
+      // untitled work. The same base becomes the DST LA: / PES header label.
+      const name = safeFileBase(project.name) ?? `buttery-stitches-${buildTag()}`;
       await exportAndDownload(plan, name, {
         format,
         pesVersion,
@@ -122,7 +125,7 @@ export default function ExportMenu({
         onStage: setStage,
       });
       setOpen(false);
-      toast(`Exported buttery-stitches-${buildTag()}.${format} to your downloads`, "success");
+      toast(`Exported ${name}.${format} to your downloads`, "success");
     } catch (err) {
       const msg = friendlyExportError(err);
       setError(msg);
@@ -137,12 +140,14 @@ export default function ExportMenu({
     setError(null);
     try {
       const plan = planFromDesign(design, project.colors);
+      const base = safeFileBase(project.name) ?? `buttery-stitches-${buildTag()}`;
       const zip = await exportBundle(plan, EMB_FORMATS, {
         pesVersion,
-        label: `buttery-stitches-${buildTag()}`,
+        label: base,
+        baseName: base,
         onStage: setStage,
       });
-      downloadBytes(zip, `buttery-stitches-${buildTag()}.zip`, "application/zip");
+      downloadBytes(zip, `${base}.zip`, "application/zip");
       setOpen(false);
       toast(`Exported all ${EMB_FORMATS.length} formats as a .zip`, "success");
     } catch (err) {

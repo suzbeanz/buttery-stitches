@@ -24,6 +24,11 @@ export const LIMITS = {
   minDensity: 0.3, // mm/row — denser than this risks puckering
   maxStitchCount: 25000,
   maxSatinWidth: SATIN_MAX_WIDTH, // mm — wider satin sews loose; use a fill
+  // Below this a column is thinner than the needle can separate: the engine
+  // auto-widens to its 1.0 mm sewable floor, but the result reads bolder than
+  // drawn — typical of text under ~4 mm cap height at 40 wt. Physical limit;
+  // warn and suggest finer thread or a bigger size rather than pretend.
+  minSatinWidth: 1.2,
   largeFillAreaMm2: 200, // mm² — a fill this big really wants underlay
   // Measured (not parameter-derived) quality gates over the compiled stream:
   /** fills covering less than this fraction of their region show fabric gaps. */
@@ -145,6 +150,9 @@ export function validateDesign(design: EngineStitch[], project: Project): Warnin
 
   // A satin column wider than a single throw can span sews loose and floats —
   // past this it should really be a fill (the engine splits it, but warn anyway).
+  // And one NARROWER than a needle can separate gets auto-widened to the 1 mm
+  // sewable floor — tiny lettering will read bolder than drawn (physics, not a
+  // bug): say so and point at the real fixes.
   for (const o of project.objects) {
     if (o.type !== "satin") continue;
     const width = meanSatinWidthMm(o.paths);
@@ -153,6 +161,12 @@ export function validateDesign(design: EngineStitch[], project: Project): Warnin
         level: "warn",
         objectId: o.id,
         message: `"${o.name}" satin column is ${width.toFixed(1)} mm wide — wider than ${LIMITS.maxSatinWidth} mm sews loose; consider a fill.`,
+      });
+    } else if (width > 0 && width < LIMITS.minSatinWidth) {
+      warnings.push({
+        level: "warn",
+        objectId: o.id,
+        message: `"${o.name}" is only ${width.toFixed(1)} mm wide — thinner than a needle can separate, so it sews at the 1 mm minimum and reads bolder than drawn. Use 60 wt thread or make it larger.`,
       });
     }
   }

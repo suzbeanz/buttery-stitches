@@ -431,6 +431,12 @@ export default function TextDialog({
               onChange={(e) => setSize(Number(e.target.value))}
               className="input"
             />
+            {heightMm < 5 && (
+              <p className="mt-1 text-[11px] text-stamp">
+                Very small — strokes sew at the 1 mm needle minimum and read bolder than
+                drawn. Small text sews best at 60 wt thread and ≥4 mm height.
+              </p>
+            )}
           </label>
 
           <label className="flex-1 text-sm text-navy">
