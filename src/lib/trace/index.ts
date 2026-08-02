@@ -18,6 +18,7 @@ import {
 import { stackSmallFeatures } from "./stack";
 import { nameForRgb } from "./colorname";
 import { weldSliverGaps } from "./weld";
+import { traceLabelMap } from "./boundary";
 
 export * from "./simplify";
 export * from "./classify";
@@ -77,6 +78,12 @@ export interface DigitizeOptions {
   /** extend earlier-sewn regions under later neighbours so color boundaries
    *  can't open bare-fabric gaps when the thread pulls. Default on. */
   underlap?: boolean;
+  /** boundary extractor. "native" is the first-party crack tracer (shared
+   *  boundaries between colors, subpixel edge recovery) — extraction-exact,
+   *  but until its curve-fitting stage lands, the downstream simplify chain
+   *  treats its raw polylines worse than imagetracerjs's pre-fit curves, so
+   *  the legacy path remains the DEFAULT. Tracked by the tracer A/B test. */
+  tracer?: "native" | "legacy";
 }
 
 /** Detail level for auto-digitize: bolder & cleaner ↔ finer & busier. */
@@ -736,22 +743,30 @@ export function imageDataToObjects(
   // Detail level steers trace smoothing/omission AND the downstream
   // simplify/despeckle defaults together. Explicit opts still override the preset.
   const preset = DETAIL_PRESETS[opts.detail ?? "balanced"];
-  const td = ImageTracer.imagedataToTracedata(
-    { width: flat.width, height: flat.height, data: flat.data } as ImageData,
-    {
-      ...TRACE_OPTIONS,
-      // pathomit is in PIXELS of path length — scale it with the upscale factor
-      // so despeckling strength is resolution-independent (a "small stray piece"
-      // is the same physical size whether the source arrived at 128px or 512px).
-      pathomit: preset.pathomit * factor,
-      blurradius: preset.blurradius,
-      ltres: preset.ltres,
-      qtres: preset.qtres,
-      pal,
-      colorsampling: 0,
-      numberofcolors: pal.length,
-    },
-  ) as Tracedata;
+  // Boundary extraction: imagetracerjs (default) or the first-party crack
+  // tracer (`tracer: "native"`) — see the DigitizeOptions.tracer docs for why
+  // the default hasn't flipped yet.
+  const td =
+    opts.tracer !== "native"
+      ? (ImageTracer.imagedataToTracedata(
+          { width: flat.width, height: flat.height, data: flat.data } as ImageData,
+          {
+            ...TRACE_OPTIONS,
+            // pathomit is in PIXELS of path length — scale it with the upscale factor
+            // so despeckling strength is resolution-independent (a "small stray piece"
+            // is the same physical size whether the source arrived at 128px or 512px).
+            pathomit: preset.pathomit * factor,
+            blurradius: preset.blurradius,
+            ltres: preset.ltres,
+            qtres: preset.qtres,
+            pal,
+            colorsampling: 0,
+            numberofcolors: pal.length,
+          },
+        ) as Tracedata)
+      : traceLabelMap(flat, hasAntiAliasing(source) ? source : null, {
+          pathomitPx: preset.pathomit * factor,
+        });
   return tracedataToObjects(td, {
     simplifyTolMm: preset.simplifyTolMm,
     minAreaMm2: preset.minAreaMm2,

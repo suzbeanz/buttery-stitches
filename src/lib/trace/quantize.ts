@@ -17,6 +17,10 @@ export interface RasterImage {
 
 export interface QuantizedImage extends RasterImage {
   palette: RGB[];
+  /** Denoised per-pixel palette index (−1 = transparent), same pass that
+   *  produced `data` — the native boundary tracer consumes this directly
+   *  instead of re-segmenting the flattened RGBA. */
+  labels?: Int16Array;
 }
 
 /** Below this alpha a pixel is treated as transparent and left untouched. */
@@ -677,7 +681,7 @@ export function quantizeImage(
     out[o + 2] = b;
     out[o + 3] = 255;
   }
-  return { width, height, data: out, palette };
+  return { width, height, data: out, palette, labels };
 }
 
 /**
