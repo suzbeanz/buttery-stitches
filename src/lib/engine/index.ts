@@ -419,7 +419,17 @@ function acceptableSatin(
   // medial code caps total cells and falls back to fill if a region is enormous.
   const b = pathsBounds(region);
   const span = b ? Math.min(b.maxX - b.minX, b.maxY - b.minY) : 12;
-  const cellMm = Math.max(0.12, Math.min(0.4, span / 60));
+  // Resolution must track the STROKE WIDTH, not just the bounding box: a
+  // crest-sized border ring has a huge bbox but a ~2mm band, and at 0.4mm
+  // cells that band is 5 cells wide — the thinned skeleton lands off-centre
+  // (cell parity), the width caps then clip the far rail, and a bare strip
+  // runs down the whole flank (measured: ring coverage 0.88 at 0.4mm cells vs
+  // 0.996 at 0.15mm). width/14 keeps ~14 cells across any stroke.
+  const strokeW = meanStrokeWidthMm(region);
+  const cellMm = Math.max(
+    0.12,
+    Math.min(0.4, span / 60, strokeW > 0 ? strokeW / 14 : Infinity),
+  );
   // Small feature (an i/j tittle, a period, an accent) OR a small round dot (a golf
   // ball, an eye): its medial axis is a tiny cross that satins as a criss-cross
   // mess, and tatami leaves rough little rows. Lay ONE clean satin block across its
@@ -517,6 +527,10 @@ function principalAxis(ring: Path): { ux: number; uy: number; cx: number; cy: nu
 function sliverMendRun(patch: Path, stitchLength: number): Point[] | null {
   const ax = principalAxis(patch);
   if (ax.spanS > PATCH_SLIVER_MAX_W_MM || ax.spanT < ax.spanS * 2) return null;
+  // Long strips are beyond a mend's pay grade: a 20mm flank sliver needs the
+  // tatami patch (proven to cover it); skinny spine passes on that length
+  // follow the PCA axis of a gently CURVED strip and miss half of it.
+  if (ax.spanT > 8) return null;
   // Enough passes that the mend actually reads solid (~0.45mm per thread).
   const passes = Math.max(2, Math.ceil(ax.spanS / 0.45));
   // Midline: bucket boundary points along the axis, midpoint of each bucket's
@@ -1106,7 +1120,7 @@ export function generateObjectRuns(
         // mend ladder as satin patches: a thin sliver takes quiet spine runs, a
         // compact wedge takes one block — tatami rows across a tip at the
         // object grain read as a web fighting the turned rows around them.
-        for (const patch of residualRegions(region, turned, 0.3, TIP_PATCH_MIN_MM2)) {
+        for (const patch of residualRegions(region, turned, 0.2, TIP_PATCH_MIN_MM2)) {
           tops.push(
             sliverMendRun(patch, stitchLength) ??
               smallPatchSatinBlock(patch, density, fabric.pullMul) ??
@@ -1129,7 +1143,14 @@ export function generateObjectRuns(
       // back so they don't fan. Without this a self-crossing script loop (the 'l' in
       // "hello") shows a hole. Laid first so the satin sits on top at the seams.
       // (Line-art renders as regularized stroke satin via lineArtFill and skips this path.)
-      for (const patch of residualRegions(region, tops)) {
+      // Same low floor as the turned path's tip patching: on a 4mm glyph a
+      // 0.6mm² bare arm-end is 4% of the letter — far past visible — yet the
+      // old 2.2mm² default (tuned for big fills) ignored it. True inter-row
+      // specks stay below 0.5mm² after the residual dilate+simplify.
+      // 0.2mm cells: the coarser 0.3 grid's one-cell halo forgave ~0.45mm
+      // around every stitch and literally could not see a 1.3mm-wide bare
+      // arm-end that a finer sweep (and the eye) catches.
+      for (const patch of residualRegions(region, tops, 0.2, TIP_PATCH_MIN_MM2)) {
         // A thin SLIVER (a curve apex's crescent, an edge-hugging trail) mends
         // with quiet running passes along its own spine — a block or tatami
         // across it sprays visible stitches against the column grain. A SMALL
