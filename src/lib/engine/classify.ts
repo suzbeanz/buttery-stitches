@@ -29,18 +29,81 @@ export interface ClassifyOptions {
   satinMaxWidthMm?: number;
 }
 
-/** Mean stroke width (mm) of a region: 2·netArea / totalPerimeter, holes-aware. */
+/** Mean stroke width (mm) of a region: 2·netArea / totalPerimeter, holes-aware.
+ *  Net area is the |signed sum| over all rings, so winding conveys hole-ness —
+ *  the old "ring 0 is THE outer, everything else subtracts" broke on
+ *  multi-component regions (a 12-glyph text object read as width 0). */
 export function meanStrokeWidthMm(rings: Path[]): number {
   const usable = rings.filter((r) => r.length >= 3);
   if (usable.length === 0) return 0;
-  const outer = usable[0];
-  const holes = usable.slice(1);
-  const netArea =
-    polygonArea(outer) - holes.reduce((s, h) => s + polygonArea(h), 0);
-  const totalPer =
-    polygonPerimeter(outer) + holes.reduce((s, h) => s + polygonPerimeter(h), 0);
+  // Even containment depth = outer (adds), odd = hole (subtracts). No winding
+  // convention required — hand-drawn, traced and font geometry all mix them.
+  const depths = ringDepths(usable);
+  const netArea = usable.reduce(
+    (s, r, i) => s + Math.abs(polygonArea(r)) * (depths[i] % 2 === 0 ? 1 : -1),
+    0,
+  );
+  const totalPer = usable.reduce((s, r) => s + polygonPerimeter(r), 0);
   if (totalPer <= 0 || netArea <= 0) return 0;
   return (2 * netArea) / totalPer;
+}
+
+/** Containment depth of each ring: how many OTHER rings its first vertex sits
+ *  inside. Even = outer boundary, odd = hole. */
+function ringDepths(usable: Path[]): number[] {
+  return usable.map((r, i) => {
+    let d = 0;
+    for (let j = 0; j < usable.length; j++) {
+      if (j !== i && pointInsideRing(r[0], usable[j])) d++;
+    }
+    return d;
+  });
+}
+
+/** True when `p` lies inside ring (even-odd crossing test). */
+function pointInsideRing(p: Point, ring: Path): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i], b = ring[j];
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x)
+      inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Split a multi-ring region into CONNECTED COMPONENTS: rings at even
+ * containment depth are outers, each odd-depth ring is a hole attached to the
+ * smallest outer containing it. A text object is one region with a component
+ * per glyph — processing it as a single blob starves the small glyphs (grid
+ * sized to the phrase, dots with no skeleton at all).
+ */
+export function splitComponents(rings: Path[]): Path[][] {
+  const usable = rings.filter((r) => r.length >= 3);
+  if (usable.length <= 1) return usable.length ? [usable] : [];
+  const depth = ringDepths(usable);
+  const areas = usable.map((r) => Math.abs(polygonArea(r)));
+  const comps: Path[][] = [];
+  const owner = new Array<number>(usable.length).fill(-1);
+  usable.forEach((r, i) => {
+    if (depth[i] % 2 === 0) {
+      owner[i] = comps.length;
+      comps.push([r]);
+    }
+  });
+  usable.forEach((r, i) => {
+    if (depth[i] % 2 === 0) return;
+    let best = -1, bestArea = Infinity;
+    usable.forEach((o, j) => {
+      if (depth[j] % 2 !== 0 || areas[j] <= areas[i]) return;
+      if (areas[j] < bestArea && pointInsideRing(r[0], o)) {
+        best = j;
+        bestArea = areas[j];
+      }
+    });
+    if (best >= 0) comps[owner[best]].push(r);
+  });
+  return comps;
 }
 
 /** Even-odd point-in-region test over a region's rings (outer + holes). */
