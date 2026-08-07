@@ -1218,6 +1218,7 @@ function buildColumn(
     dense.map((p) => halfWidthAtMm(dt, grid, p.x, p.y) + OVERSHOOT_MM),
     loop,
   );
+
   // Typical stroke half-width for this column (median of the DT samples). Where
   // strokes meet — B's bowls into the stem, e's bowl into the bar — the inscribed
   // circle balloons, so the raw DT half spikes and the perpendicular ray bolts
@@ -1460,26 +1461,59 @@ function buildColumn(
   const MIN_INNER_ADV_MM = 0.05;
   const chosenL = idx.map((i) => ({ ...left[i] }));
   const chosenR = idx.map((i) => ({ ...right[i] }));
+  // Compare each throw against the LAST ACCEPTED one (not merely its immediate
+  // neighbour): at an S-bend the lagging side flips mid-curve, and per-step
+  // pinning alternated sides and left a crossing lattice anyway (a 9mm wedge
+  // petal sewed 37% of its throws crossed). Pin once; if the throw STILL
+  // crosses the accepted front, DROP it — a dropped throw is a hair of extra
+  // pitch that the density compensation already bounds, while a crossed throw
+  // is a visible defect on fabric.
+  const keep: number[] = idx.length ? [0] : [];
   for (let k = 1; k < idx.length; k++) {
-    if (!throwsCross(chosenL[k - 1], chosenR[k - 1], chosenL[k], chosenR[k])) continue;
-    const dl = Math.hypot(chosenL[k].x - chosenL[k - 1].x, chosenL[k].y - chosenL[k - 1].y);
-    const dr = Math.hypot(chosenR[k].x - chosenR[k - 1].x, chosenR[k].y - chosenR[k - 1].y);
-    // The outer side's direction is the trustworthy "forward" at a bend.
-    if (dl <= dr) {
-      const ux = (chosenR[k].x - chosenR[k - 1].x) / (dr || 1);
-      const uy = (chosenR[k].y - chosenR[k - 1].y) / (dr || 1);
-      chosenL[k] = { x: chosenL[k - 1].x + ux * MIN_INNER_ADV_MM, y: chosenL[k - 1].y + uy * MIN_INNER_ADV_MM };
-    } else {
-      const ux = (chosenL[k].x - chosenL[k - 1].x) / (dl || 1);
-      const uy = (chosenL[k].y - chosenL[k - 1].y) / (dl || 1);
-      chosenR[k] = { x: chosenR[k - 1].x + ux * MIN_INNER_ADV_MM, y: chosenR[k - 1].y + uy * MIN_INNER_ADV_MM };
+    const p = keep[keep.length - 1];
+    if (throwsCross(chosenL[p], chosenR[p], chosenL[k], chosenR[k])) {
+      const dl = Math.hypot(chosenL[k].x - chosenL[p].x, chosenL[k].y - chosenL[p].y);
+      const dr = Math.hypot(chosenR[k].x - chosenR[p].x, chosenR[k].y - chosenR[p].y);
+      // The outer side's direction is the trustworthy "forward" at a bend.
+      if (dl <= dr) {
+        const ux = (chosenR[k].x - chosenR[p].x) / (dr || 1);
+        const uy = (chosenR[k].y - chosenR[p].y) / (dr || 1);
+        chosenL[k] = { x: chosenL[p].x + ux * MIN_INNER_ADV_MM, y: chosenL[p].y + uy * MIN_INNER_ADV_MM };
+      } else {
+        const ux = (chosenL[k].x - chosenL[p].x) / (dl || 1);
+        const uy = (chosenL[k].y - chosenL[p].y) / (dl || 1);
+        chosenR[k] = { x: chosenR[p].x + ux * MIN_INNER_ADV_MM, y: chosenR[p].y + uy * MIN_INNER_ADV_MM };
+      }
+      if (throwsCross(chosenL[p], chosenR[p], chosenL[k], chosenR[k])) continue; // still folded — drop
     }
+    // A throw can clear its immediate predecessor yet still lie across an
+    // EARLIER accepted throw (fan wrap-around on a >90° bend — a wedge petal
+    // kept 16 such mid-air crossings). Test the last few accepted throws;
+    // near-pivot fan-mates (segments meeting within a thread's width) are the
+    // deliberate hand-style fan and stay.
+    let folded = false;
+    for (let b = keep.length - 1; b >= 0 && b >= keep.length - 6; b--) {
+      const q = keep[b];
+      if (!throwsCross(chosenL[q], chosenR[q], chosenL[k], chosenR[k])) continue;
+      const dmin = Math.min(
+        Math.hypot(chosenL[q].x - chosenL[k].x, chosenL[q].y - chosenL[k].y),
+        Math.hypot(chosenL[q].x - chosenR[k].x, chosenL[q].y - chosenR[k].y),
+        Math.hypot(chosenR[q].x - chosenL[k].x, chosenR[q].y - chosenL[k].y),
+        Math.hypot(chosenR[q].x - chosenR[k].x, chosenR[q].y - chosenR[k].y),
+      );
+      if (dmin > 0.2) {
+        folded = true;
+        break;
+      }
+    }
+    if (folded) continue;
+    keep.push(k);
   }
 
   // Alternate the leading rail each throw so they chain into a zig-zag; split
   // any over-wide throw into scattered sub-stitches (split satin, no seam).
-  const pairs: [Point, Point][] = idx.map((_, k) =>
-    k % 2 === 0 ? [chosenL[k], chosenR[k]] : [chosenR[k], chosenL[k]],
+  const pairs: [Point, Point][] = keep.map((k, j) =>
+    j % 2 === 0 ? [chosenL[k], chosenR[k]] : [chosenR[k], chosenL[k]],
   );
   const capped = staggeredSatin(pairs, MAX_THROW_MM, true);
   if (capped.length < 2) return null;
