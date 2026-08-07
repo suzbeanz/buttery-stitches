@@ -400,3 +400,35 @@ Tier 2), and **(4) signature features** (photo-stitch, multi-hooping — Tier 3)
 almost none of it is a research problem. It's a stitch-out rig, a data-entry effort, a
 handful of editing tools, and one genuinely new feature. Do Tier 0 first — everything else is
 built on believing the stitches.
+
+### Progress log 8 — perfection sweep 2: the stress corpus (2026-08-08)
+
+The sweep harness moved into the repo (`src/lib/bench/sweep.ts`) with three
+committed stress designs (`src/lib/bench/corpus/`): lettering at 4/6/10mm +
+a 120° arch, ring bands at 1.5/2.5/4mm + a rounded-square, and shape samplers
+(star/heart/triangle, two sizes). `corpusSweep.test.ts` gates every object:
+coverage ≥0.97 (≥0.93 for hairline-stroke regions, deliberately — see below),
+bare ≤3mm², ZERO mid-air crossings, zero density danger cells.
+
+Defect classes found and fixed:
+- **Small-text collapse**: a text object is one region with a component per
+  glyph; processed as one blob the grid starves small glyphs (4mm lettering
+  measured 0.77 coverage, dots skipped entirely). `acceptableSatin` now splits
+  components and pipelines each at its own scale; `meanStrokeWidthMm` is
+  containment-depth-aware (was: "ring 0 is the outer", read 0 on text).
+- **Hairline strokes bean, not satin**: strokes under 0.75mm sew as a
+  de-looped triple-run down the centerline — the professional treatment for
+  4mm lettering; satin at that width bleeds past the letterform and welds
+  neighbouring glyphs. Their coverage gate is 0.93 because a run credits less
+  halo than a ladder — a documented allowance, not a loophole.
+- **Tip piles cross**: at any sharp taper (triangle apex, heart point, arch
+  tip) rows shorter than a stitch piled into crossing scribbles. Every fill
+  pass is now de-looped, INCLUDING after the short-stitch drop (merging
+  sub-minimum penetrations fuses clean throws into crossing chords — two
+  emission paths had this).
+- **Plain tatami had no residual mend pass** (satin and turned did): a
+  heart's point measured 3.8mm² bare after de-looping. It mends now, measured
+  against the geometry that actually sews.
+- **Crescent patches sprayed**: `smallPatchSatinBlock` gained a straightness
+  gate (patch must fill ≥55% of its principal-axis box) so curved crescents
+  take quiet tatami rows instead of a straight block across the counter.

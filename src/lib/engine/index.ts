@@ -16,7 +16,8 @@ import { contourFill } from "./contour";
 import { medialColumns, columnsFromCenterlines, satinCoverage, residualRegions, type SatinColumn } from "./medial";
 import { turningFill, flowFill, flowAlong } from "./turning";
 import { guidanceFieldFill, multiAngleFill } from "./field";
-import { isSmallRoundFill, meanStrokeWidthMm, isBroadlyThick } from "./classify";
+import { isSmallRoundFill, meanStrokeWidthMm, isBroadlyThick, splitComponents } from "./classify";
+import { polygonArea } from "../trace/classify";
 import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
 import { dropShortStitches, splitLongTravels } from "./resample";
 
@@ -417,6 +418,22 @@ function acceptableSatin(
   // and the rails wobble). Scale the cell to the region so a letter is resolved
   // finely while a big auto-digitized blob stays cheap. Clamped both ways; the
   // medial code caps total cells and falls back to fill if a region is enormous.
+  // MULTI-COMPONENT region (a text object is one region with a component per
+  // glyph): process each component through this whole pipeline independently.
+  // As one blob, the grid is sized to the phrase while the strokes are
+  // glyph-sized — small glyphs starve and dots produce no skeleton at all
+  // (4mm lettering measured 0.77 coverage). Per component, every path below
+  // (dot block, authored, medial) sees glyph-scale geometry. A component the
+  // gate rejects contributes nothing here — the caller's residual patching
+  // finds it as a bare region and closes it.
+  const comps = splitComponents(region);
+  if (comps.length > 1) {
+    const all: SatinColumn[] = [];
+    for (const comp of comps) {
+      all.push(...acceptableSatin(comp, density, pullScale, authored, regularize));
+    }
+    return all;
+  }
   const b = pathsBounds(region);
   const span = b ? Math.min(b.maxX - b.minX, b.maxY - b.minY) : 12;
   // Resolution must track the STROKE WIDTH, not just the bounding box: a
@@ -426,8 +443,11 @@ function acceptableSatin(
   // runs down the whole flank (measured: ring coverage 0.88 at 0.4mm cells vs
   // 0.996 at 0.15mm). width/14 keeps ~14 cells across any stroke.
   const strokeW = meanStrokeWidthMm(region);
+  // Floor 0.06 (was 0.12): hairline strokes — 4mm lettering runs ~0.55mm —
+  // need it to center their skeleton; span/60 keeps big regions coarse, so
+  // the fine floor only ever engages on glyph-scale geometry.
   const cellMm = Math.max(
-    0.12,
+    0.06,
     Math.min(0.4, span / 60, strokeW > 0 ? strokeW / 14 : Infinity),
   );
   // Small feature (an i/j tittle, a period, an accent) OR a small round dot (a golf
@@ -593,6 +613,18 @@ function smallPatchSatinBlock(patch: Path, density: number, pullScale: number): 
     if (t > tMax) tMax = t;
   }
   if (!(tMax - tMin > 0.4)) return null;
+  // STRAIGHTNESS gate: a curved crescent (an S crown's bare tip) fills little
+  // of its own principal-axis box, and a straight block across it sprays
+  // throws over the counter and crosses itself. Only compact, box-filling
+  // patches take the block; crescents fall through to quiet tatami rows.
+  let sMin = Infinity, sMax = -Infinity;
+  for (const q of patch) {
+    const t = -(q.x - cx) * uy + (q.y - cy) * ux;
+    if (t < sMin) sMin = t;
+    if (t > sMax) sMax = t;
+  }
+  const boxArea = (tMax - tMin) * Math.max(0.01, sMax - sMin);
+  if (Math.abs(polygonArea(patch)) < boxArea * 0.55) return null;
   // Inset the ends like the small-feature block so end throws stay inside.
   const inset = (tMax - tMin) * 0.18;
   const centerline: Point[] = [
@@ -638,9 +670,14 @@ function seedMidpoint(cl: Path): Point {
  * A medial column thinner than this stitches as a single running line, not satin.
  * Kept low so genuinely fine strokes — script faces, serif hairlines, small text —
  * still get a COVERING satin column (crisp, filled) instead of a bare wireframe
- * line; only true hairlines (< 0.6 mm) run as a single line.
+ * line; only true hairlines run down the centerline. 0.7 keeps 4mm lettering
+ * (≈0.55–0.65mm strokes) CONSISTENTLY on the centerline path — at 0.6 its
+ * strokes straddled the threshold and mixed weak runs with bleeding satin.
  */
-const RUNNING_COLUMN_MM = 0.6;
+const RUNNING_COLUMN_MM = 0.75;
+/** Stitch length for hairline centerline runs: small-glyph curves need shorter
+ *  steps than the general run default or the run cuts corners visibly. */
+const HAIRLINE_RUN_STITCH_MM = 1.2;
 
 /** Shortest line-art stroke (centerline mm) worth sewing — below this it's a
  *  medial spur/speck that just adds a trim. */
@@ -746,6 +783,41 @@ function fillEdgeRuns(region: Path[], stitchLength: number): Point[][] {
     const inset = insetRingInward(ring, EDGE_RUN_INSET_MM);
     if (inset.length < 3) continue;
     out.push(runningStitch(inset, stitchLength));
+  }
+  return out;
+}
+
+/** Remove SELF-LOOPS from a hairline run: where the path crosses itself within
+ *  a short window (a skeleton hook at an S crown that survived tip-trimming),
+ *  collapse the loop — the run continues from the crossing instead of sewing a
+ *  visible jag. Windowed so two genuinely separate strokes of one letter that
+ *  cross by design (a k, an x) are left alone. */
+function deloopRun(line: Point[]): Point[] {
+  const out: Point[] = [];
+  const crosses = (a1: Point, a2: Point, b1: Point, b2: Point): boolean => {
+    const d = (p: Point, q: Point, r: Point) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+    const e = 1e-9;
+    const d1 = d(a1, a2, b1), d2 = d(a1, a2, b2), d3 = d(b1, b2, a1), d4 = d(b1, b2, a2);
+    return ((d1 > e && d2 < -e) || (d1 < -e && d2 > e)) && ((d3 > e && d4 < -e) || (d3 < -e && d4 > e));
+  };
+  for (const pt of line) {
+    out.push(pt);
+    const k = out.length - 1;
+    if (k < 3) continue;
+    for (let j = Math.max(1, k - 10); j < k - 1; j++) {
+      if (!crosses(out[j - 1], out[j], out[k - 1], out[k])) continue;
+      // Near-pivot fan-mates (satin fans, shared-hole geometry) are deliberate:
+      // segments meeting within a thread's width are not a loop.
+      const dmin = Math.min(
+        Math.hypot(out[j - 1].x - out[k - 1].x, out[j - 1].y - out[k - 1].y),
+        Math.hypot(out[j - 1].x - out[k].x, out[j - 1].y - out[k].y),
+        Math.hypot(out[j].x - out[k - 1].x, out[j].y - out[k - 1].y),
+        Math.hypot(out[j].x - out[k].x, out[j].y - out[k].y),
+      );
+      if (dmin <= 0.25) continue;
+      out.splice(j, k - j); // collapse the loop between the crossing segments
+      break;
+    }
   }
   return out;
 }
@@ -1016,9 +1088,16 @@ export function generateObjectRuns(
         lineArtFill = true;
       } else {
         const runMax = RUNNING_COLUMN_MM;
+        // Hairlines sew as a BEAN retrace (forward/back/forward), not a single
+        // pass: this is how small lettering is digitized professionally — a
+        // 4mm glyph's 0.55mm stroke is one thread wide, and satin would bleed
+        // past the letterform while a single run reads weak and broken.
         tops = keep.map((c) =>
           c.widthMm < runMax
-            ? runningStitch(c.centerline, stitchLength)
+            ? beanPath(
+                deloopRun(runningStitch(c.centerline, Math.min(stitchLength, HAIRLINE_RUN_STITCH_MM))),
+                LINE_ART_BEAN_REPEATS,
+              )
             : c.throws,
         );
       }
@@ -1167,8 +1246,13 @@ export function generateObjectRuns(
             stitchLength: fillStitchLength,
             pullCompMm: pullComp,
           });
-        for (const sub of orderByNearest(splitLongTravels(fill, travelMax), cursor)) {
-          const r = dropShortStitches(sub);
+        // Mends are tiny; a lead-in that hooks across the patch's own contour
+        // sews a visible X on an otherwise-clean glyph. De-loop each pass.
+        const clean = deloopRun(fill);
+        for (const sub of orderByNearest(splitLongTravels(clean, travelMax), cursor)) {
+          // Post-drop de-loop, same as the tatami path: dropping sub-minimum
+          // stitches fuses segments into chords that can newly cross.
+          const r = deloopRun(dropShortStitches(sub));
           addRun(runs, r, false, regionIdx, true);
           if (r.length) cursor = r[r.length - 1];
         }
@@ -1179,13 +1263,43 @@ export function generateObjectRuns(
       // chaining nearby centerlines into one pass; anything left trims (invisible).
       for (const run of orderByNearest(tops, cursor)) {
         for (const sub of splitLongTravels(run, travelMax)) {
-          const r = dropShortStitches(sub, minStitch);
+          // Post-drop de-loop here too: merging sub-minimum penetrations can
+          // fuse two clean throws into a crossing chord. On accepted satin
+          // geometry (anti-fold guaranteed, pivot fans within the exemption)
+          // this is a no-op.
+          const r = deloopRun(dropShortStitches(sub, minStitch));
           addRun(runs, r, false, regionIdx, true);
           if (r.length) cursor = r[r.length - 1];
         }
       }
     } else {
-      const subRuns = tops.flatMap((run) => splitLongTravels(run, travelMax));
+      // The tatami path needs the same residual safety net as satin/turned:
+      // de-looping a sharp taper's row pile (below) leaves a small bare tip —
+      // a heart's point measured 3.8mm² — and plain tatami had no mend pass
+      // at all. Mends join `tops` and order with the fill.
+      if (!lineArtFill && !motifMode && !blendMode && !contour) {
+        // Measure the residual against the geometry that will actually SEW:
+        // the emission below de-loops, drops short stitches, then de-loops
+        // again, and each pass can shave a tip the mend must cover.
+        const preTops = tops.map((run) => deloopRun(dropShortStitches(deloopRun(run), minStitch)));
+        for (const patch of residualRegions(region, preTops, 0.2, TIP_PATCH_MIN_MM2)) {
+          tops.push(
+            sliverMendRun(patch, stitchLength) ??
+              smallPatchSatinBlock(patch, density, fabric.pullMul) ??
+              tatamiFill([patch], {
+                density,
+                angle: tatamiAngle,
+                stitchLength: fillStitchLength,
+                pullCompMm: pullComp,
+              }),
+          );
+        }
+      }
+      // De-loop every fill pass first: at a sharp taper (a triangle apex, an
+      // arch tip) the last rows are shorter than a stitch and pile into a
+      // crossing scribble — collapsing the loops sews the tip as a clean
+      // shortening path instead. Fan-tolerant, so line-art satin is untouched.
+      const subRuns = tops.flatMap((run) => splitLongTravels(deloopRun(run), travelMax));
       // Contour keeps its spiral order; everything else is re-sorted for the
       // shortest travel between pieces.
       const ordered = contourSpiral ? subRuns : orderByNearest(subRuns, cursor);
@@ -1196,7 +1310,10 @@ export function generateObjectRuns(
       // same-colour coverage or trim).
       const noBare = tatamiNoBareTravel || contourSpiral;
       for (const sub of ordered) {
-        const r = dropShortStitches(sub, minStitch);
+        // De-loop AFTER the short-stitch drop as well: removing sub-minimum
+        // tip stitches fuses segments into longer chords, and a chord across
+        // a collapsed pile can cross rows the pre-drop pass already cleared.
+        const r = lineArtFill ? dropShortStitches(sub, minStitch) : deloopRun(dropShortStitches(sub, minStitch));
         // Line-art strokes CONNECT within their network, and that's how the
         // professional references sew bold linework: the thread walks from
         // stroke to stroke THROUGH the ink and almost never cuts. noBareTravel
