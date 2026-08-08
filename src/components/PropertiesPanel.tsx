@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   SlidersHorizontal,
   AlignStartVertical,
@@ -24,6 +24,7 @@ import {
   Plus,
   Trash2,
   Check,
+  Type as TypeIcon,
 } from "lucide-react";
 import { alignObjects, distributeObjects, type AlignEdge } from "../lib/arrange";
 import { designBounds, scaleAllPaths, translateAllPaths } from "../lib/layout";
@@ -41,6 +42,9 @@ import type {
 import { newId } from "../lib/id";
 import { convertObjectType, satinWidthOf, setSatinWidth } from "../lib/objects";
 import { splitRegionComponents } from "../lib/regions";
+
+// Lazy: pulls in opentype.js + fonts only when re-setting traced text.
+const RetypeTextDialog = lazy(() => import("./RetypeTextDialog"));
 import { toast } from "../store/toastStore";
 import { motifsByGroup } from "../lib/engine/motifs";
 import { buildOutline, DEFAULT_OUTLINE_WIDTH } from "../lib/outline";
@@ -72,6 +76,7 @@ export default function PropertiesPanel() {
     () => objects.filter((o) => selectedIds.includes(o.id)),
     [objects, selectedIds],
   );
+  const [showRetype, setShowRetype] = useState(false);
 
   // Selecting an object from nothing jumps to its properties — the tab is
   // otherwise sticky, so picking an object while parked on Design/Threads
@@ -143,9 +148,12 @@ export default function PropertiesPanel() {
               </p>
             </div>
           ) : selected.length > 1 ? (
-            <div className="px-3 py-4 text-center font-body text-sm text-navy/80">
-              {selected.length} objects selected. Use the <b>Arrange</b> tab to align,
-              group, or merge them.
+            <div className="flex flex-col gap-3 px-3 py-4 text-center font-body text-sm text-navy/80">
+              <div>
+                {selected.length} objects selected. Use the <b>Arrange</b> tab to align,
+                group, or merge them.
+              </div>
+              <RetypeButton onOpen={() => setShowRetype(true)} />
             </div>
           ) : (
             <>
@@ -178,10 +186,35 @@ export default function PropertiesPanel() {
                   <Spline size={15} /> Smooth lines &amp; curves
                 </button>
               </div>
+              {selected[0].type === "fill" && !selected[0].text && (
+                <div className="border-b border-navy/25 p-3">
+                  <RetypeButton onOpen={() => setShowRetype(true)} />
+                </div>
+              )}
             </>
           ))}
       </div>
+      {showRetype && (
+        <Suspense fallback={null}>
+          <RetypeTextDialog onClose={() => setShowRetype(false)} />
+        </Suspense>
+      )}
     </aside>
+  );
+}
+
+/** "Re-set as text" entry: the traced-lettering rescue. Traced letters sew
+ *  ragged; setting the words in a real font fitted to the same footprint is
+ *  the professional fix (see lib/text/retype). */
+function RetypeButton({ onOpen }: { onOpen: () => void }) {
+  return (
+    <button
+      onClick={onOpen}
+      data-tip="Replace traced lettering with clean type in the same spot"
+      className="tap-target flex w-full items-center justify-center gap-1.5 rounded-sm border border-ink/25 bg-cream py-1.5 text-sm text-ink-deep hover:bg-butter-200"
+    >
+      <TypeIcon size={15} /> Re-set as text…
+    </button>
   );
 }
 

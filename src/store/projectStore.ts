@@ -70,6 +70,9 @@ export interface ProjectState {
    *  segment `segIndex` of its node ring. No-op for closed/non-node objects. */
   splitObject: (id: string, segIndex: number, point: Point) => void;
   removeObjects: (ids: string[]) => void;
+  /** Replace `ids` with `objects` at the first removed position, in ONE step
+   *  (atomic undo restores the originals). New objects become the selection. */
+  replaceObjects: (ids: string[], objects: EmbObject[]) => void;
   updateObject: (id: string, patch: Partial<EmbObject>) => void;
   updateObjectParams: (id: string, patch: Partial<EmbObjectParams>) => void;
   /** Translate several objects together (one undo step). */
@@ -193,6 +196,21 @@ export const useProjectStore = create<ProjectState>()(
               objects: s.project.objects.filter((o) => !remove.has(o.id)),
             },
             selectedIds: s.selectedIds.filter((id) => !remove.has(id)),
+          };
+        }),
+
+      replaceObjects: (ids, objects) =>
+        set((s) => {
+          const remove = new Set(ids);
+          const at = s.project.objects.findIndex((o) => remove.has(o.id));
+          const kept = s.project.objects.filter((o) => !remove.has(o.id));
+          const idx = at < 0 ? kept.length : Math.min(at, kept.length);
+          return {
+            project: {
+              ...s.project,
+              objects: [...kept.slice(0, idx), ...objects, ...kept.slice(idx)],
+            },
+            selectedIds: objects.map((o) => o.id),
           };
         }),
 

@@ -432,3 +432,15 @@ Defect classes found and fixed:
 - **Crescent patches sprayed**: `smallPatchSatinBlock` gained a straightness
   gate (patch must fill ≥55% of its principal-axis box) so curved crescents
   take quiet tatami rows instead of a straight block across the counter.
+
+### Progress log 9 — "Re-set as text" in-app (2026-08-08)
+
+The crest rescue is now a feature, not a hand-run script: select traced
+lettering (one object or several), Properties → **Re-set as text…**, type the
+words, pick a font — the selection is replaced by authored type fitted to its
+exact union footprint (vertical strips auto-detected and rotated, the run
+stretched to match extended faces, small text emboldened past the satin
+threshold via ring offset). One undo restores the traced originals. Backed by
+`lib/text/retype.ts` (pure, unit-tested), `replaceObjects` (atomic store
+action), a live stitch preview in the dialog, and a DOM test of the full
+replace-and-undo path.
