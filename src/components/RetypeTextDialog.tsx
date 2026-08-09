@@ -3,6 +3,7 @@ import type { Font } from "opentype.js";
 import { Type } from "lucide-react";
 import { useProjectStore } from "../store/projectStore";
 import { FONTS, DEFAULT_FONT_ID, loadFont } from "../lib/text/fonts";
+import { listCustomFonts, type CustomFontMeta } from "../lib/text/customFonts";
 import { retypeToBox, suggestVertical, suggestEmboldenMm } from "../lib/text/retype";
 import { pathsBounds } from "../lib/geometry";
 import { generateDesign } from "../lib/engine";
@@ -38,6 +39,16 @@ export default function RetypeTextDialog({ onClose }: { onClose: () => void }) {
   const [text, setText] = useState("");
   const [fontId, setFontId] = useState(DEFAULT_FONT_ID);
   const [font, setFont] = useState<Font | null>(null);
+  // User-imported faces (a purchased embroidery font, a brand face) join the
+  // picker — loadFont already resolves `user-…` ids from the browser store.
+  const [customFonts, setCustomFonts] = useState<CustomFontMeta[]>([]);
+  useEffect(() => {
+    let alive = true;
+    listCustomFonts().then((f) => alive && setCustomFonts(f)).catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
   const [vertical, setVertical] = useState(() => (box ? suggestVertical(box) : false));
   const [weight, setWeight] = useState<0 | 0.1 | 0.2>(() =>
     box && suggestEmboldenMm(box, vertical) > 0 ? 0.1 : 0,
@@ -162,6 +173,15 @@ export default function RetypeTextDialog({ onClose }: { onClose: () => void }) {
                   {f.name}
                 </option>
               ))}
+              {customFonts.length > 0 && (
+                <optgroup label="Your fonts">
+                  {customFonts.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </label>
           <label className="block">
