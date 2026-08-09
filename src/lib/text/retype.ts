@@ -65,29 +65,42 @@ export function retypeToBox(opts: RetypeOptions): EmbObject {
     name: text,
   });
   let paths: Path[] = object.paths;
+  // The layout attaches per-glyph stroke centerlines (hand-authored or
+  // auto-derived); they must ride every transform below with the outlines or
+  // the engine would sew stale strokes at the original position. Embolden
+  // applies to OUTLINES only — the stroke middle doesn't move when a letter
+  // gets bolder.
+  let strokes: Path[] = object.satinCenterlines ?? [];
   if (opts.emboldenMm && opts.emboldenMm > 0) {
     // Negative distance = outward for font winding (outers grow, counters
     // shrink together) — validated on the crest's small lettering.
     paths = paths.map((r) => offsetPolyline(r, -opts.emboldenMm!, true));
   }
   const b0 = pathsBounds(paths);
-  if (!b0) return { ...object, paths: [], colorId };
+  if (!b0) return { ...object, paths: [], satinCenterlines: undefined, colorId };
   // Stretch along the reading direction to fill the box length.
   const targetLen = vertical ? box.y1 - box.y0 : box.x1 - box.x0;
   const len0 = Math.max(0.001, b0.maxX - b0.minX);
   const sx = targetLen / len0;
-  paths = paths.map((r) => r.map((p) => ({ x: (p.x - b0.minX) * sx, y: p.y - b0.minY })));
+  const stretch = (p: { x: number; y: number }) => ({ x: (p.x - b0.minX) * sx, y: p.y - b0.minY });
+  paths = paths.map((r) => r.map(stretch));
+  strokes = strokes.map((r) => r.map(stretch));
   if (vertical) {
     // Rotate 90° clockwise: reading top→bottom, letter tops facing right.
-    paths = paths.map((r) => r.map((p) => ({ x: -p.y, y: p.x })));
+    const rot = (p: { x: number; y: number }) => ({ x: -p.y, y: p.x });
+    paths = paths.map((r) => r.map(rot));
+    strokes = strokes.map((r) => r.map(rot));
   }
   const b1 = pathsBounds(paths)!;
   const dx = (box.x0 + box.x1) / 2 - (b1.minX + b1.maxX) / 2;
   const dy = (box.y0 + box.y1) / 2 - (b1.minY + b1.maxY) / 2;
-  paths = paths.map((r) => r.map((p) => ({ x: p.x + dx, y: p.y + dy })));
+  const shift = (p: { x: number; y: number }) => ({ x: p.x + dx, y: p.y + dy });
+  paths = paths.map((r) => r.map(shift));
+  strokes = strokes.map((r) => r.map(shift));
   return {
     ...object,
     paths,
+    satinCenterlines: strokes.length ? strokes : undefined,
     colorId,
     params: {
       density: opts.baseParams?.density ?? 0.32,

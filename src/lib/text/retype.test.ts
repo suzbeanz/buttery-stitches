@@ -48,3 +48,21 @@ describe("retypeToBox", () => {
     expect(suggestEmboldenMm({ x0: 0, y0: 0, x1: 30, y1: 12 }, false)).toBe(0);
   });
 });
+
+describe("retypeToBox stroke centerlines", () => {
+  it("transforms satinCenterlines with the outlines", () => {
+    const box = { x0: 70, y0: 20, x1: 76, y1: 60 };
+    const o = retypeToBox({ text: "CITY", font, box, vertical: true, colorId: "c" });
+    expect(o.satinCenterlines?.length ?? 0).toBeGreaterThan(0);
+    // Every stroke point must land inside the target box (plus tolerance) —
+    // stale untransformed strokes would sit far outside it.
+    for (const st of o.satinCenterlines!) {
+      for (const p of st) {
+        expect(p.x).toBeGreaterThan(box.x0 - 2);
+        expect(p.x).toBeLessThan(box.x1 + 2);
+        expect(p.y).toBeGreaterThan(box.y0 - 2);
+        expect(p.y).toBeLessThan(box.y1 + 2);
+      }
+    }
+  });
+});

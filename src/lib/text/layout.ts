@@ -17,6 +17,8 @@ import type { EmbObject, GlyphTweak, Path, Point } from "../../types/project";
 import { makeObjectFromPaths } from "../objects";
 import { pathsBounds, polylineLength } from "../geometry";
 import { authoredAlphabet, type AuthoredAlphabet } from "./authored";
+import { medialColumns } from "../engine/medial";
+import { meanStrokeWidthMm } from "../engine/classify";
 // opentype is only used as a type here; parsing happens in fonts.ts. This keeps
 // layout pure (it never fetches or reads files — the caller passes the Font).
 import type { Font } from "opentype.js";
@@ -244,6 +246,44 @@ interface FlatGlyph {
   cx: number;
 }
 
+/** Per-font cache of auto-derived glyph strokes, keyed by glyph index and
+ *  normalized to the glyph bbox (pen-position independent). */
+const autoStrokeCache = new WeakMap<Font, Map<number, [number, number][][]>>();
+
+/** Derive stroke centerlines for one glyph from a skeleton of its outline,
+ *  computed at a nominal 10mm cap in glyph-local space. Returns strokes in
+ *  the same font-unit frame as `rings`. */
+function autoGlyphStrokes(font: Font, glyph: { index?: number }, rings: Path[]): Path[] {
+  const b = pathsBounds(rings);
+  if (!b) return [];
+  const w = b.maxX - b.minX;
+  const h = b.maxY - b.minY;
+  if (w <= 0 || h <= 0) return [];
+  const key = glyph.index ?? -1;
+  let perFont = autoStrokeCache.get(font);
+  if (!perFont) {
+    perFont = new Map();
+    autoStrokeCache.set(font, perFont);
+  }
+  let norm = perFont.get(key);
+  if (!norm) {
+    const S = 10 / Math.max(w, h); // nominal 10mm glyph
+    const mm = rings.map((r) => r.map((p) => ({ x: (p.x - b.minX) * S, y: (p.y - b.minY) * S })));
+    const strokeW = meanStrokeWidthMm(mm);
+    const cellMm = Math.max(0.06, Math.min(0.15, strokeW > 0 ? strokeW / 14 : 0.15));
+    try {
+      const cols = medialColumns(mm, { density: 0.4, pullScale: 1, cellMm });
+      norm = cols
+        .filter((c) => c.centerline.length >= 2)
+        .map((c) => c.centerline.map((p): [number, number] => [p.x / (w * S), p.y / (h * S)]));
+    } catch {
+      norm = [];
+    }
+    perFont.set(key, norm);
+  }
+  return norm.map((st) => st.map(([nx, ny]) => ({ x: b.minX + nx * w, y: b.minY + ny * h })));
+}
+
 /** Lay a string flat, per glyph, in font units. */
 function glyphsFlat(
   font: Font,
@@ -271,6 +311,17 @@ function glyphsFlat(
         const h = b.maxY - b.minY;
         for (const st of spec) strokes.push(st.map(([nx, ny]) => ({ x: b.minX + nx * w, y: b.minY + ny * h })));
       }
+    } else if (rings.length) {
+      // AUTO-AUTHOR: fonts without a hand-authored alphabet get per-glyph
+      // strokes derived from a skeleton of the CLEAN glyph — computed once
+      // per glyph in pristine em-space geometry and cached, then transformed
+      // with the glyph through every baseline/stretch/arch. Downstream the
+      // engine snaps these to the true outline exactly as it does the
+      // hand-authored specs (and falls back to its own skeleton if they fail
+      // the coverage bar), so this is strictly a quality floor-raiser —
+      // notably for text that later gets stretched or bent, where a skeleton
+      // of the DEFORMED shape wobbles but a deformed clean skeleton doesn't.
+      for (const st of autoGlyphStrokes(font, glyph, rings)) strokes.push(st);
     }
     glyphs.push({ rings, strokes, cx: penX + adv / 2 });
     penX += adv + spacingUnits;
