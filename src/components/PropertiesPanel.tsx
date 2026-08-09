@@ -25,6 +25,7 @@ import {
   Trash2,
   Check,
   Type as TypeIcon,
+  PenLine as PenLineIcon,
 } from "lucide-react";
 import { alignObjects, distributeObjects, type AlignEdge } from "../lib/arrange";
 import { designBounds, scaleAllPaths, translateAllPaths } from "../lib/layout";
@@ -45,6 +46,8 @@ import { splitRegionComponents } from "../lib/regions";
 
 // Lazy: pulls in opentype.js + fonts only when re-setting traced text.
 const RetypeTextDialog = lazy(() => import("./RetypeTextDialog"));
+// Lazy: the hand-authoring stroke editor.
+const StrokeEditorDialog = lazy(() => import("./StrokeEditorDialog"));
 import { toast } from "../store/toastStore";
 import { motifsByGroup } from "../lib/engine/motifs";
 import { buildOutline, DEFAULT_OUTLINE_WIDTH } from "../lib/outline";
@@ -77,6 +80,7 @@ export default function PropertiesPanel() {
     [objects, selectedIds],
   );
   const [showRetype, setShowRetype] = useState(false);
+  const [strokeEditId, setStrokeEditId] = useState<string | null>(null);
 
   // Selecting an object from nothing jumps to its properties — the tab is
   // otherwise sticky, so picking an object while parked on Design/Threads
@@ -186,9 +190,16 @@ export default function PropertiesPanel() {
                   <Spline size={15} /> Smooth lines &amp; curves
                 </button>
               </div>
-              {selected[0].type === "fill" && !selected[0].text && (
-                <div className="border-b border-navy/25 p-3">
-                  <RetypeButton onOpen={() => setShowRetype(true)} />
+              {selected[0].type === "fill" && (
+                <div className="flex flex-col gap-2 border-b border-navy/25 p-3">
+                  {!selected[0].text && <RetypeButton onOpen={() => setShowRetype(true)} />}
+                  <button
+                    onClick={() => setStrokeEditId(selected[0].id)}
+                    data-tip="Hand-author the satin strokes — full control of where every column runs"
+                    className="tap-target flex w-full items-center justify-center gap-1.5 rounded-sm border border-ink/25 bg-cream py-1.5 text-sm text-ink-deep hover:bg-butter-200"
+                  >
+                    <PenLineIcon size={15} /> Edit satin strokes…
+                  </button>
                 </div>
               )}
             </>
@@ -197,6 +208,11 @@ export default function PropertiesPanel() {
       {showRetype && (
         <Suspense fallback={null}>
           <RetypeTextDialog onClose={() => setShowRetype(false)} />
+        </Suspense>
+      )}
+      {strokeEditId && (
+        <Suspense fallback={null}>
+          <StrokeEditorDialog objectId={strokeEditId} onClose={() => setStrokeEditId(null)} />
         </Suspense>
       )}
     </aside>

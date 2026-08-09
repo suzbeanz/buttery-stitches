@@ -444,3 +444,18 @@ threshold via ring offset). One undo restores the traced originals. Backed by
 `lib/text/retype.ts` (pure, unit-tested), `replaceObjects` (atomic store
 action), a live stitch preview in the dialog, and a DOM test of the full
 replace-and-undo path.
+
+### Progress log 10 — deliberate hand authoring (2026-08-09)
+
+Two layers landed. (1) AUTO-authoring: every font — bundled or user-imported —
+now derives per-glyph stroke centerlines from a skeleton of the clean glyph
+(cached per font, transformed with the glyph through stretch/arch/retype),
+competing against the auto skeleton on measured coverage. Hard faces improved
+measurably (Dancing Script 8mm bare 2.6→0.8mm²; Playfair 5mm cov
+0.955→0.973). (2) HAND-authoring: the stroke editor (Properties → Edit satin
+strokes…) shows any fill object's stroke centerlines — auto-derived as the
+starting point — with drag-to-adjust points, draw-new-stroke, per-stroke
+delete, reset-to-auto and a live stitch preview; saves onto the object
+(one undo) and the engine's authored path snaps them to the true outline.
+This is the per-stroke control a hand digitizer has — the "ESA font" answer,
+per object today; per-font glyph libraries remain the natural extension.
