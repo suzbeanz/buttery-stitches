@@ -39,6 +39,7 @@ import {
   type Matrix,
   type Bounds,
 } from "../lib/geometry";
+import { cloneObject } from "../lib/objects";
 import { snap } from "../lib/snap";
 import { douglasPeucker } from "../lib/trace/simplify";
 import { toast } from "../store/toastStore";
@@ -1557,6 +1558,52 @@ export default function CanvasStage() {
           </Layer>
         </Stage>
       )}
+
+      {/* SELECTION QUICK BAR — the Canva move: touch a thing, get its verbs.
+          Floats over the selection with the actions a person wants next, so
+          nothing essential hides in menus: text edits with one obvious button
+          (double-tap also works, but nobody should have to know that). */}
+      {viewMode === "edit" && tool === "select" && selectedIds.length > 0 && (() => {
+        const sel = project.objects.filter((o) => selectedIds.includes(o.id));
+        if (!sel.length) return null;
+        const b = pathsBounds(sel.flatMap((o) => o.paths));
+        if (!b) return null;
+        const midX = Math.min(Math.max(px((b.minX + b.maxX) / 2), 120), size.width - 120);
+        const topY = Math.min(Math.max(py(b.minY) - 52, 8), size.height - 48);
+        const textObj = sel.length === 1 && sel[0].text ? sel[0] : null;
+        return (
+          <div
+            className="absolute z-10 flex -translate-x-1/2 items-center gap-1 rounded-sm border-2 border-ink bg-cream p-1 shadow-press-sm"
+            style={{ left: midX, top: topY }}
+            role="toolbar"
+            aria-label="Selection actions"
+          >
+            {textObj && (
+              <button
+                onClick={() => useEditorStore.getState().setEditingTextId(textObj.id)}
+                className="flex items-center gap-1 rounded-[2px] bg-ink px-2.5 py-1 font-label text-[11px] font-semibold uppercase tracking-wide text-cream hover:bg-ink-deep"
+              >
+                Edit text
+              </button>
+            )}
+            <button
+              onClick={() => {
+                const ps = useProjectStore.getState();
+                ps.addObjects(sel.map((o) => cloneObject(o, 4, 4)));
+              }}
+              className="rounded-[2px] px-2 py-1 font-label text-[11px] font-semibold uppercase tracking-wide text-ink hover:bg-butter-200"
+            >
+              Duplicate
+            </button>
+            <button
+              onClick={() => useProjectStore.getState().removeObjects(selectedIds)}
+              className="rounded-[2px] px-2 py-1 font-label text-[11px] font-semibold uppercase tracking-wide text-stamp hover:bg-butter-200"
+            >
+              Delete
+            </button>
+          </div>
+        );
+      })()}
 
       {/* Node action bar — the touch path for a selected node's keyboard-only
           actions (toggle smooth/corner, delete). Appears only while editing

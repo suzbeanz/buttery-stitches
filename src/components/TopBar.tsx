@@ -388,15 +388,17 @@ export default function TopBar({
       <div className="mx-0.5 hidden h-5 w-px shrink-0 bg-butter-200/20 sm:mx-1.5 sm:block" />
 
       {/* Insert group — the single home for adding content (words, image, shapes). */}
-      <BarButton label="Add words" onClick={() => setPendingStart("text")}>
+      <BarButton label="Add words" text="Text" textEarly onClick={() => setPendingStart("text")}>
         <Type size={18} />
       </BarButton>
-      <BarButton label="Turn an image into stitches" onClick={() => setPendingStart("image")}>
+      <BarButton label="Turn an image into stitches" text="Image" textEarly onClick={() => setPendingStart("image")}>
         <ImageIcon size={18} />
       </BarButton>
       <div className="relative">
         <BarButton
           label="Add a shape — pick one, then drag it out"
+          text="Shapes"
+          textEarly
           onClick={() => setShowShapes((v) => !v)}
           active={showShapes}
           popup
@@ -619,6 +621,7 @@ function BarButton({
   active,
   align,
   popup,
+  textEarly,
 }: {
   children: React.ReactNode;
   /** accessible name + tooltip for the icon button. */
@@ -626,6 +629,9 @@ function BarButton({
   /** optional short visible caption (≥xl screens) — key actions shouldn't rely
    *  on hover tooltips alone to be discoverable. */
   text?: string;
+  /** show the caption from md up (the insert group: adding content must be
+   *  findable without hovering anything). */
+  textEarly?: boolean;
   onClick: () => void;
   disabled?: boolean;
   active?: boolean;
@@ -654,7 +660,11 @@ function BarButton({
     >
       {children}
       {text && (
-        <span className="hidden font-label text-xs font-semibold uppercase tracking-[0.08em] xl:inline">
+        <span
+          className={`hidden font-label text-xs font-semibold uppercase tracking-[0.08em] ${
+            textEarly ? "md:inline" : "xl:inline"
+          }`}
+        >
           {text}
         </span>
       )}

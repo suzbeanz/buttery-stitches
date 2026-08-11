@@ -300,9 +300,14 @@ function TemplateStarters() {
           onClick={() => {
             loadFont(DEFAULT_FONT_ID)
               .then((font) => {
-                setProject(buildTemplate(t.id, font));
+                const project = buildTemplate(t.id, font);
+                setProject(project);
                 useProjectStore.temporal.getState().clear();
-                toast(`${t.name} loaded — select the text and use “Re-set as text” to make it yours`, "success");
+                // Select the placeholder text so the quick bar's "Edit text"
+                // is the very next thing the user sees.
+                const firstText = project.objects.find((o) => o.text);
+                if (firstText) useProjectStore.setState({ selectedIds: [firstText.id] });
+                toast(`${t.name} loaded — double-tap the text (or hit Edit text) to make it yours`, "success");
               })
               .catch(() => toast("Couldn't load the lettering font", "error"));
           }}

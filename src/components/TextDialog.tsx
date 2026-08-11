@@ -39,10 +39,24 @@ export interface AddTextResult {
 // arbitrary "0.59" there. 12.7mm also matches the first quick-size chip (0.5).
 const DEFAULT_HEIGHT_MM = 12.7;
 
-/** Quick height presets, in each unit. Inches mirror common lettering sizes. */
-const SIZE_PRESETS: Record<"in" | "mm", number[]> = {
-  in: [0.5, 1, 1.5, 2, 3],
-  mm: [12, 25, 38, 50, 75],
+/** Quick height presets, in each unit, NAMED for what they're actually for —
+ *  a bare "38" means nothing; "cap front" does. Values mirror standard
+ *  garment lettering sizes (0.5–3in). */
+const SIZE_PRESETS: Record<"in" | "mm", { v: number; label: string; hint: string }[]> = {
+  in: [
+    { v: 0.5, label: "Name", hint: "chest names & small lines (0.5\")" },
+    { v: 1, label: "Word", hint: "chest words & pockets (1\")" },
+    { v: 1.5, label: "Cap", hint: "cap fronts & sleeves (1.5\")" },
+    { v: 2, label: "Title", hint: "tote bags & small backs (2\")" },
+    { v: 3, label: "Hero", hint: "jacket backs (3\")" },
+  ],
+  mm: [
+    { v: 12, label: "Name", hint: "chest names & small lines (12mm)" },
+    { v: 25, label: "Word", hint: "chest words & pockets (25mm)" },
+    { v: 38, label: "Cap", hint: "cap fronts & sleeves (38mm)" },
+    { v: 50, label: "Title", hint: "tote bags & small backs (50mm)" },
+    { v: 75, label: "Hero", hint: "jacket backs (75mm)" },
+  ],
 };
 
 export default function TextDialog({
@@ -515,18 +529,23 @@ export default function TextDialog({
           <div className="flex flex-wrap gap-1.5">
             {presets.map((p) => (
               <button
-                key={p}
+                key={p.v}
                 type="button"
-                onClick={() => setSize(p)}
-                aria-label={`Set height to ${p} ${unit}`}
+                onClick={() => setSize(p.v)}
+                aria-label={`Set height to ${p.v} ${unit} — ${p.hint}`}
+                data-tip={p.hint}
                 className={
-                  "rounded-sm border-2 px-2.5 py-1 text-[12px] " +
-                  (isPresetActive(p)
+                  "rounded-sm border-2 px-2.5 py-1 text-[12px] leading-tight " +
+                  (isPresetActive(p.v)
                     ? "border-ink bg-ink text-cream"
                     : "border-ink/30 bg-cream text-ink hover:bg-butter-200")
                 }
               >
-                {p}
+                <span className="block font-semibold">{p.label}</span>
+                <span className="block text-[10px] opacity-70">
+                  {p.v}
+                  {unit}
+                </span>
               </button>
             ))}
           </div>
