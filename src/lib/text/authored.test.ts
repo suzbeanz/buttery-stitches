@@ -57,17 +57,19 @@ describe("authored alphabet (flagship Oswald)", () => {
     expect(authoredAlphabet(undefined)).toBeNull();
   });
 
-  it("attaches satin centerlines to authored glyphs and not to others", () => {
+  it("attaches satin centerlines to every glyph (hand-authored or auto)", () => {
     const a = layoutText({ text: "A", font: oswald, heightMm: 16, colorId: "c1", fontId: "oswald" });
     expect((a.object.satinCenterlines ?? []).length).toBeGreaterThan(0);
-    // 'O' is a clean loop — not authored, handled by the auto skeleton.
+    // 'O' has no hand-authored spec — it now gets AUTO-derived strokes from a
+    // clean glyph-space skeleton (a loop yields its ring centerline), so every
+    // glyph rides the authored path and survives stretch/arch transforms.
     const o = layoutText({ text: "O", font: oswald, heightMm: 16, colorId: "c1", fontId: "oswald" });
-    expect(o.object.satinCenterlines ?? []).toHaveLength(0);
+    expect((o.object.satinCenterlines ?? []).length).toBeGreaterThan(0);
   });
 
-  it("does NOT author when the font isn't the flagship", () => {
+  it("auto-authors when the font isn't the flagship", () => {
     const a = layoutText({ text: "A", font: oswald, heightMm: 16, colorId: "c1", fontId: "poppins" });
-    expect(a.object.satinCenterlines ?? []).toHaveLength(0);
+    expect((a.object.satinCenterlines ?? []).length).toBeGreaterThan(0);
   });
 
   it("the authored centerlines build a satin that covers the glyph", () => {

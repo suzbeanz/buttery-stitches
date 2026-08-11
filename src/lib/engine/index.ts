@@ -482,8 +482,23 @@ function acceptableSatin(
   // mostly missed (matched the wrong region, bad coords) falls back to the auto
   // skeleton rather than sewing something broken.
   if (authored && authored.length) {
+    // Authored strokes COMPETE with the auto skeleton on measured coverage
+    // (the same referee that picks turned-vs-flat fills). Hand-authored specs
+    // and auto-derived glyph strokes both go through this: whichever sews
+    // more of the region wins, with a small preference for the authored
+    // candidate (its stroke ORDER and junction splits are deliberate).
     const cols = columnsFromCenterlines(region, authored, { density, pullScale, cellMm });
-    if (cols.length && satinCoverage(region, cols.map((c) => c.throws)) >= AUTHORED_MIN_COVERAGE) {
+    const authoredCov = cols.length
+      ? satinCoverage(region, cols.map((c) => c.throws))
+      : 0;
+    if (authoredCov >= AUTHORED_MIN_COVERAGE) {
+      const auto = medialColumns(region, { density, pullScale, cellMm, regularize });
+      const autoCov = auto.length ? satinCoverage(region, auto.map((c) => c.throws)) : 0;
+      if (autoCov > authoredCov + 0.015) {
+        // The auto skeleton measurably covers better here — take it.
+        const widths = auto.map((c) => c.widthMm).sort((a, b) => a - b);
+        if (widths[widths.length >> 1] <= MAX_SATIN_STROKE_MM && autoCov >= MIN_SATIN_COVERAGE) return auto;
+      }
       return cols;
     }
   }

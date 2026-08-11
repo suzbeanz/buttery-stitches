@@ -66,6 +66,9 @@ export type ViewMode = "edit" | "stitch";
 export type PropertiesTab = "design" | "object" | "arrange" | "threads";
 
 interface EditorState {
+  /** Stitch-style clipboard: params copied from one object, pasteable to any. */
+  copiedStyle: import("../types/project").EmbObjectParams | null;
+  setCopiedStyle: (p: import("../types/project").EmbObjectParams | null) => void;
   tool: Tool;
   /** which premade shape the `shape` tool stamps (rectangle, ellipse, …). */
   shapeKind: ShapeKind;
@@ -171,6 +174,8 @@ interface EditorState {
 }
 
 export const useEditorStore = create<EditorState>((set) => ({
+  copiedStyle: null,
+  setCopiedStyle: (p) => set({ copiedStyle: p }),
   tool: "select",
   shapeKind: "rectangle",
   draft: [],

@@ -432,3 +432,46 @@ Defect classes found and fixed:
 - **Crescent patches sprayed**: `smallPatchSatinBlock` gained a straightness
   gate (patch must fill ≥55% of its principal-axis box) so curved crescents
   take quiet tatami rows instead of a straight block across the counter.
+
+### Progress log 9 — "Re-set as text" in-app (2026-08-08)
+
+The crest rescue is now a feature, not a hand-run script: select traced
+lettering (one object or several), Properties → **Re-set as text…**, type the
+words, pick a font — the selection is replaced by authored type fitted to its
+exact union footprint (vertical strips auto-detected and rotated, the run
+stretched to match extended faces, small text emboldened past the satin
+threshold via ring offset). One undo restores the traced originals. Backed by
+`lib/text/retype.ts` (pure, unit-tested), `replaceObjects` (atomic store
+action), a live stitch preview in the dialog, and a DOM test of the full
+replace-and-undo path.
+
+### Progress log 10 — deliberate hand authoring (2026-08-09)
+
+Two layers landed. (1) AUTO-authoring: every font — bundled or user-imported —
+now derives per-glyph stroke centerlines from a skeleton of the clean glyph
+(cached per font, transformed with the glyph through stretch/arch/retype),
+competing against the auto skeleton on measured coverage. Hard faces improved
+measurably (Dancing Script 8mm bare 2.6→0.8mm²; Playfair 5mm cov
+0.955→0.973). (2) HAND-authoring: the stroke editor (Properties → Edit satin
+strokes…) shows any fill object's stroke centerlines — auto-derived as the
+starting point — with drag-to-adjust points, draw-new-stroke, per-stroke
+delete, reset-to-auto and a live stitch preview; saves onto the object
+(one undo) and the engine's authored path snaps them to the true outline.
+This is the per-stroke control a hand digitizer has — the "ESA font" answer,
+per object today; per-font glyph libraries remain the natural extension.
+
+### Progress log 11 — font stroke library + studio essentials (2026-08-09)
+
+- **Font-level stroke library**: hand-authored glyph strokes save per
+  (font, letter) to the browser (IndexedDB + sync mirror), keyed in the same
+  normalized frame as the built-in authored alphabet. Layout priority is now
+  user library → hand-authored alphabet → auto-derived, so one correction
+  applies to every future use of that letter — including custom fonts. The
+  stroke editor gains "Also save per-letter to this font".
+- **Copy/Paste stitch style**: one object's full stitch recipe (density, fill
+  style, underlay, angle — not geometry/color) applies to any selection in one
+  undo step.
+- **Starter templates**: three quality-gated one-click designs (name patch,
+  monogram badge, team arc) on the blank-slate panel, generated live by the
+  current engine and gated by the same sweep as the corpus.
+- Help quick-start now teaches the lettering rescue tools.

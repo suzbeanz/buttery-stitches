@@ -17,6 +17,9 @@ import type { EmbObject, GlyphTweak, Path, Point } from "../../types/project";
 import { makeObjectFromPaths } from "../objects";
 import { pathsBounds, polylineLength } from "../geometry";
 import { authoredAlphabet, type AuthoredAlphabet } from "./authored";
+import { medialColumns } from "../engine/medial";
+import { libraryGlyphStrokes } from "./strokeLibrary";
+import { meanStrokeWidthMm } from "../engine/classify";
 // opentype is only used as a type here; parsing happens in fonts.ts. This keeps
 // layout pure (it never fetches or reads files — the caller passes the Font).
 import type { Font } from "opentype.js";
@@ -244,6 +247,44 @@ interface FlatGlyph {
   cx: number;
 }
 
+/** Per-font cache of auto-derived glyph strokes, keyed by glyph index and
+ *  normalized to the glyph bbox (pen-position independent). */
+const autoStrokeCache = new WeakMap<Font, Map<number, [number, number][][]>>();
+
+/** Derive stroke centerlines for one glyph from a skeleton of its outline,
+ *  computed at a nominal 10mm cap in glyph-local space. Returns strokes in
+ *  the same font-unit frame as `rings`. */
+function autoGlyphStrokes(font: Font, glyph: { index?: number }, rings: Path[]): Path[] {
+  const b = pathsBounds(rings);
+  if (!b) return [];
+  const w = b.maxX - b.minX;
+  const h = b.maxY - b.minY;
+  if (w <= 0 || h <= 0) return [];
+  const key = glyph.index ?? -1;
+  let perFont = autoStrokeCache.get(font);
+  if (!perFont) {
+    perFont = new Map();
+    autoStrokeCache.set(font, perFont);
+  }
+  let norm = perFont.get(key);
+  if (!norm) {
+    const S = 10 / Math.max(w, h); // nominal 10mm glyph
+    const mm = rings.map((r) => r.map((p) => ({ x: (p.x - b.minX) * S, y: (p.y - b.minY) * S })));
+    const strokeW = meanStrokeWidthMm(mm);
+    const cellMm = Math.max(0.06, Math.min(0.15, strokeW > 0 ? strokeW / 14 : 0.15));
+    try {
+      const cols = medialColumns(mm, { density: 0.4, pullScale: 1, cellMm });
+      norm = cols
+        .filter((c) => c.centerline.length >= 2)
+        .map((c) => c.centerline.map((p): [number, number] => [p.x / (w * S), p.y / (h * S)]));
+    } catch {
+      norm = [];
+    }
+    perFont.set(key, norm);
+  }
+  return norm.map((st) => st.map(([nx, ny]) => ({ x: b.minX + nx * w, y: b.minY + ny * h })));
+}
+
 /** Lay a string flat, per glyph, in font units. */
 function glyphsFlat(
   font: Font,
@@ -252,10 +293,19 @@ function glyphsFlat(
   spacingUnits: number,
   flattenTol: number,
   authored: AuthoredAlphabet | null,
+  fontIdForLibrary?: string,
 ): { glyphs: FlatGlyph[]; width: number } {
+  const shaped = authored ? null : glyphsFor(font, text);
+  const chars = Array.from(text);
   const items = authored
-    ? Array.from(text).map((ch) => ({ ch, glyph: font.charToGlyph(ch) }))
-    : glyphsFor(font, text).map((glyph) => ({ ch: undefined as string | undefined, glyph }));
+    ? chars.map((ch) => ({ ch, glyph: font.charToGlyph(ch) }))
+    : shaped!.map((glyph, i) => ({
+        // Keep the character when shaping is 1:1 so the user's font-level
+        // stroke library can key by it; ligature-shaped runs lose the mapping
+        // and simply fall back to auto strokes.
+        ch: shaped!.length === chars.length ? chars[i] : (undefined as string | undefined),
+        glyph,
+      }));
   const glyphs: FlatGlyph[] = [];
   let penX = 0;
   for (const { ch, glyph } of items) {
@@ -263,7 +313,10 @@ function glyphsFlat(
     const rings = commandsToRings(path.commands, flattenTol);
     const adv = glyph.advanceWidth ?? 0;
     const strokes: Path[] = [];
-    const spec = authored && ch ? authored[ch] : undefined;
+    // Priority: the user's font-level library -> hand-authored alphabet ->
+    // auto-derived. A person's saved correction beats everything.
+    const lib = libraryGlyphStrokes(fontIdForLibrary, ch);
+    const spec = (lib as [number, number][][] | null) ?? (authored && ch ? authored[ch] : undefined);
     if (spec && rings.length) {
       const b = pathsBounds(rings);
       if (b) {
@@ -271,6 +324,17 @@ function glyphsFlat(
         const h = b.maxY - b.minY;
         for (const st of spec) strokes.push(st.map(([nx, ny]) => ({ x: b.minX + nx * w, y: b.minY + ny * h })));
       }
+    } else if (rings.length) {
+      // AUTO-AUTHOR: fonts without a hand-authored alphabet get per-glyph
+      // strokes derived from a skeleton of the CLEAN glyph — computed once
+      // per glyph in pristine em-space geometry and cached, then transformed
+      // with the glyph through every baseline/stretch/arch. Downstream the
+      // engine snaps these to the true outline exactly as it does the
+      // hand-authored specs (and falls back to its own skeleton if they fail
+      // the coverage bar), so this is strictly a quality floor-raiser —
+      // notably for text that later gets stretched or bent, where a skeleton
+      // of the DEFORMED shape wobbles but a deformed clean skeleton doesn't.
+      for (const st of autoGlyphStrokes(font, glyph, rings)) strokes.push(st);
     }
     glyphs.push({ rings, strokes, cx: penX + adv / 2 });
     penX += adv + spacingUnits;
@@ -279,6 +343,7 @@ function glyphsFlat(
 }
 
 interface CircularOpts {
+  fontId?: string;
   font: Font;
   emSize: number;
   spacingUnits: number;
@@ -302,7 +367,7 @@ interface CircularOpts {
  * and a bottom line at the same radius line up into one badge.
  */
 function layoutCircular(text: string, o: CircularOpts): TextLayoutResult {
-  const { glyphs, width } = glyphsFlat(o.font, text, o.emSize, o.spacingUnits, o.flattenTol, o.authored);
+  const { glyphs, width } = glyphsFlat(o.font, text, o.emSize, o.spacingUnits, o.flattenTol, o.authored, o.fontId);
   const allRings = glyphs.flatMap((g) => g.rings);
   const bb = pathsBounds(allRings);
   if (!bb) {
@@ -390,6 +455,7 @@ function sampleAt(path: Point[], cum: number[], s: number): { p: Point; t: Point
 }
 
 interface PathLayoutOpts {
+  fontId?: string;
   font: Font;
   emSize: number;
   spacingUnits: number;
@@ -409,7 +475,7 @@ interface PathLayoutOpts {
  * Authored satin centerlines ride the same per-glyph transform.
  */
 function layoutOnPath(text: string, rawPath: Point[], o: PathLayoutOpts): TextLayoutResult {
-  const { glyphs, width } = glyphsFlat(o.font, text, o.emSize, o.spacingUnits, o.flattenTol, o.authored);
+  const { glyphs, width } = glyphsFlat(o.font, text, o.emSize, o.spacingUnits, o.flattenTol, o.authored, o.fontId);
   const allRings = glyphs.flatMap((g) => g.rings);
   const bb = pathsBounds(allRings);
   if (!bb) return { object: makeObjectFromPaths("fill", [], o.colorId, o.name ?? "Text"), widthMm: 0 };
@@ -540,7 +606,7 @@ export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
   const pathLen = cleanPath ? polylineLength(cleanPath) : 0;
   if (cleanPath && cleanPath.length >= 2 && pathLen > 0.1) {
     return layoutOnPath(text.replace(/\n/g, " "), cleanPath, {
-      font, emSize, spacingUnits, flattenTol, authored, heightMm, provScale, colorId, name,
+      font, emSize, spacingUnits, flattenTol, authored, fontId, heightMm, provScale, colorId, name,
       tweaks: opts.glyphTweaks,
     });
   }
@@ -549,7 +615,7 @@ export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
   // at top or bottom. Overrides arch/multiline.
   if (opts.circleRadiusMm && opts.circleRadiusMm > 0) {
     return layoutCircular(text.replace(/\n/g, " "), {
-      font, emSize, spacingUnits, flattenTol, authored, heightMm, provScale,
+      font, emSize, spacingUnits, flattenTol, authored, fontId, heightMm, provScale,
       radius: opts.circleRadiusMm, side: opts.circleSide ?? "top", colorId, name,
       tweaks: opts.glyphTweaks,
     });
@@ -558,7 +624,7 @@ export function layoutText(opts: TextLayoutOptions): TextLayoutResult {
   // One row per line; each centered on x=0 and stacked downward. Laid PER GLYPH
   // so per-glyph tweaks can act in each glyph's own local frame.
   const lines = text.split("\n");
-  const laid = lines.map((ln) => glyphsFlat(font, ln, emSize, spacingUnits, flattenTol, authored));
+  const laid = lines.map((ln) => glyphsFlat(font, ln, emSize, spacingUnits, flattenTol, authored, fontId));
   const lineHeightUnits = unitsPerEm * lineSpacing;
 
   // Authored satin centerlines ride through the SAME transforms as the rings so
