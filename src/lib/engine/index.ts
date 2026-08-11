@@ -18,6 +18,7 @@ import { turningFill, flowFill, flowAlong } from "./turning";
 import { guidanceFieldFill, multiAngleFill } from "./field";
 import { isSmallRoundFill, meanStrokeWidthMm, isBroadlyThick, splitComponents } from "./classify";
 import { polygonArea } from "../trace/classify";
+import { weldNonzero, ringsOverlap } from "../boolean";
 import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
 import { dropShortStitches, splitLongTravels } from "./resample";
 
@@ -946,7 +947,17 @@ export function generateObjectRuns(
   const satin = p.fillStyle === "satin";
   const motifMode = p.fillStyle === "motif";
   const blendMode = p.fillStyle === "blend" && !!p.blendColorId;
-  const tracedRegions = splitFillRegions(object.paths);
+  // WELD self-overlapping artwork first: connected-script lettering (and any
+  // layered art) has rings that genuinely intersect, and the fill's even-odd
+  // rule would punch phantom holes at every overlap — the stitch skeleton
+  // then swirls around holes that don't exist in the art (a Pacifico phrase
+  // sewed as scribble this way). Nonzero welding keeps overlapping solids
+  // solid and opposite-winding counters open. Gated on actual ring
+  // intersection so ordinary multi-ring objects are untouched.
+  const weldedPaths = ringsOverlap(object.paths)
+    ? weldNonzero(object.paths, 0.12)
+    : object.paths;
+  const tracedRegions = splitFillRegions(weldedPaths);
   // Sew the regions in travel-minimising order (auto-branching) rather than trace
   // order, so a scattered fill doesn't strand far regions and rack up jumps.
   const regionOrder = orderByTravel(tracedRegions.map(regionAnchor));
@@ -1000,7 +1011,16 @@ export function generateObjectRuns(
   regions.forEach((region, regionIdx) => {
     const columns =
       satin || (autoStyle && meanStrokeWidthMm(region) <= AUTO_SATIN_MAX_WIDTH_MM)
-        ? acceptableSatin(region, density, fabric.pullMul, authoredForRegion(object, region), p.lineArt)
+        ? acceptableSatin(
+            region,
+            density,
+            fabric.pullMul,
+            authoredForRegion(object, region),
+            // Text gets the line-art REGULARIZED columns: constant width
+            // around each stroke's median with stiffly-smoothed centerlines —
+            // script faces bead-and-pinch without it.
+            p.lineArt || !!object.text,
+          )
         : [];
     const usingSatin = columns.length > 0;
     const contour = !usingSatin && p.fillStyle === "contour";

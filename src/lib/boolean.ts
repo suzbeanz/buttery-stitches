@@ -227,6 +227,83 @@ export function seamTrap(lower: Path[], higher: Path[][], trapMm = 0.35, cellMm 
  * Returns the result as rings (outer + holes), in mm — ready to drop onto a fill
  * object (which fills with the even-odd / nonzero rule, so holes cut correctly).
  */
+/**
+ * WELD self-overlapping artwork into clean outlines using the NONZERO winding
+ * rule. Connected-script lettering (and any layered art) has rings that
+ * genuinely overlap — under the fill's even-odd rule every overlap becomes a
+ * phantom HOLE, and the stitch skeleton swirls around holes that don't exist
+ * in the art. Nonzero counts winding direction instead: overlapping solids
+ * stay solid, counters (opposite winding) stay holes — exactly what type
+ * designers intend.
+ */
+export function weldNonzero(paths: Path[], cellMm = 0.15): Path[] {
+  const cell = Math.max(0.08, cellMm);
+  const bb = bounds(paths);
+  if (!bb) return paths;
+  const pad = 2;
+  const W = Math.max(3, Math.ceil((bb.maxX - bb.minX) / cell) + pad * 2 + 1);
+  const H = Math.max(3, Math.ceil((bb.maxY - bb.minY) / cell) + pad * 2 + 1);
+  if (W * H > MAX_CELLS) return paths;
+  const ox = bb.minX - pad * cell;
+  const oy = bb.minY - pad * cell;
+  const mask = new Uint8Array(W * H);
+  let any = false;
+  for (let gy = 0; gy < H; gy++) {
+    const py = oy + gy * cell;
+    for (let gx = 0; gx < W; gx++) {
+      const px = ox + gx * cell;
+      let winding = 0;
+      for (const ring of paths) {
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+          const a1 = ring[j], a2 = ring[i];
+          if (a1.y <= py) {
+            if (a2.y > py && (a2.x - a1.x) * (py - a1.y) - (px - a1.x) * (a2.y - a1.y) > 0) winding++;
+          } else if (a2.y <= py && (a2.x - a1.x) * (py - a1.y) - (px - a1.x) * (a2.y - a1.y) < 0) {
+            winding--;
+          }
+        }
+      }
+      if (winding !== 0) {
+        mask[gy * W + gx] = 1;
+        any = true;
+      }
+    }
+  }
+  if (!any) return paths;
+  const minArea = Math.max(0.5, (3 * cell) ** 2);
+  const out = marchingSquares(mask, W, H)
+    .map((ring) => simplify(ring.map((q) => ({ x: ox + q.x * cell, y: oy + q.y * cell })), cell * 0.9))
+    .filter((r) => r.length >= 3 && area(r) >= minArea);
+  return out.length ? out : paths;
+}
+
+/** True when any two DIFFERENT rings' segments intersect — the signal that
+ *  even-odd will punch phantom holes and the artwork needs welding. */
+export function ringsOverlap(paths: Path[]): boolean {
+  for (let i = 0; i < paths.length; i++) {
+    const bi = bounds([paths[i]]);
+    if (!bi) continue;
+    for (let j = i + 1; j < paths.length; j++) {
+      const bj = bounds([paths[j]]);
+      if (!bj || bi.minX > bj.maxX || bj.minX > bi.maxX || bi.minY > bj.maxY || bj.minY > bi.maxY) continue;
+      if (anySegmentsCross(paths[i], paths[j])) return true;
+    }
+  }
+  return false;
+}
+
+function anySegmentsCross(a: Path, b: Path): boolean {
+  const d = (p: Point, q: Point, r: Point) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+  for (let i = 0, i2 = a.length - 1; i < a.length; i2 = i++) {
+    for (let j = 0, j2 = b.length - 1; j < b.length; j2 = j++) {
+      const d1 = d(a[i2], a[i], b[j2]), d2 = d(a[i2], a[i], b[j]);
+      const d3 = d(b[j2], b[j], a[i2]), d4 = d(b[j2], b[j], a[i]);
+      if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return true;
+    }
+  }
+  return false;
+}
+
 export function booleanOp(a: Path[], b: Path[], op: BoolOp, cellMm = 0.2): Path[] {
   const cell = Math.max(0.08, cellMm);
   // For subtract the result lives inside A; otherwise span both operands.
