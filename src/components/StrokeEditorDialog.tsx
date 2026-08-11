@@ -7,6 +7,8 @@ import { pathsBounds } from "../lib/geometry";
 import { generateObjectRuns } from "../lib/engine";
 import { useEscapeToClose, useDialogFocus } from "./useEscapeToClose";
 import { toast } from "../store/toastStore";
+import { saveGlyphStrokes, normalizeStrokes } from "../lib/text/strokeLibrary";
+import { splitComponents } from "../lib/engine/classify";
 
 /**
  * HAND-AUTHORING for satin strokes: the deliberate, per-stroke control a
@@ -35,6 +37,8 @@ export default function StrokeEditorDialog({
   const [activeStroke, setActiveStroke] = useState<number | null>(null);
   const [draft, setDraft] = useState<Path>([]);
   const [preview, setPreview] = useState(true);
+  const [saveToFont, setSaveToFont] = useState(false);
+  const isText = !!object?.text?.fontId && !!object?.text?.content;
   const drag = useRef<{ stroke: number; point: number } | null>(null);
 
   const box = useMemo(() => pathsBounds(object?.paths ?? []), [object]);
@@ -231,6 +235,15 @@ export default function StrokeEditorDialog({
             <input type="checkbox" checked={preview} onChange={(e) => setPreview(e.target.checked)} />
             Stitch preview
           </label>
+          {isText && (
+            <label
+              className="flex w-full items-center gap-1.5 font-body text-xs text-navy"
+              data-tip="Store each letter's strokes with the font, so every future use of that letter sews your version"
+            >
+              <input type="checkbox" checked={saveToFont} onChange={(e) => setSaveToFont(e.target.checked)} />
+              Also save per-letter to this font (applies to all future text)
+            </label>
+          )}
         </div>
 
         <canvas
@@ -290,6 +303,29 @@ export default function StrokeEditorDialog({
           <button
             onClick={() => {
               updateObject(object.id, { satinCenterlines: strokes.length ? strokes : undefined });
+              if (saveToFont && isText) {
+                // Split strokes per glyph COMPONENT (each letter is one
+                // component of the text region), key by the typed character
+                // at the same index, and store bbox-normalized — the exact
+                // frame the layout maps authored strokes from.
+                const comps = splitComponents(object.paths);
+                const chars = Array.from(object.text!.content.replace(/\s/g, ""));
+                const mid = (st: Path) => st[Math.floor(st.length / 2)];
+                const inBox = (p: Point, b: { minX: number; minY: number; maxX: number; maxY: number }) =>
+                  p.x >= b.minX - 0.5 && p.x <= b.maxX + 0.5 && p.y >= b.minY - 0.5 && p.y <= b.maxY + 0.5;
+                const saved: string[] = [];
+                comps.forEach((comp, ci) => {
+                  const ch = chars[ci];
+                  if (!ch) return;
+                  const b = pathsBounds(comp);
+                  if (!b) return;
+                  const mine = strokes.filter((st) => st.length >= 2 && inBox(mid(st), b));
+                  if (!mine.length) return;
+                  void saveGlyphStrokes(object.text!.fontId, ch, normalizeStrokes(mine, b));
+                  saved.push(ch);
+                });
+                if (saved.length) toast(`Saved strokes for ${saved.join(" ")} to the font`, "success");
+              }
               toast(`Saved ${strokes.length} authored stroke${strokes.length === 1 ? "" : "s"}`, "success");
               onClose();
             }}

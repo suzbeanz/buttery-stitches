@@ -459,3 +459,19 @@ delete, reset-to-auto and a live stitch preview; saves onto the object
 (one undo) and the engine's authored path snaps them to the true outline.
 This is the per-stroke control a hand digitizer has — the "ESA font" answer,
 per object today; per-font glyph libraries remain the natural extension.
+
+### Progress log 11 — font stroke library + studio essentials (2026-08-09)
+
+- **Font-level stroke library**: hand-authored glyph strokes save per
+  (font, letter) to the browser (IndexedDB + sync mirror), keyed in the same
+  normalized frame as the built-in authored alphabet. Layout priority is now
+  user library → hand-authored alphabet → auto-derived, so one correction
+  applies to every future use of that letter — including custom fonts. The
+  stroke editor gains "Also save per-letter to this font".
+- **Copy/Paste stitch style**: one object's full stitch recipe (density, fill
+  style, underlay, angle — not geometry/color) applies to any selection in one
+  undo step.
+- **Starter templates**: three quality-gated one-click designs (name patch,
+  monogram badge, team arc) on the blank-slate panel, generated live by the
+  current engine and gated by the same sweep as the corpus.
+- Help quick-start now teaches the lettering rescue tools.

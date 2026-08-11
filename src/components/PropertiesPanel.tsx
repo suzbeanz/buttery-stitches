@@ -26,6 +26,8 @@ import {
   Check,
   Type as TypeIcon,
   PenLine as PenLineIcon,
+  Copy as CopyIcon,
+  ClipboardPaste as ClipboardPasteIcon,
 } from "lucide-react";
 import { alignObjects, distributeObjects, type AlignEdge } from "../lib/arrange";
 import { designBounds, scaleAllPaths, translateAllPaths } from "../lib/layout";
@@ -81,6 +83,9 @@ export default function PropertiesPanel() {
   );
   const [showRetype, setShowRetype] = useState(false);
   const [strokeEditId, setStrokeEditId] = useState<string | null>(null);
+  const copiedStyle = useEditorStore((s) => s.copiedStyle);
+  const setCopiedStyle = useEditorStore((s) => s.setCopiedStyle);
+  const applyParamsTo = useProjectStore((s) => s.applyParamsTo);
 
   // Selecting an object from nothing jumps to its properties — the tab is
   // otherwise sticky, so picking an object while parked on Design/Threads
@@ -158,6 +163,12 @@ export default function PropertiesPanel() {
                 group, or merge them.
               </div>
               <RetypeButton onOpen={() => setShowRetype(true)} />
+              <StyleClipboardButtons
+                canCopy={false}
+                onCopy={() => {}}
+                canPaste={!!copiedStyle}
+                onPaste={() => copiedStyle && applyParamsTo(selected.map((o) => o.id), copiedStyle)}
+              />
             </div>
           ) : (
             <>
@@ -192,6 +203,12 @@ export default function PropertiesPanel() {
               </div>
               {selected[0].type === "fill" && (
                 <div className="flex flex-col gap-2 border-b border-navy/25 p-3">
+                  <StyleClipboardButtons
+                    canCopy
+                    onCopy={() => setCopiedStyle({ ...selected[0].params })}
+                    canPaste={!!copiedStyle}
+                    onPaste={() => copiedStyle && applyParamsTo([selected[0].id], copiedStyle)}
+                  />
                   {!selected[0].text && <RetypeButton onOpen={() => setShowRetype(true)} />}
                   <button
                     onClick={() => setStrokeEditId(selected[0].id)}
@@ -216,6 +233,43 @@ export default function PropertiesPanel() {
         </Suspense>
       )}
     </aside>
+  );
+}
+
+/** Stitch-style clipboard: copy one object's full stitch recipe (density,
+ *  fill style, underlay, angle, pull comp — not its geometry or color) and
+ *  apply it to any other objects. The fastest way to make a design coherent. */
+function StyleClipboardButtons({
+  canCopy,
+  onCopy,
+  canPaste,
+  onPaste,
+}: {
+  canCopy: boolean;
+  onCopy: () => void;
+  canPaste: boolean;
+  onPaste: () => void;
+}) {
+  return (
+    <div className="flex gap-2">
+      {canCopy && (
+        <button
+          onClick={onCopy}
+          data-tip="Copy this object's stitch settings (not its shape or color)"
+          className="tap-target flex flex-1 items-center justify-center gap-1.5 rounded-sm border border-ink/25 bg-cream py-1.5 text-sm text-ink-deep hover:bg-butter-200"
+        >
+          <CopyIcon size={14} /> Copy style
+        </button>
+      )}
+      <button
+        onClick={onPaste}
+        disabled={!canPaste}
+        data-tip="Apply the copied stitch settings to the selection"
+        className="tap-target flex flex-1 items-center justify-center gap-1.5 rounded-sm border border-ink/25 bg-cream py-1.5 text-sm text-ink-deep hover:bg-butter-200 disabled:opacity-40"
+      >
+        <ClipboardPasteIcon size={14} /> Paste style
+      </button>
+    </div>
   );
 }
 

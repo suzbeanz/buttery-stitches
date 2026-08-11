@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { useProjectStore } from "../store/projectStore";
 import { toast } from "../store/toastStore";
+import { TEMPLATES, buildTemplate } from "../lib/templates";
+import { loadFont, DEFAULT_FONT_ID } from "../lib/text/fonts";
 import type { StitchType, ThreadColor } from "../types/project";
 
 /** Small glyph for each stitch type, matching the tool strip's icons. */
@@ -130,6 +132,7 @@ export default function LayerPanel() {
           <p className="font-body text-sm text-navy/80">
             Nothing stitched yet. Pick a tool and draw, or bring in an image.
           </p>
+          <TemplateStarters />
         </div>
       ) : (
         <ul className="min-h-0 flex-1 overflow-y-auto py-1">
@@ -277,5 +280,39 @@ export default function LayerPanel() {
         </ul>
       )}
     </aside>
+  );
+}
+
+
+/** One-click starter designs on the blank slate — complete, quality-gated
+ *  layouts (the same sweep gates as the corpus) the user re-types via
+ *  "Re-set as text" or the text dialog. */
+function TemplateStarters() {
+  const setProject = useProjectStore((s) => s.setProject);
+  return (
+    <div className="mt-2 flex w-full flex-col gap-1.5">
+      <div className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-navy/80">
+        Or start from a template
+      </div>
+      {TEMPLATES.map((t) => (
+        <button
+          key={t.id}
+          onClick={() => {
+            loadFont(DEFAULT_FONT_ID)
+              .then((font) => {
+                setProject(buildTemplate(t.id, font));
+                useProjectStore.temporal.getState().clear();
+                toast(`${t.name} loaded — select the text and use “Re-set as text” to make it yours`, "success");
+              })
+              .catch(() => toast("Couldn't load the lettering font", "error"));
+          }}
+          data-tip={t.blurb}
+          className="tap-target rounded-sm border border-ink/25 bg-cream px-2 py-1.5 text-left font-body text-sm text-ink-deep hover:bg-butter-200"
+        >
+          <span className="font-semibold">{t.name}</span>
+          <span className="block text-xs text-navy/80">{t.blurb}</span>
+        </button>
+      ))}
+    </div>
   );
 }
