@@ -40,6 +40,7 @@ import {
   type Bounds,
 } from "../lib/geometry";
 import { cloneObject } from "../lib/objects";
+import { relayoutTextObject, nextSizeMm } from "../lib/text/relayout";
 import { snap } from "../lib/snap";
 import { douglasPeucker } from "../lib/trace/simplify";
 import { toast } from "../store/toastStore";
@@ -1579,12 +1580,38 @@ export default function CanvasStage() {
             aria-label="Selection actions"
           >
             {textObj && (
-              <button
-                onClick={() => useEditorStore.getState().setEditingTextId(textObj.id)}
-                className="flex items-center gap-1 rounded-[2px] bg-ink px-2.5 py-1 font-label text-[11px] font-semibold uppercase tracking-wide text-cream hover:bg-ink-deep"
-              >
-                Edit text
-              </button>
+              <>
+                <button
+                  onClick={() => useEditorStore.getState().setEditingTextId(textObj.id)}
+                  className="flex items-center gap-1 rounded-[2px] bg-ink px-2.5 py-1 font-label text-[11px] font-semibold uppercase tracking-wide text-cream hover:bg-ink-deep"
+                >
+                  Edit text
+                </button>
+                <button
+                  aria-label="Smaller text"
+                  data-tip="Smaller (standard sizes)"
+                  onClick={() => {
+                    void relayoutTextObject(textObj, { heightMm: nextSizeMm(textObj.text!.heightMm, -1) }).then(
+                      (patch) => patch && useProjectStore.getState().updateObject(textObj.id, patch),
+                    );
+                  }}
+                  className="rounded-[2px] px-2 py-1 font-label text-[12px] font-semibold text-ink hover:bg-butter-200"
+                >
+                  A−
+                </button>
+                <button
+                  aria-label="Bigger text"
+                  data-tip="Bigger (standard sizes)"
+                  onClick={() => {
+                    void relayoutTextObject(textObj, { heightMm: nextSizeMm(textObj.text!.heightMm, 1) }).then(
+                      (patch) => patch && useProjectStore.getState().updateObject(textObj.id, patch),
+                    );
+                  }}
+                  className="rounded-[2px] px-2 py-1 font-label text-[13px] font-semibold text-ink hover:bg-butter-200"
+                >
+                  A+
+                </button>
+              </>
             )}
             <button
               onClick={() => {

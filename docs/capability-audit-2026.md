@@ -475,3 +475,14 @@ per object today; per-font glyph libraries remain the natural extension.
   monogram badge, team arc) on the blank-slate panel, generated live by the
   current engine and gated by the same sweep as the corpus.
 - Help quick-start now teaches the lettering rescue tools.
+
+### Progress log 12 — studio Canva-ization (2026-08-12)
+
+Wave 1: visible TEXT/IMAGE/SHAPES captions in the top bar; template text
+carries its full TextSpec (was baked geometry — uneditable); loading a
+template auto-selects its text; a floating SELECTION QUICK BAR gives every
+selection its verbs (Edit text pre-filled, Duplicate, Delete); quick sizes
+named for their real use (Name 0.5" … Hero 3"). Wave 2: on-canvas text
+resizing (A−/A+ stepping a standard-size ladder via relayoutTextObject —
+re-lays from the stored spec, preserves the center). Mobile text wizard
+shows a crop of each detected text area beside its input.
