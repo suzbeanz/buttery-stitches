@@ -44,7 +44,13 @@ export function meanStrokeWidthMm(rings: Path[]): number {
     0,
   );
   const totalPer = usable.reduce((s, r) => s + polygonPerimeter(r), 0);
-  if (totalPer <= 0 || netArea <= 0) return 0;
+  if (totalPer <= 0) return 0;
+  if (netArea <= 0) {
+    // Mutually-overlapping rings (connected script) collapse the depth-signed
+    // sum; fall back to gross area so callers still see a real stroke width.
+    const gross = usable.reduce((s, r) => s + Math.abs(polygonArea(r)), 0);
+    return gross > 0 ? (2 * gross) / totalPer : 0;
+  }
   return (2 * netArea) / totalPer;
 }
 
