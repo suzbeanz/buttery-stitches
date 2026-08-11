@@ -124,6 +124,30 @@ export default function AutoDigitizeDialog({
   const dialogRef = useDialogFocus<HTMLDivElement>();
 
   const previewUrl = useMemo(() => URL.createObjectURL(file), [file]);
+  // Source image as a canvas + the SAME mm mapping the trace uses, so cluster
+  // quads (mm) can be cropped back out of the image for thumbnails.
+  const srcCanvas = useMemo(() => {
+    if (!imageData) return null;
+    const c = document.createElement("canvas");
+    c.width = imageData.width;
+    c.height = imageData.height;
+    try {
+      c.getContext("2d")?.putImageData(imageData, 0, 0);
+    } catch {
+      return null;
+    }
+    return c;
+  }, [imageData]);
+  const mmMap = useMemo(() => {
+    if (!imageData) return null;
+    const fit = 0.92;
+    const mmPerPx = Math.min(hoop.wMm / imageData.width, hoop.hMm / imageData.height) * fit;
+    return {
+      mmPerPx,
+      offsetX: (hoop.wMm - imageData.width * mmPerPx) / 2,
+      offsetY: (hoop.hMm - imageData.height * mmPerPx) / 2,
+    };
+  }, [imageData, hoop]);
   useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
 
   useEffect(() => {
@@ -652,6 +676,10 @@ export default function AutoDigitizeDialog({
                   >
                     {i + 1}
                   </span>
+                  {/* A crop of the ACTUAL text this box refers to — on a phone
+                      the preview is small or scrolled away, and "Text area 2
+                      (4mm)" says nothing about WHICH words it means. */}
+                  <ClusterThumb cluster={cl} src={srcCanvas} map={mmMap} />
                   <input
                     type="text"
                     value={textAssign[cl.id] ?? ""}
@@ -973,5 +1001,57 @@ function DigitizePreview({
         </div>
       )}
     </div>
+  );
+}
+
+
+/** Thumbnail of one detected text cluster, cropped from the source image via
+ *  the same mm mapping the trace used. Rotated clusters show their upright
+ *  bounding box — still instantly recognizable. */
+function ClusterThumb({
+  cluster,
+  src,
+  map,
+}: {
+  cluster: DetectedTextCluster;
+  src: HTMLCanvasElement | null;
+  map: { mmPerPx: number; offsetX: number; offsetY: number } | null;
+}) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas || !src || !map) return;
+    const xs = cluster.quad.map((p) => p.x);
+    const ys = cluster.quad.map((p) => p.y);
+    const padMm = 0.8;
+    const sx = (Math.min(...xs) - padMm - map.offsetX) / map.mmPerPx;
+    const sy = (Math.min(...ys) - padMm - map.offsetY) / map.mmPerPx;
+    const sw = (Math.max(...xs) - Math.min(...xs) + 2 * padMm) / map.mmPerPx;
+    const sh = (Math.max(...ys) - Math.min(...ys) + 2 * padMm) / map.mmPerPx;
+    if (sw <= 0 || sh <= 0) return;
+    const H = 26;
+    const W = Math.max(30, Math.min(110, Math.round((sw / sh) * H)));
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = `${W}px`;
+    canvas.style.height = `${H}px`;
+    let ctx: CanvasRenderingContext2D | null = null;
+    try {
+      ctx = canvas.getContext("2d");
+    } catch {
+      return;
+    }
+    if (!ctx) return;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(src, sx, sy, sw, sh, 0, 0, W * dpr, H * dpr);
+  }, [cluster, src, map]);
+  if (!src || !map) return null;
+  return (
+    <canvas
+      ref={ref}
+      aria-hidden
+      className="shrink-0 rounded-[2px] border border-ink/20 bg-white"
+    />
   );
 }
