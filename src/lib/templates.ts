@@ -23,8 +23,8 @@ export interface TemplateSpec {
 }
 
 export const TEMPLATES: TemplateSpec[] = [
-  { id: "name-patch", name: "Name patch", blurb: "Bordered bar with your name in clean satin", words: "RILEY" },
-  { id: "monogram", name: "Monogram badge", blurb: "Circle band around a big single letter", words: "S" },
+  { id: "name-patch", name: "Name patch", blurb: "Bordered bar with your name in clean satin", words: "BUTTERS" },
+  { id: "monogram", name: "Monogram badge", blurb: "Circle band around a big single letter", words: "B" },
   { id: "team-arc", name: "Team arc", blurb: "Arched team name over a straight line", words: "TIGERS" },
 ];
 
