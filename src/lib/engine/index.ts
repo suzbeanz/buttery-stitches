@@ -954,7 +954,13 @@ export function generateObjectRuns(
   // sewed as scribble this way). Nonzero welding keeps overlapping solids
   // solid and opposite-winding counters open. Gated on actual ring
   // intersection so ordinary multi-ring objects are untouched.
-  const weldedPaths = ringsOverlap(object.paths)
+  // TEXT OBJECTS ONLY: fonts guarantee nonzero winding semantics (outers one
+  // direction, counters the other), so welding is safe and correct. Traced
+  // artwork does NOT — its rings encode holes by containment, not winding,
+  // and welding a cartoon's grazing outline network solidified the entire
+  // figure into a black slab (the reported Smurf). Traced overlaps stay on
+  // the even-odd path.
+  const weldedPaths = object.text && ringsOverlap(object.paths)
     ? weldNonzero(object.paths, 0.12)
     : object.paths;
   const tracedRegions = splitFillRegions(weldedPaths);
