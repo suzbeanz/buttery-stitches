@@ -33,6 +33,25 @@ function segsCross(a1: Point, a2: Point, b1: Point, b2: Point): boolean {
   return ((d1 > e && d2 < -e) || (d1 < -e && d2 > e)) && ((d3 > e && d4 < -e) || (d3 < -e && d4 > e));
 }
 
+/** Intersection point of two crossing segments (call only when segsCross). */
+function crossPoint(a1: Point, a2: Point, b1: Point, b2: Point): Point {
+  const d = (a2.x - a1.x) * (b2.y - b1.y) - (a2.y - a1.y) * (b2.x - b1.x);
+  const t = d !== 0 ? ((b1.x - a1.x) * (b2.y - b1.y) - (b1.y - a1.y) * (b2.x - b1.x)) / d : 0.5;
+  return { x: a1.x + (a2.x - a1.x) * t, y: a1.y + (a2.y - a1.y) * t };
+}
+
+/** Even-odd point-in-region over all rings. */
+function insideRegion(p: Point, rings: Point[][]): boolean {
+  let inside = false;
+  for (const ring of rings) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const a = ring[i], b = ring[j];
+      if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+    }
+  }
+  return inside;
+}
+
 /** Sweep one object: run the engine, measure the result against its own
  *  drawn region. Fill-type objects only (running lines have no region). */
 export function sweepObject(o: EmbObject, index = 0): ObjectSweep | null {
@@ -64,7 +83,14 @@ export function sweepObject(o: EmbObject, index = 0): ObjectSweep | null {
           Math.hypot(pts[j].x - pts[k - 1].x, pts[j].y - pts[k - 1].y),
           Math.hypot(pts[j].x - pts[k].x, pts[j].y - pts[k].y),
         );
-        if (dmin > 0.25) crossings++;
+        if (dmin <= 0.25) continue;
+        // A crossing BURIED in the object's own fill (a boustrophedon
+        // boundary connector passing over same-color rows) is invisible on
+        // fabric. The defect this metric exists for is thread crossing over
+        // BARE or foreign ground — count only intersections outside the
+        // object's own region.
+        const cp = crossPoint(pts[j - 1], pts[j], pts[k - 1], pts[k]);
+        if (!insideRegion(cp, o.paths)) crossings++;
       }
     }
   }
