@@ -3,7 +3,14 @@ import { createPortal } from "react-dom";
 import { AlertTriangle, Check, ChevronDown, Eye, EyeOff, Minus, Plus } from "lucide-react";
 import type { EmbObject, Hoop, Project, ThreadColor } from "../types/project";
 import { loadImageData } from "../lib/image";
-import { imageDataToObjects, estimateColorComplexity, suggestColorCount, type DigitizeDetail } from "../lib/trace";
+import {
+  imageDataToObjects,
+  estimateColorComplexity,
+  suggestColorCount,
+  detectLineArt,
+  livePaintObjects,
+  type DigitizeDetail,
+} from "../lib/trace";
 import { ocrWords } from "../lib/trace/ocr";
 import { recognizeTextObjects, applyTextRecognition } from "../lib/trace/textRecognize";
 import {
@@ -88,6 +95,9 @@ const MAX_COLORS = 12;
 /** Per-color stitch style the user can force in the dialog. */
 type StitchStyle = "auto" | "satin" | "outline";
 
+/** How the image becomes stitches (Image-step choice, auto-preselected). */
+type DigitizeMethod = "standard" | "lineart" | "photo";
+
 /** Apply a per-color style override to an object (no-op for "auto"). Satin/running
  *  survive the apply-time fixStitches pass, so the choice sticks. */
 function styleObject(o: EmbObject, style: StitchStyle): EmbObject {
@@ -126,11 +136,15 @@ export default function AutoDigitizeDialog({
   } | null>(null);
   const [numColors, setNumColors] = useState(4);
   const [userSetColors, setUserSetColors] = useState(false);
-  // PHOTO-STITCH mode: instead of posterizing a photo into flat regions, sew
-  // serpentine rows whose local density follows the image's tones (the classic
-  // engraved-portrait look). Offered when the image looks photographic; the
-  // normal trace stays the default.
-  const [photoMode, setPhotoMode] = useState(false);
+  // DIGITIZING METHOD. "standard": posterize-by-color trace. "lineart": the
+  // Live-Paint model for outlined cartoon art — dark linework becomes one
+  // stroke network sewn LAST, every enclosed face between the lines becomes a
+  // flat color fill sampled from the image. "photo": serpentine rows whose
+  // density follows the image's tones (the engraved-portrait look).
+  // Auto-detection preselects lineart/photo until the user chooses explicitly.
+  const [method, setMethod] = useState<DigitizeMethod>("standard");
+  const [userSetMethod, setUserSetMethod] = useState(false);
+  const photoMode = method === "photo";
   const [photoShades, setPhotoShades] = useState<1 | 2 | 3 | 4>(1);
   const [photoRowSpacing, setPhotoRowSpacing] = useState(0.8);
   const [removeBackground, setRemoveBackground] = useState(true);
@@ -240,14 +254,33 @@ export default function AutoDigitizeDialog({
     [imageData],
   );
   const looksLikePhoto = complexity > PHOTO_COMPLEXITY;
+  // Live-Paint detection: does the image read as outlined line art (a dark
+  // connected line network enclosing flat color faces)? Raster sources only.
+  const lineArt = useMemo(
+    () => (imageData && !isSvg ? detectLineArt(imageData) : null),
+    [imageData, isSvg],
+  );
+
+  // Auto-preselect the Line art method for detected outlined artwork — the
+  // posterize trace visibly butchers this art class (its ink becomes filled
+  // blobs that swallow the faces). The user's explicit choice always wins.
+  useEffect(() => {
+    if (lineArt?.isLineArt && !userSetMethod) setMethod("lineart");
+  }, [lineArt, userSetMethod]);
 
   // Adaptive default color count, graded to the image's dominant-color count
   // (flat logos land low, busy art/photos higher) instead of a binary 4/8. Once
-  // the user nudges the stepper we stop steering.
+  // the user nudges the stepper we stop steering. Line art counts its actual
+  // face colors + ink instead — the generic suggester's area floor misses a
+  // cartoon's small-but-real features (a mouth is <1% of the pixels).
   useEffect(() => {
     if (!imageData || userSetColors) return;
+    if (method === "lineart" && lineArt?.isLineArt) {
+      setNumColors(Math.max(MIN_COLORS, Math.min(MAX_COLORS, lineArt.suggestedColors)));
+      return;
+    }
     setNumColors(suggestColorCount(imageData, MIN_COLORS, MAX_COLORS));
-  }, [imageData, userSetColors]);
+  }, [imageData, userSetColors, method, lineArt]);
 
   // LIVE re-trace: whenever the image or any setting changes, re-digitize after a
   // short debounce so dragging the stepper doesn't trace on every tick. The trace
@@ -298,6 +331,9 @@ export default function AutoDigitizeDialog({
         }
         // VECTOR path: import the SVG's shapes exactly (no raster ceiling). Falls
         // back to the raster tracer if the SVG couldn't be parsed.
+        // LINE-ART path: the Live-Paint model — faces between the dark linework
+        // fill flat, the ink network sews last on top.
+        const liveArt = method === "lineart" && !isSvg;
         const traced =
           isSvg && svgShapes?.shapes
             ? svgShapesToObjects(svgShapes.shapes.shapes, {
@@ -307,29 +343,44 @@ export default function AutoDigitizeDialog({
                 hoopHmm: hoop.hMm,
                 maxColors: numColors,
               })
-            : imageDataToObjects(imageData, numColors, {
-                mmPerPx,
-                offsetX,
-                offsetY,
-                removeBackground,
-                detail,
-              });
+            : liveArt
+              ? livePaintObjects(imageData, numColors, {
+                  mmPerPx,
+                  offsetX,
+                  offsetY,
+                  removeBackground,
+                  detail,
+                })
+              : imageDataToObjects(imageData, numColors, {
+                  mmPerPx,
+                  offsetX,
+                  offsetY,
+                  removeBackground,
+                  detail,
+                });
         // Collapse near-duplicate palette entries k-means split off a flat region
         // (anti-alias bands, thin shadow shades) so the body doesn't fragment and
         // thread slots aren't wasted. Area-aware, so distinct colors stay.
-        const { colors, objects } = consolidateFringeColors(
-          {
-            version: 1,
-            widthMm: hoop.wMm,
-            heightMm: hoop.hMm,
-            hoop: { ...hoop },
-            colors: traced.colors,
-            objects: traced.objects,
-          },
-          // Fringe cleanup may collapse duplicates, never the user's colour
-          // budget — the trace already chose the best numColors clusters.
-          numColors,
-        );
+        // Live paint SKIPS this: its palette is already face-exact, and the
+        // outer-ring-area weighting would over-weigh the ink silhouette (and the
+        // ΔE30 fringe rule could merge an eye-white into the hat-white, or a
+        // dark face color INTO the ink colorId — dragging the ink group forward
+        // in fixStitches' color-grouped ordering).
+        const { colors, objects } = liveArt
+          ? traced
+          : consolidateFringeColors(
+              {
+                version: 1,
+                widthMm: hoop.wMm,
+                heightMm: hoop.hMm,
+                hoop: { ...hoop },
+                colors: traced.colors,
+                objects: traced.objects,
+              },
+              // Fringe cleanup may collapse duplicates, never the user's colour
+              // budget — the trace already chose the best numColors clusters.
+              numColors,
+            );
 
         let finalObjects = objects;
         if (recognizeText && objects.length > 0) {
@@ -378,7 +429,7 @@ export default function AutoDigitizeDialog({
       alive = false;
       clearTimeout(handle);
     };
-  }, [imageData, svgShapes, isSvg, numColors, removeBackground, detail, recognizeText, hoop.wMm, hoop.hMm, photoMode, photoShades, photoRowSpacing]);
+  }, [imageData, svgShapes, isSvg, numColors, removeBackground, detail, recognizeText, hoop.wMm, hoop.hMm, method, photoShades, photoRowSpacing]);
 
   // Load the lettering font once — the text-retype assist needs it.
   useEffect(() => {
@@ -502,12 +553,28 @@ export default function AutoDigitizeDialog({
   const MERGE_DELTA_E = 10;
   const mergeSimilar = () => {
     if (!result) return;
+    // Live paint: the ink color/object sit out the merge. A ΔE≤10 merge of a
+    // near-black face color INTO the ink colorId would remap ids and drag the
+    // ink group forward in fixStitches' color-grouped ordering — the linework
+    // must stay the last thing sewn.
+    const inkIds = new Set(
+      method === "lineart"
+        ? result.objects.filter((o) => o.params.lineArt).map((o) => o.colorId)
+        : [],
+    );
+    const mergeColors = result.colors.filter((c) => !inkIds.has(c.id));
+    const mergeObjects = result.objects.filter((o) => !inkIds.has(o.colorId));
     const merged = mergeSimilarColors(
-      { version: 1, widthMm: hoop.wMm, heightMm: hoop.hMm, hoop: { ...hoop }, colors: result.colors, objects: result.objects },
+      { version: 1, widthMm: hoop.wMm, heightMm: hoop.hMm, hoop: { ...hoop }, colors: mergeColors, objects: mergeObjects },
       MERGE_DELTA_E,
     );
-    setResult({ colors: merged.colors, objects: merged.objects });
-    setKeptIds(new Set(merged.colors.map((c) => c.id)));
+    const inkColors = result.colors.filter((c) => inkIds.has(c.id));
+    const inkObjects = result.objects.filter((o) => inkIds.has(o.colorId));
+    setResult({
+      colors: [...merged.colors, ...inkColors],
+      objects: [...merged.objects, ...inkObjects],
+    });
+    setKeptIds(new Set([...merged.colors, ...inkColors].map((c) => c.id)));
   };
 
   // Snap the traced palette to the nearest real threads (name + code + exact spool
@@ -651,30 +718,47 @@ export default function AutoDigitizeDialog({
                 tones, like an engraved portrait.
               </span>
             </p>
-            {!isSvg && (
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <div
-                  className="inline-flex overflow-hidden rounded-sm border-2 border-ink/30"
-                  role="group"
-                  aria-label="Digitizing method"
-                >
-                  {([[false, "Standard trace"], [true, "Photo stitch (rows)"]] as const).map(
-                    ([value, label]) => (
-                      <button
-                        key={label}
-                        onClick={() => setPhotoMode(value)}
-                        aria-pressed={photoMode === value}
-                        className={`px-3 py-1 font-label text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ink ${
-                          photoMode === value ? "bg-ink text-cream" : "bg-cream text-navy/70 hover:bg-butter-200"
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ),
-                  )}
-                </div>
-              </div>
-            )}
+          </div>
+        )}
+
+        {/* DIGITIZING METHOD — always visible for rasters, so the choice isn't
+            buried in a warning banner. Auto-detection preselects Line art for
+            outlined cartoon artwork and Photo never preselects itself. */}
+        {!isSvg && (
+          <div className="mb-3">
+            <div
+              className="inline-flex overflow-hidden rounded-sm border-2 border-ink/30"
+              role="group"
+              aria-label="Digitizing method"
+            >
+              {([["standard", "Standard trace"], ["lineart", "Line art"], ["photo", "Photo stitch"]] as const).map(
+                ([value, label]) => (
+                  <button
+                    key={value}
+                    onClick={() => {
+                      setUserSetMethod(true);
+                      setMethod(value);
+                    }}
+                    aria-pressed={method === value}
+                    className={`px-3 py-1 font-label text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ink ${
+                      method === value ? "bg-ink text-cream" : "bg-cream text-navy/70 hover:bg-butter-200"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ),
+              )}
+            </div>
+            <p className="mt-1 text-[11px] text-navy/55">
+              {method === "lineart"
+                ? "Outlined cartoon art: every area between the lines fills flat with its own color, and the dark linework sews last on top."
+                : method === "photo"
+                  ? "Rows of stitches whose density follows the photo's tones, like an engraved portrait."
+                  : "Flattens the image to solid color regions and stitches each one."}
+              {method === "lineart" && lineArt?.isLineArt && !userSetMethod && (
+                <span className="text-navy/45"> Looks like outlined line art, so we picked this for you.</span>
+              )}
+            </p>
           </div>
         )}
 

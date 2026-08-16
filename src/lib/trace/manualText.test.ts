@@ -31,6 +31,26 @@ function word(x0: number, y: number, n: number, s: number, gap: number, colorId:
 }
 
 describe("detectTextClusters", () => {
+  it("does NOT offer two similar blobs (a cartoon's fists) as a text area", () => {
+    // The exact false positive a user hit: two same-size compact blobs near
+    // each other. Two members are never confidently a word (≥3 required).
+    const fists = [glyph(20, 20, 8, "c1"), glyph(38, 24, 8, "c1")];
+    expect(detectTextClusters(fists)).toHaveLength(0);
+  });
+
+  it("does NOT offer scattered same-size blobs off a common line as a word", () => {
+    // Three blobs in a triangle — proximity-linked, but their centres don't
+    // march along a line and the frame isn't word-shaped.
+    const blobs = [glyph(20, 20, 8, "c1"), glyph(38, 30, 8, "c1"), glyph(24, 42, 8, "c1")];
+    expect(detectTextClusters(blobs)).toHaveLength(0);
+  });
+
+  it("does NOT link blobs of different thread colors into one word", () => {
+    const row = [glyph(20, 20, 5, "c1"), glyph(28, 20, 5, "c2"), glyph(36, 20, 5, "c1")];
+    // c1 has only two members (too few); c2 has one — nothing qualifies.
+    expect(detectTextClusters(row)).toHaveLength(0);
+  });
+
   it("finds a horizontal row of similar glyphs as one cluster", () => {
     const objs = word(10, 20, 5, 4, 1.5, "c1"); // 5 letters, 4mm, at y=20
     const clusters = detectTextClusters(objs);

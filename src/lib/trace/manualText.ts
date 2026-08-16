@@ -95,6 +95,16 @@ const CLUSTER_GAP_FACTOR = 2.2;
  *  can sit adjacent in one colour (a crest's CITY above ST LOUIS), and merging
  *  them would letter the small word at the big word's height. */
 const CLUSTER_SIZE_RATIO = 1.9;
+/** Word-shape gates (see wordLike in detectTextClusters): text taller than
+ *  this isn't small stylized lettering needing a retype... */
+const WORD_MAX_HEIGHT_MM = 15;
+/** …a word is wider than tall… */
+const WORD_MIN_ELONGATION = 1.6;
+/** …its letters' centres sit on a line (RMS cross-axis residual as a fraction
+ *  of the mean glyph size)… */
+const WORD_MAX_CROSS_RESIDUAL = 0.35;
+/** …and at roughly even pitch (coefficient of variation of successive gaps). */
+const WORD_MAX_GAP_CV = 0.6;
 
 /** Glyph-scale candidate PIECES: each connected region of a fill object judged
  *  on its own (a word's letters are separate rings inside one traced object, so
@@ -134,6 +144,9 @@ function clusterGlyphs(cands: ReturnType<typeof glyphCandidates>): number[][] {
   };
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
+      // Letters of one word share a thread color; linking across colors chained
+      // a cartoon's unrelated same-size blobs into phantom "words".
+      if (cands[i].colorId !== cands[j].colorId) continue;
       const gap = Math.hypot(cands[i].cx - cands[j].cx, cands[i].cy - cands[j].cy);
       const size = (cands[i].dim + cands[j].dim) / 2;
       const ratio = Math.max(cands[i].dim, cands[j].dim) / Math.max(1e-6, Math.min(cands[i].dim, cands[j].dim));
@@ -145,7 +158,9 @@ function clusterGlyphs(cands: ReturnType<typeof glyphCandidates>): number[][] {
     const r = find(i);
     (groups.get(r) ?? groups.set(r, []).get(r)!).push(i);
   }
-  return [...groups.values()].filter((g) => g.length >= 2); // a word is ≥2 glyphs
+  // A word is ≥3 glyphs: two similar blobs near each other (a cartoon's two
+  // fists, a pair of eyes) are far too common to offer as "text".
+  return [...groups.values()].filter((g) => g.length >= 3);
 }
 
 /** Oriented frame of a glyph group via PCA on the member centres. */
@@ -215,9 +230,41 @@ let clusterSeq = 0;
 export function detectTextClusters(objects: EmbObject[], minHeightMm = DEFAULT_MIN_HEIGHT_MM): DetectedTextCluster[] {
   const cands = glyphCandidates(objects);
   const groups = clusterGlyphs(cands);
+  // A group is only a WORD when its members actually march like letters:
+  // centres on a line (small cross-axis residual), the run wider than tall,
+  // cap height in lettering range, and roughly even spacing. A cartoon's
+  // fists/feet/eyes pass the loose proximity link but fail these.
+  const wordLike = (members: number[], c: Cluster): boolean => {
+    if (c.heightMm > WORD_MAX_HEIGHT_MM) return false;
+    if (c.lengthMm / Math.max(1e-6, c.heightMm) < WORD_MIN_ELONGATION) return false;
+    const ux = Math.cos(c.angleRad), uy = Math.sin(c.angleRad);
+    const along: number[] = [];
+    let residual2 = 0;
+    let meanDim = 0;
+    for (const i of members) {
+      const dx = cands[i].cx - c.cx;
+      const dy = cands[i].cy - c.cy;
+      along.push(dx * ux + dy * uy);
+      const cross = -dx * uy + dy * ux;
+      residual2 += cross * cross;
+      meanDim += cands[i].dim;
+    }
+    meanDim /= members.length;
+    const rms = Math.sqrt(residual2 / members.length);
+    if (rms > meanDim * WORD_MAX_CROSS_RESIDUAL) return false;
+    // Spacing regularity: letters sit at roughly even pitch along the run.
+    along.sort((a, b) => a - b);
+    const gaps: number[] = [];
+    for (let i = 1; i < along.length; i++) gaps.push(along[i] - along[i - 1]);
+    const mean = gaps.reduce((s, g) => s + g, 0) / gaps.length;
+    if (mean <= 1e-6) return false;
+    const sd = Math.sqrt(gaps.reduce((s, g) => s + (g - mean) ** 2, 0) / gaps.length);
+    return sd / mean <= WORD_MAX_GAP_CV;
+  };
   const raw = groups
-    .map((g) => frameOf(g, cands))
-    .filter((c) => c.heightMm >= minHeightMm)
+    .map((g) => ({ g, frame: frameOf(g, cands) }))
+    .filter(({ g, frame }) => frame.heightMm >= minHeightMm && wordLike(g, frame))
+    .map(({ frame }) => frame)
     .sort((a, b) => a.cy - b.cy || a.cx - b.cx);
   return raw.map((c, i) => {
     const ca = Math.cos(c.angleRad), sa = Math.sin(c.angleRad);

@@ -86,6 +86,11 @@ const SLIVER_MEAN_W_MM = 0.5;
  *  remains (the whole object was trace fringe). Speck-drop handles tiny blobs;
  *  this handles LONG-but-thin junk the area test can't see. */
 function dropSliverRings(o: EmbObject): EmbObject | null {
+  // Line-art networks legitimately carry sub-0.5mm rings: a detached hairline
+  // stroke (an eyebrow, a shoe crease) has ring mean width = its stroke width,
+  // and the engine's medial renderer bean-retraces exactly those by design —
+  // stripping them here would delete drawn detail from a live-paint trace.
+  if (o.params.lineArt) return o;
   if (o.type !== "fill" || o.paths.length === 0) return o;
   const real = o.paths.filter((r) => ringMeanWidthMm(r) >= SLIVER_MEAN_W_MM);
   if (real.length === o.paths.length) return o;
@@ -434,8 +439,11 @@ export function fixStitchesWithReport(project: Project): { project: Project; rep
       const ca = colorOrder.get(a.o.colorId)!;
       const cb = colorOrder.get(b.o.colorId)!;
       if (ca !== cb) return ca - cb; // group by color (fewest thread changes)
-      const la = LAYER_RANK[a.o.type];
-      const lb = LAYER_RANK[b.o.type];
+      // Linework always ranks last within its color: an outline network sews
+      // ON TOP of every same-color detail (and live paint's whole contract is
+      // fills first, ink last).
+      const la = a.o.params.lineArt ? 3 : LAYER_RANK[a.o.type];
+      const lb = b.o.params.lineArt ? 3 : LAYER_RANK[b.o.type];
       if (la !== lb) return la - lb; // fills first, details on top
       return a.i - b.i; // otherwise keep the drawn order (stable)
     })
