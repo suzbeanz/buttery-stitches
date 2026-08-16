@@ -28,6 +28,20 @@ vi.mock("../lib/trace", () => ({
   imageDataToObjects: vi.fn(() => ({ colors: COLORS, objects: OBJECTS })),
   estimateColorComplexity: vi.fn(() => 0),
   suggestColorCount: vi.fn(() => 4),
+  detectLineArt: vi.fn(() => ({
+    isLineArt: false,
+    stats: {
+      opaqueFraction: 1,
+      inkFraction: 0,
+      largestInkShare: 0,
+      erosionSurvivor2: 1,
+      meanInkLum: 255,
+      enclosedFaces: 0,
+      faceFlatness: 255,
+    },
+    suggestedColors: 4,
+  })),
+  livePaintObjects: vi.fn(() => ({ colors: COLORS, objects: OBJECTS })),
 }));
 // Keep fixStitches an identity so onApply gets exactly the filtered subset.
 vi.mock("../lib/fix", () => ({ fixStitches: vi.fn((p: Project) => p) }));
@@ -62,8 +76,22 @@ vi.mock("../lib/text/fonts", async (importActual) => {
 });
 
 import AutoDigitizeDialog from "./AutoDigitizeDialog";
-import { imageDataToObjects } from "../lib/trace";
+import { imageDataToObjects, detectLineArt, livePaintObjects } from "../lib/trace";
 import { sweepObject } from "../lib/bench/sweep";
+
+const LINE_ART_YES = {
+  isLineArt: true,
+  stats: {
+    opaqueFraction: 0.44,
+    inkFraction: 0.23,
+    largestInkShare: 0.83,
+    erosionSurvivor2: 0.06,
+    meanInkLum: 13,
+    enclosedFaces: 14,
+    faceFlatness: 3,
+  },
+  suggestedColors: 4,
+};
 
 const HOOP = { wMm: 100, hMm: 100, name: "4×4" };
 const CLEAN_SWEEP = {
@@ -135,6 +163,12 @@ describe("AutoDigitizeDialog (wizard)", () => {
     // Re-establish the default trace result (clearAllMocks keeps any per-test
     // mockReturnValue override otherwise, leaking into later tests).
     vi.mocked(imageDataToObjects).mockReturnValue({ colors: COLORS, objects: OBJECTS });
+    vi.mocked(livePaintObjects).mockReturnValue({ colors: COLORS, objects: OBJECTS });
+    vi.mocked(detectLineArt).mockReturnValue({
+      isLineArt: false,
+      stats: { ...LINE_ART_YES.stats, inkFraction: 0, enclosedFaces: 0 },
+      suggestedColors: 4,
+    });
     vi.mocked(sweepObject).mockImplementation(() => ({ ...CLEAN_SWEEP }));
     // jsdom lacks object URLs.
     URL.createObjectURL = vi.fn(() => "blob:x");
@@ -516,4 +550,72 @@ describe("AutoDigitizeDialog (wizard)", () => {
     expect(kept?.type).toBe("fill");
     expect(project.objects).toHaveLength(3);
   });
+
+  // ── Live-Paint (line art) method ─────────────────────────────────────────
+  const LP_COLORS = [
+    { id: "cw", rgb: [250, 250, 250] as [number, number, number], name: "White" },
+    { id: "cb", rgb: [60, 180, 240] as [number, number, number], name: "Blue" },
+    { id: "cink", rgb: [15, 15, 18] as [number, number, number], name: "Ink" },
+  ];
+  const LP_OBJECTS = [
+    obj("f1", "cw", 0),
+    obj("f2", "cb", 20),
+    {
+      ...obj("ink", "cink", 40),
+      name: "Ink lines",
+      params: { fillStyle: "satin" as const, lineArt: true },
+    },
+  ];
+
+  it("auto-preselects Line art for detected outlined artwork and traces via livePaintObjects", async () => {
+    vi.mocked(detectLineArt).mockReturnValue(LINE_ART_YES);
+    vi.mocked(livePaintObjects).mockReturnValue({ colors: LP_COLORS, objects: LP_OBJECTS });
+    renderDialog();
+    await waitForTrace();
+    const btn = screen.getByRole("button", { name: "Line art" }) as HTMLButtonElement;
+    expect(btn.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText(/we picked this for you/)).toBeTruthy();
+    expect(vi.mocked(livePaintObjects)).toHaveBeenCalled();
+    expect(vi.mocked(imageDataToObjects)).not.toHaveBeenCalled();
+  });
+
+  it("switching back to Standard trace re-traces via imageDataToObjects", async () => {
+    vi.mocked(detectLineArt).mockReturnValue(LINE_ART_YES);
+    vi.mocked(livePaintObjects).mockReturnValue({ colors: LP_COLORS, objects: LP_OBJECTS });
+    renderDialog();
+    await waitForTrace();
+    fireEvent.click(screen.getByRole("button", { name: "Standard trace" }));
+    await waitFor(() => expect(vi.mocked(imageDataToObjects)).toHaveBeenCalled());
+  });
+
+  it("Line art applies colors verbatim (no fringe consolidation) with the ink object last", async () => {
+    vi.mocked(detectLineArt).mockReturnValue(LINE_ART_YES);
+    // Two near-identical whites that consolidateFringeColors WOULD merge —
+    // live paint must keep the palette exactly as the trace produced it.
+    const colors = [
+      { id: "cw", rgb: [250, 250, 250] as [number, number, number], name: "White" },
+      { id: "cw2", rgb: [247, 247, 247] as [number, number, number], name: "White 2" },
+      { id: "cink", rgb: [15, 15, 18] as [number, number, number], name: "Ink" },
+    ];
+    const objects = [
+      obj("f1", "cw", 0),
+      obj("f2", "cw2", 20),
+      { ...obj("ink", "cink", 40), name: "Ink lines", params: { fillStyle: "satin" as const, lineArt: true } },
+    ];
+    vi.mocked(livePaintObjects).mockReturnValue({ colors, objects });
+    const onApply = renderDialog();
+    await waitForTrace();
+    await toColorsFromHere();
+    await toReview();
+    const project = await addToDesign(onApply);
+    expect(project.colors.map((c) => c.id)).toEqual(["cw", "cw2", "cink"]);
+    const last = project.objects[project.objects.length - 1];
+    expect(last.params.lineArt).toBe(true);
+  });
 });
+
+/** From step 0 with the trace already landed: go to the Colors step. */
+async function toColorsFromHere() {
+  clickNext();
+  await screen.findByText(/Colors found/);
+}

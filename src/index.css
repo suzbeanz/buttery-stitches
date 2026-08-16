@@ -383,9 +383,17 @@ body::after {
     z-index: 70;
     transition: opacity 0.08s ease;
   }
-  [data-tip]:hover::after,
-  [data-tip]:focus-visible::after {
-    opacity: 1;
+  /* Reveal on hover/focus — but ONLY for true pointer devices. Touch browsers
+     apply a sticky :hover to the last-tapped element, so on a phone every tap
+     left a tooltip painted over the toolbar (and the rail's data-tip-side
+     "right" placement, tuned for the desktop vertical rail, lands ON TOP of
+     the neighbouring buttons in the horizontal phone layout). Touch users get
+     labels and the Help overlay instead. */
+  @media (hover: hover) and (pointer: fine) {
+    [data-tip]:hover::after,
+    [data-tip]:focus-visible::after {
+      opacity: 1;
+    }
   }
   /* Tooltips on elements near the bottom of the screen flip above. */
   [data-tip-side="top"]::after {

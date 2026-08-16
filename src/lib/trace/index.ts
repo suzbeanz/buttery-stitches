@@ -19,9 +19,17 @@ import { stackSmallFeatures } from "./stack";
 import { nameForRgb } from "./colorname";
 import { weldSliverGaps } from "./weld";
 
+import { upscaleFactor, hasAntiAliasing, upscaleBilinear, upscaleNearest } from "./upscale";
+import { DETAIL_PRESETS } from "./types";
+import type { DigitizeDetail, DigitizeOptions, DigitizeResult } from "./types";
+
 export * from "./simplify";
 export * from "./classify";
 export * from "./quantize";
+export * from "./types";
+export * from "./upscale";
+export * from "./livepaint";
+export type { DigitizeDetail, DigitizeOptions, DigitizeResult };
 
 /** The slice of imagetracerjs's tracedata we consume. */
 interface TraceSegment {
@@ -49,42 +57,6 @@ export interface Tracedata {
   palette: TracePalette[];
   width: number;
   height: number;
-}
-
-export interface DigitizeOptions {
-  /** millimeters per source pixel (sets the physical size) */
-  mmPerPx: number;
-  /** translate the whole design (mm), e.g. to center it in the hoop */
-  offsetX?: number;
-  offsetY?: number;
-  /** Douglas–Peucker tolerance (default 0.3 mm) */
-  simplifyTolMm?: number;
-  /** drop shapes smaller than this (default 1 mm²) */
-  minAreaMm2?: number;
-  /** shapes thinner than this become running stitches (default 1.2 mm) */
-  runningMaxWidth?: number;
-  /** skip the background color (usually the fabric) */
-  removeBackground?: boolean;
-  /** the detected background RGB (from the image border); falls back to area. */
-  backgroundRgb?: [number, number, number];
-  /** how much fine detail to keep vs how bold/clean to simplify (default
-   *  "balanced"). Drives trace smoothing, path simplification, and despeckling
-   *  together; explicit simplifyTolMm/minAreaMm2 still override. */
-  detail?: DigitizeDetail;
-  /** apply design-level idealization (regularize even/uniform repeats like a ladder's
-   *  rungs into one canonical shape at a single pitch). Default on. */
-  idealize?: boolean;
-  /** extend earlier-sewn regions under later neighbours so color boundaries
-   *  can't open bare-fabric gaps when the thread pulls. Default on. */
-  underlap?: boolean;
-}
-
-/** Detail level for auto-digitize: bolder & cleaner ↔ finer & busier. */
-export type DigitizeDetail = "smooth" | "balanced" | "detailed";
-
-export interface DigitizeResult {
-  colors: ThreadColor[];
-  objects: EmbObject[];
 }
 
 /** Samples along a quadratic from (x1,y1) via control (x2,y2) to (x3,y3). */
@@ -528,129 +500,6 @@ const TRACE_OPTIONS = {
   blurdelta: 20,
 };
 
-/**
- * Per-detail-level knobs. "balanced" matches the long-standing defaults. Higher
- * `pathomit`/`blurradius`/`ltres`/`qtres` and a larger min-area drop tiny pieces
- * and smooth the pixel staircase (bolder, fewer thread stops); lower values keep
- * fine lines and small features (busier, more stitches).
- */
-const DETAIL_PRESETS: Record<
-  DigitizeDetail,
-  { pathomit: number; blurradius: number; ltres: number; qtres: number; simplifyTolMm: number; minAreaMm2: number }
-> = {
-  smooth: { pathomit: 16, blurradius: 3, ltres: 1.5, qtres: 1.5, simplifyTolMm: 0.5, minAreaMm2: 3 },
-  balanced: { pathomit: 8, blurradius: 1, ltres: 1, qtres: 1, simplifyTolMm: 0.3, minAreaMm2: 1 },
-  detailed: { pathomit: 3, blurradius: 0, ltres: 0.5, qtres: 0.5, simplifyTolMm: 0.15, minAreaMm2: 0.4 },
-};
-
-/** Sources whose longest side is under this many px get upscaled before
- *  tracing (a favicon-sized logo at hoop scale is ~0.5mm per pixel — every
- *  anti-aliased stair-step becomes a visible wobble in thread). */
-const UPSCALE_TARGET_PX = 480;
-/** Never upscale more than this (a 32px source is beyond saving anyway, and
- *  memory grows with the square of the factor). */
-const UPSCALE_MAX_FACTOR = 6;
-
-function upscaleFactor(w: number, h: number): number {
-  const maxDim = Math.max(w, h);
-  if (maxDim <= 0 || maxDim >= UPSCALE_TARGET_PX) return 1;
-  return Math.min(UPSCALE_MAX_FACTOR, Math.ceil(UPSCALE_TARGET_PX / maxDim));
-}
-
-/** Does the image carry anti-aliasing? Real-world exports blend edges over many
- *  intermediate colours (and PNG subjects feather their alpha); a hard-edged
- *  flat raster uses only a handful of exact colours and binary alpha. Decides
- *  the upscale interpolation: smooth sources interpolate bilinearly (sub-pixel
- *  edge accuracy), hard sources go nearest-neighbour so the upscale never
- *  INVENTS blend colours that would trace as a halo outline. */
-function hasAntiAliasing(img: { width: number; height: number; data: Uint8ClampedArray }): boolean {
-  const { data } = img;
-  const total = data.length / 4;
-  const step = Math.max(1, Math.floor(total / 5000));
-  const colors = new Set<number>();
-  let softAlpha = 0;
-  let sampled = 0;
-  for (let i = 0; i < total; i += step) {
-    const o = i * 4;
-    sampled++;
-    const a = data[o + 3];
-    if (a > 16 && a < 240) softAlpha++;
-    if (a < 16) continue;
-    colors.add((data[o] << 16) | (data[o + 1] << 8) | data[o + 2]);
-    if (colors.size > 24) return true;
-  }
-  return sampled > 0 && softAlpha / sampled > 0.005;
-}
-
-/** Bilinear upscale with PREMULTIPLIED alpha, so colours interpolate weighted
- *  by their coverage — interpolating straight RGBA across a transparent edge
- *  would smear the (meaningless) colour of invisible pixels into the visible
- *  ones and put a dark fringe around every transparent-PNG subject. */
-function upscaleBilinear(img: { width: number; height: number; data: Uint8ClampedArray }, factor: number) {
-  const sw = img.width;
-  const sh = img.height;
-  const dw = sw * factor;
-  const dh = sh * factor;
-  const src = img.data;
-  const out = new Uint8ClampedArray(dw * dh * 4);
-  for (let y = 0; y < dh; y++) {
-    const fy = Math.min(sh - 1, (y + 0.5) / factor - 0.5);
-    const y0 = Math.max(0, Math.floor(fy));
-    const y1 = Math.min(sh - 1, y0 + 1);
-    const ty = fy - y0;
-    for (let x = 0; x < dw; x++) {
-      const fx = Math.min(sw - 1, (x + 0.5) / factor - 0.5);
-      const x0 = Math.max(0, Math.floor(fx));
-      const x1 = Math.min(sw - 1, x0 + 1);
-      const tx = fx - x0;
-      let r = 0, g = 0, b = 0, a = 0;
-      for (const [sx, sy, wgt] of [
-        [x0, y0, (1 - tx) * (1 - ty)],
-        [x1, y0, tx * (1 - ty)],
-        [x0, y1, (1 - tx) * ty],
-        [x1, y1, tx * ty],
-      ] as const) {
-        const o = (sy * sw + sx) * 4;
-        const av = src[o + 3] / 255;
-        r += src[o] * av * wgt;
-        g += src[o + 1] * av * wgt;
-        b += src[o + 2] * av * wgt;
-        a += av * wgt;
-      }
-      const o = (y * dw + x) * 4;
-      if (a > 1e-4) {
-        out[o] = r / a;
-        out[o + 1] = g / a;
-        out[o + 2] = b / a;
-      }
-      out[o + 3] = a * 255;
-    }
-  }
-  return { width: dw, height: dh, data: out };
-}
-
-/** Nearest-neighbour upscale — exact colours only, for hard-edged sources. */
-function upscaleNearest(img: { width: number; height: number; data: Uint8ClampedArray }, factor: number) {
-  const sw = img.width;
-  const sh = img.height;
-  const dw = sw * factor;
-  const dh = sh * factor;
-  const src = img.data;
-  const out = new Uint8ClampedArray(dw * dh * 4);
-  for (let y = 0; y < dh; y++) {
-    const sy = Math.min(sh - 1, Math.floor(y / factor));
-    for (let x = 0; x < dw; x++) {
-      const sx = Math.min(sw - 1, Math.floor(x / factor));
-      const so = (sy * sw + sx) * 4;
-      const o = (y * dw + x) * 4;
-      out[o] = src[so];
-      out[o + 1] = src[so + 1];
-      out[o + 2] = src[so + 2];
-      out[o + 3] = src[so + 3];
-    }
-  }
-  return { width: dw, height: dh, data: out };
-}
 
 /**
  * Full auto-digitize: a raster segmentation pre-pass (median-cut quantization
