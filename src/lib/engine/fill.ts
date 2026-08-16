@@ -1,4 +1,5 @@
 import type { Path, Point } from "../../types/project";
+import { booleanOp, ringsOverlap } from "../boolean";
 import { rotatePoint } from "./resample";
 import { staggeredSatin } from "./satin";
 import { motifById, type Motif } from "./motifs";
@@ -166,12 +167,13 @@ export function splitFillRegions(rings: Path[]): Path[][] {
     }
   }
 
-  const regionOf = new Map<number, Path[]>();
+  const outersOf = new Map<number, Path[]>();
   outers.forEach((i) => {
     const root = find(i);
-    if (!regionOf.has(root)) regionOf.set(root, []);
-    regionOf.get(root)!.push(orientRing(usable[i], true));
+    if (!outersOf.has(root)) outersOf.set(root, []);
+    outersOf.get(root)!.push(orientRing(usable[i], true));
   });
+  const holesOf = new Map<number, Path[]>();
   usable.forEach((r, i) => {
     if (d[i] % 2 === 0) return; // outer, handled above
     let best = -1;
@@ -183,9 +185,32 @@ export function splitFillRegions(rings: Path[]): Path[][] {
       }
     });
     const root = best >= 0 ? find(best) : outers.length ? find(outers[0]) : -1;
-    if (root >= 0 && regionOf.has(root)) regionOf.get(root)!.push(orientRing(r, false));
+    if (root >= 0 && outersOf.has(root)) {
+      if (!holesOf.has(root)) holesOf.set(root, []);
+      holesOf.get(root)!.push(orientRing(r, false));
+    }
   });
-  return [...regionOf.values()];
+  const result: Path[][] = [];
+  for (const [root, outs] of outersOf) {
+    let solids = outs;
+    // Two outers in one region whose rings ACTUALLY INTERSECT (a traced shoe
+    // grazing the pants) cannot sew as-is: the even-odd scanline cancels
+    // their overlap, and one solid's fill collapses (a cartoon's pants sewed
+    // three rows then nothing). Union such solids into clean welded outers
+    // first; disjoint outers sharing a region (mere bbox overlap) untouched.
+    if (solids.length > 1 && ringsOverlap(solids)) {
+      let acc: Path[] = [solids[0]];
+      for (let k = 1; k < solids.length; k++) {
+        const u = booleanOp(acc, [solids[k]], "union", 0.15);
+        if (u.length) acc = u;
+        else acc.push(solids[k]); // raster failure — keep both, old behavior
+      }
+      const dd = depthsOf(acc);
+      solids = acc.map((r, i) => orientRing(r, dd[i] % 2 === 0));
+    }
+    result.push([...solids, ...(holesOf.get(root) ?? [])]);
+  }
+  return result;
 }
 
 function centroid(ring: Path): Point {

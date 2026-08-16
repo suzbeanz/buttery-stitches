@@ -831,6 +831,18 @@ function deloopRun(line: Point[]): Point[] {
         Math.hypot(out[j].x - out[k].x, out[j].y - out[k].y),
       );
       if (dmin <= 0.25) continue;
+      // Only collapse SHORT loops. Tip piles (the scribble this exists for)
+      // are a few millimetres of thread; a LONG apparent loop is legitimate
+      // geometry — a boustrophedon's boundary connector crossing its own rows
+      // on a concave region. Splicing those ate a cartoon's entire pants fill
+      // (hundreds of points) while "de-looping".
+      let loopLen = 0;
+      for (let q = j; q < k; q++) loopLen += Math.hypot(out[q + 1].x - out[q].x, out[q + 1].y - out[q].y);
+      // 12mm separates the two worlds cleanly: real tip piles and notch
+      // slashes are a few mm of redundant thread; the false "loops" that must
+      // survive are whole row-blocks (50mm+) that a concave boundary
+      // connector legitimately crosses — splicing those ate a fill.
+      if (loopLen > 12) continue;
       out.splice(j, k - j); // collapse the loop between the crossing segments
       break;
     }
