@@ -40,6 +40,7 @@ vi.mock("../lib/bench/sweep", () => ({
     strokeWidthMm: 5,
     coverage: 1,
     bareMm2: 0,
+    maxBarePatchMm2: 0,
     crossings: 0,
     crossingPct: 0,
     maxSegMm: 4,
@@ -71,6 +72,7 @@ const CLEAN_SWEEP = {
   strokeWidthMm: 5,
   coverage: 1,
   bareMm2: 0,
+  maxBarePatchMm2: 0,
   crossings: 0,
   crossingPct: 0,
   maxSegMm: 4,
@@ -458,7 +460,7 @@ describe("AutoDigitizeDialog (wizard)", () => {
     // Make the sweep flag object o1 (bad coverage) and pass the rest.
     vi.mocked(sweepObject).mockImplementation((o) =>
       o.id === "o1"
-        ? { ...CLEAN_SWEEP, name: o.name, coverage: 0.6, bareMm2: 24 }
+        ? { ...CLEAN_SWEEP, name: o.name, coverage: 0.6, bareMm2: 24, maxBarePatchMm2: 9 }
         : { ...CLEAN_SWEEP, name: o.name },
     );
     const onApply = renderDialog();
@@ -478,7 +480,7 @@ describe("AutoDigitizeDialog (wizard)", () => {
   it("Check step: 'Sew as outline' converts the flagged piece to a running outline", async () => {
     vi.mocked(sweepObject).mockImplementation((o) =>
       o.id === "o1"
-        ? { ...CLEAN_SWEEP, name: o.name, coverage: 0.6, bareMm2: 24 }
+        ? { ...CLEAN_SWEEP, name: o.name, coverage: 0.6, bareMm2: 24, maxBarePatchMm2: 9 }
         : { ...CLEAN_SWEEP, name: o.name },
     );
     const onApply = renderDialog();
@@ -496,7 +498,7 @@ describe("AutoDigitizeDialog (wizard)", () => {
   it("Check step: Undo restores a fix, and 'Keep anyway' applies the piece unchanged", async () => {
     vi.mocked(sweepObject).mockImplementation((o) =>
       o.id === "o1"
-        ? { ...CLEAN_SWEEP, name: o.name, coverage: 0.6, bareMm2: 24 }
+        ? { ...CLEAN_SWEEP, name: o.name, coverage: 0.6, bareMm2: 24, maxBarePatchMm2: 9 }
         : { ...CLEAN_SWEEP, name: o.name },
     );
     const onApply = renderDialog();

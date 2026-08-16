@@ -64,7 +64,10 @@ interface ReviewItem {
 function plainFlags(s: ReturnType<typeof sweepObject>): string[] {
   if (!s) return []; // outline/running pieces have no fill region to sweep
   const flags: string[] = [];
-  if (s.coverage < 0.9 || s.bareMm2 > 6)
+  // The eye sees a HOLE, not a sum: a big outline network accrues invisible
+  // speck dust along hundreds of mm of stroke edge, so distributed sub-1.5mm²
+  // dust never flags — only low overall coverage or an actual visible gap.
+  if (s.coverage < 0.9 || (s.bareMm2 > 6 && s.maxBarePatchMm2 > 1.5))
     flags.push(
       `Thread may not fully cover this piece — about ${Math.max(1, Math.round(s.bareMm2))} mm² could show bare fabric.`,
     );
