@@ -701,8 +701,10 @@ const LINE_ART_MIN_LEN_MM = 2.5;
 /** Line-art strokes at/above this width (mm) sew as satin across the stroke (an
  *  outline band, a tire wall); thinner detail (a hairline, an antenna) is
  *  bean-retraced down its centerline instead — too narrow to satin, but a single
- *  pass reads weak. */
-const LINE_ART_SATIN_MIN_MM = 0.9;
+ *  pass reads weak. 0.7 (was 0.9): a traced cartoon's ink lines run 0.7–1.9mm
+ *  and read as bold SOLID strokes — beaning the 0.7–0.9 band left a fifth of a
+ *  cartoon's outline network under-covered. True hairlines still bean. */
+const LINE_ART_SATIN_MIN_MM = 0.7;
 /** A thin line-art stroke is retraced forward/back/forward (bean / triple) so the
  *  hairline reads bold and dark instead of a single weak pass. */
 const LINE_ART_BEAN_REPEATS = 3;
@@ -808,7 +810,26 @@ function fillEdgeRuns(region: Path[], stitchLength: number): Point[][] {
  *  collapse the loop — the run continues from the crossing instead of sewing a
  *  visible jag. Windowed so two genuinely separate strokes of one letter that
  *  cross by design (a k, an x) are left alone. */
-function deloopRun(line: Point[]): Point[] {
+/** Intersection point of two crossing segments. */
+function ix(a1: Point, a2: Point, b1: Point, b2: Point): Point {
+  const d = (a2.x - a1.x) * (b2.y - b1.y) - (a2.y - a1.y) * (b2.x - b1.x);
+  const t = d !== 0 ? ((b1.x - a1.x) * (b2.y - b1.y) - (b1.y - a1.y) * (b2.x - b1.x)) / d : 0.5;
+  return { x: a1.x + (a2.x - a1.x) * t, y: a1.y + (a2.y - a1.y) * t };
+}
+
+/** Even-odd point-in-region. */
+function insideEvenOdd(p: Point, rings: Path[]): boolean {
+  let inside = false;
+  for (const ring of rings) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const a = ring[i], b = ring[j];
+      if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function deloopRun(line: Point[], region?: Path[]): Point[] {
   const out: Point[] = [];
   const crosses = (a1: Point, a2: Point, b1: Point, b2: Point): boolean => {
     const d = (p: Point, q: Point, r: Point) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
@@ -838,11 +859,21 @@ function deloopRun(line: Point[]): Point[] {
       // (hundreds of points) while "de-looping".
       let loopLen = 0;
       for (let q = j; q < k; q++) loopLen += Math.hypot(out[q + 1].x - out[q].x, out[q + 1].y - out[q].y);
-      // 12mm separates the two worlds cleanly: real tip piles and notch
-      // slashes are a few mm of redundant thread; the false "loops" that must
-      // survive are whole row-blocks (50mm+) that a concave boundary
-      // connector legitimately crosses — splicing those ate a fill.
-      if (loopLen > 12) continue;
+      // Two families of genuine defects, two caps. A crossing whose
+      // intersection lies OUTSIDE the region is a notch slash over bare
+      // ground — collapse up to 12mm. A crossing INSIDE the fill is only a
+      // defect when it's a tiny tip pile (≤4mm); longer inside "loops" are a
+      // boundary connector legitimately crossing its own rows (or a mend's
+      // rows) — splicing those ate a fill and then ate its mend.
+      // No region info (satin emission, mend passes): keep the flat 12mm cap
+      // that shipped green — tightening those sites to 4 let a script loop's
+      // 5–12mm lead-in crossing survive to the fabric (corpus-script, team-arc).
+      let maxLoop = 12;
+      if (region) {
+        const cx = ix(out[j - 1], out[j], out[k - 1], out[k]);
+        maxLoop = insideEvenOdd(cx, region) ? 4 : 12;
+      }
+      if (loopLen > maxLoop) continue;
       out.splice(j, k - j); // collapse the loop between the crossing segments
       break;
     }
@@ -1269,6 +1300,27 @@ export function generateObjectRuns(
     // throw sequence) then splits. Tatami/contour split the fill path into
     // machine-safe pieces FIRST, then order those — so a concave shape's spans
     // connect with short travels instead of leaping (and trimming) across it.
+    if (usingSatin && lineArtFill) {
+      // Line art gets the QUIET mend chain only: every stroke crossing in a
+      // traced outline network leaves a small junction wedge (a cartoon's
+      // linework measured 31 such 2–4mm² pinholes), and skipping mends
+      // entirely — the old rule — reads as perforations at every joint.
+      // Slivers and small blocks lie along/inside the strokes; tatami is
+      // still excluded so nothing fights the linework grain.
+      for (const patch of residualRegions(region, tops, 0.2, TIP_PATCH_MIN_MM2)) {
+        if (Math.abs(polygonArea(patch)) > 8) continue;
+        const fill =
+          sliverMendRun(patch, stitchLength) ??
+          smallPatchSatinBlock(patch, density, fabric.pullMul);
+        if (!fill) continue;
+        const clean = deloopRun(fill);
+        for (const sub of orderByNearest(splitLongTravels(clean, travelMax), cursor)) {
+          const r = dropShortStitches(sub);
+          addRun(runs, r, false, regionIdx, true);
+          if (r.length) cursor = r[r.length - 1];
+        }
+      }
+    }
     if (usingSatin && !lineArtFill) {
       // A true satin fill tatami-fills any interior the satin left bare — the small
       // patches at stroke crossings and 3-way junctions where columns are trimmed
@@ -1329,12 +1381,20 @@ export function generateObjectRuns(
       // The tatami path needs the same residual safety net as satin/turned:
       // de-looping a sharp taper's row pile (below) leaves a small bare tip —
       // a heart's point measured 3.8mm² — and plain tatami had no mend pass
-      // at all. Mends join `tops` and order with the fill.
-      if (!lineArtFill && !motifMode && !blendMode && !contour) {
+      // at all. Mends join `tops` and order with the fill. CARVE is excluded on
+      // purpose: its relief grooves are penetration-free BY DESIGN, and the
+      // emission-exact residual sees exactly those grooves as bare — a mend
+      // would sew the artwork shut (and did: +1900 stitches on a carved square).
+      const carving = !!p.carve && p.carve !== "none";
+      if (!lineArtFill && !motifMode && !blendMode && !contour && !carving) {
         // Measure the residual against the geometry that will actually SEW:
         // the emission below de-loops, drops short stitches, then de-loops
         // again, and each pass can shave a tip the mend must cover.
-        const preTops = tops.map((run) => deloopRun(dropShortStitches(deloopRun(run), minStitch)));
+        const preTops = tops.flatMap((run) =>
+          splitLongTravels(deloopRun(run, region), travelMax).map((sub) =>
+            deloopRun(dropShortStitches(sub, minStitch), region),
+          ),
+        );
         for (const patch of residualRegions(region, preTops, 0.2, TIP_PATCH_MIN_MM2)) {
           tops.push(
             sliverMendRun(patch, stitchLength) ??
@@ -1352,7 +1412,7 @@ export function generateObjectRuns(
       // arch tip) the last rows are shorter than a stitch and pile into a
       // crossing scribble — collapsing the loops sews the tip as a clean
       // shortening path instead. Fan-tolerant, so line-art satin is untouched.
-      const subRuns = tops.flatMap((run) => splitLongTravels(deloopRun(run), travelMax));
+      const subRuns = tops.flatMap((run) => splitLongTravels(deloopRun(run, region), travelMax));
       // Contour keeps its spiral order; everything else is re-sorted for the
       // shortest travel between pieces.
       const ordered = contourSpiral ? subRuns : orderByNearest(subRuns, cursor);
@@ -1366,7 +1426,7 @@ export function generateObjectRuns(
         // De-loop AFTER the short-stitch drop as well: removing sub-minimum
         // tip stitches fuses segments into longer chords, and a chord across
         // a collapsed pile can cross rows the pre-drop pass already cleared.
-        const r = lineArtFill ? dropShortStitches(sub, minStitch) : deloopRun(dropShortStitches(sub, minStitch));
+        const r = lineArtFill ? dropShortStitches(sub, minStitch) : deloopRun(dropShortStitches(sub, minStitch), region);
         // Line-art strokes CONNECT within their network, and that's how the
         // professional references sew bold linework: the thread walks from
         // stroke to stroke THROUGH the ink and almost never cuts. noBareTravel
