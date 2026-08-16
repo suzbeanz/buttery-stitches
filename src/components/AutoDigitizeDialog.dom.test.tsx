@@ -31,6 +31,20 @@ vi.mock("../lib/trace", () => ({
 }));
 // Keep fixStitches an identity so onApply gets exactly the filtered subset.
 vi.mock("../lib/fix", () => ({ fixStitches: vi.fn((p: Project) => p) }));
+// The Check step's sweep runs the real engine per object — slow and canvas-free
+// noise in jsdom. Mock it clean by default; flag tests override per object.
+vi.mock("../lib/bench/sweep", () => ({
+  sweepObject: vi.fn(() => ({
+    index: 0,
+    name: "",
+    strokeWidthMm: 5,
+    coverage: 1,
+    bareMm2: 0,
+    crossings: 0,
+    crossingPct: 0,
+    maxSegMm: 4,
+  })),
+}));
 // jsdom can't fetch the font — load a real .ttf from disk so the text-retype
 // path actually places lettering (keeps the other tests' fonts.ts constants).
 vi.mock("../lib/text/fonts", async (importActual) => {
@@ -48,8 +62,19 @@ vi.mock("../lib/text/fonts", async (importActual) => {
 
 import AutoDigitizeDialog from "./AutoDigitizeDialog";
 import { imageDataToObjects } from "../lib/trace";
+import { sweepObject } from "../lib/bench/sweep";
 
 const HOOP = { wMm: 100, hMm: 100, name: "4×4" };
+const CLEAN_SWEEP = {
+  index: 0,
+  name: "",
+  strokeWidthMm: 5,
+  coverage: 1,
+  bareMm2: 0,
+  crossings: 0,
+  crossingPct: 0,
+  maxSegMm: 4,
+};
 
 function renderDialog(onApply = vi.fn()) {
   const file = new File([new Uint8Array([1, 2, 3])], "logo.png", { type: "image/png" });
@@ -57,25 +82,58 @@ function renderDialog(onApply = vi.fn()) {
   return onApply;
 }
 
-// The first trace runs after the image loads + the debounce; wait for the swatches.
 /** The canvas preview renders the real engine output; it exposes the kept-object
  *  count as a data attribute so the (canvas-less) jsdom tests can assert on it. */
 function previewCount(): string | null {
   return document.querySelector("[data-preview]")?.getAttribute("data-preview-objects") ?? null;
 }
-
-async function waitForColors() {
-  await screen.findByRole("button", { name: /Red/ }, { timeout: 2000 });
-  await waitFor(() => expect(previewCount()).toBe("3"));
+function wizardStep(): string | null {
+  return document.querySelector("[data-wizard-step]")?.getAttribute("data-wizard-step") ?? null;
 }
 
-describe("AutoDigitizeDialog (live preview)", () => {
+// The first trace runs after the image loads + the debounce; wait for it to
+// land in the preview and for Next to unlock.
+async function waitForTrace(count = "3") {
+  await waitFor(() => expect(previewCount()).toBe(count), { timeout: 2000 });
+  await waitFor(() =>
+    expect((screen.getByRole("button", { name: "Next" }) as HTMLButtonElement).disabled).toBe(false),
+  );
+}
+function clickNext() {
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+}
+/** Step 0 → 1 (the color list). */
+async function toColors(count = "3") {
+  await waitForTrace(count);
+  clickNext();
+  await screen.findByText(/Colors found/);
+}
+/** Colors → the Check step. The default three-aligned-squares fixture reads as
+ *  a text-like cluster to the REAL detector, so a Text step may sit in between —
+ *  click through it (fireEvent flushes state synchronously, so the step
+ *  attribute is fresh right after the click). */
+async function toReview() {
+  clickNext();
+  if (wizardStep() === "2") clickNext();
+  await screen.findByRole("button", { name: /Add to design/ });
+}
+/** Click Add to design (async apply) and return the applied project. */
+async function addToDesign(onApply: ReturnType<typeof vi.fn>) {
+  const btn = (await screen.findByRole("button", { name: /Add to design/ })) as HTMLButtonElement;
+  await waitFor(() => expect(btn.disabled).toBe(false));
+  fireEvent.click(btn);
+  await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1), { timeout: 2000 });
+  return onApply.mock.calls[0][0] as Project;
+}
+
+describe("AutoDigitizeDialog (wizard)", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
     // Re-establish the default trace result (clearAllMocks keeps any per-test
     // mockReturnValue override otherwise, leaking into later tests).
     vi.mocked(imageDataToObjects).mockReturnValue({ colors: COLORS, objects: OBJECTS });
+    vi.mocked(sweepObject).mockImplementation(() => ({ ...CLEAN_SWEEP }));
     // jsdom lacks object URLs.
     URL.createObjectURL = vi.fn(() => "blob:x");
     URL.revokeObjectURL = vi.fn();
@@ -84,14 +142,69 @@ describe("AutoDigitizeDialog (live preview)", () => {
     HTMLCanvasElement.prototype.getContext = vi.fn(() => null) as never;
   });
 
-  it("auto-traces and shows a swatch per color with region counts and a live preview", async () => {
+  it("auto-traces on the Image step and shows a live preview; color chips wait on step 2", async () => {
     renderDialog();
-    await waitForColors();
+    await waitForTrace();
+    expect(wizardStep()).toBe("0");
+    expect(screen.getByText("Basics")).toBeTruthy();
+    // The color list is NOT on this step.
+    expect(screen.queryByRole("button", { name: /Red/ })).toBeNull();
+    clickNext();
+    await screen.findByText(/Colors found/);
+    expect(wizardStep()).toBe("1");
     expect(screen.getByRole("button", { name: /Red/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Green/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Blue/ })).toBeTruthy();
     expect(screen.getAllByText("1 region")).toHaveLength(3);
     expect(previewCount()).toBe("3");
+  });
+
+  // Three scattered, differently-sized blobs — nothing the text detector could
+  // read as a word, so the Text step genuinely doesn't exist.
+  const SCATTERED = [
+    { ...obj("o1", "c1", 0), paths: [[{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }]] },
+    { ...obj("o2", "c2", 0), paths: [[{ x: 40, y: 25 }, { x: 65, y: 25 }, { x: 65, y: 50 }, { x: 40, y: 50 }]] },
+    { ...obj("o3", "c3", 0), paths: [[{ x: 5, y: 55 }, { x: 45, y: 55 }, { x: 45, y: 95 }, { x: 5, y: 95 }]] },
+  ];
+
+  it("Next from Colors auto-skips the Text step when no text was found", async () => {
+    vi.mocked(imageDataToObjects).mockReturnValue({ colors: COLORS, objects: SCATTERED });
+    renderDialog();
+    await toColors();
+    clickNext();
+    await screen.findByText(/Quality check/);
+    expect(wizardStep()).toBe("3");
+  });
+
+  it("Back returns through the steps and choices survive navigation without a re-trace", async () => {
+    renderDialog();
+    await toColors();
+    fireEvent.click(screen.getByRole("button", { name: /Red/ })); // skip Red
+    await waitFor(() => expect(previewCount()).toBe("2"));
+    const traces = vi.mocked(imageDataToObjects).mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(wizardStep()).toBe("0");
+    clickNext();
+    await screen.findByText(/Colors found/);
+    // The skip stuck, and navigating didn't re-trace.
+    await waitFor(() => expect(previewCount()).toBe("2"));
+    expect(vi.mocked(imageDataToObjects).mock.calls.length).toBe(traces);
+  });
+
+  it("visited step chips stay tappable; unvisited and skipped ones don't", async () => {
+    vi.mocked(imageDataToObjects).mockReturnValue({ colors: COLORS, objects: SCATTERED });
+    renderDialog();
+    await toColors();
+    await toReview();
+    // Jump straight back to Image via its chip.
+    fireEvent.click(screen.getByRole("button", { name: /Image/ }));
+    expect(wizardStep()).toBe("0");
+    // Text was auto-skipped (no clusters) — its chip is disabled.
+    const text = screen.getByRole("button", { name: /Text/ }) as HTMLButtonElement;
+    expect(text.disabled).toBe(true);
+    // Check was visited — its chip jumps forward again.
+    fireEvent.click(screen.getByRole("button", { name: /Check/ }));
+    expect(wizardStep()).toBe("3");
   });
 
   it("consolidates TRUE near-duplicate colors, but never trims below the colour budget", async () => {
@@ -114,14 +227,14 @@ describe("AutoDigitizeDialog (live preview)", () => {
       objects: [obj("o1", "c1", 0), obj("o2", "c2", 20), sliver, obj("o3", "c3", 40)],
     });
     const onApply = renderDialog();
-    await screen.findByRole("button", { name: /^Red/ }, { timeout: 2000 });
+    await toColors("4");
     // The near-duplicate red folded…
     await waitFor(() => expect(screen.queryByRole("button", { name: /Red dup/ })).toBeNull());
     // …but the real dark-red feature and the blue survive.
     expect(screen.getByRole("button", { name: /Dark red/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Blue/ })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /Add to design/ }));
-    const project = onApply.mock.calls[0][0] as Project;
+    await toReview();
+    const project = await addToDesign(onApply);
     expect(project.colors).toHaveLength(3);
     const ids = new Set(project.colors.map((c) => c.id));
     for (const o of project.objects) expect(ids.has(o.colorId)).toBe(true);
@@ -129,7 +242,7 @@ describe("AutoDigitizeDialog (live preview)", () => {
 
   it("re-traces when the color count changes", async () => {
     renderDialog();
-    await waitForColors();
+    await waitForTrace();
     const before = vi.mocked(imageDataToObjects).mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: "More colors" }));
     await waitFor(() =>
@@ -139,7 +252,7 @@ describe("AutoDigitizeDialog (live preview)", () => {
 
   it("re-traces when the detail level changes", async () => {
     renderDialog();
-    await waitForColors();
+    await waitForTrace();
     const before = vi.mocked(imageDataToObjects).mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: "Detailed" }));
     await waitFor(() =>
@@ -152,16 +265,16 @@ describe("AutoDigitizeDialog (live preview)", () => {
 
   it("toggling a color updates the preview WITHOUT re-tracing", async () => {
     renderDialog();
-    await waitForColors();
+    await toColors();
     const before = vi.mocked(imageDataToObjects).mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: /Red/ })); // skip Red
     await waitFor(() => expect(previewCount()).toBe("2"));
     expect(vi.mocked(imageDataToObjects).mock.calls.length).toBe(before); // pure filter
   });
 
-  it("text-retype: detects a text cluster, and typing swaps it for authored lettering", async () => {
+  it("text-retype: the Text step appears, and typing swaps the cluster for authored lettering", async () => {
     // A row of six small same-colour glyph blocks — a word the trace can't set
-    // cleanly. The dialog should spot it and offer a text box.
+    // cleanly. The dialog should spot it and offer a text box on the Text step.
     const glyph = (id: string, x: number) => ({
       id,
       name: id,
@@ -177,14 +290,17 @@ describe("AutoDigitizeDialog (live preview)", () => {
       objects: wordObjs,
     });
     const onApply = renderDialog();
-    // The "Text found" panel appears once the trace + detection run.
+    await toColors("6");
+    // Text clusters exist → Next lands on the Text step, not Check.
+    clickNext();
     const box = (await screen.findByPlaceholderText(/Text area 1/, {}, { timeout: 2000 })) as HTMLInputElement;
+    expect(wizardStep()).toBe("2");
     // Type the word; the traced glyphs are replaced by ONE authored lettering
     // object (fewer objects, and none of the original glyph ids remain).
     fireEvent.change(box, { target: { value: "HELLO" } });
     await waitFor(() => expect(previewCount()).toBe("1"));
-    fireEvent.click(screen.getByRole("button", { name: /Add to design/ }));
-    const project = onApply.mock.calls[0][0] as Project;
+    await toReview();
+    const project = await addToDesign(onApply);
     expect(project.objects).toHaveLength(1);
     expect(project.objects.some((o) => o.id.startsWith("g"))).toBe(false); // rough glyphs gone
     expect(project.objects[0].paths.length).toBeGreaterThan(0); // real lettering geometry
@@ -192,12 +308,11 @@ describe("AutoDigitizeDialog (live preview)", () => {
 
   it("applies only the kept colors", async () => {
     const onApply = renderDialog();
-    await waitForColors();
+    await toColors();
     fireEvent.click(screen.getByRole("button", { name: /Red/ })); // skip Red
     await waitFor(() => expect(previewCount()).toBe("2"));
-    fireEvent.click(screen.getByRole("button", { name: /Add to design/ }));
-    expect(onApply).toHaveBeenCalledTimes(1);
-    const project = onApply.mock.calls[0][0] as Project;
+    await toReview();
+    const project = await addToDesign(onApply);
     expect(project.colors.map((c) => c.id)).toEqual(["c2", "c3"]);
     expect(project.objects.every((o) => o.colorId !== "c1")).toBe(true);
     expect(project.objects).toHaveLength(2);
@@ -205,29 +320,29 @@ describe("AutoDigitizeDialog (live preview)", () => {
 
   it("recolors a traced shade, and the new rgb flows into the applied design", async () => {
     const onApply = renderDialog();
-    await waitForColors();
+    await toColors();
     const recolor = screen.getByLabelText(/Recolor Red/) as HTMLInputElement;
     fireEvent.input(recolor, { target: { value: "#112233" } });
-    fireEvent.click(screen.getByRole("button", { name: /Add to design/ }));
-    const project = onApply.mock.calls[0][0] as Project;
+    await toReview();
+    const project = await addToDesign(onApply);
     const red = project.colors.find((c) => c.id === "c1");
     expect(red?.rgb).toEqual([0x11, 0x22, 0x33]);
   });
 
   it("renames a traced color, and the name flows into the applied design", async () => {
     const onApply = renderDialog();
-    await waitForColors();
+    await toColors();
     const rename = screen.getByLabelText(/Rename Red/) as HTMLInputElement;
     fireEvent.change(rename, { target: { value: "Crimson" } });
     fireEvent.blur(rename);
-    fireEvent.click(screen.getByRole("button", { name: /Add to design/ }));
-    const project = onApply.mock.calls[0][0] as Project;
+    await toReview();
+    const project = await addToDesign(onApply);
     expect(project.colors.find((c) => c.id === "c1")?.name).toBe("Crimson");
   });
 
   it("merges similar shades, reducing the palette with no orphan colorIds", async () => {
     const onApply = renderDialog();
-    await waitForColors();
+    await toColors();
     // Recolor Green to near-Red so the two are within the merge threshold.
     fireEvent.input(screen.getByLabelText(/Recolor Green/) as HTMLInputElement, {
       target: { value: "#e74637" }, // ≈ rgb(231,70,55), within ΔE of Red
@@ -237,8 +352,8 @@ describe("AutoDigitizeDialog (live preview)", () => {
     await waitFor(() =>
       expect(screen.queryAllByRole("button", { name: /tap to (keep|skip)/ }).length).toBe(2),
     );
-    fireEvent.click(screen.getByRole("button", { name: /Add to design/ }));
-    const project = onApply.mock.calls[0][0] as Project;
+    await toReview();
+    const project = await addToDesign(onApply);
     expect(project.colors.length).toBe(2);
     const ids = new Set(project.colors.map((c) => c.id));
     expect(project.objects.every((o) => ids.has(o.colorId))).toBe(true);
@@ -246,17 +361,17 @@ describe("AutoDigitizeDialog (live preview)", () => {
 
   it("matches the palette to real threads, stamping brand + code on the applied colors", async () => {
     const onApply = renderDialog();
-    await waitForColors();
+    await toColors();
     fireEvent.click(screen.getByRole("button", { name: /Advanced options/ }));
     fireEvent.click(screen.getByRole("button", { name: /Match to thread colors/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Add to design/ }));
-    const project = onApply.mock.calls[0][0] as Project;
+    await toReview();
+    const project = await addToDesign(onApply);
     expect(project.colors.every((c) => c.brand && c.code)).toBe(true);
   });
 
   it("applies a per-color stitch style: Outline → running, Satin → satin fill", async () => {
     const onApply = renderDialog();
-    await waitForColors();
+    await toColors();
     // Per-color stitch style lives under Advanced options.
     expect(screen.queryByLabelText(/Stitch style for Red/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Advanced options/ }));
@@ -266,8 +381,8 @@ describe("AutoDigitizeDialog (live preview)", () => {
     fireEvent.change(screen.getByLabelText(/Stitch style for Green/) as HTMLSelectElement, {
       target: { value: "satin" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Add to design/ }));
-    const project = onApply.mock.calls[0][0] as Project;
+    await toReview();
+    const project = await addToDesign(onApply);
     const red = project.objects.find((o) => o.colorId === "c1");
     const green = project.objects.find((o) => o.colorId === "c2");
     expect(red?.type).toBe("running");
@@ -275,11 +390,9 @@ describe("AutoDigitizeDialog (live preview)", () => {
     expect(green?.params.fillStyle).toBe("satin");
   });
 
-  it("keeps the first view calm — power tools hidden until Advanced is opened", async () => {
+  it("keeps the color list calm — power tools hidden until Advanced is opened", async () => {
     renderDialog();
-    await waitForColors();
-    // Basics are grouped; power tools (merge/match, per-color style) start hidden.
-    expect(screen.getByText("Basics")).toBeTruthy();
+    await toColors();
     expect(screen.queryByRole("button", { name: /Merge similar shades/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /Match to thread colors/ })).toBeNull();
     expect(screen.queryByLabelText(/Stitch style for Red/)).toBeNull();
@@ -291,10 +404,12 @@ describe("AutoDigitizeDialog (live preview)", () => {
 
   it("disables Add to design when every color is dropped", async () => {
     renderDialog();
-    await waitForColors();
+    await toColors();
     for (const name of [/Red/, /Green/, /Blue/]) {
       fireEvent.click(screen.getByRole("button", { name }));
     }
+    await waitFor(() => expect(previewCount()).toBe("0"));
+    await toReview();
     const add = screen.getByRole("button", { name: /Add to design/ }) as HTMLButtonElement;
     expect(add.disabled).toBe(true);
   });
@@ -307,14 +422,14 @@ describe("AutoDigitizeDialog (live preview)", () => {
     const ring = { ...obj("halo", "c1", 60), name: "Red ring (background?)", suspectedBackground: true };
     vi.mocked(imageDataToObjects).mockReturnValue({ colors: COLORS, objects: [...OBJECTS, ring] });
     const onApply = renderDialog();
-    await screen.findByRole("button", { name: /Red ring \(background\?\)/ }, { timeout: 2000 });
     // Default: excluded from the live preview (3 of 4 objects) and from apply.
-    await waitFor(() => expect(previewCount()).toBe("3"));
+    await toColors("3");
+    await screen.findByRole("button", { name: /Red ring \(background\?\)/ }, { timeout: 2000 });
     // Keep it → preview includes it.
     fireEvent.click(screen.getByRole("button", { name: /Red ring \(background\?\) — tap to keep/ }));
     await waitFor(() => expect(previewCount()).toBe("4"));
-    fireEvent.click(screen.getByRole("button", { name: /Add to design/ }));
-    const project = onApply.mock.calls[0][0] as Project;
+    await toReview();
+    const project = await addToDesign(onApply);
     const applied = project.objects.find((o) => o.name === "Red ring (background?)");
     expect(applied, "kept ring lands in the project").toBeDefined();
     expect(applied!.suspectedBackground, "explicit keep clears the flag").toBeUndefined();
@@ -324,11 +439,79 @@ describe("AutoDigitizeDialog (live preview)", () => {
     const ring = { ...obj("halo", "c1", 60), name: "Red ring (background?)", suspectedBackground: true };
     vi.mocked(imageDataToObjects).mockReturnValue({ colors: COLORS, objects: [...OBJECTS, ring] });
     const onApply = renderDialog();
+    await toColors("3");
     await screen.findByRole("button", { name: /Red ring \(background\?\)/ }, { timeout: 2000 });
-    await waitFor(() => expect(previewCount()).toBe("3"));
-    fireEvent.click(screen.getByRole("button", { name: /Add to design/ }));
-    const project = onApply.mock.calls[0][0] as Project;
+    await toReview();
+    const project = await addToDesign(onApply);
     expect(project.objects.some((o) => o.name === "Red ring (background?)")).toBe(false);
+    expect(project.objects).toHaveLength(3);
+  });
+
+  it("Check step: clean sweep reports every piece ready to sew", async () => {
+    renderDialog();
+    await toColors();
+    await toReview();
+    await screen.findByText(/All 3 pieces look ready to sew/, {}, { timeout: 2000 });
+  });
+
+  it("Check step: a flagged piece shows plain-language worries with one-tap fixes", async () => {
+    // Make the sweep flag object o1 (bad coverage) and pass the rest.
+    vi.mocked(sweepObject).mockImplementation((o) =>
+      o.id === "o1"
+        ? { ...CLEAN_SWEEP, name: o.name, coverage: 0.6, bareMm2: 24 }
+        : { ...CLEAN_SWEEP, name: o.name },
+    );
+    const onApply = renderDialog();
+    await toColors();
+    await toReview();
+    await screen.findByText(/Thread may not fully cover/, {}, { timeout: 2000 });
+    // One-tap SKIP: the piece stays visible in the list (with Undo) but leaves
+    // the preview and the applied project.
+    fireEvent.click(screen.getByRole("button", { name: /Skip this piece/ }));
+    await screen.findByText(/Skipped — this piece won't sew/);
+    await waitFor(() => expect(previewCount()).toBe("2"));
+    const project = await addToDesign(onApply);
+    expect(project.objects.some((o) => o.id === "o1")).toBe(false);
+    expect(project.objects).toHaveLength(2);
+  });
+
+  it("Check step: 'Sew as outline' converts the flagged piece to a running outline", async () => {
+    vi.mocked(sweepObject).mockImplementation((o) =>
+      o.id === "o1"
+        ? { ...CLEAN_SWEEP, name: o.name, coverage: 0.6, bareMm2: 24 }
+        : { ...CLEAN_SWEEP, name: o.name },
+    );
+    const onApply = renderDialog();
+    await toColors();
+    await toReview();
+    await screen.findByText(/Thread may not fully cover/, {}, { timeout: 2000 });
+    fireEvent.click(screen.getByRole("button", { name: /Sew as outline/ }));
+    await screen.findByText(/Will sew as a clean outline instead/);
+    const project = await addToDesign(onApply);
+    const fixed = project.objects.find((o) => o.id === "o1");
+    expect(fixed?.type).toBe("running");
+    expect(project.objects).toHaveLength(3);
+  });
+
+  it("Check step: Undo restores a fix, and 'Keep anyway' applies the piece unchanged", async () => {
+    vi.mocked(sweepObject).mockImplementation((o) =>
+      o.id === "o1"
+        ? { ...CLEAN_SWEEP, name: o.name, coverage: 0.6, bareMm2: 24 }
+        : { ...CLEAN_SWEEP, name: o.name },
+    );
+    const onApply = renderDialog();
+    await toColors();
+    await toReview();
+    await screen.findByText(/Thread may not fully cover/, {}, { timeout: 2000 });
+    fireEvent.click(screen.getByRole("button", { name: /Skip this piece/ }));
+    await screen.findByText(/Skipped — this piece won't sew/);
+    fireEvent.click(screen.getByRole("button", { name: /Undo/ }));
+    await screen.findByText(/Thread may not fully cover/);
+    fireEvent.click(screen.getByRole("button", { name: /Keep anyway/ }));
+    await screen.findByText(/Kept as is/);
+    const project = await addToDesign(onApply);
+    const kept = project.objects.find((o) => o.id === "o1");
+    expect(kept?.type).toBe("fill");
     expect(project.objects).toHaveLength(3);
   });
 });

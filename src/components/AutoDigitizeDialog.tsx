@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AlertTriangle, ChevronDown, Eye, EyeOff, Minus, Plus } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Eye, EyeOff, Minus, Plus } from "lucide-react";
 import type { EmbObject, Hoop, Project, ThreadColor } from "../types/project";
 import { loadImageData } from "../lib/image";
 import { imageDataToObjects, estimateColorComplexity, suggestColorCount, type DigitizeDetail } from "../lib/trace";
@@ -29,13 +29,51 @@ import { drawStitches } from "../lib/render-stitches";
 import { createEmptyProject } from "../lib/project";
 import { useEscapeToClose, useDialogFocus } from "./useEscapeToClose";
 import { logError } from "../lib/log";
+import { sweepObject } from "../lib/bench/sweep";
 
 /**
- * Auto-digitize dialog: one live screen — the source image beside a preview that
- * RE-RENDERS as you change the colors or options, plus a color list you curate
- * before adding. Best for clean logos and line art; photos are warned about and
- * digitize roughly (an explicit v1 non-goal).
+ * Auto-digitize WIZARD: digitizing an image well is a user-assisted process, not
+ * one magic pass — so the dialog walks it in four small steps (Image · Colors ·
+ * Text · Check), each showing the live stitch preview that re-renders as you
+ * change things. Nothing re-traces on navigation: all state lives in place, so
+ * Back/Next is instant. The final Check step runs the same numeric defect sweep
+ * the engine's own quality gates use, translates anything it finds into plain
+ * language, and offers one-tap fixes — sew as outline, skip the piece, or keep
+ * it anyway. Best for clean logos and line art; photos are warned about and
+ * offered the photo-stitch row mode instead.
  */
+
+/** Wizard steps. Text auto-skips when the trace found no text-like clusters. */
+const STEP_LABELS = ["Image", "Colors", "Text", "Check"] as const;
+type WizardStep = 0 | 1 | 2 | 3;
+
+/** One-tap fix chosen on the Check step for a flagged piece. */
+type ReviewFix = "outline" | "skip" | "keep";
+
+/** One reviewed piece: the sweep's findings in plain language (empty = clean). */
+interface ReviewItem {
+  id: string;
+  name: string;
+  colorId: string;
+  flags: string[];
+}
+
+/** Translate a numeric sweep into plain-language worries a non-digitizer can act
+ *  on. Thresholds are gentler than the engine's own CI gates — this is "worth a
+ *  look", not "failed the build". */
+function plainFlags(s: ReturnType<typeof sweepObject>): string[] {
+  if (!s) return []; // outline/running pieces have no fill region to sweep
+  const flags: string[] = [];
+  if (s.coverage < 0.9 || s.bareMm2 > 6)
+    flags.push(
+      `Thread may not fully cover this piece — about ${Math.max(1, Math.round(s.bareMm2))} mm² could show bare fabric.`,
+    );
+  if (s.crossings > 0)
+    flags.push("A few stitches cross over open fabric here and could snag or look messy.");
+  if (s.maxSegMm > 9)
+    flags.push(`Has a ${s.maxSegMm.toFixed(1)} mm stitch — longer than machines sew reliably.`);
+  return flags;
+}
 
 /** Above this estimated color count, the image is probably a photo. */
 const PHOTO_COMPLEXITY = 160;
@@ -120,8 +158,30 @@ export default function AutoDigitizeDialog({
   // Per-color stitch style override (by colorId). "auto" = the trace's own
   // fill/line-art classification; otherwise force the whole color one way.
   const [styleById, setStyleById] = useState<Record<string, StitchStyle>>({});
+  // Wizard position + the furthest step reached (completed chips stay tappable).
+  const [step, setStep] = useState<WizardStep>(0);
+  const [maxStep, setMaxStep] = useState<WizardStep>(0);
+  // Check-step one-tap fixes, per object id (outline / skip / keep-anyway).
+  const [fixById, setFixById] = useState<Record<string, ReviewFix>>({});
+  // The Check step's sweep results (null while the check is running) and its
+  // running progress, so a big design shows "checking piece 3 of 9" not a freeze.
+  const [review, setReview] = useState<ReviewItem[] | null>(null);
+  const [reviewDone, setReviewDone] = useState(0);
+  // Applying is ASYNC with a visible progress veil: the stitch cleanup pass on a
+  // busy trace can take many seconds, and a frozen button reads as a crash.
+  const [applying, setApplying] = useState(false);
   useEscapeToClose(onClose);
   const dialogRef = useDialogFocus<HTMLDivElement>();
+
+  const goTo = (s: WizardStep) => {
+    setStep(s);
+    setMaxStep((m) => (s > m ? s : m));
+  };
+  // The Text step only exists when the trace found text-like clusters; Next and
+  // Back hop straight over it otherwise.
+  const hasTextStep = textClusters.length > 0;
+  const goNext = () => goTo(step === 0 ? 1 : step === 1 ? (hasTextStep ? 2 : 3) : 3);
+  const goBack = () => setStep(step === 3 ? (hasTextStep ? 2 : 1) : ((Math.max(0, step - 1)) as WizardStep));
 
   const previewUrl = useMemo(() => URL.createObjectURL(file), [file]);
   // Source image as a canvas + the SAME mm mapping the trace uses, so cluster
@@ -223,6 +283,7 @@ export default function AutoDigitizeDialog({
           setResult({ colors: photo.colors, objects: shifted });
           setKeptIds(new Set(photo.colors.map((c) => c.id)));
           setStyleById({});
+          setFixById({});
           setTextClusters([]);
           setTextAssign({});
           setError(
@@ -294,6 +355,7 @@ export default function AutoDigitizeDialog({
         // Suspected-background regions start EXCLUDED but visible as a chip.
         setExcludedIds(new Set(finalObjects.filter((o) => o.suspectedBackground).map((o) => o.id)));
         setStyleById({}); // a fresh trace = fresh colorIds, so clear overrides
+        setFixById({}); // fresh object ids too — stale Check-step fixes must not linger
         // Offer the text-retype assist for any text-like clusters in the trace.
         setTextClusters(detectTextClusters(finalObjects));
         setTextAssign({}); // fresh trace = fresh cluster ids
@@ -346,7 +408,10 @@ export default function AutoDigitizeDialog({
     });
     return applyManualText(result.objects, res);
   }, [result, textAssign, textClusters, font, textKeepShapes]);
-  const keptObjects = useMemo(
+  // The pieces the Check step examines: everything currently kept, with the
+  // per-color styles applied but BEFORE the one-tap fixes — so a skipped piece
+  // still shows in the review list (with its Undo) instead of vanishing.
+  const reviewCandidates = useMemo(
     () =>
       result
         ? objectsWithText
@@ -355,6 +420,51 @@ export default function AutoDigitizeDialog({
         : [],
     [result, objectsWithText, keptIds, excludedIds, styleById],
   );
+  const keptObjects = useMemo(
+    () =>
+      reviewCandidates
+        .filter((o) => fixById[o.id] !== "skip")
+        .map((o) => (fixById[o.id] === "outline" ? styleObject(o, "outline") : o)),
+    [reviewCandidates, fixById],
+  );
+
+  // CHECK step: sweep each kept piece with the engine's own defect metrics,
+  // CHUNKED one piece per tick so the dialog stays responsive and can show live
+  // progress (a busy trace is many engine runs). Results cache against the
+  // candidate list — tapping a fix updates the verdict display instantly without
+  // re-sweeping everything.
+  useEffect(() => {
+    if (step !== 3) return;
+    if (photoMode && !isSvg) {
+      // Photo rows are final penetrations already — nothing to check.
+      setReview([]);
+      return;
+    }
+    let alive = true;
+    setReview(null);
+    setReviewDone(0);
+    const candidates = reviewCandidates;
+    (async () => {
+      const items: ReviewItem[] = [];
+      for (let i = 0; i < candidates.length; i++) {
+        await new Promise((r) => setTimeout(r, 0));
+        if (!alive) return;
+        const o = candidates[i];
+        let flags: string[] = [];
+        try {
+          flags = plainFlags(sweepObject(o, i));
+        } catch (e) {
+          logError(`Check failed for ${o.name}: ${(e as Error).message}`, (e as Error).stack);
+        }
+        items.push({ id: o.id, name: o.name, colorId: o.colorId, flags });
+        setReviewDone(i + 1);
+      }
+      if (alive) setReview(items);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [step, reviewCandidates, photoMode, isSvg]);
 
   const setColors = (n: number) => {
     setUserSetColors(true);
@@ -404,16 +514,21 @@ export default function AutoDigitizeDialog({
     setResult({ ...result, colors: matchColorsToChart(result.colors, THREAD_CHARTS[0]) });
   };
 
-  /** Apply only the kept colors. Filtering by colorId needs no re-trace. */
-  function apply() {
-    if (!result) return;
+  /** Apply only the kept colors and pieces (Check-step fixes included). ASYNC
+   *  with a progress state: the fixStitches cleanup on a busy trace can take
+   *  many seconds, and a silently frozen main thread reads as a crash — the
+   *  short yield lets the "adding" veil paint first. */
+  async function apply() {
+    if (!result || applying) return;
     const colors = result.colors.filter((c) => keptIds.has(c.id));
     const objects = objectsWithText
       .filter((o) => keptIds.has(o.colorId) && !excludedIds.has(o.id))
+      .filter((o) => fixById[o.id] !== "skip")
       // An explicit KEEP is a decision — clear the flag so Check design never
       // re-nags about an object the user already ruled on.
       .map((o) => (o.suspectedBackground ? { ...o, suspectedBackground: undefined } : o))
-      .map((o) => styleObject(o, styleById[o.colorId] ?? "auto"));
+      .map((o) => styleObject(o, styleById[o.colorId] ?? "auto"))
+      .map((o) => (fixById[o.id] === "outline" ? styleObject(o, "outline") : o));
     if (objects.length === 0) return;
     const project: Project = {
       version: 1,
@@ -423,11 +538,20 @@ export default function AutoDigitizeDialog({
       colors,
       objects,
     };
-    // Photo-stitch rows are already final penetrations (params.raw) in the right
-    // order (darkest band first) — fixStitches' re-typing and colour-grouped
-    // re-ordering would only disturb them, so they apply verbatim. The normal
-    // trace keeps the smart cleanup (sensible stitch types, safe densities).
-    onApply(photoMode && !isSvg ? project : fixStitches(project));
+    setApplying(true);
+    await new Promise((r) => setTimeout(r, 30));
+    try {
+      // Photo-stitch rows are already final penetrations (params.raw) in the right
+      // order (darkest band first) — fixStitches' re-typing and colour-grouped
+      // re-ordering would only disturb them, so they apply verbatim. The normal
+      // trace keeps the smart cleanup (sensible stitch types, safe densities).
+      onApply(photoMode && !isSvg ? project : fixStitches(project));
+    } catch (e) {
+      logError(`Apply failed: ${(e as Error).message}`, (e as Error).stack);
+      setError((e as Error).message);
+    } finally {
+      setApplying(false);
+    }
   }
 
   return createPortal(
@@ -450,10 +574,51 @@ export default function AutoDigitizeDialog({
         aria-label="Turn an image into stitches"
         className="anim-press-in max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-sm border-[2.5px] border-ink bg-cream p-3 shadow-press outline-none sm:p-5"
       >
-        <h2 className="mb-3 font-label text-lg font-semibold uppercase tracking-[0.08em] text-navy">
+        <h2 className="mb-2 font-label text-lg font-semibold uppercase tracking-[0.08em] text-navy">
           Turn an image into stitches
         </h2>
 
+        {/* Step chips: where you are, where you've been (visited chips stay
+            tappable), and that Text only exists when text was found. */}
+        <ol className="mb-3 flex flex-wrap items-center gap-1" aria-label="Steps" data-wizard-step={step}>
+          {STEP_LABELS.map((label, i) => {
+            const skipped = i === 2 && !hasTextStep;
+            const reachable = i <= maxStep && !skipped;
+            const current = step === i;
+            return (
+              <li key={label} className="flex items-center gap-1">
+                {i > 0 && <span className="text-navy/25" aria-hidden>·</span>}
+                <button
+                  type="button"
+                  onClick={() => reachable && goTo(i as WizardStep)}
+                  disabled={!reachable}
+                  aria-current={current ? "step" : undefined}
+                  className={`flex items-center gap-1 rounded-full border-2 py-0.5 pl-1 pr-2.5 font-label text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink ${
+                    current
+                      ? "border-ink bg-ink text-cream"
+                      : reachable
+                        ? "border-ink/40 text-navy/70 hover:border-ink hover:bg-butter-200"
+                        : "border-ink/15 text-navy/30"
+                  }`}
+                >
+                  <span
+                    className={`grid h-4.5 min-h-[18px] w-4.5 min-w-[18px] place-items-center rounded-full text-[10px] tabular-nums ${
+                      current ? "bg-cream/20" : reachable ? "bg-ink/10" : "bg-ink/5"
+                    }`}
+                    aria-hidden
+                  >
+                    {i < maxStep && !current && !skipped ? <Check size={11} /> : i + 1}
+                  </span>
+                  {label}
+                  {skipped && <span className="normal-case tracking-normal text-navy/30"> (none)</span>}
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+
+        {step === 0 && (
+        <>
         {/* Source image beside the LIVE stitch preview. */}
         <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <figure className="m-0">
@@ -631,10 +796,23 @@ export default function AutoDigitizeDialog({
           </p>
         </fieldset>
         )}
+        </>
+        )}
+
+        {/* Steps past the first keep the live preview in view — it's the anchor
+            every choice reflects into. */}
+        {step > 0 && (
+          <figure className="m-0 mb-3">
+            <figcaption className="mb-1 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/50">
+              Stitch preview
+            </figcaption>
+            <DigitizePreview objects={keptObjects} colorById={colorById} updating={updating} photo={photoMode && !isSvg} />
+          </figure>
+        )}
 
         {/* Text-retype assist — type what small/stylized/rotated text says and it's
             re-set in crisp satin, the professional move OCR can't do. */}
-        {textClusters.length > 0 && (
+        {step === 2 && textClusters.length > 0 && (
           <fieldset className="mb-4 rounded-sm border-2 border-ink/15 bg-butter-50 p-3">
             <p className="mb-1 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/50">
               Text found — type what it says for crisp lettering
@@ -694,7 +872,7 @@ export default function AutoDigitizeDialog({
         )}
 
         {/* Color list — tap to keep or skip; the preview updates instantly. */}
-        {result && result.colors.length > 0 && (
+        {step === 1 && result && result.colors.length > 0 && (
           <div className="mb-4 rounded-sm border-2 border-ink/15 bg-butter-50 p-3">
             <p className="mb-1.5 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/50">
               Colors found — recolor or rename a shade, or skip a stray one
@@ -843,7 +1021,117 @@ export default function AutoDigitizeDialog({
           </div>
         )}
 
-        {hasExistingWork && (
+        {/* CHECK step — the engine's own numeric quality sweep on every kept
+            piece, translated to plain language with one-tap fixes. */}
+        {step === 3 && (
+          <div className="mb-4 rounded-sm border-2 border-ink/15 bg-butter-50 p-3" data-review>
+            <p className="mb-1.5 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/50">
+              Quality check
+            </p>
+            {photoMode && !isSvg ? (
+              <p className="text-[12px] text-navy/60">
+                Photo-stitch rows sew exactly as previewed — nothing to check here.
+              </p>
+            ) : review === null ? (
+              <div aria-live="polite">
+                <p className="mb-1.5 text-[12px] text-navy/60">
+                  Checking piece {Math.min(reviewDone + 1, reviewCandidates.length)} of{" "}
+                  {reviewCandidates.length} for gaps, snags and unsafe stitches…
+                </p>
+                <div className="h-[3px] w-full overflow-hidden rounded-full bg-ink/10">
+                  <div
+                    className="h-full rounded-full bg-stamp transition-all"
+                    style={{ width: `${reviewCandidates.length ? (reviewDone / reviewCandidates.length) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+            ) : (
+              (() => {
+                const flagged = review.filter((r) => r.flags.length > 0);
+                const clean = review.length - flagged.length;
+                return (
+                  <>
+                    {flagged.length === 0 ? (
+                      <p className="flex items-center gap-1.5 text-[13px] text-navy">
+                        <Check size={15} className="shrink-0 text-ink" aria-hidden />
+                        {review.length === 0
+                          ? "Nothing kept yet — go back and keep at least one color."
+                          : `All ${review.length === 1 ? "1 piece looks" : `${review.length} pieces look`} ready to sew.`}
+                      </p>
+                    ) : (
+                      <>
+                        <p className="mb-2 text-[12px] text-navy/60">
+                          {clean > 0 && `${clean} piece${clean === 1 ? "" : "s"} look${clean === 1 ? "s" : ""} good. `}
+                          {flagged.length === 1 ? "One piece is" : `${flagged.length} pieces are`} worth a look
+                          — each has a one-tap fix, or keep it as is.
+                        </p>
+                        <div className="flex flex-col gap-1.5">
+                          {flagged.map((r) => {
+                            const fix = fixById[r.id];
+                            const rgb = colorById.get(r.colorId)?.rgb;
+                            return (
+                              <div key={r.id} className="rounded-sm border-2 border-ink/20 bg-cream px-2 py-1.5">
+                                <p className="mb-0.5 flex items-center gap-1.5 text-[13px] font-semibold text-navy">
+                                  {rgb && (
+                                    <span
+                                      className="h-3 w-3 shrink-0 rounded-sm border border-navy/30"
+                                      style={{ background: `rgb(${rgb.join(",")})` }}
+                                      aria-hidden
+                                    />
+                                  )}
+                                  <span className="min-w-0 truncate">{r.name}</span>
+                                </p>
+                                {fix ? (
+                                  <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-navy/70">
+                                    {fix === "outline" && "Will sew as a clean outline instead."}
+                                    {fix === "skip" && "Skipped — this piece won't sew."}
+                                    {fix === "keep" && "Kept as is."}
+                                    <button
+                                      onClick={() => setFixById((prev) => { const next = { ...prev }; delete next[r.id]; return next; })}
+                                      className="rounded-sm font-label text-[10px] font-semibold uppercase tracking-wide text-navy/60 underline hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
+                                    >
+                                      Undo
+                                    </button>
+                                  </p>
+                                ) : (
+                                  <>
+                                    {r.flags.map((f) => (
+                                      <p key={f} className="mb-0.5 flex gap-1 text-[12px] leading-snug text-navy/70">
+                                        <AlertTriangle size={13} className="mt-0.5 shrink-0 text-stamp" aria-hidden />
+                                        {f}
+                                      </p>
+                                    ))}
+                                    <div className="mt-1 flex flex-wrap gap-1.5">
+                                      {[
+                                        ["outline", "Sew as outline"],
+                                        ["skip", "Skip this piece"],
+                                        ["keep", "Keep anyway"],
+                                      ].map(([value, label]) => (
+                                        <button
+                                          key={value}
+                                          onClick={() => setFixById((prev) => ({ ...prev, [r.id]: value as ReviewFix }))}
+                                          className="rounded-sm border-2 border-ink/40 px-2 py-0.5 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/70 transition hover:border-ink hover:bg-butter-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
+                                        >
+                                          {label}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </>
+                );
+              })()
+            )}
+          </div>
+        )}
+
+        {step === 3 && hasExistingWork && (
           <p className="mb-3 text-[12px] text-navy/60">
             This replaces your current design (you can undo it with ⌘/Ctrl+Z).
           </p>
@@ -851,20 +1139,51 @@ export default function AutoDigitizeDialog({
 
         {error && <p className="mb-3 text-[12px] text-stamp">{error}</p>}
 
-        <div className="flex justify-end gap-2">
+        {applying && (
+          <div className="mb-3" aria-live="polite">
+            <p className="mb-1.5 text-[12px] text-navy/70">
+              Building clean stitches — a detailed design can take a moment…
+            </p>
+            <div className="h-[3px] w-full overflow-hidden rounded-full bg-ink/10">
+              <div className="anim-indeterminate h-full w-1/3 rounded-full bg-stamp" />
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-2">
           <button
             onClick={onClose}
             className="rounded-sm border-2 border-ink px-4 py-2 font-label text-xs font-semibold uppercase tracking-wide text-ink hover:bg-butter-200"
           >
             Cancel
           </button>
-          <button
-            onClick={apply}
-            disabled={keptObjects.length === 0 || updating}
-            className="rounded-sm border-2 border-ink bg-ink px-4 py-2 font-label text-xs font-semibold uppercase tracking-wide text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none disabled:opacity-50"
-          >
-            Add to design
-          </button>
+          <div className="flex gap-2">
+            {step > 0 && (
+              <button
+                onClick={goBack}
+                className="rounded-sm border-2 border-ink px-4 py-2 font-label text-xs font-semibold uppercase tracking-wide text-ink hover:bg-butter-200"
+              >
+                Back
+              </button>
+            )}
+            {step < 3 ? (
+              <button
+                onClick={goNext}
+                disabled={!result || updating}
+                className="rounded-sm border-2 border-ink bg-ink px-4 py-2 font-label text-xs font-semibold uppercase tracking-wide text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none disabled:opacity-50"
+              >
+                Next
+              </button>
+            ) : (
+              <button
+                onClick={() => void apply()}
+                disabled={keptObjects.length === 0 || updating || applying}
+                className="rounded-sm border-2 border-ink bg-ink px-4 py-2 font-label text-xs font-semibold uppercase tracking-wide text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none disabled:opacity-50"
+              >
+                {applying ? "Adding…" : "Add to design"}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>,
