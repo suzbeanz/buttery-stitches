@@ -560,13 +560,26 @@ function principalAxis(ring: Path): { ux: number; uy: number; cx: number; cy: nu
  * genuinely two-dimensional. The spine follows the sliver's own midline, so on
  * a curved crescent (an arch crown) the mend hugs the curve.
  */
-function sliverMendRun(patch: Path, stitchLength: number): Point[] | null {
+function sliverMendRun(patch: Path, stitchLength: number, compactOk = false): Point[] | null {
   const ax = principalAxis(patch);
-  if (ax.spanS > PATCH_SLIVER_MAX_W_MM || ax.spanT < ax.spanS * 2) return null;
+  // compactOk: LAST-RESORT mode for a line-art junction wedge — compact or
+  // bent, so both the sliver gate below and the straight satin block decline
+  // it, and line art has no tatami fallback: the wedge stayed a visible
+  // pinhole at the joint (a cartoon's network kept 8 such holes >2mm²). The
+  // bucket passes below follow the patch's own boundary per bucket, so they
+  // fill a compact blob just as quietly; only the elongation demand is waived.
+  if (compactOk) {
+    if (ax.spanS > 4) return null;
+  } else if (ax.spanS > PATCH_SLIVER_MAX_W_MM || ax.spanT < ax.spanS * 2) return null;
   // Long strips are beyond a mend's pay grade: a 20mm flank sliver needs the
   // tatami patch (proven to cover it); skinny spine passes on that length
-  // follow the PCA axis of a gently CURVED strip and miss half of it.
-  if (ax.spanT > 8) return null;
+  // follow the PCA axis of a gently CURVED strip and miss half of it. In
+  // compactOk (line-art last resort) length is allowed — a beaned hairline
+  // leaves a long thin flank strip down its whole branch and there is no
+  // tatami behind it — but the result must PROVE it covers (below): on a
+  // U-shaped strip the per-bucket midline lands between the arms, and that
+  // failed mend must not sew.
+  if (!compactOk && ax.spanT > 8) return null;
   // Enough passes that the mend actually reads solid (~0.45mm per thread).
   const passes = Math.max(2, Math.ceil(ax.spanS / 0.45));
   // Midline: bucket boundary points along the axis, midpoint of each bucket's
@@ -599,7 +612,12 @@ function sliverMendRun(patch: Path, stitchLength: number): Point[] | null {
     if (j % 2 === 1) run.reverse();
     all.push(...run);
   }
-  return all.length >= 2 ? all : null;
+  if (all.length < 2) return null;
+  // Last-resort mends self-validate: accept only a mend that actually covers
+  // its patch (a multi-lobed patch defeats the per-bucket midline — better
+  // bare than a stray pass over already-covered ground).
+  if (compactOk && satinCoverage([patch], [all], 0.3) < 0.7) return null;
+  return all;
 }
 
 /**
@@ -830,6 +848,22 @@ function insideEvenOdd(p: Point, rings: Path[]): boolean {
 }
 
 function deloopRun(line: Point[], region?: Path[]): Point[] {
+  // A splice joins out[j-1] straight to out[k], and that NEW chord can itself
+  // cross segments laid before j-1 — the streaming pass never looks back at
+  // it, so a collapsed scribble could leave a fresh crossing behind (a
+  // cartoon's fill turnaround measured exactly this: 3 crossings surviving a
+  // "de-looped" run that a second pass removed). Iterate to a fixpoint; two
+  // passes settle every case seen, the bound is just a guard.
+  let cur = line;
+  for (let pass = 0; pass < 4; pass++) {
+    const next = deloopOnce(cur, region);
+    if (next.length === cur.length) return next;
+    cur = next;
+  }
+  return cur;
+}
+
+function deloopOnce(line: Point[], region?: Path[]): Point[] {
   const out: Point[] = [];
   const crosses = (a1: Point, a2: Point, b1: Point, b2: Point): boolean => {
     const d = (p: Point, q: Point, r: Point) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
@@ -1311,7 +1345,8 @@ export function generateObjectRuns(
         if (Math.abs(polygonArea(patch)) > 8) continue;
         const fill =
           sliverMendRun(patch, stitchLength) ??
-          smallPatchSatinBlock(patch, density, fabric.pullMul);
+          smallPatchSatinBlock(patch, density, fabric.pullMul) ??
+          sliverMendRun(patch, stitchLength, true);
         if (!fill) continue;
         const clean = deloopRun(fill);
         for (const sub of orderByNearest(splitLongTravels(clean, travelMax), cursor)) {

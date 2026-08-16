@@ -20,6 +20,10 @@ export interface ObjectSweep {
   strokeWidthMm: number;
   coverage: number;
   bareMm2: number;
+  /** Largest single bare patch (mm²): the eye sees a HOLE, not a sum — a big
+   *  outline network legitimately accrues speck dust along hundreds of mm of
+   *  stroke edge while never showing one visible gap. */
+  maxBarePatchMm2: number;
   /** Genuine mid-air crossings — near-pivot fan-mates exempt. */
   crossings: number;
   crossingPct: number;
@@ -63,10 +67,11 @@ export function sweepObject(o: EmbObject, index = 0): ObjectSweep | null {
   // finer halo under-credits bean-run lettering (correct for 4mm text) while
   // a coarser one hides real gaps.
   const coverage = satinCoverage(o.paths, body, 0.25);
-  const bareMm2 = residualRegions(o.paths, body, 0.2, 0.4).reduce(
-    (s, r) => s + Math.abs(polygonArea(r)),
-    0,
+  const bareAreas = residualRegions(o.paths, body, 0.2, 0.4).map((r) =>
+    Math.abs(polygonArea(r)),
   );
+  const bareMm2 = bareAreas.reduce((s, a) => s + a, 0);
+  const maxBarePatchMm2 = bareAreas.reduce((m, a) => Math.max(m, a), 0);
   let crossings = 0, maxSegMm = 0, nseg = 0;
   for (const pts of body) {
     for (let k = 1; k < pts.length; k++) {
@@ -100,6 +105,7 @@ export function sweepObject(o: EmbObject, index = 0): ObjectSweep | null {
     strokeWidthMm: meanStrokeWidthMm(o.paths),
     coverage,
     bareMm2,
+    maxBarePatchMm2,
     crossings,
     crossingPct: nseg ? (100 * crossings) / nseg : 0,
     maxSegMm,
