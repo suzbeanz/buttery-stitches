@@ -723,6 +723,11 @@ const LINE_ART_MIN_LEN_MM = 2.5;
  *  and read as bold SOLID strokes — beaning the 0.7–0.9 band left a fifth of a
  *  cartoon's outline network under-covered. True hairlines still bean. */
 const LINE_ART_SATIN_MIN_MM = 0.7;
+/** Regularized line-art satin renders every stroke at least this wide (mm):
+ *  cartoon ink at its measured 0.6mm reads wispy next to 1.8mm outlines, and
+ *  any fill tucked under a stroke would peek past a satin narrower than the
+ *  drawn ink. True hairlines (below the satin threshold) still bean. */
+const LINE_ART_MIN_RENDER_MM = 0.8;
 /** A thin line-art stroke is retraced forward/back/forward (bean / triple) so the
  *  hairline reads bold and dark instead of a single weak pass. */
 const LINE_ART_BEAN_REPEATS = 3;
@@ -1197,10 +1202,42 @@ export function generateObjectRuns(
         // the trace's bead-and-pinch noise never reaches the satin edge. Hairline
         // detail below satin width is bean-retraced down its centerline instead —
         // too narrow to satin, but a single pass reads weak.
+        // Width FLOOR at render time only: thin detail strokes sew at least
+        // LINE_ART_MIN_RENDER_MM wide so the linework reads as one bold hand
+        // (and the fill tucked beneath a stroke can't peek past its satin).
+        // Applied to the THROWS, not the medial rails — the acceptance,
+        // redundancy and coverage gates keep judging the measured geometry
+        // (flooring the rails there dropped whole branches: cov 0.99 -> 0.92).
+        const widen = (c: SatinColumn): Point[] => {
+          if (c.widthMm <= 0 || c.widthMm >= LINE_ART_MIN_RENDER_MM) return c.throws;
+          const f = LINE_ART_MIN_RENDER_MM / c.widthMm - 1;
+          return c.throws.map((q) => {
+            // Push each throw point away from its nearest centerline point.
+            let best = c.centerline[0];
+            let bd = Infinity;
+            for (let i = 1; i < c.centerline.length; i++) {
+              const a = c.centerline[i - 1];
+              const b2 = c.centerline[i];
+              const dx = b2.x - a.x;
+              const dy = b2.y - a.y;
+              const len2 = dx * dx + dy * dy;
+              let t = len2 > 0 ? ((q.x - a.x) * dx + (q.y - a.y) * dy) / len2 : 0;
+              t = t < 0 ? 0 : t > 1 ? 1 : t;
+              const px2 = a.x + t * dx;
+              const py2 = a.y + t * dy;
+              const d = (q.x - px2) ** 2 + (q.y - py2) ** 2;
+              if (d < bd) {
+                bd = d;
+                best = { x: px2, y: py2 };
+              }
+            }
+            return { x: q.x + (q.x - best.x) * f, y: q.y + (q.y - best.y) * f };
+          });
+        };
         tops = keep.map((c) =>
           c.widthMm < LINE_ART_SATIN_MIN_MM
             ? beanPath(runningStitch(c.centerline, stitchLength), LINE_ART_BEAN_REPEATS)
-            : c.throws,
+            : widen(c),
         );
         tatamiNoBareTravel = true; // a fill: order for shortest travel, never slash a bare gap
         lineArtFill = true;

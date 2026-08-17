@@ -105,7 +105,13 @@ describe.runIf(!!process.env.LINEART_PNG)("live paint on the real cartoon PNG", 
     const ink = res.objects[res.objects.length - 1];
     expect(ink.name).toBe("Ink lines");
     expect(ink.params.lineArt).toBe(true);
-    expect(res.objects.filter((o) => o.colorId === ink.colorId)).toHaveLength(1);
+    // The ink thread may own TWO objects: solid blobs (pupils, the mouth
+    // cavity) sewn as fills, then the stroke network last. Nothing else
+    // shares the ink color, and its ThreadColor is minted last.
+    const inkObjs = res.objects.filter((o) => o.colorId === ink.colorId);
+    expect(inkObjs.length).toBeGreaterThanOrEqual(1);
+    expect(inkObjs.length).toBeLessThanOrEqual(2);
+    expect(inkObjs[inkObjs.length - 1].params.lineArt).toBe(true);
     expect(res.colors[res.colors.length - 1].id).toBe(ink.colorId);
     // The small-but-critical features survive: a red mouth fill of ~8–30mm².
     const red = res.objects.find((o) => {

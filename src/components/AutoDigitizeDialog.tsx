@@ -24,7 +24,6 @@ import { loadFont, DEFAULT_FONT_ID } from "../lib/text/fonts";
 import type { Font } from "opentype.js";
 import { parseSvgShapes } from "../lib/trace/svgParse";
 import { svgShapesToObjects } from "../lib/trace/svgImport";
-import { photoStitchObjects } from "../lib/trace/photo";
 import { fixStitches } from "../lib/fix";
 import { mergeSimilarColors, consolidateFringeColors } from "../lib/thread/reduce";
 import { matchColorsToChart } from "../lib/thread/match";
@@ -46,8 +45,8 @@ import { sweepObject } from "../lib/bench/sweep";
  * Back/Next is instant. The final Check step runs the same numeric defect sweep
  * the engine's own quality gates use, translates anything it finds into plain
  * language, and offers one-tap fixes — sew as outline, skip the piece, or keep
- * it anyway. Best for clean logos and line art; photos are warned about and
- * offered the photo-stitch row mode instead.
+ * it anyway. Best for clean logos and line art; photos are out of scope and
+ * warned about — embroidery is flat color and line, not continuous tone.
  */
 
 /** Wizard steps. Text auto-skips when the trace found no text-like clusters. */
@@ -96,7 +95,7 @@ const MAX_COLORS = 12;
 type StitchStyle = "auto" | "satin" | "outline";
 
 /** How the image becomes stitches (Image-step choice, auto-preselected). */
-type DigitizeMethod = "standard" | "lineart" | "photo";
+type DigitizeMethod = "standard" | "lineart";
 
 /** Apply a per-color style override to an object (no-op for "auto"). Satin/running
  *  survive the apply-time fixStitches pass, so the choice sticks. */
@@ -139,14 +138,11 @@ export default function AutoDigitizeDialog({
   // DIGITIZING METHOD. "standard": posterize-by-color trace. "lineart": the
   // Live-Paint model for outlined cartoon art — dark linework becomes one
   // stroke network sewn LAST, every enclosed face between the lines becomes a
-  // flat color fill sampled from the image. "photo": serpentine rows whose
-  // density follows the image's tones (the engraved-portrait look).
-  // Auto-detection preselects lineart/photo until the user chooses explicitly.
+  // flat color fill sampled from the image. (Photos are deliberately NOT a
+  // mode: continuous tone isn't embroiderable and we don't pretend otherwise.)
+  // Auto-detection preselects lineart until the user chooses explicitly.
   const [method, setMethod] = useState<DigitizeMethod>("standard");
   const [userSetMethod, setUserSetMethod] = useState(false);
-  const photoMode = method === "photo";
-  const [photoShades, setPhotoShades] = useState<1 | 2 | 3 | 4>(1);
-  const [photoRowSpacing, setPhotoRowSpacing] = useState(0.8);
   const [removeBackground, setRemoveBackground] = useState(true);
   const [detail, setDetail] = useState<DigitizeDetail>("balanced");
   const [recognizeText, setRecognizeText] = useState(false);
@@ -297,38 +293,6 @@ export default function AutoDigitizeDialog({
         const mmPerPx = Math.min(hoop.wMm / imageData.width, hoop.hMm / imageData.height) * fit;
         const offsetX = (hoop.wMm - imageData.width * mmPerPx) / 2;
         const offsetY = (hoop.hMm - imageData.height * mmPerPx) / 2;
-        // PHOTO-STITCH path: rows of tone-following stitches, already at their
-        // final pitch (params.raw) — no posterizing, palette work, or OCR.
-        if (photoMode && !isSvg) {
-          const boxW = hoop.wMm * fit;
-          const boxH = hoop.hMm * fit;
-          const photo = photoStitchObjects(imageData, {
-            widthMm: boxW,
-            heightMm: boxH,
-            rowSpacingMm: photoRowSpacing,
-            colors: photoShades,
-          });
-          // photoStitchObjects centers within its box; shift the box into the hoop.
-          const dx = (hoop.wMm - boxW) / 2;
-          const dy = (hoop.hMm - boxH) / 2;
-          const shifted = photo.objects.map((o) => ({
-            ...o,
-            paths: o.paths.map((path) => path.map((q) => ({ x: q.x + dx, y: q.y + dy }))),
-          }));
-          if (!alive) return;
-          setResult({ colors: photo.colors, objects: shifted });
-          setKeptIds(new Set(photo.colors.map((c) => c.id)));
-          setStyleById({});
-          setFixById({});
-          setTextClusters([]);
-          setTextAssign({});
-          setError(
-            shifted.length === 0
-              ? "Nothing dark enough to stitch — this image may be too light for photo rows."
-              : null,
-          );
-          return;
-        }
         // VECTOR path: import the SVG's shapes exactly (no raster ceiling). Falls
         // back to the raster tracer if the SVG couldn't be parsed.
         // LINE-ART path: the Live-Paint model — faces between the dark linework
@@ -429,7 +393,7 @@ export default function AutoDigitizeDialog({
       alive = false;
       clearTimeout(handle);
     };
-  }, [imageData, svgShapes, isSvg, numColors, removeBackground, detail, recognizeText, hoop.wMm, hoop.hMm, method, photoShades, photoRowSpacing]);
+  }, [imageData, svgShapes, isSvg, numColors, removeBackground, detail, recognizeText, hoop.wMm, hoop.hMm, method]);
 
   // Load the lettering font once — the text-retype assist needs it.
   useEffect(() => {
@@ -489,11 +453,6 @@ export default function AutoDigitizeDialog({
   // re-sweeping everything.
   useEffect(() => {
     if (step !== 3) return;
-    if (photoMode && !isSvg) {
-      // Photo rows are final penetrations already — nothing to check.
-      setReview([]);
-      return;
-    }
     let alive = true;
     setReview(null);
     setReviewDone(0);
@@ -518,7 +477,7 @@ export default function AutoDigitizeDialog({
     return () => {
       alive = false;
     };
-  }, [step, reviewCandidates, photoMode, isSvg]);
+  }, [step, reviewCandidates]);
 
   const setColors = (n: number) => {
     setUserSetColors(true);
@@ -611,11 +570,7 @@ export default function AutoDigitizeDialog({
     setApplying(true);
     await new Promise((r) => setTimeout(r, 30));
     try {
-      // Photo-stitch rows are already final penetrations (params.raw) in the right
-      // order (darkest band first) — fixStitches' re-typing and colour-grouped
-      // re-ordering would only disturb them, so they apply verbatim. The normal
-      // trace keeps the smart cleanup (sensible stitch types, safe densities).
-      onApply(photoMode && !isSvg ? project : fixStitches(project));
+      onApply(fixStitches(project));
     } catch (e) {
       logError(`Apply failed: ${(e as Error).message}`, (e as Error).stack);
       setError((e as Error).message);
@@ -704,7 +659,7 @@ export default function AutoDigitizeDialog({
             <figcaption className="mb-1 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/50">
               Stitch preview
             </figcaption>
-            <DigitizePreview objects={keptObjects} colorById={colorById} updating={updating} photo={photoMode && !isSvg} />
+            <DigitizePreview objects={keptObjects} colorById={colorById} updating={updating} />
           </figure>
         </div>
 
@@ -713,9 +668,9 @@ export default function AutoDigitizeDialog({
             <p className="flex gap-1.5">
               <AlertTriangle size={14} className="mt-0.5 shrink-0 text-stamp" aria-hidden />
               <span>
-                This looks photographic. Clean illustrations and logos work best with the standard
-                trace — or try Photo stitch: rows of stitches whose density follows the photo&apos;s
-                tones, like an engraved portrait.
+                This looks like a photo. Embroidery is flat color and clean lines — photos
+                aren&apos;t supported and won&apos;t digitize well. Clean illustrations, logos and
+                outlined artwork give great results.
               </span>
             </p>
           </div>
@@ -731,7 +686,7 @@ export default function AutoDigitizeDialog({
               role="group"
               aria-label="Digitizing method"
             >
-              {([["standard", "Standard trace"], ["lineart", "Line art"], ["photo", "Photo stitch"]] as const).map(
+              {([["standard", "Standard trace"], ["lineart", "Line art"]] as const).map(
                 ([value, label]) => (
                   <button
                     key={value}
@@ -752,9 +707,7 @@ export default function AutoDigitizeDialog({
             <p className="mt-1 text-[11px] text-navy/55">
               {method === "lineart"
                 ? "Outlined cartoon art: every area between the lines fills flat with its own color, and the dark linework sews last on top."
-                : method === "photo"
-                  ? "Rows of stitches whose density follows the photo's tones, like an engraved portrait."
-                  : "Flattens the image to solid color regions and stitches each one."}
+                : "Flattens the image to solid color regions and stitches each one."}
               {method === "lineart" && lineArt?.isLineArt && !userSetMethod && (
                 <span className="text-navy/45"> Looks like outlined line art, so we picked this for you.</span>
               )}
@@ -762,63 +715,9 @@ export default function AutoDigitizeDialog({
           </div>
         )}
 
-        {/* PHOTO-STITCH controls — shades (tonal bands) and row spacing. */}
-        {photoMode && !isSvg && (
-          <fieldset className="mb-4 rounded-sm border-2 border-ink/15 bg-butter-50 p-3">
-            <legend className="px-1 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/50">
-              Photo stitch
-            </legend>
-            <div className="mb-1 flex items-center justify-between">
-              <span className="text-sm text-navy">Shades</span>
-              <div
-                className="inline-flex overflow-hidden rounded-sm border-2 border-ink/30"
-                role="group"
-                aria-label="Shades"
-              >
-                {([1, 2, 3, 4] as const).map((n) => (
-                  <button
-                    key={n}
-                    onClick={() => setPhotoShades(n)}
-                    aria-pressed={photoShades === n}
-                    aria-label={`${n} shade${n === 1 ? "" : "s"}`}
-                    className={`px-3 py-1 font-label text-[11px] font-semibold tabular-nums transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ink ${
-                      photoShades === n ? "bg-ink text-cream" : "bg-cream text-navy/70 hover:bg-butter-200"
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <p className="mb-3 text-[11px] text-navy/55">
-              One shade sews black rows on light fabric; more shades layer gray threads for richer
-              midtones (recolor them in the list below). Darkest sews first.
-            </p>
-            <label className="flex items-center justify-between gap-2 text-sm text-navy">
-              Row spacing (mm)
-              <input
-                type="number"
-                min={0.3}
-                max={3}
-                step={0.1}
-                value={photoRowSpacing}
-                onChange={(e) => {
-                  const v = parseFloat(e.target.value);
-                  if (Number.isFinite(v)) setPhotoRowSpacing(Math.max(0.3, Math.min(3, v)));
-                }}
-                className="w-20 rounded-sm border border-ink/30 bg-white px-2 py-1 text-right text-sm tabular-nums text-navy outline-none focus:ring-1 focus:ring-ink/40"
-              />
-            </label>
-            <p className="mt-1 text-[11px] text-navy/55">
-              Closer rows read darker and take longer to sew; wider rows are lighter and faster.
-            </p>
-          </fieldset>
-        )}
-
         {/* BASICS — the few controls most designs need, grouped so the dialog
-            reads calm and "ready to apply" at a glance. Hidden in photo-stitch
-            mode, whose rows have their own controls above. */}
-        {!(photoMode && !isSvg) && (
+            reads calm and "ready to apply" at a glance. */}
+        {(
         <fieldset className="mb-4 rounded-sm border-2 border-ink/15 bg-butter-50 p-3">
           <legend className="px-1 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/50">
             Basics
@@ -893,7 +792,7 @@ export default function AutoDigitizeDialog({
             <figcaption className="mb-1 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/50">
               Stitch preview
             </figcaption>
-            <DigitizePreview objects={keptObjects} colorById={colorById} updating={updating} photo={photoMode && !isSvg} />
+            <DigitizePreview objects={keptObjects} colorById={colorById} updating={updating} />
           </figure>
         )}
 
@@ -1115,11 +1014,7 @@ export default function AutoDigitizeDialog({
             <p className="mb-1.5 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/50">
               Quality check
             </p>
-            {photoMode && !isSvg ? (
-              <p className="text-[12px] text-navy/60">
-                Photo-stitch rows sew exactly as previewed — nothing to check here.
-              </p>
-            ) : review === null ? (
+            {review === null ? (
               <div aria-live="polite">
                 <p className="mb-1.5 text-[12px] text-navy/60">
                   Checking piece {Math.min(reviewDone + 1, reviewCandidates.length)} of{" "}
@@ -1311,15 +1206,10 @@ function DigitizePreview({
   objects,
   colorById,
   updating,
-  photo = false,
 }: {
   objects: EmbObject[];
   colorById: Map<string, ThreadColor>;
   updating: boolean;
-  /** Photo-stitch rows: the points ARE the penetrations (params.raw), so skip the
-   *  engine and draw each polyline directly as cheap flat 2D lines — tens of
-   *  thousands of row stitches preview instantly. */
-  photo?: boolean;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1329,22 +1219,12 @@ function DigitizePreview({
     if (!b) return { segs: [], box: null as null | { minX: number; minY: number; w: number; h: number } };
     const pad = 2;
     const box = { minX: b.minX - pad, minY: b.minY - pad, w: b.maxX - b.minX + pad * 2, h: b.maxY - b.minY + pad * 2 };
-    if (photo) {
-      // Raw rows draw verbatim — one segment per object, no engine pass needed.
-      const segs = objects.map((o) => ({
-        colorId: o.colorId,
-        underlay: false,
-        travel: false,
-        points: o.paths[0] ?? [],
-      }));
-      return { segs, box };
-    }
     const design = generateDesign({
       ...createEmptyProject(),
       objects: objects.map((o) => ({ ...o, visible: true })),
     });
     return { segs: designToSegments(design), box };
-  }, [objects, photo]);
+  }, [objects]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1377,14 +1257,14 @@ function DigitizePreview({
       const py = (y: number) => offY + (y - box.minY) * scale;
       const threadPx = Math.min(4, Math.max(1.2, scale * 0.42));
       // Photo rows: flat strokes (realistic fuzz × 100k stitches would crawl).
-      drawStitches(ctx, segs, { colorById, px, py, threadPx: photo ? Math.min(threadPx, 1.5) : threadPx, realistic: !photo });
+      drawStitches(ctx, segs, { colorById, px, py, threadPx, realistic: true });
     };
     draw();
     if (typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(draw);
     ro.observe(wrap);
     return () => ro.disconnect();
-  }, [segs, box, colorById, photo]);
+  }, [segs, box, colorById]);
 
   return (
     <div
