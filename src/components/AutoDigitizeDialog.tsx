@@ -1255,7 +1255,8 @@ function DigitizePreview({
       const offY = (cssH - box.h * scale) / 2;
       const px = (x: number) => offX + (x - box.minX) * scale;
       const py = (y: number) => offY + (y - box.minY) * scale;
-      const threadPx = Math.min(4, Math.max(1.2, scale * 0.42));
+      // Track physical thread width with zoom (see CanvasStage) — a hard 4px cap made dense fills look laned.
+      const threadPx = Math.min(28, Math.max(1.2, scale * 0.46));
       // Photo rows: flat strokes (realistic fuzz × 100k stitches would crawl).
       drawStitches(ctx, segs, { colorById, px, py, threadPx, realistic: true });
     };
