@@ -869,11 +869,13 @@ export function livePaintObjects(
       const bb = blobBounds[bl];
       const bw = bb.maxX - bb.minX + 1;
       const bh = bb.maxY - bb.minY + 1;
-      if (Math.max(bw, bh) / Math.max(1, Math.min(bw, bh)) > 2.5) return false;
+      const aspect = Math.max(bw, bh) / Math.max(1, Math.min(bw, bh));
+      const fat = c / (Math.PI * blobCoreRadPx * blobCoreRadPx);
+      if (aspect > 2.5) return false;
       // A true solid is FATTER than the opening disc; a stroke junction or an
       // L-corner survives the erosion but reconstructs to just the disc
       // (~πr² clipped) — a pupil reconstructs to its own larger body.
-      return c >= 1.6 * Math.PI * blobCoreRadPx * blobCoreRadPx;
+      return fat >= 1.6;
     });
     for (let p = 0; p < W * H; p++) {
       const bl = blobLabels[p];

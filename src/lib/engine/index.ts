@@ -722,7 +722,7 @@ const LINE_ART_MIN_LEN_MM = 2.5;
  *  pass reads weak. 0.7 (was 0.9): a traced cartoon's ink lines run 0.7–1.9mm
  *  and read as bold SOLID strokes — beaning the 0.7–0.9 band left a fifth of a
  *  cartoon's outline network under-covered. True hairlines still bean. */
-const LINE_ART_SATIN_MIN_MM = 0.7;
+const LINE_ART_SATIN_MIN_MM = 0.55;
 /** Regularized line-art satin renders every stroke at least this wide (mm):
  *  cartoon ink at its measured 0.6mm reads wispy next to 1.8mm outlines, and
  *  any fill tucked under a stroke would peek past a satin narrower than the
