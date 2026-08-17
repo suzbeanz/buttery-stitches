@@ -186,12 +186,13 @@ describe("underpath travel under coverage", () => {
 });
 
 describe("line-art strokes (running lines, not satin)", () => {
-  // A genuinely thin elongated bar (a 0.5 mm hairline — safely under the
-  // line-art satin threshold, now 0.7 mm so traced cartoon ink satins bold). As
-  // plain satin it sews a dense zig-zag; as line-art it should sew a running
-  // line down the centerline — much longer median stitch, far fewer
-  // penetrations. (Wider bars, e.g. a ~2 mm flag-pole, satin-fill solid.)
-  const bar = [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 0.5 }, { x: 0, y: 0.5 }];
+  // A genuinely thin elongated bar (a 0.35 mm hairline — safely under the
+  // line-art satin threshold, now 0.55 mm so traced cartoon ink satins bold;
+  // the margin also absorbs the medial grid's width quantization). As plain
+  // satin it sews a dense zig-zag; as line-art it should sew a running line
+  // down the centerline — much longer median stitch, far fewer penetrations.
+  // (Wider bars, e.g. a ~2 mm flag-pole, satin-fill solid.)
+  const bar = [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 0.35 }, { x: 0, y: 0.35 }];
   function design(lineArt: boolean) {
     const o = makeObjectFromPaths("fill", [bar], "c1");
     o.params = { fillStyle: "satin", lineArt, underlay: false };

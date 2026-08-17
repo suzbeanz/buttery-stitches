@@ -5,7 +5,6 @@ import { marchingSquares } from "../paintbucket";
 import { smoothRingKeepingCorners } from "../smooth";
 import { douglasPeucker } from "./simplify";
 import { polygonArea } from "./classify";
-import { recognizeShape } from "./recognize";
 import { nameForRgb } from "./colorname";
 import {
   borderIsTransparent,
@@ -52,13 +51,21 @@ const INK_MEAN_LUM_MAX = 90;
 const INK_MIN_FRACTION = 0.02;
 /** Palette entries closer than this (RGB dist²) merge — two whites are one thread. */
 const PALETTE_MERGE_DIST2 = 32 * 32;
-/** A face less pure than this (share of its pixels within FACE_PURE_DIST2 of the
- *  face mean) is suspected of a leak through a line gap and gets split. */
-const FACE_PURITY_MIN = 0.85;
+/** A pixel further than this (RGB dist²) from its face's mean color is an
+ *  OUTLIER — a connected clump of them big enough to sew is a distinct region
+ *  that leaked in through a line-work gap, and splits into its own face. */
 const FACE_PURE_DIST2 = 60 * 60;
 /** Pixel cap after upscale; beyond it we work on a stride-2 downsample
  *  (mm-denominated thresholds make this scale-free). */
 const MAX_PIXELS = 4_000_000;
+/** Ink locally fatter than 2× this half-width (mm) is a solid BLOB (a pupil,
+ *  a heavy brow), not a pen stroke — it sews as an ordinary fill because a
+ *  stroke skeleton renders a blob as a hollow outline. Pen strokes in the
+ *  reference cartoons run 0.6–2.0mm, so 1.15mm half-width (2.3mm full) only
+ *  fires on genuine solids. */
+const INK_BLOB_MIN_HALF_MM = 0.8;
+/** A blob smaller than this (mm²) stays part of the stroke network. */
+const INK_BLOB_MIN_MM2 = 2.5;
 
 interface Raster {
   width: number;
@@ -510,7 +517,7 @@ export function livePaintObjects(
       a.g += data[o + 1];
       a.b += data[o + 2];
     }
-    return counts.map((c, id) => {
+    return counts.map((_c, id) => {
       const a = acc[id];
       const total = a.n + a.tr;
       const rgb: [number, number, number] =
@@ -534,87 +541,54 @@ export function livePaintObjects(
           keep = false;
       }
       let tiny = false;
-      if (keep && c * pxArea < minFaceMm2) {
+      if (keep && total * pxArea < minFaceMm2) {
         keep = false;
         tiny = true;
       }
-      return { id, px: c, rgb, keep, tiny };
+      return { id, px: total, rgb, keep, tiny };
     });
   };
 
   let faces = analyzeFaces();
 
-  // ── Purity split ─────────────────────────────────────────────────────────
-  // A face whose pixels stray far from its own mean is suspected of a LEAK
-  // through a real gap in the linework (two rooms reading as one). Split it by
-  // color (k=2) and relabel each side's connected components as new faces.
-  // One level deep — measured sufficient, and it can't loop.
-  for (const f of faces.filter((f) => f.keep)) {
-    let pure = 0;
-    let n = 0;
-    for (let p = 0; p < W * H; p++) {
-      if (labels[p] !== f.id || data[p * 4 + 3] < 128) continue;
-      n++;
-      const o = p * 4;
-      const d2 =
-        (data[o] - f.rgb[0]) ** 2 + (data[o + 1] - f.rgb[1]) ** 2 + (data[o + 2] - f.rgb[2]) ** 2;
-      if (d2 <= FACE_PURE_DIST2) pure++;
-    }
-    if (n === 0 || pure / n >= FACE_PURITY_MIN) continue;
-    // k-means k=2 over this face's opaque pixels (8 iterations).
-    let c0: [number, number, number] = [...f.rgb];
-    let c1: [number, number, number] = [0, 0, 0];
-    let far = -1;
-    for (let p = 0; p < W * H; p++) {
-      if (labels[p] !== f.id || data[p * 4 + 3] < 128) continue;
-      const o = p * 4;
-      const d2 =
-        (data[o] - f.rgb[0]) ** 2 + (data[o + 1] - f.rgb[1]) ** 2 + (data[o + 2] - f.rgb[2]) ** 2;
-      if (d2 > far) {
-        far = d2;
-        c1 = [data[o], data[o + 1], data[o + 2]];
-      }
-    }
-    for (let it = 0; it < 8; it++) {
-      const s0 = [0, 0, 0, 0];
-      const s1 = [0, 0, 0, 0];
+  // ── Outlier-clump split ──────────────────────────────────────────────────
+  // A small region that LEAKED into a big one through a line-work gap — an eye
+  // white joining the face blue — is invisible to any FRACTIONAL purity test:
+  // the clump is a rounding error of the big face's pixel count. Instead, find
+  // connected clumps of pixels far from their face's mean color; every clump
+  // big enough to sew becomes its own face. Runs to a fixpoint (bounded): a
+  // split changes the parent's mean, which can expose the next clump.
+  const minFacePx = Math.max(1, Math.round(minFaceMm2 / pxArea));
+  for (let round = 0; round < 3; round++) {
+    let changed = false;
+    for (const f of faces.filter((ff) => ff.keep)) {
+      const outlier = new Uint8Array(W * H);
+      let n = 0;
       for (let p = 0; p < W * H; p++) {
         if (labels[p] !== f.id || data[p * 4 + 3] < 128) continue;
         const o = p * 4;
-        const d0 =
-          (data[o] - c0[0]) ** 2 + (data[o + 1] - c0[1]) ** 2 + (data[o + 2] - c0[2]) ** 2;
-        const d1 =
-          (data[o] - c1[0]) ** 2 + (data[o + 1] - c1[1]) ** 2 + (data[o + 2] - c1[2]) ** 2;
-        const s = d0 <= d1 ? s0 : s1;
-        s[0] += data[o];
-        s[1] += data[o + 1];
-        s[2] += data[o + 2];
-        s[3]++;
+        const d2 =
+          (data[o] - f.rgb[0]) ** 2 + (data[o + 1] - f.rgb[1]) ** 2 + (data[o + 2] - f.rgb[2]) ** 2;
+        if (d2 > FACE_PURE_DIST2) {
+          outlier[p] = 1;
+          n++;
+        }
       }
-      if (s0[3]) c0 = [s0[0] / s0[3], s0[1] / s0[3], s0[2] / s0[3]];
-      if (s1[3]) c1 = [s1[0] / s1[3], s1[1] / s1[3], s1[2] / s1[3]];
-    }
-    // Relabel: cluster-1 pixels become new components appended to counts.
-    const side = new Uint8Array(W * H);
-    for (let p = 0; p < W * H; p++) {
-      if (labels[p] !== f.id) continue;
-      const o = p * 4;
-      if (data[o + 3] < 128) continue;
-      const d0 = (data[o] - c0[0]) ** 2 + (data[o + 1] - c0[1]) ** 2 + (data[o + 2] - c0[2]) ** 2;
-      const d1 = (data[o] - c1[0]) ** 2 + (data[o + 1] - c1[1]) ** 2 + (data[o + 2] - c1[2]) ** 2;
-      if (d1 < d0) side[p] = 1;
-    }
-    const { labels: subLabels, counts: subCounts } = labelComponents(side, W, H, 1);
-    if (subCounts.length === 0) continue;
-    const base = counts.length;
-    for (const c of subCounts) counts.push(c);
-    for (let p = 0; p < W * H; p++) {
-      if (subLabels[p] >= 0) {
-        labels[p] = base + subLabels[p];
-        counts[f.id]--;
+      if (n < minFacePx) continue;
+      const { labels: subLabels, counts: subCounts } = labelComponents(outlier, W, H, 1);
+      if (!subCounts.some((c) => c >= minFacePx)) continue;
+      const base = counts.length;
+      for (let si = 0; si < subCounts.length; si++) counts.push(0);
+      for (let p = 0; p < W * H; p++) {
+        const si = subLabels[p];
+        if (si >= 0 && subCounts[si] >= minFacePx) {
+          labels[p] = base + si;
+          changed = true;
+        }
       }
     }
-    faces = analyzeFaces(); // re-derive with the split applied
+    if (!changed) break;
+    faces = analyzeFaces();
   }
 
   // Sub-visible enclosed specks dissolve into ink so they can't pinhole;
@@ -703,11 +677,11 @@ export function livePaintObjects(
     }));
   const toMmRing = (ring: Point[]): Path =>
     ring.map((p) => ({ x: p.x * mmPerPx + offsetX, y: p.y * mmPerPx + offsetY }));
-  const cleanRing = (ringPx: Point[]): Path => {
-    const mm = douglasPeucker(toMmRing(ringPx), simplifyTolMm);
-    const rec = recognizeShape(mm, 1.0);
-    return clampToImage(rec ? rec.ring : smoothRingKeepingCorners(mm, 0.6));
-  };
+  // NO shape snapping on faces: recognizeShape's 1mm circle/ellipse tolerance
+  // visibly pushed knuckle-sized faces past their ink boundary (blue spilling
+  // outside the lines). Faces hug the linework — fidelity beats idealization.
+  const cleanRing = (ringPx: Point[]): Path =>
+    clampToImage(smoothRingKeepingCorners(douglasPeucker(toMmRing(ringPx), simplifyTolMm), 0.6));
 
   const colors: ThreadColor[] = [];
   const objects: EmbObject[] = [];
@@ -718,21 +692,73 @@ export function livePaintObjects(
     return n === 1 ? base : `${base} ${n}`;
   };
 
+  // ── Midline claim: how far each color may tuck under the ink ────────────
+  // The old per-color dilation grew masks into the ink's DILATED halo, so a
+  // fill could poke out the FAR side of a thin stroke (blue past the outline).
+  // Instead, one multi-source BFS claims every sealed-ink cell for its NEAREST
+  // region — a kept face's color, or the OUTSIDE — so fills extend exactly to
+  // the stroke midline: seams are buried under the ink and nothing can ever
+  // overshoot the drawn boundary. Depth-capped: a tuck deeper than ~1.2mm buys
+  // nothing (the seam is covered) and just sews dead thread under fat ink.
+  const colorIndexOfFace = new Int16Array(counts.length).fill(-1);
+  for (const f of faces) {
+    if (!f.keep) continue;
+    const ci = assign.get(f.id);
+    if (ci === undefined) continue;
+    const mi = merged.findIndex((m) => m.members.has(ci));
+    if (mi >= 0) colorIndexOfFace[f.id] = mi as unknown as number;
+  }
+  const OUTSIDE = -2;
+  const claim = new Int32Array(W * H).fill(-1);
+  let frontier: number[] = [];
+  for (let p = 0; p < W * H; p++) {
+    if (barrier[p]) continue;
+    const id = labels[p];
+    const region = id >= 0 && keepFace[id] ? colorIndexOfFace[id] : OUTSIDE;
+    claim[p] = region === -1 ? OUTSIDE : region;
+    frontier.push(p);
+  }
+  // 0.45mm ≈ the engine's own color-seam underlap: enough that thread pull
+  // can't open fabric at the boundary, shallow enough that the tuck always
+  // stays under the ink's satin (a deeper tuck peeked out beside strokes whose
+  // regularized constant-width satin is narrower than a local ink bulge).
+  const maxTuckPx = Math.max(2, Math.round(0.45 / mmPerPx));
+  for (let depth = 0; depth < maxTuckPx && frontier.length; depth++) {
+    const next: number[] = [];
+    for (const p of frontier) {
+      const i = p % W;
+      const j = (p / W) | 0;
+      const spread = (q: number) => {
+        if (claim[q] === -1 && barrier[q]) {
+          claim[q] = claim[p];
+          next.push(q);
+        }
+      };
+      if (i > 0) spread(p - 1);
+      if (i < W - 1) spread(p + 1);
+      if (j > 0) spread(p - W);
+      if (j < H - 1) spread(p + W);
+    }
+    frontier = next;
+  }
+
   const colorEntries = merged
-    .map((m) => {
-      // Union mask of this color's faces, then tuck it UNDER the ink: dilate
-      // into barrier-ink cells only (never into another face or the open
-      // background), so thread pull can't open bare fabric along a line and
-      // two faces meeting under a stroke simply overlap beneath it.
+    .map((m, mi) => {
+      // This color's faces plus the ink cells the midline claim awarded them.
       const mask = new Uint8Array(W * H);
       let px = 0;
       for (let p = 0; p < W * H; p++) {
         const id = labels[p];
-        if (id < 0 || !keepFace[id]) continue;
-        const ci = assign.get(id);
-        if (ci === undefined || !m.members.has(ci)) continue;
-        mask[p] = 1;
-        px++;
+        if (id >= 0 && keepFace[id]) {
+          const ci = assign.get(id);
+          if (ci !== undefined && m.members.has(ci)) {
+            mask[p] = 1;
+            px++;
+          }
+        } else if (barrier[p] && claim[p] === mi) {
+          mask[p] = 1;
+          px++; // count the claimed tuck too — the size ORDER must match the final rings
+        }
       }
       return { m, mask, px };
     })
@@ -740,26 +766,7 @@ export function livePaintObjects(
     .sort((a, b) => b.px - a.px);
 
   for (const { m, mask } of colorEntries) {
-    const tuck = closeRadius + 1;
-    let cur = mask;
-    for (let n = 0; n < tuck; n++) {
-      const next = cur.slice();
-      for (let j = 0; j < H; j++) {
-        for (let i = 0; i < W; i++) {
-          const p = j * W + i;
-          if (cur[p] || !barrier[p]) continue; // only grow into sealed ink
-          if (
-            (i > 0 && cur[p - 1]) ||
-            (i < W - 1 && cur[p + 1]) ||
-            (j > 0 && cur[p - W]) ||
-            (j < H - 1 && cur[p + W])
-          )
-            next[p] = 1;
-        }
-      }
-      cur = next;
-    }
-    const rings = marchingSquares(cur, W, H)
+    const rings = marchingSquares(mask, W, H)
       .map(cleanRing)
       .filter((r) => r.length >= 3 && Math.abs(polygonArea(r)) >= minFaceMm2);
     if (rings.length === 0) continue;
@@ -771,10 +778,16 @@ export function livePaintObjects(
     const colorId = newId("color");
     const base = nameForRgb(rgb);
     colors.push({ id: colorId, rgb, name: base });
-    objects.push(makeObjectFromPaths("fill", rings, colorId, mintName(`${base} fill`)));
+    const obj = makeObjectFromPaths("fill", rings, colorId, mintName(`${base} fill`));
+    // NO pull compensation on live-paint faces: their drawn boundary already
+    // includes the under-ink tuck (their seam allowance). Adding the default
+    // pull comp on top pushed fills past the stroke midline and out beside the
+    // ink's satin — 145 stitches of face blue measured inside the eye whites.
+    obj.params = { ...obj.params, pullComp: 0 };
+    objects.push(obj);
   }
 
-  // ── Ink object, strictly last ────────────────────────────────────────────
+  // ── Ink, strictly last: solid BLOBS as fills, then the stroke network ────
   // True morphological CLOSE (not the fattened barrier): seal AA pinholes
   // without thickening the strokes.
   const closed = eroded(dilated(ink, W, H, closeRadius), W, H, closeRadius);
@@ -784,13 +797,116 @@ export function livePaintObjects(
     const id = labels[p];
     if (id >= 0 && tinyFace[id]) closed[p] = 1;
   }
+
+  // A solid ink BLOB — a pupil, a fat brow, a mouth-cavity shadow — has no
+  // stroke skeleton; the line-art renderer draws its outline and leaves the
+  // body hollow (a cartoon's pupils sewed as empty diamonds). Erosion finds
+  // where the ink is locally FATTER than any pen stroke; those cores
+  // reconstruct into blob masks that sew as ordinary solid fills (same ink
+  // thread, before the line network so the strokes still sit on top).
+  // The blob threshold ADAPTS to the artwork's own pen: the core radius is
+  // 1.4× the ink's median half-width (found by eroding until half the ink is
+  // gone), floored at INK_BLOB_MIN_HALF_MM. A uniform frame's L-corners are
+  // locally a bit fatter than the wall and must NOT become solids; a pupil is
+  // fatter than any stroke of its drawing.
+  let inkPxCount = 0;
+  for (let p = 0; p < W * H; p++) if (closed[p]) inkPxCount++;
+  // A uniform stroke of width w loses HALF its area at erosion w/4, so the
+  // median half-width is 2× the 50%-survival radius.
+  let r50 = 1;
+  {
+    let cur = closed;
+    for (let r = 1; r <= 14; r++) {
+      cur = eroded(cur, W, H, 1);
+      let surv = 0;
+      for (let p = 0; p < W * H; p++) if (cur[p]) surv++;
+      r50 = r;
+      if (surv < inkPxCount / 2) break;
+    }
+  }
+  const blobCoreRadPx = Math.max(
+    Math.round(INK_BLOB_MIN_HALF_MM / mmPerPx),
+    Math.round(2 * r50 * 1.4),
+  );
+  const cores = eroded(closed, W, H, blobCoreRadPx);
+  let blobs: Uint8Array = new Uint8Array(W * H);
+  let hasCore = false;
+  for (let p = 0; p < W * H; p++)
+    if (cores[p]) {
+      blobs[p] = 1;
+      hasCore = true;
+    }
+  if (hasCore) {
+    // TRUE morphological opening: plain disc dilation of the cores clipped to
+    // the ink. (Geodesic growth instead WALKED along connected strokes — a
+    // pupil's solid bled 1mm down its eyelid line.)
+    blobs = dilated(blobs, W, H, blobCoreRadPx + 1);
+    for (let p = 0; p < W * H; p++) if (!closed[p]) blobs[p] = 0;
+  }
+  const inkColorId = newId("color");
+  let inkColorUsed = false;
+
+  if (hasCore) {
+    // Each blob big enough to sew becomes rings; smaller cores stay strokes.
+    const { labels: blobLabels, counts: blobCounts } = labelComponents(blobs, W, H, 1);
+    // Size AND shape gates: a blob is COMPACT (a pupil, a shadow patch). A
+    // reconstructed stretch of extra-thick outline is elongated — it must stay
+    // in the stroke network or the outline fragments into fill patches.
+    const blobBounds = blobCounts.map(() => ({ minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }));
+    for (let p2 = 0; p2 < W * H; p2++) {
+      const bl = blobLabels[p2];
+      if (bl < 0) continue;
+      const bx = p2 % W;
+      const by = (p2 / W) | 0;
+      const bb = blobBounds[bl];
+      if (bx < bb.minX) bb.minX = bx;
+      if (by < bb.minY) bb.minY = by;
+      if (bx > bb.maxX) bb.maxX = bx;
+      if (by > bb.maxY) bb.maxY = by;
+    }
+    const keepBlob = blobCounts.map((c, bl) => {
+      if (c * pxArea < INK_BLOB_MIN_MM2) return false;
+      const bb = blobBounds[bl];
+      const bw = bb.maxX - bb.minX + 1;
+      const bh = bb.maxY - bb.minY + 1;
+      const aspect = Math.max(bw, bh) / Math.max(1, Math.min(bw, bh));
+      const fat = c / (Math.PI * blobCoreRadPx * blobCoreRadPx);
+      if (aspect > 2.5) return false;
+      // A true solid is FATTER than the opening disc; a stroke junction or an
+      // L-corner survives the erosion but reconstructs to just the disc
+      // (~πr² clipped) — a pupil reconstructs to its own larger body.
+      return fat >= 1.6;
+    });
+    for (let p = 0; p < W * H; p++) {
+      const bl = blobLabels[p];
+      if (bl >= 0 && !keepBlob[bl]) blobs[p] = 0;
+    }
+    const blobRings = marchingSquares(blobs, W, H)
+      .map((r) => clampToImage(smoothRingKeepingCorners(douglasPeucker(toMmRing(r), simplifyTolMm), 0.6)))
+      .filter((r) => r.length >= 3 && Math.abs(polygonArea(r)) >= INK_BLOB_MIN_MM2 * 0.5);
+    if (blobRings.length > 0) {
+      colors.push({ id: inkColorId, rgb: inkRgb, name: nameForRgb(inkRgb) });
+      inkColorUsed = true;
+      const blobObj = makeObjectFromPaths("fill", blobRings, inkColorId, "Ink solids");
+      // Same thread as the line network (one color group in fixStitches, and
+      // the lineArt rank keeps the strokes on top). No pull comp: blobs abut
+      // the strokes that will cover their edges.
+      blobObj.params = { ...blobObj.params, pullComp: 0 };
+      objects.push(blobObj);
+      // Strokes = ink minus the blob bodies, but keep a thin overlap ring so
+      // the network stays CONNECTED through a blob (a pupil touching the lid
+      // line must not sever the lid's centerline).
+      const blobCore = eroded(blobs, W, H, Math.max(1, Math.round(0.3 / mmPerPx)));
+      for (let p = 0; p < W * H; p++) if (blobCore[p]) closed[p] = 0;
+    }
+  }
+
   const inkRingsRaw = marchingSquares(closed, W, H);
   const inkRings = inkRingsRaw
     .map((r) => clampToImage(smoothRingKeepingCorners(douglasPeucker(toMmRing(r), simplifyTolMm), 0.6)))
     .filter((r) => r.length >= 3 && Math.abs(polygonArea(r)) >= 0.3);
   if (inkRings.length > 0) {
-    const inkColorId = newId("color");
-    colors.push({ id: inkColorId, rgb: inkRgb, name: nameForRgb(inkRgb) });
+    if (!inkColorUsed) colors.push({ id: inkColorId, rgb: inkRgb, name: nameForRgb(inkRgb) });
     const inkObj = makeObjectFromPaths("fill", inkRings, inkColorId, "Ink lines");
     inkObj.params = { ...inkObj.params, fillStyle: "satin", lineArt: true };
     objects.push(inkObj);

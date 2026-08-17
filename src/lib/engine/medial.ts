@@ -1484,7 +1484,17 @@ function buildColumn(
         const uy = (chosenL[k].y - chosenL[p].y) / (dl || 1);
         chosenR[k] = { x: chosenR[p].x + ux * MIN_INNER_ADV_MM, y: chosenR[p].y + uy * MIN_INNER_ADV_MM };
       }
-      if (throwsCross(chosenL[p], chosenR[p], chosenL[k], chosenR[k])) continue; // still folded — drop
+      if (throwsCross(chosenL[p], chosenR[p], chosenL[k], chosenR[k])) {
+        // Still folded: SHARE the previous inner hole exactly — a hand-style
+        // radial fan spoke. A shared endpoint is no longer a proper crossing,
+        // and the zero advance can't compound into the tilted lattice a
+        // forced forward step produced. Dropping instead thinned sustained
+        // tight curls (a fist's spiral, a small ear ring) to a 1–2mm ladder —
+        // every other throw of the whole arc died here.
+        if (dl <= dr) chosenL[k] = { ...chosenL[p] };
+        else chosenR[k] = { ...chosenR[p] };
+        if (throwsCross(chosenL[p], chosenR[p], chosenL[k], chosenR[k])) continue; // degenerate — drop
+      }
     }
     // A throw can clear its immediate predecessor yet still lie across an
     // EARLIER accepted throw (fan wrap-around on a >90° bend — a wedge petal

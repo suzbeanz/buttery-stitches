@@ -33,10 +33,11 @@ function xReversals(pts: { x: number }[]): number {
 }
 
 describe("line-art bold (bean) outlines", () => {
-  // A thin (~0.5 mm) horizontal stroke 40 mm long — a typical cartoon outline. It
-  // runs down its centerline, but RETRACED forward/back/forward so it sews solid
-  // and dark instead of a single weak hairline.
-  const hairline: Path = [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 0.5 }, { x: 0, y: 0.5 }];
+  // A thin (~0.35 mm) horizontal stroke 40 mm long — a true hairline, safely
+  // under the line-art satin threshold (0.55 mm — cartoon ink above it satins
+  // bold). It runs down its centerline, but RETRACED forward/back/forward so
+  // it sews solid and dark instead of a single weak hairline.
+  const hairline: Path = [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 0.35 }, { x: 0, y: 0.35 }];
 
   it("retraces a thin outline stroke (bean / triple), not a single weak pass", () => {
     const top = generateObjectRuns(lineArtObject([hairline])).find((r) => !r.underlay)!;

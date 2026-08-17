@@ -2056,7 +2056,12 @@ function StitchView({
   // stitch is stroked at the real thread thickness (~0.4 mm) so a dense fill or
   // satin reads as solid coverage instead of separate hairline "scanlines".
   const mmPx = px(1) - px(0);
-  const threadPx = Math.min(4, Math.max(1.4, mmPx * 0.42));
+  // Thread width TRACKS the zoom (a 40wt thread lays ~0.42mm and spreads a
+  // touch under tension). The old 4px cap silently thinned the thread past
+  // ~230% zoom, so every dense fill showed phantom bare lanes between rows —
+  // users zoomed in and read solid coverage as "uneven, not edge to edge".
+  // The generous 28px ceiling only guards absurd zoom levels.
+  const threadPx = Math.min(28, Math.max(1.4, mmPx * 0.46));
   // Fade the stitched preview in when entering Stitch view — a gentle "watch it
   // sew" reveal (instant under prefers-reduced-motion).
   const groupRef = useRef<Konva.Group>(null);
