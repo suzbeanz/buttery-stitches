@@ -20,6 +20,7 @@ import { isSmallRoundFill, meanStrokeWidthMm, isBroadlyThick, splitComponents } 
 import { polygonArea } from "../trace/classify";
 import { weldNonzero, ringsOverlap } from "../boolean";
 import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
+import { routeInkPieces, partitionInkComponents, type InkPiece } from "./inkroute";
 import { dropShortStitches, splitLongTravels } from "./resample";
 
 export * from "./running";
@@ -1128,6 +1129,13 @@ export function generateObjectRuns(
       const ulColumns = p.lineArt
         ? columns.filter((c) => c.widthMm >= LINE_ART_SATIN_MIN_MM)
         : columns;
+      // Line-art underlay is DEFERRED: it emits below, interleaved per network
+      // component (underlay → mends → satin for each island in turn), so a
+      // detached piece is entered once and finished — three separate global
+      // passes each re-visited every island and paid a trim per visit.
+      if (usingSatin && p.lineArt) {
+        /* handled in the line-art emission block below */
+      } else {
       const ulRuns = usingSatin
         ? ulColumns.flatMap((c) => columnUnderlay(c.centerline, c.widthMm, weight, underlayType))
         : contour && underlayType === "auto"
@@ -1143,6 +1151,7 @@ export function generateObjectRuns(
           addRun(runs, u, true, regionIdx, usingSatin);
           if (u.length) cursor = u[u.length - 1];
         }
+      }
       }
     }
 
@@ -1186,6 +1195,9 @@ export function generateObjectRuns(
     // through the general ordered path below, not the satin emission path, and gets
     // no residual tatami fill (crossing columns cover the junctions).
     let lineArtFill = false;
+    // Line-art keeps each rendered stroke paired with its medial centerline so
+    // the network router below can walk the skeleton between strokes.
+    let lineArtPieces: InkPiece[] | null = null;
     if (usingSatin) {
       // Line-art: drop medial-axis SPURS (tiny centerline stubs off a blobby
       // region) — they sew as 1-stitch specks that only add trims and clutter.
@@ -1241,6 +1253,7 @@ export function generateObjectRuns(
         );
         tatamiNoBareTravel = true; // a fill: order for shortest travel, never slash a bare gap
         lineArtFill = true;
+        lineArtPieces = keep.map((c, i) => ({ top: tops[i], centerline: c.centerline, widthMm: c.widthMm }));
       } else {
         const runMax = RUNNING_COLUMN_MM;
         // Hairlines sew as a BEAN retrace (forward/back/forward), not a single
@@ -1371,13 +1384,38 @@ export function generateObjectRuns(
     // throw sequence) then splits. Tatami/contour split the fill path into
     // machine-safe pieces FIRST, then order those — so a concave shape's spans
     // connect with short travels instead of leaping (and trimming) across it.
-    if (usingSatin && lineArtFill) {
-      // Line art gets the QUIET mend chain only: every stroke crossing in a
-      // traced outline network leaves a small junction wedge (a cartoon's
-      // linework measured 31 such 2–4mm² pinholes), and skipping mends
-      // entirely — the old rule — reads as perforations at every joint.
-      // Slivers and small blocks lie along/inside the strokes; tatami is
-      // still excluded so nothing fights the linework grain.
+    if (usingSatin && lineArtFill && lineArtPieces) {
+      // LINE-ART EMISSION — per network component, in the professional order:
+      // enter an island once, sew its underlay, its junction mends, then its
+      // satin, and leave. (Three global passes each re-visited every island
+      // and paid a trim per visit — the reference cartoon spent 18 ink trims
+      // on island revisits alone; per-component it sews with a handful.)
+      // Within a component every pass rides the skeleton: the router emits
+      // running connectors down the centerlines, which the stroke satin sewn
+      // over those same centerlines buries. Mends use the QUIET chain only:
+      // every stroke crossing leaves a small junction wedge (a cartoon's
+      // linework measured 31 such 2–4mm² pinholes) and skipping mends reads
+      // as perforations at every joint; tatami stays excluded so nothing
+      // fights the linework grain.
+      const tracks = lineArtPieces.map((pc) => pc.centerline);
+      const { labels, assign } = partitionInkComponents(tracks);
+
+      const ulByComp = new Map<number, InkPiece[]>();
+      const mendByComp = new Map<number, InkPiece[]>();
+      const topByComp = new Map<number, InkPiece[]>();
+      const push = (m: Map<number, InkPiece[]>, k: number, v: InkPiece) => {
+        let arr = m.get(k);
+        if (!arr) m.set(k, (arr = []));
+        arr.push(v);
+      };
+      lineArtPieces.forEach((pc, i) => {
+        push(topByComp, labels[i], { ...pc, top: deloopRun(pc.top, region) });
+        if (p.underlay && !motifMode && (pc.widthMm ?? 0) >= LINE_ART_SATIN_MIN_MM) {
+          for (const run of columnUnderlay(pc.centerline, pc.widthMm!, weight, underlayType)) {
+            push(ulByComp, labels[i], { top: run, centerline: pc.centerline });
+          }
+        }
+      });
       for (const patch of residualRegions(region, tops, 0.2, TIP_PATCH_MIN_MM2)) {
         if (Math.abs(polygonArea(patch)) > 8) continue;
         const fill =
@@ -1385,11 +1423,53 @@ export function generateObjectRuns(
           smallPatchSatinBlock(patch, density, fabric.pullMul) ??
           sliverMendRun(patch, stitchLength, true);
         if (!fill) continue;
-        const clean = deloopRun(fill);
-        for (const sub of orderByNearest(splitLongTravels(clean, travelMax), cursor)) {
+        for (const sub of splitLongTravels(deloopRun(fill), travelMax)) {
           const r = dropShortStitches(sub);
+          if (r.length >= 2) push(mendByComp, assign(r[r.length >> 1]), { top: r, centerline: r });
+        }
+      }
+
+      // Components in a greedy proximity chain from the cursor; the hop INTO
+      // each island is the one place the assembler still trims.
+      const compIds = [...new Set([...topByComp.keys(), ...mendByComp.keys()])];
+      const compEntry = (comp: number): Point[] =>
+        (topByComp.get(comp) ?? mendByComp.get(comp) ?? []).flatMap((pc) => [
+          pc.top[0],
+          pc.top[pc.top.length - 1],
+        ]);
+      const done = new Set<number>();
+      while (done.size < compIds.length) {
+        let comp = -2;
+        let best = Infinity;
+        for (const c of compIds) {
+          if (done.has(c)) continue;
+          const d = cursor
+            ? Math.min(...compEntry(c).map((q) => Math.hypot(q.x - cursor!.x, q.y - cursor!.y)))
+            : 0;
+          if (d < best) {
+            best = d;
+            comp = c;
+          }
+        }
+        done.add(comp);
+        const compTracks = tracks.filter((_, i) => labels[i] === comp);
+        for (const run of routeInkPieces(ulByComp.get(comp) ?? [], cursor, TRAVEL_STITCH, compTracks)) {
+          for (const sub of splitLongTravels(run, travelMax)) {
+            const u = dropShortStitches(sub);
+            addRun(runs, u, true, regionIdx, true);
+            if (u.length) cursor = u[u.length - 1];
+          }
+        }
+        for (const r of routeInkPieces(mendByComp.get(comp) ?? [], cursor, TRAVEL_STITCH, compTracks)) {
           addRun(runs, r, false, regionIdx, true);
           if (r.length) cursor = r[r.length - 1];
+        }
+        for (const run of routeInkPieces(topByComp.get(comp) ?? [], cursor, TRAVEL_STITCH, compTracks)) {
+          for (const sub of splitLongTravels(run, travelMax)) {
+            const r = dropShortStitches(sub, minStitch);
+            addRun(runs, r, false, regionIdx, true);
+            if (r.length) cursor = r[r.length - 1];
+          }
         }
       }
     }
@@ -1484,10 +1564,17 @@ export function generateObjectRuns(
       // arch tip) the last rows are shorter than a stitch and pile into a
       // crossing scribble — collapsing the loops sews the tip as a clean
       // shortening path instead. Fan-tolerant, so line-art satin is untouched.
-      const subRuns = tops.flatMap((run) => splitLongTravels(deloopRun(run, region), travelMax));
-      // Contour keeps its spiral order; everything else is re-sorted for the
-      // shortest travel between pieces.
-      const ordered = contourSpiral ? subRuns : orderByNearest(subRuns, cursor);
+      // Line-art already emitted per network component above (underlay, mends
+      // and satin routed over the skeleton together) — nothing goes through
+      // the generic ordering.
+      const ordered = lineArtFill
+        ? []
+        : (() => {
+            const subRuns = tops.flatMap((run) => splitLongTravels(deloopRun(run, region), travelMax));
+            // Contour keeps its spiral order; everything else is re-sorted for
+            // the shortest travel between pieces.
+            return contourSpiral ? subRuns : orderByNearest(subRuns, cursor);
+          })();
       // Contour rings step ~one density between loops (drawn as ordinary stitches),
       // but a region of DISCONNECTED blobs (e.g. two eyes + a nose as one object)
       // must not draw a bare connector across the open gap between them — so, like
@@ -1902,13 +1989,21 @@ export function generateDesign(
   // same reason as MAX_COVERED_TRAVEL — a mid-color "trim" is a loose drag on
   // home machines, so nearly any covered detour beats it.
   const ROUTE_CAP = 150;
-  type Grid = { minX: number; minY: number; w: number; h: number; g: Uint8Array };
+  // ORDER-AWARE grid, matching the exact test above: a cell is usable for a
+  // travel when SAME-colour ink covers it (invisible either way), or when ink
+  // sewn LATER than the travel's object covers it (laid over the top). The old
+  // same-colour-only raster could never bury a white move under the later-sewn
+  // outline network — precisely the professional route in outline-last designs
+  // (the reference rat sews its body fills connected under the final linework).
+  // `later` holds the max draw order covering each cell; ring EDGES rasterize
+  // too, so a thin stroke marks a continuous chain instead of whichever cell
+  // centers happen to fall inside a 0.7mm band.
+  type Grid = { minX: number; minY: number; w: number; h: number; same: Uint8Array; later: Int32Array };
   const covByColor = new Map<string, Grid | null>();
   function coverage(colorId: string): Grid | null {
     const cached = covByColor.get(colorId);
     if (cached !== undefined) return cached;
-    const mine = fills.filter((o) => o.colorId === colorId);
-    if (mine.length === 0) {
+    if (fills.length === 0) {
       covByColor.set(colorId, null);
       return null;
     }
@@ -1916,7 +2011,7 @@ export function generateDesign(
     let minY = Infinity;
     let maxX = -Infinity;
     let maxY = -Infinity;
-    for (const o of mine) {
+    for (const o of fills) {
       for (const ring of o.paths) {
         for (const p of ring) {
           if (p.x < minX) minX = p.x;
@@ -1940,33 +2035,57 @@ export function generateDesign(
       covByColor.set(colorId, null); // guard against a pathological hoop size
       return null;
     }
-    const g = new Uint8Array(w * h);
-    for (let gy = 0; gy < h; gy++) {
-      for (let gx = 0; gx < w; gx++) {
-        const p = { x: minX + gx * COVERAGE_CELL, y: minY + gy * COVERAGE_CELL };
-        for (const o of mine) {
-          if (pointInRings(p, o.paths)) {
-            g[gy * w + gx] = 1;
-            break;
-          }
+    const same = new Uint8Array(w * h);
+    const later = new Int32Array(w * h).fill(-1);
+    for (const o of fills) {
+      const isSame = o.colorId === colorId;
+      const order = drawOrder.get(o.id) ?? -1;
+      if (!isSame && order < 0) continue;
+      const mark = (idx: number) => {
+        if (isSame) same[idx] = 1;
+        else if (order > later[idx]) later[idx] = order;
+      };
+      // Interior: cell centers inside the rings.
+      const b = pathsBounds(o.paths);
+      if (!b) continue;
+      const gx0 = Math.max(0, Math.floor((b.minX - minX) / COVERAGE_CELL));
+      const gy0 = Math.max(0, Math.floor((b.minY - minY) / COVERAGE_CELL));
+      const gx1 = Math.min(w - 1, Math.ceil((b.maxX - minX) / COVERAGE_CELL));
+      const gy1 = Math.min(h - 1, Math.ceil((b.maxY - minY) / COVERAGE_CELL));
+      for (let gy = gy0; gy <= gy1; gy++) {
+        for (let gx = gx0; gx <= gx1; gx++) {
+          const p = { x: minX + gx * COVERAGE_CELL, y: minY + gy * COVERAGE_CELL };
+          if (pointInRings(p, o.paths)) mark(gy * w + gx);
         }
       }
+      // NOTE: no edge-cell rasterization. It was tried two ways (all objects,
+      // then line-art only) and both times the A* preferred the resulting thin
+      // boundary/stroke chains as shortcuts — paths the 0.45mm-slack exact
+      // verifier then rejects (cell centers sit up to 0.7mm off a thin line),
+      // so hops that used to route through interiors started trimming instead
+      // (measured +5 trims on the reference cartoon). Interior cells only;
+      // thin stroke networks are routed by their own skeleton walk in
+      // inkroute.ts, which is the reliable medium for them.
     }
-    const grid = { minX, minY, w, h, g };
+    const grid = { minX, minY, w, h, same, later };
     covByColor.set(colorId, grid);
     return grid;
   }
-  const cellCovered = (c: Grid, gx: number, gy: number) =>
-    gx >= 0 && gy >= 0 && gx < c.w && gy < c.h && c.g[gy * c.w + gx] === 1;
-  /** Nearest covered cell to a world point, within a few cells (else null). */
-  function snapCell(c: Grid, p: Point): number | null {
+  const cellCovered = (c: Grid, gx: number, gy: number, afterOrder: number) =>
+    gx >= 0 &&
+    gy >= 0 &&
+    gx < c.w &&
+    gy < c.h &&
+    (c.same[gy * c.w + gx] === 1 || c.later[gy * c.w + gx] > afterOrder);
+  /** Nearest usable cell to a world point, within a few cells (else null). */
+  function snapCell(c: Grid, p: Point, afterOrder: number): number | null {
     const cx = Math.round((p.x - c.minX) / COVERAGE_CELL);
     const cy = Math.round((p.y - c.minY) / COVERAGE_CELL);
     for (let r = 0; r <= 3; r++) {
       for (let dy = -r; dy <= r; dy++) {
         for (let dx = -r; dx <= r; dx++) {
           if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-          if (cellCovered(c, cx + dx, cy + dy)) return (cy + dy) * c.w + (cx + dx);
+          if (cellCovered(c, cx + dx, cy + dy, afterOrder)) return (cy + dy) * c.w + (cx + dx);
         }
       }
     }
@@ -1980,8 +2099,8 @@ export function generateDesign(
   function routeUnderCoverage(a: Point, b: Point, colorId: string, afterOrder: number): Point[] | null {
     const c = coverage(colorId);
     if (!c) return null;
-    const startCell = snapCell(c, a);
-    const goalCell = snapCell(c, b);
+    const startCell = snapCell(c, a, afterOrder);
+    const goalCell = snapCell(c, b, afterOrder);
     if (startCell === null || goalCell === null) return null;
     const { w, h } = c;
     const gxOf = (i: number) => i % w;
@@ -2040,7 +2159,7 @@ export function generateDesign(
           if (dx === 0 && dy === 0) continue;
           const ngx = cgx + dx;
           const ngy = cgy + dy;
-          if (!cellCovered(c, ngx, ngy)) continue;
+          if (!cellCovered(c, ngx, ngy, afterOrder)) continue;
           const ni = ngy * w + ngx;
           const step = (dx === 0 || dy === 0 ? 1 : Math.SQRT2) * COVERAGE_CELL;
           const ng = base + step;
