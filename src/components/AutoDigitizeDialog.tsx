@@ -28,6 +28,7 @@ import { mergeSimilarColors, consolidateFringeColors } from "../lib/thread/reduc
 import { matchColorsToChart } from "../lib/thread/match";
 import { THREAD_CHARTS } from "../lib/thread/catalog";
 import { pathsBounds } from "../lib/geometry";
+import { polygonArea } from "../lib/trace/classify";
 import { useEscapeToClose, useDialogFocus } from "./useEscapeToClose";
 import { logError } from "../lib/log";
 
@@ -56,16 +57,30 @@ const MIN_COLORS = 2;
 const MAX_COLORS = 12;
 
 /** Per-color stitch style the user can force in the dialog. */
-type StitchStyle = "auto" | "satin" | "outline";
+type StitchStyle = "auto" | "satin" | "outline" | "sketch" | "crosshatch";
 
 /** How the image becomes stitches (Image-step choice, auto-preselected). */
 type DigitizeMethod = "standard" | "lineart";
+
+/** Overall FILL LOOK for line art: flat solid color (a patch), or the open
+ *  sketch rows of the hand-drawn commercial style (fabric shows through). */
+type FillLook = "solid" | "sketch";
+
+/** Open sketch rows want much wider spacing than a solid fill — the measured
+ *  commercial "light fill" band. */
+const SKETCH_DENSITY = 0.8;
+/** Faces below this area keep their solid fill even in the sketch look: the
+ *  reference designs satin their small details (a rat's feet, an eye) — two
+ *  sketch rows across a tiny face read broken, not textured. */
+const SKETCH_MIN_FACE_MM2 = 30;
 
 /** Apply a per-color style override to an object (no-op for "auto"). Satin/running
  *  survive the apply-time fixStitches pass, so the choice sticks. */
 function styleObject(o: EmbObject, style: StitchStyle): EmbObject {
   if (style === "satin") return { ...o, type: "fill", params: { ...o.params, fillStyle: "satin" } };
   if (style === "outline") return { ...o, type: "running" };
+  if (style === "sketch" || style === "crosshatch")
+    return { ...o, type: "fill", params: { ...o.params, fillStyle: style, density: SKETCH_DENSITY } };
   return o;
 }
 
@@ -107,6 +122,10 @@ export default function AutoDigitizeDialog({
   // Auto-detection preselects lineart until the user chooses explicitly.
   const [method, setMethod] = useState<DigitizeMethod>("standard");
   const [userSetMethod, setUserSetMethod] = useState(false);
+  // FILL LOOK (line art only): solid patch color, or the open sketch-row
+  // texture of the hand-drawn commercial style. A pure param overlay — no
+  // re-trace — mapped over the faces at preview/apply time.
+  const [look, setLook] = useState<FillLook>("solid");
   const [removeBackground, setRemoveBackground] = useState(true);
   const [detail, setDetail] = useState<DigitizeDetail>("balanced");
   const [recognizeText, setRecognizeText] = useState(false);
@@ -293,7 +312,9 @@ export default function AutoDigitizeDialog({
                 version: 1,
                 widthMm: hoop.wMm,
                 heightMm: hoop.hMm,
-                hoop: { ...hoop },
+                // Listed per-property (not spread) so the effect's dependency
+                // list can name exactly what it reads.
+                hoop: { wMm: hoop.wMm, hMm: hoop.hMm, name: hoop.name },
                 colors: traced.colors,
                 objects: traced.objects,
               },
@@ -348,7 +369,7 @@ export default function AutoDigitizeDialog({
       alive = false;
       clearTimeout(handle);
     };
-  }, [imageData, svgShapes, isSvg, numColors, removeBackground, detail, recognizeText, hoop.wMm, hoop.hMm, method]);
+  }, [imageData, svgShapes, isSvg, numColors, removeBackground, detail, recognizeText, hoop.wMm, hoop.hMm, hoop.name, method]);
 
   // Load the lettering font once — the text-retype assist needs it.
   useEffect(() => {
@@ -381,14 +402,31 @@ export default function AutoDigitizeDialog({
     });
     return applyManualText(result.objects, res);
   }, [result, textAssign, textClusters, font, textKeepShapes]);
+  // The ink thread's objects (stroke network + solid blobs) never take the
+  // sketch look — open rows down the linework would erase the drawing.
+  const inkColorIds = useMemo(
+    () => new Set((result?.objects ?? []).filter((o) => o.params.lineArt).map((o) => o.colorId)),
+    [result],
+  );
+  // The FILL LOOK overlay: in sketch look, each big-enough face becomes an open
+  // sketch fill. Linework, ink solids, authored lettering and small detail
+  // faces keep their solid treatment (the reference designs do exactly this).
+  const lookStyled = (o: EmbObject): EmbObject => {
+    if (look !== "sketch" || method !== "lineart") return o;
+    if (o.params.lineArt || o.text || inkColorIds.has(o.colorId)) return o;
+    const area = o.paths.reduce((s, r) => s + Math.abs(polygonArea(r)), 0);
+    if (area < SKETCH_MIN_FACE_MM2) return o;
+    return { ...o, type: "fill", params: { ...o.params, fillStyle: "sketch", density: SKETCH_DENSITY } };
+  };
   const keptObjects = useMemo(
     () =>
       result
         ? objectsWithText
             .filter((o) => keptIds.has(o.colorId) && !excludedIds.has(o.id))
-            .map((o) => styleObject(o, styleById[o.colorId] ?? "auto"))
+            .map((o) => styleObject(lookStyled(o), styleById[o.colorId] ?? "auto"))
         : [],
-    [result, objectsWithText, keptIds, excludedIds, styleById],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- lookStyled closes over look/method/inkColorIds, listed directly
+    [result, objectsWithText, keptIds, excludedIds, styleById, look, method, inkColorIds],
   );
 
   const setColors = (n: number) => {
@@ -467,7 +505,7 @@ export default function AutoDigitizeDialog({
       // An explicit KEEP is a decision — clear the flag so Check design never
       // re-nags about an object the user already ruled on.
       .map((o) => (o.suspectedBackground ? { ...o, suspectedBackground: undefined } : o))
-      .map((o) => styleObject(o, styleById[o.colorId] ?? "auto"));
+      .map((o) => styleObject(lookStyled(o), styleById[o.colorId] ?? "auto"));
     if (objects.length === 0) return;
     const project: Project = {
       version: 1,
@@ -618,6 +656,36 @@ export default function AutoDigitizeDialog({
                 <span className="text-navy/45"> Looks like outlined line art, so we picked this for you.</span>
               )}
             </p>
+
+            {/* FILL LOOK — line art only: flat patch color vs the open
+                sketch-row texture of the hand-drawn commercial style. */}
+            {method === "lineart" && (
+              <div className="mt-2">
+                <div
+                  className="inline-flex overflow-hidden rounded-sm border-2 border-ink/30"
+                  role="group"
+                  aria-label="Fill look"
+                >
+                  {([["solid", "Solid"], ["sketch", "Sketch"]] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      onClick={() => setLook(value)}
+                      aria-pressed={look === value}
+                      className={`px-3 py-1 font-label text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ink ${
+                        look === value ? "bg-ink text-cream" : "bg-cream text-navy/70 hover:bg-butter-200"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1 text-[11px] text-navy/55">
+                  {look === "sketch"
+                    ? "Open pencil-stroke rows, like hand-drawn shading — the fabric shows through. Small details stay solid. The preview shows flat color; Stitch view shows the open rows."
+                    : "Flat color like a patch — every area fills fully."}
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -816,6 +884,8 @@ export default function AutoDigitizeDialog({
                         <option value="auto">Auto</option>
                         <option value="satin">Satin</option>
                         <option value="outline">Outline</option>
+                        <option value="sketch">Sketch</option>
+                        <option value="crosshatch">Crosshatch</option>
                       </select>
                     )}
                     <button

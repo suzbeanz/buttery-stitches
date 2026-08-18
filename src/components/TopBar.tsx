@@ -239,6 +239,10 @@ export default function TopBar({
     setProject({ ...p, digitizedBuild: buildTag() });
     setImageFile(null);
     goEdit();
+    // Name the road ahead: the wizard delivers ARTWORK, and new users need to
+    // hear that stitches are a later, deliberate step (the review bar below
+    // walks the pieces; this points past it).
+    toast("Artwork added — reshape and recolor freely, then Clean up → Stitch view when you're ready", "success");
     // Walk the user through each freshly-traced region (confirm type, keep/skip).
     // Guarded against an empty trace inside startReview. Runs after setProject so
     // the ids already exist in the project.
