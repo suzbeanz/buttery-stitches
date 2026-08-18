@@ -7,6 +7,7 @@
  */
 import type { EmbObject, Point, Project } from "../../types/project";
 import { generateObjectRuns, generateDesign } from "../engine";
+import { splitFillRegions } from "../engine/fill";
 import { satinCoverage, residualRegions } from "../engine/medial";
 import { buildDensityMap, hotCells } from "../engine/densitymap";
 import { polygonArea } from "../trace/classify";
@@ -116,9 +117,29 @@ export interface DesignSweep {
   objects: ObjectSweep[];
   stitches: number;
   dangerCells: number;
+  /** Thread cuts in the whole design. */
+  trims: number;
+  /** Trims normalized per 10k stitches — the professional band, measured from
+   *  five commercial reference files (Wilcom worksheet: 12/13.5k ≈ 9; small
+   *  designs run to ~22), is 9–22. */
+  trimsPer10k: number;
+  /** q95 of stitched segment lengths (mm). Every reference fill block measures
+   *  3.99–4.10; only deliberate decorative satin exceeds it. */
+  stitchQ95Mm: number;
+  /** Disjoint fill pieces across the design's visible objects. Lettering-like
+   *  designs (every glyph its own island on open fabric) legitimately trim
+   *  about once per piece — the professional norm for standalone text — so the
+   *  trim gate scales with this, not only with stitch count. */
+  pieces: number;
+  /** Thread-block boundaries (trims) in the design… */
+  boundaries: number;
+  /** …and how many of them have lock stitches on BOTH sides (a tie-out before
+   *  the cut, a tie-in after). The reference files lock every one. */
+  lockedBoundaries: number;
 }
 
-/** Sweep a whole project: every visible fill object + design-wide density. */
+/** Sweep a whole project: every visible fill object + design-wide density +
+ *  the design-level professional metrics (trims, lengths, locks). */
 export function sweepProject(project: Project): DesignSweep {
   const objects: ObjectSweep[] = [];
   project.objects.forEach((o, i) => {
@@ -129,5 +150,57 @@ export function sweepProject(project: Project): DesignSweep {
   const design = generateDesign(project);
   const map = buildDensityMap(design);
   const dangerCells = map ? hotCells(map).filter((h) => h.severity >= 1).length : 0;
-  return { objects, stitches: design.length, dangerCells };
+
+  // Design-level pro metrics off the final stitch stream.
+  let trims = 0;
+  const lens: number[] = [];
+  let boundaries = 0;
+  let lockedBoundaries = 0;
+  /** Are there ≥2 sub-1.2mm stitches within the window's penetrations? (The
+   *  engine's ties are 3 alternating ~0.5-0.8mm bites.) */
+  const lockAround = (idx: number, dir: -1 | 1): boolean => {
+    let short = 0;
+    let steps = 0;
+    let i = idx;
+    while (steps < 6 && i + dir >= 0 && i + dir < design.length) {
+      const a = design[i];
+      const b = design[i + dir];
+      if (a.jump || a.trim || b.jump || b.trim) break;
+      if (Math.hypot(a.x - b.x, a.y - b.y) <= 1.2) short++;
+      i += dir;
+      steps++;
+    }
+    return short >= 2;
+  };
+  for (let i = 1; i < design.length; i++) {
+    const s = design[i];
+    if (s.trim) {
+      trims++;
+      boundaries++;
+      if (lockAround(i - 1, -1) && (i + 1 >= design.length || lockAround(i + 1, 1)))
+        lockedBoundaries++;
+      continue;
+    }
+    if (s.jump || design[i - 1].jump || design[i - 1].trim) continue;
+    if (s.colorId !== design[i - 1].colorId) continue;
+    lens.push(Math.hypot(s.x - design[i - 1].x, s.y - design[i - 1].y));
+  }
+  lens.sort((a, b) => a - b);
+  const stitchQ95Mm = lens.length ? lens[Math.min(lens.length - 1, Math.floor(0.95 * lens.length))] : 0;
+  let pieces = 0;
+  for (const o of project.objects) {
+    if (!o.visible) continue;
+    pieces += o.type === "running" ? o.paths.length : splitFillRegions(o.paths).length;
+  }
+  return {
+    objects,
+    stitches: design.length,
+    dangerCells,
+    trims,
+    trimsPer10k: design.length ? (trims * 10_000) / design.length : 0,
+    stitchQ95Mm,
+    pieces,
+    boundaries,
+    lockedBoundaries,
+  };
 }

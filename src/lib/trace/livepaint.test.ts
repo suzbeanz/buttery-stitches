@@ -125,6 +125,30 @@ describe("livePaintObjects", () => {
     expect(found).toBe(true);
   });
 
+  it("a small bright face inside a dark face sews AFTER it (the highlight-over idiom)", () => {
+    // The professional layering (a white sparkle satin-stitched ON TOP of a
+    // black eye) falls out of live paint's area-descending fill order: the
+    // tiny ink-ringed white disc inside the blue room must belong to an object
+    // sewn after the blue face object, so it lands on top.
+    const res = livePaintObjects(smurfLike(), 5, OPTS);
+    const blueIdx = res.objects.findIndex((o) => {
+      const c = res.colors.find((cc) => cc.id === o.colorId);
+      return c && c.rgb[2] > 200 && c.rgb[0] < 120;
+    });
+    const discIdx = res.objects.findIndex((o) => {
+      const c = res.colors.find((cc) => cc.id === o.colorId);
+      if (!c || c.rgb[0] < 230 || c.rgb[1] < 230 || c.rgb[2] < 230) return false;
+      return o.paths.some((ring) => {
+        const cx = ring.reduce((s, p) => s + p.x, 0) / ring.length;
+        const cy = ring.reduce((s, p) => s + p.y, 0) / ring.length;
+        return Math.hypot(cx - 24, cy - 24) < 4 && Math.abs(polygonArea(ring)) < 70;
+      });
+    });
+    expect(blueIdx).toBeGreaterThanOrEqual(0);
+    expect(discIdx).toBeGreaterThanOrEqual(0);
+    expect(discIdx, "highlight object sews after the dark face").toBeGreaterThan(blueIdx);
+  });
+
   it("behaves the same on a transparent and an opaque-white background", () => {
     const a = livePaintObjects(smurfLike({ background: "transparent" }), 5, OPTS);
     const b = livePaintObjects(smurfLike({ background: "white" }), 5, OPTS);

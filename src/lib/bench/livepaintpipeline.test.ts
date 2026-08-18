@@ -92,9 +92,13 @@ describe("live-paint pipeline gates", () => {
     expect(longest).toBeLessThanOrEqual(9);
   });
 
-  it("keeps trims bounded (thread doesn't cut constantly)", () => {
+  it("keeps trims at professional counts (the network sews connected)", () => {
+    // The commercial reference files trim 9-22 times per 10k stitches (a Wilcom
+    // production sheet lists 12 for 13.5k). This fixture's ink is ONE connected
+    // grid — the skeleton router sews it as a single pass, so the only cuts are
+    // the color changes plus the ink entry. 8 = 3 color changes + entry + slack.
     const trims = design.filter((s) => s.trim).length;
-    expect(trims).toBeLessThanOrEqual(Math.max(10, design.length / 100));
+    expect(trims).toBeLessThanOrEqual(8);
   });
 
   it("each piece passes the sweep coverage bar", () => {

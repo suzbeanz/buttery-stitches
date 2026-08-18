@@ -43,23 +43,6 @@ vi.mock("../lib/trace", () => ({
   })),
   livePaintObjects: vi.fn(() => ({ colors: COLORS, objects: OBJECTS })),
 }));
-// Keep fixStitches an identity so onApply gets exactly the filtered subset.
-vi.mock("../lib/fix", () => ({ fixStitches: vi.fn((p: Project) => p) }));
-// The Check step's sweep runs the real engine per object — slow and canvas-free
-// noise in jsdom. Mock it clean by default; flag tests override per object.
-vi.mock("../lib/bench/sweep", () => ({
-  sweepObject: vi.fn(() => ({
-    index: 0,
-    name: "",
-    strokeWidthMm: 5,
-    coverage: 1,
-    bareMm2: 0,
-    maxBarePatchMm2: 0,
-    crossings: 0,
-    crossingPct: 0,
-    maxSegMm: 4,
-  })),
-}));
 // jsdom can't fetch the font — load a real .ttf from disk so the text-retype
 // path actually places lettering (keeps the other tests' fonts.ts constants).
 vi.mock("../lib/text/fonts", async (importActual) => {
@@ -77,7 +60,6 @@ vi.mock("../lib/text/fonts", async (importActual) => {
 
 import AutoDigitizeDialog from "./AutoDigitizeDialog";
 import { imageDataToObjects, detectLineArt, livePaintObjects } from "../lib/trace";
-import { sweepObject } from "../lib/bench/sweep";
 
 const LINE_ART_YES = {
   isLineArt: true,
@@ -94,17 +76,6 @@ const LINE_ART_YES = {
 };
 
 const HOOP = { wMm: 100, hMm: 100, name: "4×4" };
-const CLEAN_SWEEP = {
-  index: 0,
-  name: "",
-  strokeWidthMm: 5,
-  coverage: 1,
-  bareMm2: 0,
-  maxBarePatchMm2: 0,
-  crossings: 0,
-  crossingPct: 0,
-  maxSegMm: 4,
-};
 
 function renderDialog(onApply = vi.fn()) {
   const file = new File([new Uint8Array([1, 2, 3])], "logo.png", { type: "image/png" });
@@ -112,8 +83,8 @@ function renderDialog(onApply = vi.fn()) {
   return onApply;
 }
 
-/** The canvas preview renders the real engine output; it exposes the kept-object
- *  count as a data attribute so the (canvas-less) jsdom tests can assert on it. */
+/** The canvas preview paints the flat artwork; it exposes the kept-object count
+ *  as a data attribute so the (canvas-less) jsdom tests can assert on it. */
 function previewCount(): string | null {
   return document.querySelector("[data-preview]")?.getAttribute("data-preview-objects") ?? null;
 }
@@ -138,21 +109,14 @@ async function toColors(count = "3") {
   clickNext();
   await screen.findByText(/Colors found/);
 }
-/** Colors → the Check step. The default three-aligned-squares fixture reads as
- *  a text-like cluster to the REAL detector, so a Text step may sit in between —
- *  click through it (fireEvent flushes state synchronously, so the step
- *  attribute is fresh right after the click). */
-async function toReview() {
-  clickNext();
-  if (wizardStep() === "2") clickNext();
-  await screen.findByRole("button", { name: /Add to design/ });
-}
-/** Click Add to design (async apply) and return the applied project. */
-async function addToDesign(onApply: ReturnType<typeof vi.fn>) {
-  const btn = (await screen.findByRole("button", { name: /Add to design/ })) as HTMLButtonElement;
+/** Click Add artwork on the wizard's LAST step (Colors normally; Text when
+ *  text-like clusters were found) and return the applied project — the apply
+ *  is synchronous verbatim artwork, no stitch pass. */
+async function addArtwork(onApply: ReturnType<typeof vi.fn>) {
+  const btn = (await screen.findByRole("button", { name: /Add artwork/ })) as HTMLButtonElement;
   await waitFor(() => expect(btn.disabled).toBe(false));
   fireEvent.click(btn);
-  await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1), { timeout: 2000 });
+  await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1));
   return onApply.mock.calls[0][0] as Project;
 }
 
@@ -169,7 +133,6 @@ describe("AutoDigitizeDialog (wizard)", () => {
       stats: { ...LINE_ART_YES.stats, inkFraction: 0, enclosedFaces: 0 },
       suggestedColors: 4,
     });
-    vi.mocked(sweepObject).mockImplementation(() => ({ ...CLEAN_SWEEP }));
     // jsdom lacks object URLs.
     URL.createObjectURL = vi.fn(() => "blob:x");
     URL.revokeObjectURL = vi.fn();
@@ -195,21 +158,17 @@ describe("AutoDigitizeDialog (wizard)", () => {
     expect(previewCount()).toBe("3");
   });
 
-  // Three scattered, differently-sized blobs — nothing the text detector could
-  // read as a word, so the Text step genuinely doesn't exist.
-  const SCATTERED = [
-    { ...obj("o1", "c1", 0), paths: [[{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }]] },
-    { ...obj("o2", "c2", 0), paths: [[{ x: 40, y: 25 }, { x: 65, y: 25 }, { x: 65, y: 50 }, { x: 40, y: 50 }]] },
-    { ...obj("o3", "c3", 0), paths: [[{ x: 5, y: 55 }, { x: 45, y: 55 }, { x: 45, y: 95 }, { x: 5, y: 95 }]] },
-  ];
-
-  it("Next from Colors auto-skips the Text step when no text was found", async () => {
-    vi.mocked(imageDataToObjects).mockReturnValue({ colors: COLORS, objects: SCATTERED });
+  it("Colors is the final step when no text was found — its action is Add artwork", async () => {
     renderDialog();
     await toColors();
-    clickNext();
-    await screen.findByText(/Quality check/);
-    expect(wizardStep()).toBe("3");
+    // No Next on the last step; the primary action adds the artwork.
+    expect(screen.queryByRole("button", { name: "Next" })).toBeNull();
+    expect(screen.getByRole("button", { name: /Add artwork/ })).toBeTruthy();
+    // The hand-off note explains editing happens in the studio, stitches later.
+    expect(screen.getByText(/EDITABLE ARTWORK/)).toBeTruthy();
+    // The skipped Text chip is visible but disabled.
+    const text = screen.getByRole("button", { name: /Text/ }) as HTMLButtonElement;
+    expect(text.disabled).toBe(true);
   });
 
   it("Back returns through the steps and choices survive navigation without a re-trace", async () => {
@@ -227,20 +186,31 @@ describe("AutoDigitizeDialog (wizard)", () => {
     expect(vi.mocked(imageDataToObjects).mock.calls.length).toBe(traces);
   });
 
-  it("visited step chips stay tappable; unvisited and skipped ones don't", async () => {
-    vi.mocked(imageDataToObjects).mockReturnValue({ colors: COLORS, objects: SCATTERED });
+  it("visited step chips stay tappable; skipped ones don't", async () => {
     renderDialog();
     await toColors();
-    await toReview();
     // Jump straight back to Image via its chip.
     fireEvent.click(screen.getByRole("button", { name: /Image/ }));
     expect(wizardStep()).toBe("0");
-    // Text was auto-skipped (no clusters) — its chip is disabled.
+    // No text clusters — the Text chip is disabled.
     const text = screen.getByRole("button", { name: /Text/ }) as HTMLButtonElement;
     expect(text.disabled).toBe(true);
-    // Check was visited — its chip jumps forward again.
-    fireEvent.click(screen.getByRole("button", { name: /Check/ }));
-    expect(wizardStep()).toBe("3");
+    // Colors was visited — its chip jumps forward again.
+    fireEvent.click(screen.getByRole("button", { name: /Colors/ }));
+    expect(wizardStep()).toBe("1");
+  });
+
+  it("adds the traced artwork VERBATIM — no stitch pass touches the shapes", async () => {
+    const onApply = renderDialog();
+    await toColors();
+    const project = await addArtwork(onApply);
+    // Exactly the trace's colors and objects, untouched: same ids, same paths,
+    // same params — the studio (Clean up · Stitch view) owns stitchification.
+    expect(project.colors).toEqual(COLORS);
+    expect(project.objects).toEqual(OBJECTS);
+    expect(project.widthMm).toBe(HOOP.wMm);
+    expect(project.heightMm).toBe(HOOP.hMm);
+    expect(project.hoop).toEqual(HOOP);
   });
 
   it("consolidates TRUE near-duplicate colors, but never trims below the colour budget", async () => {
@@ -269,8 +239,7 @@ describe("AutoDigitizeDialog (wizard)", () => {
     // …but the real dark-red feature and the blue survive.
     expect(screen.getByRole("button", { name: /Dark red/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Blue/ })).toBeTruthy();
-    await toReview();
-    const project = await addToDesign(onApply);
+    const project = await addArtwork(onApply);
     expect(project.colors).toHaveLength(3);
     const ids = new Set(project.colors.map((c) => c.id));
     for (const o of project.objects) expect(ids.has(o.colorId)).toBe(true);
@@ -327,7 +296,7 @@ describe("AutoDigitizeDialog (wizard)", () => {
     });
     const onApply = renderDialog();
     await toColors("6");
-    // Text clusters exist → Next lands on the Text step, not Check.
+    // Text clusters exist → Colors is NOT final; Next lands on the Text step.
     clickNext();
     const box = (await screen.findByPlaceholderText(/Text area 1/, {}, { timeout: 2000 })) as HTMLInputElement;
     expect(wizardStep()).toBe("2");
@@ -335,8 +304,7 @@ describe("AutoDigitizeDialog (wizard)", () => {
     // object (fewer objects, and none of the original glyph ids remain).
     fireEvent.change(box, { target: { value: "HELLO" } });
     await waitFor(() => expect(previewCount()).toBe("1"));
-    await toReview();
-    const project = await addToDesign(onApply);
+    const project = await addArtwork(onApply);
     expect(project.objects).toHaveLength(1);
     expect(project.objects.some((o) => o.id.startsWith("g"))).toBe(false); // rough glyphs gone
     expect(project.objects[0].paths.length).toBeGreaterThan(0); // real lettering geometry
@@ -347,8 +315,7 @@ describe("AutoDigitizeDialog (wizard)", () => {
     await toColors();
     fireEvent.click(screen.getByRole("button", { name: /Red/ })); // skip Red
     await waitFor(() => expect(previewCount()).toBe("2"));
-    await toReview();
-    const project = await addToDesign(onApply);
+    const project = await addArtwork(onApply);
     expect(project.colors.map((c) => c.id)).toEqual(["c2", "c3"]);
     expect(project.objects.every((o) => o.colorId !== "c1")).toBe(true);
     expect(project.objects).toHaveLength(2);
@@ -359,8 +326,7 @@ describe("AutoDigitizeDialog (wizard)", () => {
     await toColors();
     const recolor = screen.getByLabelText(/Recolor Red/) as HTMLInputElement;
     fireEvent.input(recolor, { target: { value: "#112233" } });
-    await toReview();
-    const project = await addToDesign(onApply);
+    const project = await addArtwork(onApply);
     const red = project.colors.find((c) => c.id === "c1");
     expect(red?.rgb).toEqual([0x11, 0x22, 0x33]);
   });
@@ -371,8 +337,7 @@ describe("AutoDigitizeDialog (wizard)", () => {
     const rename = screen.getByLabelText(/Rename Red/) as HTMLInputElement;
     fireEvent.change(rename, { target: { value: "Crimson" } });
     fireEvent.blur(rename);
-    await toReview();
-    const project = await addToDesign(onApply);
+    const project = await addArtwork(onApply);
     expect(project.colors.find((c) => c.id === "c1")?.name).toBe("Crimson");
   });
 
@@ -388,8 +353,7 @@ describe("AutoDigitizeDialog (wizard)", () => {
     await waitFor(() =>
       expect(screen.queryAllByRole("button", { name: /tap to (keep|skip)/ }).length).toBe(2),
     );
-    await toReview();
-    const project = await addToDesign(onApply);
+    const project = await addArtwork(onApply);
     expect(project.colors.length).toBe(2);
     const ids = new Set(project.colors.map((c) => c.id));
     expect(project.objects.every((o) => ids.has(o.colorId))).toBe(true);
@@ -400,8 +364,7 @@ describe("AutoDigitizeDialog (wizard)", () => {
     await toColors();
     fireEvent.click(screen.getByRole("button", { name: /Advanced options/ }));
     fireEvent.click(screen.getByRole("button", { name: /Match to thread colors/ }));
-    await toReview();
-    const project = await addToDesign(onApply);
+    const project = await addArtwork(onApply);
     expect(project.colors.every((c) => c.brand && c.code)).toBe(true);
   });
 
@@ -417,8 +380,7 @@ describe("AutoDigitizeDialog (wizard)", () => {
     fireEvent.change(screen.getByLabelText(/Stitch style for Green/) as HTMLSelectElement, {
       target: { value: "satin" },
     });
-    await toReview();
-    const project = await addToDesign(onApply);
+    const project = await addArtwork(onApply);
     const red = project.objects.find((o) => o.colorId === "c1");
     const green = project.objects.find((o) => o.colorId === "c2");
     expect(red?.type).toBe("running");
@@ -438,15 +400,14 @@ describe("AutoDigitizeDialog (wizard)", () => {
     expect(screen.getByLabelText(/Stitch style for Red/)).toBeTruthy();
   });
 
-  it("disables Add to design when every color is dropped", async () => {
+  it("disables Add artwork when every color is dropped", async () => {
     renderDialog();
     await toColors();
     for (const name of [/Red/, /Green/, /Blue/]) {
       fireEvent.click(screen.getByRole("button", { name }));
     }
     await waitFor(() => expect(previewCount()).toBe("0"));
-    await toReview();
-    const add = screen.getByRole("button", { name: /Add to design/ }) as HTMLButtonElement;
+    const add = screen.getByRole("button", { name: /Add artwork/ }) as HTMLButtonElement;
     expect(add.disabled).toBe(true);
   });
 
@@ -464,8 +425,7 @@ describe("AutoDigitizeDialog (wizard)", () => {
     // Keep it → preview includes it.
     fireEvent.click(screen.getByRole("button", { name: /Red ring \(background\?\) — tap to keep/ }));
     await waitFor(() => expect(previewCount()).toBe("4"));
-    await toReview();
-    const project = await addToDesign(onApply);
+    const project = await addArtwork(onApply);
     const applied = project.objects.find((o) => o.name === "Red ring (background?)");
     expect(applied, "kept ring lands in the project").toBeDefined();
     expect(applied!.suspectedBackground, "explicit keep clears the flag").toBeUndefined();
@@ -477,77 +437,8 @@ describe("AutoDigitizeDialog (wizard)", () => {
     const onApply = renderDialog();
     await toColors("3");
     await screen.findByRole("button", { name: /Red ring \(background\?\)/ }, { timeout: 2000 });
-    await toReview();
-    const project = await addToDesign(onApply);
+    const project = await addArtwork(onApply);
     expect(project.objects.some((o) => o.name === "Red ring (background?)")).toBe(false);
-    expect(project.objects).toHaveLength(3);
-  });
-
-  it("Check step: clean sweep reports every piece ready to sew", async () => {
-    renderDialog();
-    await toColors();
-    await toReview();
-    await screen.findByText(/All 3 pieces look ready to sew/, {}, { timeout: 2000 });
-  });
-
-  it("Check step: a flagged piece shows plain-language worries with one-tap fixes", async () => {
-    // Make the sweep flag object o1 (bad coverage) and pass the rest.
-    vi.mocked(sweepObject).mockImplementation((o) =>
-      o.id === "o1"
-        ? { ...CLEAN_SWEEP, name: o.name, coverage: 0.6, bareMm2: 24, maxBarePatchMm2: 9 }
-        : { ...CLEAN_SWEEP, name: o.name },
-    );
-    const onApply = renderDialog();
-    await toColors();
-    await toReview();
-    await screen.findByText(/Thread may not fully cover/, {}, { timeout: 2000 });
-    // One-tap SKIP: the piece stays visible in the list (with Undo) but leaves
-    // the preview and the applied project.
-    fireEvent.click(screen.getByRole("button", { name: /Skip this piece/ }));
-    await screen.findByText(/Skipped — this piece won't sew/);
-    await waitFor(() => expect(previewCount()).toBe("2"));
-    const project = await addToDesign(onApply);
-    expect(project.objects.some((o) => o.id === "o1")).toBe(false);
-    expect(project.objects).toHaveLength(2);
-  });
-
-  it("Check step: 'Sew as outline' converts the flagged piece to a running outline", async () => {
-    vi.mocked(sweepObject).mockImplementation((o) =>
-      o.id === "o1"
-        ? { ...CLEAN_SWEEP, name: o.name, coverage: 0.6, bareMm2: 24, maxBarePatchMm2: 9 }
-        : { ...CLEAN_SWEEP, name: o.name },
-    );
-    const onApply = renderDialog();
-    await toColors();
-    await toReview();
-    await screen.findByText(/Thread may not fully cover/, {}, { timeout: 2000 });
-    fireEvent.click(screen.getByRole("button", { name: /Sew as outline/ }));
-    await screen.findByText(/Will sew as a clean outline instead/);
-    const project = await addToDesign(onApply);
-    const fixed = project.objects.find((o) => o.id === "o1");
-    expect(fixed?.type).toBe("running");
-    expect(project.objects).toHaveLength(3);
-  });
-
-  it("Check step: Undo restores a fix, and 'Keep anyway' applies the piece unchanged", async () => {
-    vi.mocked(sweepObject).mockImplementation((o) =>
-      o.id === "o1"
-        ? { ...CLEAN_SWEEP, name: o.name, coverage: 0.6, bareMm2: 24, maxBarePatchMm2: 9 }
-        : { ...CLEAN_SWEEP, name: o.name },
-    );
-    const onApply = renderDialog();
-    await toColors();
-    await toReview();
-    await screen.findByText(/Thread may not fully cover/, {}, { timeout: 2000 });
-    fireEvent.click(screen.getByRole("button", { name: /Skip this piece/ }));
-    await screen.findByText(/Skipped — this piece won't sew/);
-    fireEvent.click(screen.getByRole("button", { name: /Undo/ }));
-    await screen.findByText(/Thread may not fully cover/);
-    fireEvent.click(screen.getByRole("button", { name: /Keep anyway/ }));
-    await screen.findByText(/Kept as is/);
-    const project = await addToDesign(onApply);
-    const kept = project.objects.find((o) => o.id === "o1");
-    expect(kept?.type).toBe("fill");
     expect(project.objects).toHaveLength(3);
   });
 
@@ -604,18 +495,10 @@ describe("AutoDigitizeDialog (wizard)", () => {
     ];
     vi.mocked(livePaintObjects).mockReturnValue({ colors, objects });
     const onApply = renderDialog();
-    await waitForTrace();
-    await toColorsFromHere();
-    await toReview();
-    const project = await addToDesign(onApply);
+    await toColors();
+    const project = await addArtwork(onApply);
     expect(project.colors.map((c) => c.id)).toEqual(["cw", "cw2", "cink"]);
     const last = project.objects[project.objects.length - 1];
     expect(last.params.lineArt).toBe(true);
   });
 });
-
-/** From step 0 with the trace already landed: go to the Colors step. */
-async function toColorsFromHere() {
-  clickNext();
-  await screen.findByText(/Colors found/);
-}
