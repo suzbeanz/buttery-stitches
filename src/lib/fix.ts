@@ -353,9 +353,17 @@ export function fixObjectStitches(object: EmbObject): EmbObject {
     //    0.40 mm — standard satin spacing that covers a thin band fully without
     //    piling stitches into a heavy ridge (the outline is often the bulk of a
     //    cartoon's stitch count). The floor stays 0.30 mm so a user can push denser.
-    params.density = clamp(params.density ?? (params.lineArt ? 0.4 : 0.32), 0.3, 0.5);
-    // Underlay on by default, but suppressed for a small detail (just bulk there).
-    params.underlay = params.underlay ?? !isSmallElement(object.paths);
+    // Open decorative styles (sketch/crosshatch) are the professional "light
+    // fill": the row texture is the look, so their spacing may run far past the
+    // solid clamp (the reference animals measure ~0.4-0.8mm effective rows, and
+    // a crosshatch's two passes halve the visual spacing again).
+    const openStyle = params.fillStyle === "sketch" || params.fillStyle === "crosshatch";
+    params.density = openStyle
+      ? clamp(params.density ?? 0.8, 0.3, 1.5)
+      : clamp(params.density ?? (params.lineArt ? 0.4 : 0.32), 0.3, 0.5);
+    // Underlay on by default, but suppressed for a small detail (just bulk
+    // there) and for open styles (it would show through the deliberate gaps).
+    params.underlay = params.underlay ?? (openStyle ? false : !isSmallElement(object.paths));
     // SMART STITCH TREATMENT (geometry-driven, like a digitizer's eye):
     //  • thin strokes / rings / text → satin columns (shiny; the engine renders
     //    very-thin columns as running and falls back to tatami where satin won't

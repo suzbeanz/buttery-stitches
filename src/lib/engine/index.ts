@@ -11,7 +11,7 @@ import { underlapObjects } from "../trace/underlap";
 import { distance, railsFromCenterline, pathsBounds, offsetPolyline } from "../geometry";
 import { runningStitch } from "./running";
 import { satinColumn } from "./satin";
-import { tatamiFill, tatamiConcaveRuns, multiBlendFill, motifFill, motifRunAlong, carvePoints, splitFillRegions, autoFillAngleForRegions } from "./fill";
+import { tatamiFill, tatamiConcaveRuns, multiBlendFill, motifFill, motifRunAlong, carvePoints, splitFillRegions, autoFillAngleForRegions, autoFillAngle } from "./fill";
 import { contourFill } from "./contour";
 import { medialColumns, columnsFromCenterlines, satinCoverage, residualRegions, type SatinColumn } from "./medial";
 import { turningFill, flowFill, flowAlong } from "./turning";
@@ -942,6 +942,7 @@ function beanPath(line: Point[], repeats: number): Point[] {
 export function generateObjectRuns(
   object: EmbObject,
   fabric: FabricProfile = fabricProfile(undefined),
+  opts: { overSewn?: boolean } = {},
 ): StitchRun[] {
   // MACHINE-SAFETY gate: never step across non-finite or absurdly large
   // geometry. Doing so hangs/OOMs the tab (hundreds of millions of stitches) or
@@ -969,7 +970,17 @@ export function generateObjectRuns(
   // Push (lengthwise) distortion tracks fabric stretch like pull does.
   const pushComp = p.pushComp * fabric.pullMul;
   // Underlay heaviness: a per-object override wins over the fabric default.
-  const weight = p.underlayWeight === "auto" ? fabric.underlay : p.underlayWeight;
+  // Satin sewn ON TOP of earlier stitching gets one tier heavier: the ground
+  // under it is a pile of thread, not fabric, and throws sink into it without
+  // a firmer footing — the reference badge lays a dedicated scribble underlay
+  // beneath every satin letter that sits on its long ring spokes.
+  const baseWeight = p.underlayWeight === "auto" ? fabric.underlay : p.underlayWeight;
+  const weight =
+    opts.overSewn && baseWeight === "light"
+      ? "standard"
+      : opts.overSewn && baseWeight === "standard"
+        ? "heavy"
+        : baseWeight;
   // Explicit underlay TYPE: "auto" keeps the width/weight tiering; anything else
   // lays exactly the picked pass (see underlay.ts for the per-type mapping).
   const underlayType = p.underlayType;
@@ -1030,6 +1041,10 @@ export function generateObjectRuns(
   const satin = p.fillStyle === "satin";
   const motifMode = p.fillStyle === "motif";
   const blendMode = p.fillStyle === "blend" && !!p.blendColorId;
+  // Open decorative fills: the visible row texture IS the look (the commercial
+  // reference animals are mostly this style), so no underlay beneath, no edge
+  // run capping the row ends, and no residual mending of the deliberate gaps.
+  const sketchStyle = p.fillStyle === "sketch" || p.fillStyle === "crosshatch";
   // WELD self-overlapping artwork first: connected-script lettering (and any
   // layered art) has rings that genuinely intersect, and the fill's even-odd
   // rule would punch phantom holes at every overlap — the stitch skeleton
@@ -1070,6 +1085,15 @@ export function generateObjectRuns(
       : p.directionDeg != null
         ? p.directionDeg
         : autoFillAngleForRegions(regions, p.angle);
+  // PER-REGION auto grain: the commercial reference designs angle each region
+  // of a multi-part fill along its own flow (every fur lock its own direction)
+  // instead of one shared grain. Only when the direction is fully automatic —
+  // an explicit direction/guide always pins the whole object — and only for a
+  // clearly elongated region (grainToFillAngle's elongation gate, via
+  // autoFillAngle): a round region keeps the shared angle so a scattered set
+  // of dots doesn't sew as a patchwork.
+  const regionAutoAngle = (region: Path[]): number =>
+    manualDirection || regions.length <= 1 ? tatamiAngle : autoFillAngle(region, p.angle);
   // A painted flow curve (normalized to the object's bbox) the rows follow. Map it
   // back to mm here so it rides the object's current position/size.
   const flowSpineMm: Point[] | null = (() => {
@@ -1116,11 +1140,13 @@ export function generateObjectRuns(
     const travelMax = usingSatin ? 8 : 6;
     // Satin and contour rows are dense like satin; tatami uses the general floor.
     const minStitch = usingSatin || contour ? SATIN_MIN_STITCH : undefined;
-    // Tatami flows along the object's shared grain. Underlay follows the same angle.
-    const fillAngle = usingSatin ? p.angle : tatamiAngle;
+    // Tatami flows along the region's grain (its own for an elongated region of
+    // a multi-part object, the object's shared one otherwise). Underlay follows
+    // the same angle.
+    const fillAngle = usingSatin ? p.angle : regionAutoAngle(region);
 
     let cursor: Point | null = null;
-    if (p.underlay && !motifMode) {
+    if (p.underlay && !motifMode && !sketchStyle) {
       // Satin: tiered underlay per column (center / edge-walk / zig-zag by width).
       // Tatami: inset edge run + perpendicular pass(es). (Motif fills are open and
       // decorative — no underlay.)
@@ -1282,6 +1308,19 @@ export function generateObjectRuns(
       // concavity-aware tatami when the shape can't seat a clean field.
       const fopts = { density, angle: fillAngle, stitchLength: fillStitchLength, pullCompMm: pullComp };
       tops = guidanceFieldFill(region, fopts) ?? tatamiConcaveRuns(region, fopts);
+      tatamiNoBareTravel = true;
+    } else if (sketchStyle) {
+      // SKETCH / CROSSHATCH — the professional "light fill". Single-angle open
+      // rows whose regular texture reads as drawn pencil strokes (the reference
+      // Poodle and Rat bodies), optionally crossed by a second pass ~60° off
+      // (the Fox's layered shading). Wider spacing is the point: fix.ts allows
+      // these styles up to 1.5mm/row where solids clamp at 0.5. No underlay,
+      // no edge run, no mends — the openness is deliberate, not a defect.
+      const fopts = { density, angle: fillAngle, stitchLength: fillStitchLength, pullCompMm: pullComp };
+      tops = tatamiConcaveRuns(region, fopts);
+      if (p.fillStyle === "crosshatch") {
+        tops = tops.concat(tatamiConcaveRuns(region, { ...fopts, angle: fillAngle + 60 }));
+      }
       tatamiNoBareTravel = true;
     } else if (motifMode) {
       // Motif fill: tile a decorative motif across the region (no underlay).
@@ -1499,7 +1538,7 @@ export function generateObjectRuns(
           smallPatchSatinBlock(patch, density, fabric.pullMul) ??
           tatamiFill([patch], {
             density,
-            angle: tatamiAngle,
+            angle: fillAngle,
             stitchLength: fillStitchLength,
             pullCompMm: pullComp,
           });
@@ -1538,7 +1577,7 @@ export function generateObjectRuns(
       // emission-exact residual sees exactly those grooves as bare — a mend
       // would sew the artwork shut (and did: +1900 stitches on a carved square).
       const carving = !!p.carve && p.carve !== "none";
-      if (!lineArtFill && !motifMode && !blendMode && !contour && !carving) {
+      if (!lineArtFill && !motifMode && !blendMode && !contour && !carving && !sketchStyle) {
         // Measure the residual against the geometry that will actually SEW:
         // the emission below de-loops, drops short stitches, then de-loops
         // again, and each pass can shave a tip the mend must cover.
@@ -1553,7 +1592,7 @@ export function generateObjectRuns(
               smallPatchSatinBlock(patch, density, fabric.pullMul) ??
               tatamiFill([patch], {
                 density,
-                angle: tatamiAngle,
+                angle: fillAngle,
                 stitchLength: fillStitchLength,
                 pullCompMm: pullComp,
               }),
@@ -1607,7 +1646,8 @@ export function generateObjectRuns(
       // cross bare fabric. Forbid a bare travel here exactly as the fill rows do, so
       // that hop buries under the same-colour fill or trims instead of slashing a
       // float across the open ground — the loose edge thread the swatch sewed.
-      const edgeRuns = lineArtFill ? [] : orderByNearest(fillEdgeRuns(region, EDGE_RUN_STITCH_MM), cursor);
+      const edgeRuns =
+        lineArtFill || sketchStyle ? [] : orderByNearest(fillEdgeRuns(region, EDGE_RUN_STITCH_MM), cursor);
       for (const run of edgeRuns) {
         for (const sub of splitLongTravels(run, travelMax)) {
           const r = dropShortStitches(sub);
@@ -1878,10 +1918,45 @@ export function generateDesign(
       .filter((o) => o.visible)
       .map((o) => ({ ...o, paths: o.paths.map((ring) => ring.map((p) => ({ ...p }))) })),
   );
+  // Does this object sew ON TOP of an earlier object's region? (Satin over
+  // stitching needs a heavier footing — see generateObjectRuns.) Sampled ring
+  // points against each earlier region, bbox-prefiltered.
+  const overSewnAt = (idx: number): boolean => {
+    const o = seamProofed[idx];
+    if (o.type !== "satin" && !(o.type === "fill" && (o.params.fillStyle === "satin" || o.params.lineArt)))
+      return false;
+    const ob = pathsBounds(o.paths);
+    if (!ob) return false;
+    for (let j = 0; j < idx; j++) {
+      const prev = seamProofed[j];
+      if (prev.type === "running") continue;
+      const pb = pathsBounds(prev.paths);
+      if (!pb || ob.minX > pb.maxX || pb.minX > ob.maxX || ob.minY > pb.maxY || pb.minY > ob.maxY)
+        continue;
+      // DEEP overlap only: every fill legitimately tucks ~0.45mm under its
+      // outline (the color-seam underlap), and that graze must not read as
+      // "sewn on top of stitching". A sample counts only when it sits well
+      // inside the earlier region (all four 0.8mm offsets still inside).
+      const deepInside = (q: Point): boolean =>
+        pointInRings(q, prev.paths) &&
+        pointInRings({ x: q.x + 0.8, y: q.y }, prev.paths) &&
+        pointInRings({ x: q.x - 0.8, y: q.y }, prev.paths) &&
+        pointInRings({ x: q.x, y: q.y + 0.8 }, prev.paths) &&
+        pointInRings({ x: q.x, y: q.y - 0.8 }, prev.paths);
+      for (const ring of o.paths) {
+        for (let k = 0; k < ring.length; k += 4) {
+          if (deepInside(ring[k])) return true;
+        }
+      }
+    }
+    return false;
+  };
   const groups = seamProofed
-    .map((object) => ({
+    .map((object, idx) => ({
       object,
-      runs: generateObjectRuns(object, fabric).filter((r) => r.pts.length > 0),
+      runs: generateObjectRuns(object, fabric, { overSewn: overSewnAt(idx) }).filter(
+        (r) => r.pts.length > 0,
+      ),
     }))
     .filter((g) => g.runs.length > 0);
 

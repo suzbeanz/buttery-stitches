@@ -644,7 +644,9 @@ function ObjectProperties({
                 | "contour"
                 | "gradient"
                 | "motif"
-                | "blend";
+                | "blend"
+                | "sketch"
+                | "crosshatch";
               // Default the second color so a blend renders the moment it's picked.
               const blendColorId =
                 fillStyle === "blend" && !p.blendColorId
@@ -658,6 +660,8 @@ function ObjectProperties({
             <option value="satin">Satin columns</option>
             <option value="contour">Contour (echo the shape)</option>
             <option value="gradient">Gradient (shaded)</option>
+            <option value="sketch">Sketch (light, open rows)</option>
+            <option value="crosshatch">Crosshatch (sketch, two angles)</option>
             <option value="blend">Multi-blend (two threads)</option>
             <option value="motif">Motif (decorative)</option>
           </select>

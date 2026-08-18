@@ -48,6 +48,25 @@ describe("corpus sweep gates", () => {
         expect(o.maxSegMm, `max segment in #${o.index} ${o.name}\n${detail}`).toBeLessThanOrEqual(7.5);
       }
       expect(sweep.dangerCells, `density danger cells\n${detail}`).toBe(0);
+      // PRO-METRIC design gates, thresholds measured from five commercial
+      // reference bundles (DST/PES decoded stitch-by-stitch; one ships its
+      // Wilcom production worksheet):
+      //  • trims: 12 per 13.5k stitches on the flagship dog; small designs run
+      //    to ~22/10k. Standalone lettering is the exception the pros make
+      //    too: every glyph is an island on open fabric and cuts about once —
+      //    so the gate also scales with the design's disjoint piece count.
+      //  • stitch length: every reference FILL block's q95 is 3.99-4.10mm;
+      //    their decorative satin runs 4.5-6.3 (a ring band measured 4.54).
+      //    Gate at 5.0 so satin-heavy designs pass while runaway fills fail.
+      //  • locks: the references tie in and out at every thread cut.
+      const proDetail =
+        `trims=${sweep.trims} (${sweep.trimsPer10k.toFixed(1)}/10k, ${sweep.pieces} pieces) ` +
+        `q95=${sweep.stitchQ95Mm.toFixed(2)} locked=${sweep.lockedBoundaries}/${sweep.boundaries}\n${detail}`;
+      expect(sweep.trims, `trims vs pro band\n${proDetail}`).toBeLessThanOrEqual(
+        Math.max(6, (24 / 10_000) * sweep.stitches, sweep.pieces + 4),
+      );
+      expect(sweep.stitchQ95Mm, `stitch q95 vs pro band\n${proDetail}`).toBeLessThanOrEqual(5.0);
+      expect(sweep.lockedBoundaries, `locked boundaries\n${proDetail}`).toBe(sweep.boundaries);
     });
   }
 });

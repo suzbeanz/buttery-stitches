@@ -88,9 +88,20 @@ export interface EmbObjectParams {
   outline?: boolean;
   /** how a fill is stitched: tatami (broad areas), satin columns (lettering),
    *  contour (rows that echo the shape's outline), gradient (tatami whose row
-   *  spacing ramps for a shaded/ombré effect), or motif (a tiled decorative
-   *  motif). */
-  fillStyle?: "tatami" | "satin" | "contour" | "gradient" | "motif" | "blend" | "field";
+   *  spacing ramps for a shaded/ombré effect), motif (a tiled decorative
+   *  motif), sketch (open single-angle rows whose visible texture is the look —
+   *  the professional "light fill"), or crosshatch (two sketch passes at
+   *  crossing angles, the layered shading of the reference animal designs). */
+  fillStyle?:
+    | "tatami"
+    | "satin"
+    | "contour"
+    | "gradient"
+    | "motif"
+    | "blend"
+    | "field"
+    | "sketch"
+    | "crosshatch";
   /** LINE-ART: render this (satin) object's medial columns as clean RUNNING lines
    *  down their centerline rather than filled satin — for outlines and fine detail
    *  strokes (auto-set by the tracer on thin regions). */
