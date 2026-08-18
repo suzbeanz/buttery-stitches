@@ -23,11 +23,12 @@ export default defineConfig({
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
     {
-      // Phone viewport. The smoke (drawing) spec depends on the wide layout's
-      // object counter, so it's ignored here; a11y/csp/mobile specs still run.
+      // Phone viewport. The smoke (drawing) and resize (transformer) specs
+      // depend on the wide layout's object counter / properties panel, so
+      // they're ignored here; a11y/csp/mobile specs still run.
       name: "mobile",
       use: { ...devices["Pixel 7"] },
-      testIgnore: /smoke\.spec\.ts/,
+      testIgnore: /smoke\.spec\.ts|resize\.spec\.ts/,
     },
   ],
   webServer: {

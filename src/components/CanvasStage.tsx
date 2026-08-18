@@ -25,7 +25,7 @@ import {
 import type Konva from "konva";
 import { useProjectStore } from "../store/projectStore";
 import { useEditorStore, isDrawTool, isPointTool } from "../store/editorStore";
-import type { EmbObject, Path, Point, ThreadColor } from "../types/project";
+import type { EmbObject, Path, Point, TextSpec, ThreadColor } from "../types/project";
 import { makeObject, makeObjectFromPaths, makeNodeObject, makeSatinFromRails, minPointsFor, pathsFromNodes, satinPathsFromNodes, satinWidthOf, isClosedType } from "../lib/objects";
 import { densifyRing, insertNode, moveNode, deleteNode, toggleNodeSmooth, translateNodes, impliedHandles, setNodeHandle, type NodePath } from "../lib/nodes";
 import { shapeFromDrag, shapeRings, type ShapeKind } from "../lib/shapes";
@@ -321,19 +321,39 @@ export default function CanvasStage() {
     const cur = store.selectedIds;
     store.setSelection(cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
   }, []);
-  const handleCommitPaths = useCallback((id: string, paths: Path[], satinCenterlines?: Path[]) => {
-    useProjectStore.getState().updateObject(id, { paths, satinCenterlines });
-  }, []);
-  const handleCommitNodes = useCallback((id: string, nodes: NodePath[]) => {
-    const o = useProjectStore.getState().project.objects.find((x) => x.id === id);
-    // A satin's nodes are its centerline: rebuild the rail pair at the column's
-    // current width so reshaping the spine keeps the width the user set.
-    const paths =
-      o?.type === "satin"
-        ? satinPathsFromNodes(nodes, satinWidthOf(o.paths))
-        : pathsFromNodes(nodes, o?.type === "fill");
-    useProjectStore.getState().updateObject(id, { nodes, paths });
-  }, []);
+  const handleCommitPaths = useCallback(
+    (id: string, paths: Path[], satinCenterlines?: Path[], textPatch?: Partial<TextSpec>) => {
+      const o = useProjectStore.getState().project.objects.find((x) => x.id === id);
+      useProjectStore.getState().updateObject(id, {
+        paths,
+        satinCenterlines,
+        // A resize also rescales the text RECIPE (heightMm etc.), so the next
+        // relayout (A−/A+, re-edit) reproduces the new size instead of
+        // reverting to the spec's old one.
+        ...(textPatch && o?.text ? { text: { ...o.text, ...textPatch } } : {}),
+      });
+    },
+    [],
+  );
+  const handleCommitNodes = useCallback(
+    (id: string, nodes: NodePath[], widthScale?: number, textPatch?: Partial<TextSpec>) => {
+      const o = useProjectStore.getState().project.objects.find((x) => x.id === id);
+      // A satin's nodes are its centerline: rebuild the rail pair at the column's
+      // current width so reshaping the spine keeps the width the user set — but a
+      // transform-end RESIZE passes its scale so the column width grows with the
+      // spine instead of re-deriving the pre-resize width from the old store paths.
+      const paths =
+        o?.type === "satin"
+          ? satinPathsFromNodes(nodes, satinWidthOf(o.paths) * (widthScale ?? 1))
+          : pathsFromNodes(nodes, o?.type === "fill");
+      useProjectStore.getState().updateObject(id, {
+        nodes,
+        paths,
+        ...(textPatch && o?.text ? { text: { ...o.text, ...textPatch } } : {}),
+      });
+    },
+    [],
+  );
   const handleMoveSelected = useCallback((dxMm: number, dyMm: number) => {
     const store = useProjectStore.getState();
     store.moveObjects(store.selectedIds, dxMm, dyMm);
@@ -2197,8 +2217,8 @@ const ObjectShape = memo(function ObjectShape({
   toMm: (sx: number, sy: number) => Point;
   registerNode: (id: string, node: Konva.Group | null) => void;
   onSelect: (id: string, additive: boolean) => void;
-  onCommitPaths: (id: string, paths: Path[], satinCenterlines?: Path[]) => void;
-  onCommitNodes: (id: string, nodes: NodePath[]) => void;
+  onCommitPaths: (id: string, paths: Path[], satinCenterlines?: Path[], textPatch?: Partial<TextSpec>) => void;
+  onCommitNodes: (id: string, nodes: NodePath[], widthScale?: number, textPatch?: Partial<TextSpec>) => void;
   onMoveSelected: (dxMm: number, dyMm: number) => void;
   /** Drag every OTHER selected object's node to this px offset (0,0 to reset). */
   onMultiDrag: (id: string, dxPx: number, dyPx: number) => void;
@@ -2351,8 +2371,53 @@ const ObjectShape = memo(function ObjectShape({
       }}
       onTransformEnd={(e) => {
         const node = e.target;
-        const m = node.getTransform().getMatrix() as unknown as Matrix;
+        // COPY the matrix: Konva's Transform.getMatrix() returns its internal
+        // array BY REFERENCE, and the setAttrs reset below synchronously fires
+        // absoluteTransformChange → the attached Transformer re-derives the
+        // node transform → Transform.reset() rewrites that SAME array to the
+        // identity before we ever apply it. Committing the identity meant
+        // every resize/rotate visually snapped back on release (drag-move was
+        // immune only because onDragEnd copies x/y primitives first).
+        const m = [...node.getTransform().getMatrix()] as unknown as Matrix;
         node.setAttrs({ x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 });
+        // Area-true mean scale of the transform — what a satin's column width
+        // and a text spec's letter height grow by under this resize.
+        const meanScale = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2])) || 1;
+        // Text objects carry a layout RECIPE in mm; scale it with the object so
+        // a later relayout reproduces the resized text instead of reverting.
+        // Baseline path points transform through the full matrix (like paths);
+        // scalar mm sizes take the mean scale; glyph nudges are mm offsets too.
+        const textPatch: Partial<TextSpec> | undefined = object.text
+          ? {
+              heightMm: object.text.heightMm * meanScale,
+              letterSpacingMm: object.text.letterSpacingMm * meanScale,
+              ...(object.text.circleRadiusMm !== undefined
+                ? { circleRadiusMm: object.text.circleRadiusMm * meanScale }
+                : {}),
+              ...(object.text.pathMm
+                ? {
+                    pathMm: applyMatrix(
+                      [object.text.pathMm.map((p) => ({ x: px(p.x), y: py(p.y) }))],
+                      m,
+                    )[0].map((p) => toMm(p.x, p.y)),
+                  }
+                : {}),
+              ...(object.text.glyphTweaks
+                ? {
+                    glyphTweaks: Object.fromEntries(
+                      Object.entries(object.text.glyphTweaks).map(([k, t]) => [
+                        k,
+                        {
+                          ...t,
+                          dx: t.dx !== undefined ? t.dx * meanScale : undefined,
+                          dy: t.dy !== undefined ? t.dy * meanScale : undefined,
+                        },
+                      ]),
+                    ),
+                  }
+                : {}),
+            }
+          : undefined;
         if (nodeRings) {
           // Transform the control NODES (keep curve-editability through scale/rotate).
           // Bézier handles are relative mm vectors: the matrix's LINEAR part
@@ -2374,7 +2439,7 @@ const ObjectShape = memo(function ObjectShape({
               };
             }),
           );
-          onCommitNodes(object.id, movedNodes);
+          onCommitNodes(object.id, movedNodes, meanScale, textPatch);
           return;
         }
         const pxPaths = object.paths.map((path) =>
@@ -2391,7 +2456,7 @@ const ObjectShape = memo(function ObjectShape({
               m,
             ).map((path) => path.map((p) => toMm(p.x, p.y)))
           : undefined;
-        onCommitPaths(object.id, movedMm, movedCenters);
+        onCommitPaths(object.id, movedMm, movedCenters, textPatch);
       }}
     >
       {/* Fill objects get a translucent body drawn with the nonzero rule (rings
