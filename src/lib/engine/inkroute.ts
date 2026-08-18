@@ -293,7 +293,7 @@ export function routeInkPieces(
   let firstIdx = 0;
   if (start) {
     let best = Infinity;
-    pieces.forEach((p, i) => {
+    pieces.forEach((_, i) => {
       const d = Math.min(dist(start, topStart(i)), dist(start, topEnd(i)));
       if (d < best) {
         best = d;
