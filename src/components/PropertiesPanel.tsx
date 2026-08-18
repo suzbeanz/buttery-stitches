@@ -652,7 +652,17 @@ function ObjectProperties({
                 fillStyle === "blend" && !p.blendColorId
                   ? colors.find((c) => c.id !== object.colorId)?.id ?? object.colorId
                   : p.blendColorId;
-              onParam({ fillStyle, blendColorId });
+              // Density follows the style family: the open sketch styles want
+              // ~0.8mm rows (their texture IS the look) where solids pack at
+              // ~0.32 — switching styles without moving density either buries
+              // the sketch texture or leaves a solid airy. Only auto-adjust
+              // when the current value clearly belongs to the OTHER family, so
+              // a deliberate in-family setting is never fought.
+              const open = fillStyle === "sketch" || fillStyle === "crosshatch";
+              const wasOpen = p.fillStyle === "sketch" || p.fillStyle === "crosshatch";
+              const cur = p.density ?? DEFAULT_PARAMS.density;
+              const density = open && cur < 0.6 ? 0.8 : !open && wasOpen && cur > 0.5 ? 0.32 : undefined;
+              onParam(density !== undefined ? { fillStyle, blendColorId, density } : { fillStyle, blendColorId });
             }}
             className="select"
           >

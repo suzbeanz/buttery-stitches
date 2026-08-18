@@ -479,6 +479,56 @@ describe("AutoDigitizeDialog (wizard)", () => {
     await waitFor(() => expect(vi.mocked(imageDataToObjects)).toHaveBeenCalled());
   });
 
+  it("Sketch look maps big faces to open sketch fills; ink, text and small faces stay solid", async () => {
+    vi.mocked(detectLineArt).mockReturnValue(LINE_ART_YES);
+    // A big face (30×20mm = 600mm²), a tiny face (3×3mm = 9mm²), an ink-color
+    // solid blob, and the ink line network. Only the big face may go sketch.
+    const colors = [
+      { id: "cw", rgb: [250, 250, 250] as [number, number, number], name: "White" },
+      { id: "cink", rgb: [15, 15, 18] as [number, number, number], name: "Ink" },
+    ];
+    const bigFace = { ...obj("big", "cw", 0), paths: [[{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 20 }, { x: 0, y: 20 }]] };
+    const tinyFace = { ...obj("tiny", "cw", 0), paths: [[{ x: 40, y: 0 }, { x: 43, y: 0 }, { x: 43, y: 3 }, { x: 40, y: 3 }]] };
+    const inkSolid = { ...obj("solid", "cink", 50), name: "Ink solids", params: { fillStyle: "satin" as const } };
+    const inkLines = { ...obj("ink", "cink", 60), name: "Ink lines", params: { fillStyle: "satin" as const, lineArt: true } };
+    vi.mocked(livePaintObjects).mockReturnValue({ colors, objects: [bigFace, tinyFace, inkSolid, inkLines] });
+    const onApply = renderDialog();
+    await waitForTrace("4");
+    // The Fill look toggle exists only for line art; flip it to Sketch.
+    fireEvent.click(screen.getByRole("button", { name: "Sketch" }));
+    await toColors("4");
+    const project = await addArtwork(onApply);
+    const byId = new Map(project.objects.map((o) => [o.id, o]));
+    expect(byId.get("big")!.params.fillStyle).toBe("sketch");
+    expect(byId.get("big")!.params.density).toBe(0.8);
+    expect(byId.get("tiny")!.params.fillStyle).toBeUndefined(); // small detail stays solid
+    expect(byId.get("solid")!.params.fillStyle).toBe("satin"); // ink thread untouched
+    expect(byId.get("ink")!.params.lineArt).toBe(true);
+  });
+
+  it("a per-color style override beats the sketch look", async () => {
+    vi.mocked(detectLineArt).mockReturnValue(LINE_ART_YES);
+    const colors = [{ id: "cw", rgb: [250, 250, 250] as [number, number, number], name: "White" }];
+    const bigFace = { ...obj("big", "cw", 0), paths: [[{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 20 }, { x: 0, y: 20 }]] };
+    vi.mocked(livePaintObjects).mockReturnValue({ colors, objects: [bigFace] });
+    const onApply = renderDialog();
+    await waitForTrace("1");
+    fireEvent.click(screen.getByRole("button", { name: "Sketch" }));
+    await toColors("1");
+    fireEvent.click(screen.getByRole("button", { name: /Advanced options/ }));
+    fireEvent.change(screen.getByLabelText(/Stitch style for White/) as HTMLSelectElement, {
+      target: { value: "satin" },
+    });
+    const project = await addArtwork(onApply);
+    expect(project.objects[0].params.fillStyle).toBe("satin");
+  });
+
+  it("the Fill look toggle is absent for the standard trace method", async () => {
+    renderDialog(); // default mocks: not line art
+    await waitForTrace();
+    expect(screen.queryByRole("button", { name: "Sketch" })).toBeNull();
+  });
+
   it("Line art applies colors verbatim (no fringe consolidation) with the ink object last", async () => {
     vi.mocked(detectLineArt).mockReturnValue(LINE_ART_YES);
     // Two near-identical whites that consolidateFringeColors WOULD merge —
