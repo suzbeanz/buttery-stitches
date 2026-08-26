@@ -90,8 +90,11 @@ export interface EmbObjectParams {
    *  contour (rows that echo the shape's outline), gradient (tatami whose row
    *  spacing ramps for a shaded/ombré effect), motif (a tiled decorative
    *  motif), sketch (open single-angle rows whose visible texture is the look —
-   *  the professional "light fill"), or crosshatch (two sketch passes at
-   *  crossing angles, the layered shading of the reference animal designs). */
+   *  the professional "light fill"), crosshatch (two sketch passes at crossing
+   *  angles, the layered shading of the reference animal designs), or fur (a
+   *  dense solid whose every elongated region turns along its own flow — the
+   *  layered-fur look; also exempt from seam knockdown so baked shade overlaps
+   *  survive Clean up). */
   fillStyle?:
     | "tatami"
     | "satin"
@@ -101,7 +104,8 @@ export interface EmbObjectParams {
     | "blend"
     | "field"
     | "sketch"
-    | "crosshatch";
+    | "crosshatch"
+    | "fur";
   /** LINE-ART: render this (satin) object's medial columns as clean RUNNING lines
    *  down their centerline rather than filled satin — for outlines and fine detail
    *  strokes (auto-set by the tracer on thin regions). */

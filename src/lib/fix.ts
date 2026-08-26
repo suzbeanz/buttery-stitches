@@ -506,6 +506,11 @@ function knockdownPass(objects: EmbObject[], trapMm = 0.35): EmbObject[] {
     !h.text &&
     h.params.fillStyle !== "satin" &&
     h.params.fillStyle !== "motif" &&
+    // FUR layers over other fills by design: the trace bakes a ~0.9mm tuck of
+    // each darker shade under the next lighter one (the commercial layered-fur
+    // seam), and trimming it back to the 0.35mm trap would reopen exactly the
+    // shade boundaries the overlap exists to close.
+    h.params.fillStyle !== "fur" &&
     h.paths.length > 0 &&
     h.paths.reduce((s, r) => s + Math.abs(polygonArea(r)), 0) > STACK_MAX_FEATURE_MM2;
   return objects.map((o, i) => {

@@ -9,6 +9,7 @@ import {
   suggestColorCount,
   detectLineArt,
   livePaintObjects,
+  furObjects,
   type DigitizeDetail,
 } from "../lib/trace";
 import { ocrWords } from "../lib/trace/ocr";
@@ -60,7 +61,7 @@ const MAX_COLORS = 12;
 type StitchStyle = "auto" | "satin" | "outline" | "sketch" | "crosshatch";
 
 /** How the image becomes stitches (Image-step choice, auto-preselected). */
-type DigitizeMethod = "standard" | "lineart";
+type DigitizeMethod = "standard" | "lineart" | "fur";
 
 /** Overall FILL LOOK for line art: flat solid color (a patch), or the open
  *  sketch rows of the hand-drawn commercial style (fabric shows through). */
@@ -250,7 +251,10 @@ export default function AutoDigitizeDialog({
       setNumColors(Math.max(MIN_COLORS, Math.min(MAX_COLORS, lineArt.suggestedColors)));
       return;
     }
-    setNumColors(suggestColorCount(imageData, MIN_COLORS, MAX_COLORS));
+    // Fur needs room for the shade ladder: the commercial norm is 4 fur shades
+    // plus at least one detail color, so floor the suggestion at 5.
+    const floor = method === "fur" ? 5 : MIN_COLORS;
+    setNumColors(Math.max(floor, suggestColorCount(imageData, MIN_COLORS, MAX_COLORS)));
   }, [imageData, userSetColors, method, lineArt]);
 
   // LIVE re-trace: whenever the image or any setting changes, re-digitize after a
@@ -273,6 +277,8 @@ export default function AutoDigitizeDialog({
         // LINE-ART path: the Live-Paint model — faces between the dark linework
         // fill flat, the ink network sews last on top.
         const liveArt = method === "lineart" && !isSvg;
+        const furArt = method === "fur" && !isSvg;
+        const traceOpts = { mmPerPx, offsetX, offsetY, removeBackground, detail };
         const traced =
           isSvg && svgShapes?.shapes
             ? svgShapesToObjects(svgShapes.shapes.shapes, {
@@ -283,20 +289,10 @@ export default function AutoDigitizeDialog({
                 maxColors: numColors,
               })
             : liveArt
-              ? livePaintObjects(imageData, numColors, {
-                  mmPerPx,
-                  offsetX,
-                  offsetY,
-                  removeBackground,
-                  detail,
-                })
-              : imageDataToObjects(imageData, numColors, {
-                  mmPerPx,
-                  offsetX,
-                  offsetY,
-                  removeBackground,
-                  detail,
-                });
+              ? livePaintObjects(imageData, numColors, traceOpts)
+              : furArt
+                ? furObjects(imageData, numColors, traceOpts)
+                : imageDataToObjects(imageData, numColors, traceOpts);
         // Collapse near-duplicate palette entries k-means split off a flat region
         // (anti-alias bands, thin shadow shades) so the body doesn't fragment and
         // thread slots aren't wasted. Area-aware, so distinct colors stay.
@@ -305,7 +301,10 @@ export default function AutoDigitizeDialog({
         // ΔE30 fringe rule could merge an eye-white into the hat-white, or a
         // dark face color INTO the ink colorId — dragging the ink group forward
         // in fixStitches' color-grouped ordering).
-        const { colors, objects } = liveArt
+        // FUR skips it too: adjacent fur SHADES are close by design, and a ΔE
+        // merge would collapse the very layering (and its dark→light order)
+        // the mode exists to produce.
+        const { colors, objects } = liveArt || furArt
           ? traced
           : consolidateFringeColors(
               {
@@ -465,11 +464,15 @@ export default function AutoDigitizeDialog({
     // Live paint: the ink color/object sit out the merge. A ΔE≤10 merge of a
     // near-black face color INTO the ink colorId would remap ids and drag the
     // ink group forward in fixStitches' color-grouped ordering — the linework
-    // must stay the last thing sewn.
+    // must stay the last thing sewn. Fur: the SHADE ladder sits out entirely —
+    // adjacent fur shades are close by design, and merging two collapses the
+    // dark→light layering the mode exists to produce.
     const inkIds = new Set(
       method === "lineart"
         ? result.objects.filter((o) => o.params.lineArt).map((o) => o.colorId)
-        : [],
+        : method === "fur"
+          ? result.objects.filter((o) => o.params.fillStyle === "fur").map((o) => o.colorId)
+          : [],
     );
     const mergeColors = result.colors.filter((c) => !inkIds.has(c.id));
     const mergeObjects = result.objects.filter((o) => !inkIds.has(o.colorId));
@@ -630,7 +633,7 @@ export default function AutoDigitizeDialog({
               role="group"
               aria-label="Digitizing method"
             >
-              {([["standard", "Standard trace"], ["lineart", "Line art"]] as const).map(
+              {([["standard", "Standard trace"], ["lineart", "Line art"], ["fur", "Fur"]] as const).map(
                 ([value, label]) => (
                   <button
                     key={value}
@@ -651,7 +654,9 @@ export default function AutoDigitizeDialog({
             <p className="mt-1 text-[11px] text-navy/55">
               {method === "lineart"
                 ? "Outlined cartoon art: every area between the lines fills flat with its own color, and the dark linework sews last on top."
-                : "Flattens the image to solid color regions and stitches each one."}
+                : method === "fur"
+                  ? "Layered fur: shades sew dark to light, each lock fills along its own flow, and neighboring shades tuck under each other — the soft-shaded animal look, no outlines."
+                  : "Flattens the image to solid color regions and stitches each one."}
               {method === "lineart" && lineArt?.isLineArt && !userSetMethod && (
                 <span className="text-navy/45"> Looks like outlined line art, so we picked this for you.</span>
               )}

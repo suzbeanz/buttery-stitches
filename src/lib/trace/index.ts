@@ -29,6 +29,7 @@ export * from "./quantize";
 export * from "./types";
 export * from "./upscale";
 export * from "./livepaint";
+export * from "./fur";
 export type { DigitizeDetail, DigitizeOptions, DigitizeResult };
 
 /** The slice of imagetracerjs's tracedata we consume. */
@@ -152,6 +153,9 @@ export function tracedataToObjects(
     simplifyTolMm = 0.3,
     minAreaMm2 = 2,
     removeBackground = true,
+    shapeSnap = true,
+    straightenTolMm = STRAIGHTEN_TOL_MM,
+    strokeMaxWidthMm = STROKE_MAX_WIDTH_MM,
   } = opts;
 
   const simp = (pts: Point[]): Path =>
@@ -284,8 +288,9 @@ export function tracedataToObjects(
     // on a "straight" edge collapses to a true straight line (real corners deviate far
     // more and survive DP), then corner-aware smooth so genuine curves stay smooth.
     // This is what kills the "shakily drawn" look regardless of the detail preset.
+    const straighten = (r: Path) => smoothRingKeepingCorners(douglasPeucker(r, straightenTolMm), 0.6);
     const clean = (r: Path) =>
-      recognizeShape(r, 1.0)?.ring ?? smoothRingKeepingCorners(douglasPeucker(r, STRAIGHTEN_TOL_MM), 0.6);
+      shapeSnap ? (recognizeShape(r, 1.0)?.ring ?? straighten(r)) : straighten(r);
     const fillRings: Path[] = [];
     const strokeRings: Path[] = [];
     // Suspected page-background rings (the halo gate below) go into their OWN
@@ -360,7 +365,7 @@ export function tracedataToObjects(
       // mess of medial stubs.
       let isStroke =
         isNetwork ||
-        (meanWidth < STROKE_MAX_WIDTH_MM && length >= STROKE_MIN_LENGTH_MM && elongation >= STROKE_MIN_ELONGATION);
+        (meanWidth < strokeMaxWidthMm && length >= STROKE_MIN_LENGTH_MM && elongation >= STROKE_MIN_ELONGATION);
       // A LETTERFORM-scale shape — thin like a stroke but short and compact (the
       // glyphs of small crest text) — sews far better through the FILL path: the
       // engine's auto-satin there is the same machinery the fonts use (junction

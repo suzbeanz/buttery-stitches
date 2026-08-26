@@ -1362,9 +1362,20 @@ export function generateObjectRuns(
       // the way every professional reference fills it. Judged by INSCRIBED
       // thickness (isBroadlyThick), which a boundary notch can't fool the way
       // it inflates perimeter-based mean width.
-      const bandLike = !isBroadlyThick(region, BAND_MAX_HALF_WIDTH_MM);
+      // FUR fills opt every region of a multi-region object into the turning
+      // path: each elongated lock follows its own flow — the "patchwork" the
+      // single-region rule exists to prevent is exactly the fur look (the
+      // commercial reference angles every lock separately). All the safety
+      // gates below (bandLike, self-validation, MIN_TURNED_COVERAGE, tip
+      // patching) still judge each region on its own. Fur uses a TIGHTER band
+      // bar: on a broad wavy lock the spine curls and turned rows fan into
+      // radial wedges (measured on the fur fixture) — and the commercial
+      // reference sews broad locks as straight per-lock grain anyway, so only
+      // genuinely narrow locks turn and the rest take per-region-angled tatami.
+      const furStyle = p.fillStyle === "fur";
+      const bandLike = !isBroadlyThick(region, furStyle ? 4 : BAND_MAX_HALF_WIDTH_MM);
       const autoSingle =
-        !manualDirection && !flowSpineMm && !guidesMm && regions.length === 1 && bandLike;
+        !manualDirection && !flowSpineMm && !guidesMm && (regions.length === 1 || furStyle) && bandLike;
       // A clean single-spine band (banner, leaf, crescent) turns. The guidance FIELD
       // is the promoted default there — it sweeps the form cap-to-cap and beats the
       // spine-march on coverage + long-stitch count (bench: crescent-field) — with
@@ -1379,7 +1390,12 @@ export function generateObjectRuns(
       // — the turned rows must win there or the crown sews as a patched web.
       let turned = multiAngle ?? userFlow ?? null;
       if (!turned && autoTurn) {
-        const field = guidanceFieldFill(region, fillOpts);
+        // FUR skips the harmonic field: on a blobby wavy lock the field can
+        // develop a VORTEX (rows swirling 360° around an interior point,
+        // leaving radial bare wedges the halo-credited coverage gate misses —
+        // measured around the fixture's eye). Spine-marched turning can't
+        // swirl; fur locks keep it exclusively.
+        const field = furStyle ? null : guidanceFieldFill(region, fillOpts);
         if (field) {
           const covField = satinCoverage(region, field);
           const covTurn = satinCoverage(region, autoTurn);

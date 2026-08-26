@@ -169,6 +169,48 @@ describe("fixStitches", () => {
     expect(maxX(blue.paths)).toBeCloseTo(40, 5);
   });
 
+  it("keeps a fur shade's baked overlap (fur never causes knockdown)", () => {
+    // Two broad overlapping fills: the LOWER one deliberately extends 1mm under
+    // the upper (the fur trace bakes this). With the upper marked "fur", Clean
+    // up must NOT trim the tuck back to the 0.35mm trap; without the mark, the
+    // standard knockdown applies (guards the non-fur behavior).
+    const lower: Path = [{ x: 0, y: 0 }, { x: 21, y: 0 }, { x: 21, y: 40 }, { x: 0, y: 40 }];
+    const upper: Path = [{ x: 20, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 40 }, { x: 20, y: 40 }];
+    // Probe at MID-HEIGHT: knockdown legitimately leaves corner slivers where
+    // the two fills share an outer edge (the eroded top mask shrinks there
+    // too), so a global max-x would pass even when the seam was trimmed.
+    const probe = { x: 20.8, y: 20 };
+    const covers = (rings: Path[], p: { x: number; y: number }) => {
+      let odd = false;
+      for (const ring of rings)
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+          const a = ring[i];
+          const b = ring[j];
+          if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x)
+            odd = !odd;
+        }
+      return odd;
+    };
+
+    const furProject = createEmptyProject();
+    const lowFur = makeObjectFromPaths("fill", [lower], "dark");
+    lowFur.params = { fillStyle: "fur" };
+    const upFur = makeObjectFromPaths("fill", [upper], "light");
+    upFur.params = { fillStyle: "fur" };
+    furProject.objects = [lowFur, upFur];
+    const furOut = fixStitches(furProject).objects;
+    expect(covers(furOut.find((o) => o.colorId === "dark")!.paths, probe)).toBe(true);
+
+    const plainProject = createEmptyProject();
+    plainProject.objects = [
+      makeObjectFromPaths("fill", [lower], "dark"),
+      makeObjectFromPaths("fill", [upper], "light"),
+    ];
+    const plainOut = fixStitches(plainProject).objects;
+    // Standard knockdown clamps the tuck to the ~0.35mm trap at the seam.
+    expect(covers(plainOut.find((o) => o.colorId === "dark")!.paths, probe)).toBe(false);
+  });
+
   it("reports what the clean-up changed", () => {
     const p = createEmptyProject();
     // Two same-color fills drawn out of color-group order with a too-tight density

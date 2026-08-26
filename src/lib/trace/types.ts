@@ -29,6 +29,17 @@ export interface DigitizeOptions {
   /** extend earlier-sewn regions under later neighbours so color boundaries
    *  can't open bare-fabric gaps when the thread pulls. Default on. */
   underlap?: boolean;
+  /** snap rings to recognized primitives (circle/ellipse/rect/polygon).
+   *  Default on. Fur-style tracing turns this off — a spiky lock silhouette
+   *  must never snap to an ellipse. */
+  shapeSnap?: boolean;
+  /** straightening tolerance (mm) for the ring-cleanup re-simplify (default
+   *  0.5). Fur-style tracing lowers it so 1–2mm sawtooth fur teeth survive. */
+  straightenTolMm?: number;
+  /** regions thinner than this (mean width, mm) classify as line-art strokes
+   *  (default 2.2). Fur-style tracing lowers it so elongated 1–3mm fur locks
+   *  stay FILLS instead of routing to stroke satin. */
+  strokeMaxWidthMm?: number;
 }
 
 export interface DigitizeResult {
