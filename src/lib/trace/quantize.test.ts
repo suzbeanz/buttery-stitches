@@ -136,6 +136,102 @@ describe("quantizeImage", () => {
   });
 });
 
+describe("quantizeImage detail rescue", () => {
+  const at = (q: RasterImage, x: number, y: number) => {
+    const o = (y * q.width + x) * 4;
+    return [q.data[o], q.data[o + 1], q.data[o + 2]] as RGB;
+  };
+  const isDark = (c: RGB) => c[0] < 70 && c[1] < 70 && c[2] < 70;
+
+  it("restores an eye that consolidation dissolved into near-enough dark fur", () => {
+    // Eye-black vs dark-brown sits at ~10,300 (chroma-weighted) — INSIDE the
+    // 150² consolidation gate — so a sub-0.4%-area eye legally dissolves into
+    // the fur around it. The rescue pass runs last precisely to hand it back.
+    const brown: RGB = [90, 60, 30];
+    const tan: RGB = [205, 160, 110];
+    const eye: RGB = [20, 18, 16];
+    const img = image(200, 200, (x, y) => {
+      if (Math.hypot(x - 60, y - 60) < 7) return [...eye, 255]; // ~154px < 0.4% of 40k
+      return y < 100 ? [...brown, 255] : [...tan, 255];
+    });
+    const q = quantizeImage(img, 3);
+    expect(isDark(at(q, 60, 60))).toBe(true);
+    // Restored to its EXISTING palette entry — no extra slot burned.
+    expect(q.palette.length).toBe(3);
+  });
+
+  it("rescues BOTH eyes, sharing the one restored slot between look-alikes", () => {
+    // Two sub-consolidation-size eyes on dark fur: both dissolve into the
+    // brown (each ~154px < 0.4% of 40k, within the 150² gate), and the rescue
+    // hands both back to the SAME still-existing eye palette entry.
+    const brown: RGB = [90, 60, 30];
+    const tan: RGB = [205, 160, 110];
+    const eye: RGB = [20, 18, 16];
+    const img = image(200, 200, (x, y) => {
+      if (Math.hypot(x - 50, y - 50) < 7) return [...eye, 255];
+      if (Math.hypot(x - 150, y - 50) < 7) return [...eye, 255];
+      return y < 100 ? [...brown, 255] : [...tan, 255];
+    });
+    const q = quantizeImage(img, 3);
+    expect(isDark(at(q, 50, 50)), `eye 1 got ${at(q, 50, 50)}`).toBe(true);
+    expect(isDark(at(q, 150, 50)), `eye 2 got ${at(q, 150, 50)}`).toBe(true);
+    expect(q.palette.length).toBe(3);
+  });
+
+  it("does NOT rescue a thin anti-alias band (the thinness gate)", () => {
+    // Black|white with a 3px linear ramp: the mid-greys sit ~13,000 from both
+    // sides (well past the rescue threshold) but the clump is a ribbon — a
+    // blend band, not a feature.
+    const img = image(200, 200, (x) => {
+      const t = Math.max(0, Math.min(1, (x - 98.5) / 3));
+      const v = Math.round(20 + t * 210);
+      return [v, v, v, 255];
+    });
+    const q = quantizeImage(img, 2);
+    expect(distinctColors(q).size).toBeLessThanOrEqual(2);
+  });
+
+  it("does NOT rescue a wide soft gradient between two colors (the segment gate)", () => {
+    // An 8px ramp is thicker than the sliver bar, but its mean color lies on
+    // the segment between its two bordering palette colors — still a blend.
+    const img = image(200, 200, (x) => {
+      const t = Math.max(0, Math.min(1, (x - 96) / 8));
+      const v = Math.round(20 + t * 210);
+      return [v, v, v, 255];
+    });
+    const q = quantizeImage(img, 2);
+    expect(distinctColors(q).size).toBeLessThanOrEqual(2);
+  });
+
+  it("caps rescue slots and stays deterministic", () => {
+    // Seven mutually-distinct saturated blobs on a two-field image at n=2:
+    // rescue may add at most 4 extra palette entries, largest features first,
+    // and two identical runs produce identical output.
+    const hues: RGB[] = [
+      [220, 30, 30],
+      [30, 180, 40],
+      [30, 60, 220],
+      [230, 210, 40],
+      [200, 40, 190],
+      [40, 200, 210],
+      [240, 140, 30],
+    ];
+    const paint = (x: number, y: number): [number, number, number, number] => {
+      for (let k = 0; k < hues.length; k++) {
+        const cx = 30 + (k % 4) * 45;
+        const cy = 40 + Math.floor(k / 4) * 90;
+        if (Math.hypot(x - cx, y - cy) < 8) return [...hues[k], 255];
+      }
+      return y < 100 ? [140, 140, 140, 255] : [70, 70, 70, 255];
+    };
+    const q1 = quantizeImage(image(200, 200, paint), 2);
+    const q2 = quantizeImage(image(200, 200, paint), 2);
+    expect(q1.palette.length).toBeLessThanOrEqual(2 + 4);
+    expect(q1.palette).toEqual(q2.palette);
+    expect([...q1.data]).toEqual([...q2.data]);
+  });
+});
+
 describe("kmeansPalette", () => {
   const near = (p: RGB[], r: number, g: number, b: number) =>
     p.some((c) => Math.abs(c[0] - r) < 40 && Math.abs(c[1] - g) < 40 && Math.abs(c[2] - b) < 40);

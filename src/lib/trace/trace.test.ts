@@ -610,6 +610,30 @@ describe("imageDataToObjects (real imagetracerjs)", () => {
     expect(hasDark).toBe(true);
   });
 
+  it("keeps the pet's eye on ANTIALIASED soft-shaded art (detail rescue end-to-end)", () => {
+    // The wizard failure: two soft shades with a 2px blend ramp along a wavy
+    // boundary, and a small dark eye (sub-consolidation size) with an AA rim.
+    // The eye quantizes, then consolidation dissolves it into the near-enough
+    // dark shade — only the rescue pass keeps a dark thread in the result.
+    const mix = (a: number[], b: number[], t: number) => {
+      const u = Math.max(0, Math.min(1, t));
+      return [0, 1, 2].map((k) => Math.round(a[k] + (b[k] - a[k]) * u)) as [number, number, number];
+    };
+    const brown = [90, 60, 30];
+    const tan = [205, 160, 110];
+    const eye = [20, 18, 16];
+    const img = image(200, 200, (x, y) => {
+      const d = y - (100 + 14 * Math.sin(x / 18)); // signed px to the wavy seam
+      let c = mix(brown, tan, 0.5 + d / 4); // 2px ramp each side
+      const de = Math.hypot(x - 60, y - 60) - 6; // ~113px eye < 0.4% of 40k
+      if (de < 2) c = mix(eye, c, 0.5 + de / 4);
+      return c;
+    });
+    const { colors } = imageDataToObjects(img, 3, { mmPerPx: 0.5, removeBackground: false });
+    const hasDark = colors.some((c) => c.rgb[0] < 70 && c.rgb[1] < 70 && c.rgb[2] < 70);
+    expect(hasDark, `palette: ${colors.map((c) => c.rgb.join("/")).join(" ")}`).toBe(true);
+  });
+
   it("estimates higher complexity for noisy images", () => {
     const flat = image(20, 20, () => [100, 100, 100]);
     const noisy = image(20, 20, (x, y) => [(x * 13) % 256, (y * 29) % 256, (x * y) % 256]);
@@ -644,6 +668,30 @@ describe("imageDataToObjects (real imagetracerjs)", () => {
       const img = image(40, 40, (x, y) => {
         if (y === 0) return [(x * 23) % 256, (x * 51) % 256, (x * 91) % 256]; // 2.5% fringe row
         return x < 20 ? [20, 20, 20] : [230, 230, 230];
+      });
+      expect(suggestColorCount(img)).toBe(2);
+    });
+
+    it("counts a rare-but-distinct detail color (a pet's eye) as a thread", () => {
+      // ~0.5% dark eye on a two-shade field: under the 1.5% dominance bar, but
+      // flat, far from both shades, and off their blend segment — a real thread.
+      const img = image(100, 100, (x, y) => {
+        if (Math.hypot(x - 30, y - 30) < 4.2) return [20, 18, 16];
+        return y < 50 ? [150, 105, 60] : [205, 160, 110];
+      });
+      expect(suggestColorCount(img)).toBe(3);
+    });
+
+    it("does NOT count an anti-alias ramp between two colors as a thread", () => {
+      // A soft blend seam between black and white, wavy like a real edge: its
+      // mid-greys are far from both parents, but every blend bucket is either
+      // scattered (samples span the bucket) or ON the black↔white segment —
+      // still 2 threads.
+      const img = image(200, 200, (x, y) => {
+        const d = y - (100 + 14 * Math.sin(x / 18));
+        const t = Math.max(0, Math.min(1, 0.5 + d / 6));
+        const v = Math.round(20 + t * 210);
+        return [v, v, v];
       });
       expect(suggestColorCount(img)).toBe(2);
     });

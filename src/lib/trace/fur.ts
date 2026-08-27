@@ -41,8 +41,13 @@ const FUR_MASS_MIN_AREA_SHARE = 0.06;
 const FUR_MASS_MIN_DIM_FRAC = 0.25;
 /** Sparkle candidates: thin… */
 const SPARKLE_MAX_MEAN_WIDTH_MM = 1.6;
-/** …elongated highlight strokes. */
+/** …elongated highlight strokes… */
 const SPARKLE_MIN_ELONGATION = 3;
+/** …that are actually HIGHLIGHTS — near-white in absolute terms (the reference
+ *  sparkle measures L* ≈ 97). Without this floor a small dark eye can slip in:
+ *  the perimeter²-based elongation rates even a disc at π, and a ~3mm eye sits
+ *  right at the width bar. */
+const SPARKLE_MIN_L = 80;
 /** Fewer qualifying fur shades than this → not fur art; decline to standard. */
 const MIN_FUR_COLORS = 2;
 
@@ -144,6 +149,7 @@ export function furObjects(
       (s) =>
         !s.furMass &&
         s.areaMm2 > 0 &&
+        s.L >= SPARKLE_MIN_L &&
         s.meanWidthMm < SPARKLE_MAX_MEAN_WIDTH_MM &&
         s.elongation >= SPARKLE_MIN_ELONGATION,
     )

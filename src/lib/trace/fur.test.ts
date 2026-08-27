@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { furObjects } from "./fur";
-import { furArt } from "./fur.fixture";
+import { furArt, furArtAA, FUR_EYE, FUR_TONGUE } from "./fur.fixture";
 import { polygonArea, polygonPerimeter } from "./classify";
 import { rgbToLab } from "../thread/match";
 import { douglasPeucker } from "./simplify";
@@ -85,6 +85,35 @@ describe("furObjects", () => {
       const biggest = [...o.paths].sort((a, b) => Math.abs(polygonArea(b)) - Math.abs(polygonArea(a)))[0];
       const rough = polygonPerimeter(biggest) / Math.max(1, polygonPerimeter(douglasPeucker(biggest, 1.0)));
       expect(rough, `roughness of ${o.name}`).toBeGreaterThan(1.05);
+    }
+  });
+
+  it("keeps the eye and tongue on ANTIALIASED art at the wizard's fur floor", () => {
+    // The measured wizard failure: on a browser-rendered (antialiased) upload
+    // the sub-0.4% eye and tongue quantize fine, then region consolidation
+    // dissolves them into the near-enough fur — the detail-rescue pass in
+    // quantizeImage hands them back. Gate the whole furObjects result at the
+    // dialog's fur color floor of 5. (Sparkle is NOT asserted: at n=5 a thin
+    // near-white bar legitimately loses to the shade ladder.)
+    const res = furObjects(furArtAA(), 5, OPTS);
+    const near = (rgb: readonly number[], target: readonly number[]) =>
+      Math.max(...rgb.map((v, k) => Math.abs(v - target[k]))) <= 24;
+    const eyeColor = res.colors.find((c) => near(c.rgb, FUR_EYE));
+    const tongueColor = res.colors.find((c) => near(c.rgb, FUR_TONGUE));
+    expect(eyeColor, "an eye-black thread survives").toBeTruthy();
+    expect(tongueColor, "a tongue-pink thread survives").toBeTruthy();
+    const furAA = res.objects.filter((o) => o.params.fillStyle === "fur");
+    expect(furAA.length).toBeGreaterThanOrEqual(2);
+    // Both details sew AFTER every fur mass, as plain stacked fills (an eye is
+    // never a sparkle highlight stroke, however small it traces).
+    const lastFurIdx = Math.max(...furAA.map((o) => res.objects.indexOf(o)));
+    for (const cid of [eyeColor!.id, tongueColor!.id]) {
+      const objs = res.objects.filter((o) => o.colorId === cid);
+      expect(objs.length).toBeGreaterThan(0);
+      for (const o of objs) {
+        expect(res.objects.indexOf(o)).toBeGreaterThan(lastFurIdx);
+        expect(o.params.lineArt ?? false).toBe(false);
+      }
     }
   });
 

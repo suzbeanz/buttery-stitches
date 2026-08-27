@@ -124,6 +124,38 @@ describe("fringe color consolidation", () => {
     );
     expect(out.colors).toHaveLength(2); // a+b collapse, c survives
   });
+
+  // ---- compact-detail guard: small-but-WIDE regions are features, not fringe.
+  const rect = (w: number, h: number, id: string) =>
+    makeObjectFromPaths("fill", [[{ x: 0, y: 20 }, { x: w, y: 20 }, { x: w, y: 20 + h }, { x: 0, y: 20 + h }]], id);
+  const withShape = (shape: ReturnType<typeof rect>, rgb: RGB): Project => {
+    const p = createEmptyProject();
+    p.colors = [
+      { id: "body", rgb: [218, 29, 34] },
+      { id: "small", rgb },
+    ];
+    p.objects = [tri(100, "body"), shape];
+    return p;
+  };
+
+  it("keeps a small COMPACT detail the fringe rule used to eat (a rescued eye)", () => {
+    // ΔE≈22 and well under 6% of the area — the fringe conditions hold — but a
+    // 5×5mm blob (mean width 2.5mm) is a deliberate feature, not a sliver.
+    const out = consolidateFringeColors(withShape(rect(5, 5, "small"), [155, 15, 19]));
+    expect(out.colors).toHaveLength(2);
+  });
+
+  it("still merges a THIN sliver of the same area and ΔE (true fringe)", () => {
+    // Same 25mm² and the same color pair, but as a 50×0.5mm ribbon (mean width
+    // 0.5mm) — the anti-alias shape the rule exists to sweep up.
+    const out = consolidateFringeColors(withShape(rect(50, 0.5, "small"), [155, 15, 19]));
+    expect(out.colors).toHaveLength(1);
+  });
+
+  it("still merges a compact NEAR-duplicate (ΔE≤10 stays unconditional)", () => {
+    const out = consolidateFringeColors(withShape(rect(5, 5, "small"), [225, 35, 40]));
+    expect(out.colors).toHaveLength(1);
+  });
 });
 
 describe("consolidateFringeColors respects the colour budget", () => {
