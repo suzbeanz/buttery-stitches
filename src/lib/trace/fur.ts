@@ -7,6 +7,8 @@ import { rgbToLab } from "../thread/match";
 import { seamTrap } from "../boolean";
 import { stackSmallFeatures } from "./stack";
 import { recognizeShape } from "./recognize";
+import { quantizeImage } from "./quantize";
+import { downsampleForDetection } from "./livepaint";
 
 /**
  * FUR / PAINTERLY digitizing — the commercial layered-fur model, measured from
@@ -50,6 +52,145 @@ const SPARKLE_MIN_ELONGATION = 3;
 const SPARKLE_MIN_L = 80;
 /** Fewer qualifying fur shades than this → not fur art; decline to standard. */
 const MIN_FUR_COLORS = 2;
+
+/** Two shades read as one FUR FAMILY when their Lab hues sit within this many
+ *  degrees — a shade ladder is one hue at several lightnesses. Measured: the
+ *  fixture browns sit at hue 67.6°/68.0°/72.2° (gaps ≤ 4.6°), while the
+ *  nearest confusers are far outside — fur↔tongue-pink ≥ 54.9°, a red↔blue
+ *  logo pair 95.6°. 20° gives ~4× margin both ways. */
+const FUR_HUE_AKIN_DEG = 20;
+/** Below this Lab chroma a color is NEUTRAL (grey/black/white coat) and hue is
+ *  float noise — neutrals are always hue-akin to each other. Real brown coats
+ *  carry chroma 25–35, so they are decided by the hue gate instead. */
+const FUR_NEUTRAL_CHROMA = 10;
+/** A real shade LADDER spans at least this much L* (fixture steps ≈ 20);
+ *  two shades closer than the dialog's ΔE-10 merge bar are trace noise. */
+const FUR_MIN_LADDER_DL = 12;
+/** Detection ignores near-transparent art (same floor as detectLineArt). */
+const FUR_DETECT_MIN_OPAQUE = 0.05;
+
+export interface FurArtDetection {
+  isFurArt: boolean;
+  stats: {
+    opaqueFraction: number;
+    /** hue-akin family size among the mass candidates */
+    furMassCount: number;
+    /** max L* − min L* inside the family */
+    ladderDeltaL: number;
+    /** widest hue gap accepted into the family (0 when neutral-decided) */
+    maxFamilyHueDeg: number;
+  };
+}
+
+/**
+ * Does this image read as SOFT-SHADED FUR ART — a ladder of same-hue shades
+ * laid as large interlocking masses (the layered-coat look), rather than a
+ * flat logo or outlined line art? Runs on a ≤300px downsample, once per
+ * loaded image. Sources are always simple flat-color artwork (never photos),
+ * so an 8-color quantize is a faithful palette read.
+ *
+ * The wizard preselects the Fur method on a hit — AFTER the line-art detector
+ * (outlined cartoon art with shaded fills is line art first).
+ */
+export function detectFurArt(imageData: ImageData): FurArtDetection {
+  const img = downsampleForDetection(imageData);
+  const { width, height } = img;
+  const total = width * height;
+  const no = (partial: Partial<FurArtDetection["stats"]> = {}): FurArtDetection => ({
+    isFurArt: false,
+    stats: { opaqueFraction: 0, furMassCount: 0, ladderDeltaL: 0, maxFamilyHueDeg: 0, ...partial },
+  });
+
+  let opaqueCount = 0;
+  for (let i = 3; i < img.data.length; i += 4) if (img.data[i] >= 128) opaqueCount++;
+  const opaqueFraction = opaqueCount / total;
+  if (opaqueFraction < FUR_DETECT_MIN_OPAQUE) return no({ opaqueFraction });
+
+  // 8 slots = a 4-shade coat + eye + tongue + sparkle + slack; flat art
+  // quantizes faithfully (no photos, by product constraint).
+  const q = quantizeImage({ width, height, data: img.data }, 8);
+  const key = (r: number, g: number, b: number) => (r << 16) | (g << 8) | b;
+  const slot = new Map<number, number>();
+  q.palette.forEach((c, i) => slot.set(key(c[0], c[1], c[2]), i));
+
+  // Per-palette-color raster stats: area share + bbox span (mass = big AND
+  // sweeping, the raster analogue of the trace-time fur-mass gates).
+  const count = new Array<number>(q.palette.length).fill(0);
+  const bbox = q.palette.map(() => ({ x0: width, y0: height, x1: -1, y1: -1 }));
+  let sx0 = width, sy0 = height, sx1 = -1, sy1 = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const o = (y * width + x) * 4;
+      if (q.data[o + 3] < 128) continue;
+      const i = slot.get(key(q.data[o], q.data[o + 1], q.data[o + 2]));
+      if (i === undefined) continue;
+      count[i]++;
+      const b = bbox[i];
+      if (x < b.x0) b.x0 = x;
+      if (x > b.x1) b.x1 = x;
+      if (y < b.y0) b.y0 = y;
+      if (y > b.y1) b.y1 = y;
+      if (x < sx0) sx0 = x;
+      if (x > sx1) sx1 = x;
+      if (y < sy0) sy0 = y;
+      if (y > sy1) sy1 = y;
+    }
+  }
+  const subjectSpan = Math.max(sx1 - sx0 + 1, sy1 - sy0 + 1);
+  if (subjectSpan <= 0) return no({ opaqueFraction });
+
+  interface Candidate { L: number; chroma: number; hueDeg: number; area: number }
+  const candidates: Candidate[] = [];
+  q.palette.forEach((rgb, i) => {
+    const areaShare = count[i] / opaqueCount;
+    const span = Math.max(bbox[i].x1 - bbox[i].x0 + 1, bbox[i].y1 - bbox[i].y0 + 1);
+    if (areaShare < FUR_MASS_MIN_AREA_SHARE || span < FUR_MASS_MIN_DIM_FRAC * subjectSpan) return;
+    const [L, a, b] = rgbToLab(rgb);
+    candidates.push({
+      L,
+      chroma: Math.hypot(a, b),
+      hueDeg: ((Math.atan2(b, a) * 180) / Math.PI + 360) % 360,
+      area: count[i],
+    });
+  });
+
+  // Grow the hue-akin family greedily from the largest-area candidate.
+  const akin = (p: Candidate, r: Candidate): number | null => {
+    if (p.chroma < FUR_NEUTRAL_CHROMA && r.chroma < FUR_NEUTRAL_CHROMA) return 0;
+    if (Math.min(p.chroma, r.chroma) < FUR_NEUTRAL_CHROMA && Math.max(p.chroma, r.chroma) <= 20)
+      return 0;
+    const d = Math.abs(p.hueDeg - r.hueDeg);
+    const gap = Math.min(d, 360 - d);
+    return gap <= FUR_HUE_AKIN_DEG ? gap : null;
+  };
+  candidates.sort((p, r) => r.area - p.area);
+  const family: Candidate[] = candidates.length ? [candidates[0]] : [];
+  let maxGap = 0;
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const c of candidates) {
+      if (family.includes(c)) continue;
+      const gaps = family.map((m) => akin(c, m)).filter((g): g is number => g !== null);
+      if (gaps.length > 0) {
+        family.push(c);
+        maxGap = Math.max(maxGap, ...gaps);
+        grew = true;
+      }
+    }
+  }
+  const Ls = family.map((c) => c.L);
+  const ladderDeltaL = Ls.length ? Math.max(...Ls) - Math.min(...Ls) : 0;
+  return {
+    isFurArt: family.length >= MIN_FUR_COLORS && ladderDeltaL >= FUR_MIN_LADDER_DL,
+    stats: {
+      opaqueFraction,
+      furMassCount: family.length,
+      ladderDeltaL,
+      maxFamilyHueDeg: maxGap,
+    },
+  };
+}
 
 interface ColorStats {
   colorId: string;
@@ -195,7 +336,10 @@ export function furObjects(
       };
     }
     if (st.sparkle && o.type === "fill") {
-      return { ...o, params: { ...o.params, fillStyle: "satin" as const, lineArt: true } };
+      return {
+        ...o,
+        params: { ...o.params, fillStyle: "satin" as const, lineArt: true, sparkle: true },
+      };
     }
     if (!st.furMass && o.type === "fill" && !o.params.lineArt) {
       // DETAILS get their primitives back: the fur trace disables shape-snap
@@ -211,9 +355,11 @@ export function furObjects(
   // BEFORE the overlap bake, so no dropped hole reappears via the trap raster.
   const stacked = stackSmallFeatures(styled);
 
-  // OVERLAP: each fur shade grows FUR_OVERLAP_MM under every LATER fur shade,
-  // exactly where they abut (seamTrap = lower ∪ (dilate(lower) ∩ higher)).
-  // Details are excluded — they stack on top instead.
+  // OVERLAP: each fur shade grows under every LATER fur shade, exactly where
+  // they abut (seamTrap = lower ∪ (dilate(lower) ∩ higher)). Details are
+  // excluded — they stack on top instead. Clamped: a junk option would grow
+  // every shade far under every later one.
+  const overlapMm = Math.min(2, Math.max(0, opts.furOverlapMm ?? FUR_OVERLAP_MM));
   const furIdx = stacked
     .map((o, i) => ({ o, i }))
     .filter(({ o }) => o.params.fillStyle === "fur")
@@ -221,7 +367,7 @@ export function furObjects(
   for (let k = 0; k < furIdx.length - 1; k++) {
     const i = furIdx[k];
     const higher: Path[][] = furIdx.slice(k + 1).map((j) => stacked[j].paths);
-    const trapped = seamTrap(stacked[i].paths, higher, FUR_OVERLAP_MM, FUR_TRAP_CELL_MM);
+    const trapped = seamTrap(stacked[i].paths, higher, overlapMm, FUR_TRAP_CELL_MM);
     if (trapped !== stacked[i].paths) stacked[i] = { ...stacked[i], paths: trapped };
   }
 

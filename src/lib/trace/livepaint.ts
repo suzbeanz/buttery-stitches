@@ -310,9 +310,15 @@ export interface LineArtDetection {
  * corpus's line-art fixture passes and its flat-logo / gradient / photo-ish
  * fixtures each fail at least one.
  */
-export function detectLineArt(imageData: ImageData): LineArtDetection {
-  // Downsample to ≤300px longest side (nearest: detection wants hard stats).
-  let img: Raster = { width: imageData.width, height: imageData.height, data: imageData.data };
+/** Downsample to ≤300px longest side (nearest-neighbor: detection wants hard
+ *  stats, not resampled blends). Shared by the once-per-image art-class
+ *  detectors (line art, fur). Returns the input untouched when small enough. */
+export function downsampleForDetection(imageData: ImageData): {
+  width: number;
+  height: number;
+  data: Uint8ClampedArray;
+} {
+  let img = { width: imageData.width, height: imageData.height, data: imageData.data };
   const maxDim = Math.max(img.width, img.height);
   if (maxDim > 300) {
     const stride = Math.ceil(maxDim / 300);
@@ -331,6 +337,11 @@ export function detectLineArt(imageData: ImageData): LineArtDetection {
     }
     img = { width: W, height: H, data: out };
   }
+  return img;
+}
+
+export function detectLineArt(imageData: ImageData): LineArtDetection {
+  const img: Raster = downsampleForDetection(imageData);
   const { width: W, height: H, data } = img;
   const { ink, opaque, meanLum, inkCount, opaqueCount } = inkMask(img);
 

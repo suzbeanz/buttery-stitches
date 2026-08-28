@@ -110,6 +110,10 @@ export interface EmbObjectParams {
    *  down their centerline rather than filled satin — for outlines and fine detail
    *  strokes (auto-set by the tracer on thin regions). */
   lineArt?: boolean;
+  /** LINE-ART SPARKLE: every stroke sews as ONE sparse running pass down its
+   *  centerline — no bean retrace, no satin, no underlay. The fur mode's
+   *  highlight streaks: light single strokes glinting over the coat. */
+  sparkle?: boolean;
   /** second thread color id for fillStyle "blend" (a two-thread ombré). The fill
    *  fades from the object's colorId to this across the shape. */
   blendColorId?: string;
@@ -307,6 +311,7 @@ export const DEFAULT_PARAMS: Required<EmbObjectParams> = {
   outline: true,
   fillStyle: "tatami",
   lineArt: false,
+  sparkle: false,
   blendColorId: "",
   motif: "wave",
   motifSizeMm: 4,
@@ -377,6 +382,7 @@ export function resolveParams(
     outline: params.outline ?? DEFAULT_PARAMS.outline,
     fillStyle: params.fillStyle ?? DEFAULT_PARAMS.fillStyle,
     lineArt: params.lineArt ?? DEFAULT_PARAMS.lineArt,
+    sparkle: params.sparkle ?? DEFAULT_PARAMS.sparkle,
     blendColorId: params.blendColorId ?? DEFAULT_PARAMS.blendColorId,
     motif: params.motif ?? DEFAULT_PARAMS.motif,
     motifSizeMm: safeLen(params.motifSizeMm, DEFAULT_PARAMS.motifSizeMm, 0.5, 100),

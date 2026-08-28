@@ -14,7 +14,7 @@ import { satinColumn } from "./satin";
 import { tatamiFill, tatamiConcaveRuns, multiBlendFill, motifFill, motifRunAlong, carvePoints, splitFillRegions, autoFillAngleForRegions, autoFillAngle } from "./fill";
 import { contourFill } from "./contour";
 import { medialColumns, columnsFromCenterlines, satinCoverage, residualRegions, type SatinColumn } from "./medial";
-import { turningFill, flowFill, flowAlong } from "./turning";
+import { turningFill, flowFill, flowAlong, furFlowFill } from "./turning";
 import { guidanceFieldFill, multiAngleFill } from "./field";
 import { isSmallRoundFill, meanStrokeWidthMm, isBroadlyThick, splitComponents } from "./classify";
 import { polygonArea } from "../trace/classify";
@@ -1273,9 +1273,14 @@ export function generateObjectRuns(
           });
         };
         tops = keep.map((c) =>
-          c.widthMm < LINE_ART_SATIN_MIN_MM
-            ? beanPath(runningStitch(c.centerline, stitchLength), LINE_ART_BEAN_REPEATS)
-            : widen(c),
+          p.sparkle
+            ? // SPARKLE: one sparse pass down the centerline, always — the fur
+              // mode's highlight streaks are light single strokes glinting over
+              // the coat, never a bean retrace or a solid satin bar.
+              runningStitch(c.centerline, stitchLength)
+            : c.widthMm < LINE_ART_SATIN_MIN_MM
+              ? beanPath(runningStitch(c.centerline, stitchLength), LINE_ART_BEAN_REPEATS)
+              : widen(c),
         );
         tatamiNoBareTravel = true; // a fill: order for shortest travel, never slash a bare gap
         lineArtFill = true;
@@ -1376,6 +1381,18 @@ export function generateObjectRuns(
       const bandLike = !isBroadlyThick(region, furStyle ? 4 : BAND_MAX_HALF_WIDTH_MM);
       const autoSingle =
         !manualDirection && !flowSpineMm && !guidesMm && (regions.length === 1 || furStyle) && bandLike;
+      // MEDIUM fur lock: too broad for the tight fur band bar, still band-scale
+      // (≤ the general 8mm half-width). furFlowFill gives it gently-curved rows
+      // along its own spine — with its own curl ceiling and break budget so the
+      // wave-1 radial-wedge fans cannot return; anything it declines keeps the
+      // straight per-region grain.
+      const furMedium =
+        furStyle &&
+        !bandLike &&
+        !manualDirection &&
+        !flowSpineMm &&
+        !guidesMm &&
+        !isBroadlyThick(region, BAND_MAX_HALF_WIDTH_MM);
       // A clean single-spine band (banner, leaf, crescent) turns. The guidance FIELD
       // is the promoted default there — it sweeps the form cap-to-cap and beats the
       // spine-march on coverage + long-stitch count (bench: crescent-field) — with
@@ -1405,6 +1422,8 @@ export function generateObjectRuns(
         }
       } else if (!turned && autoSingle) {
         turned = flowFill(region, fillOpts);
+      } else if (!turned && furMedium) {
+        turned = furFlowFill(region, fillOpts);
       }
       // HARD coverage gate on every fancy fill: a turned/field/flow output that
       // leaves real bare area (a pathological ring — e.g. one deformed by the
@@ -1465,7 +1484,7 @@ export function generateObjectRuns(
       };
       lineArtPieces.forEach((pc, i) => {
         push(topByComp, labels[i], { ...pc, top: deloopRun(pc.top, region) });
-        if (p.underlay && !motifMode && (pc.widthMm ?? 0) >= LINE_ART_SATIN_MIN_MM) {
+        if (p.underlay && !motifMode && !p.sparkle && (pc.widthMm ?? 0) >= LINE_ART_SATIN_MIN_MM) {
           for (const run of columnUnderlay(pc.centerline, pc.widthMm!, weight, underlayType)) {
             push(ulByComp, labels[i], { top: run, centerline: pc.centerline });
           }

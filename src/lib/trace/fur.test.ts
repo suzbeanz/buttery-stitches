@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { furObjects } from "./fur";
+import { furObjects, detectFurArt } from "./fur";
 import { furArt, furArtAA, FUR_EYE, FUR_TONGUE } from "./fur.fixture";
 import { polygonArea, polygonPerimeter } from "./classify";
 import { rgbToLab } from "../thread/match";
@@ -117,6 +117,26 @@ describe("furObjects", () => {
     }
   });
 
+  it("bakes a DEEPER overlap when asked, a shallower one when asked (the knob)", () => {
+    // The wizard's shade-overlap presets flow through DigitizeOptions: measure
+    // shared coverage between consecutive fur shades on a coarse grid — deeper
+    // tuck ⇒ strictly more shared area, subtler ⇒ strictly less.
+    const shared = (objs: EmbObject[]): number => {
+      const furs = objs.filter((o) => o.params.fillStyle === "fur");
+      let n = 0;
+      for (let k = 0; k + 1 < furs.length; k++)
+        for (let y = 0; y < 100; y += 0.8)
+          for (let x = 0; x < 100; x += 0.8)
+            if (inside({ x, y }, furs[k].paths) && inside({ x, y }, furs[k + 1].paths)) n++;
+      return n;
+    };
+    const deep = shared(furObjects(furArt(), 6, { ...OPTS, furOverlapMm: 1.5 }).objects);
+    const std = shared(furObjects(furArt(), 6, OPTS).objects);
+    const subtle = shared(furObjects(furArt(), 6, { ...OPTS, furOverlapMm: 0.4 }).objects);
+    expect(deep, `deep ${deep} vs standard ${std}`).toBeGreaterThan(std * 1.2);
+    expect(subtle, `subtle ${subtle} vs standard ${std}`).toBeLessThan(std * 0.8);
+  });
+
   it("declines gracefully on non-fur art (returns the standard trace)", () => {
     // One dominant flat color plus a small dot: only ONE color can qualify as
     // a fur mass (the dot fails both the area-share and span thresholds), so
@@ -137,5 +157,65 @@ describe("furObjects", () => {
     const out = furObjects(img, 4, { mmPerPx: 0.2, offsetX: 0, offsetY: 0, removeBackground: false });
     expect(out.objects.length).toBeGreaterThan(0);
     expect(out.objects.every((o) => o.params.fillStyle !== "fur")).toBe(true);
+  });
+});
+
+describe("detectFurArt (auto-preselect)", () => {
+  /** Flat opaque test image from a per-pixel painter. */
+  function paint(
+    w: number,
+    h: number,
+    f: (x: number, y: number) => [number, number, number],
+  ): ImageData {
+    const data = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        const [r, g, b] = f(x, y);
+        data[i] = r;
+        data[i + 1] = g;
+        data[i + 2] = b;
+        data[i + 3] = 255;
+      }
+    return { width: w, height: h, data, colorSpace: "srgb" } as ImageData;
+  }
+
+  it("detects the fur fixture (a same-hue shade ladder as large masses)", () => {
+    const d = detectFurArt(furArt());
+    expect(d.isFurArt).toBe(true);
+    expect(d.stats.furMassCount).toBeGreaterThanOrEqual(2);
+    expect(d.stats.ladderDeltaL).toBeGreaterThan(12);
+  });
+
+  it("detects the ANTIALIASED fixture too (real uploads are resampled)", () => {
+    expect(detectFurArt(furArtAA()).isFurArt).toBe(true);
+  });
+
+  it("rejects a flat one-color logo (no shade ladder)", () => {
+    const d = detectFurArt(
+      paint(200, 200, (x, y) =>
+        Math.hypot(x - 100, y - 100) < 15 ? [40, 40, 40] : [200, 60, 60],
+      ),
+    );
+    expect(d.isFurArt).toBe(false);
+  });
+
+  it("rejects a red/blue two-block logo — big masses, but not one hue family", () => {
+    // Both halves pass the area/span mass gates; the hue gate must refuse
+    // (red 36.3° vs blue 300.7° in Lab — 95.6° apart, far past the 20° bar).
+    const d = detectFurArt(paint(200, 200, (x) => (x < 100 ? [220, 30, 30] : [30, 60, 220])));
+    expect(d.isFurArt).toBe(false);
+    expect(d.stats.furMassCount).toBeLessThan(2);
+  });
+
+  it("accepts a NEUTRAL grey ladder (hue is noise at zero chroma)", () => {
+    const d = detectFurArt(
+      paint(200, 200, (x, y) => {
+        const stripe = Math.floor((y + 20 * Math.sin(x / 25)) / 60);
+        const s = ((stripe % 3) + 3) % 3;
+        return s === 0 ? [40, 40, 42] : s === 1 ? [120, 120, 122] : [200, 200, 202];
+      }),
+    );
+    expect(d.isFurArt).toBe(true);
   });
 });

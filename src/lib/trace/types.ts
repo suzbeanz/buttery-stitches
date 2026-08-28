@@ -40,6 +40,10 @@ export interface DigitizeOptions {
    *  (default 2.2). Fur-style tracing lowers it so elongated 1–3mm fur locks
    *  stay FILLS instead of routing to stroke satin. */
   strokeMaxWidthMm?: number;
+  /** FUR method only: how far each earlier (darker) fur shade tucks under the
+   *  next lighter one (mm). Default 0.9 — the measured commercial overlap.
+   *  Deeper hides seams on loose knits; subtler keeps thin locks light. */
+  furOverlapMm?: number;
 }
 
 export interface DigitizeResult {

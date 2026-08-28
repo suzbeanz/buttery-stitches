@@ -4,6 +4,7 @@ import { orientByDepth, MIN_FILL_DENSITY, FILL_STITCH_LENGTH, type FillOptions }
 import { resampleByDistance } from "./resample";
 import { distance, polylineLength } from "../geometry";
 import { polygonArea, polygonPerimeter } from "../trace/classify";
+import { douglasPeucker } from "../trace/simplify";
 
 // ---------------------------------------------------------------------------
 // Turning (directional) fill
@@ -429,5 +430,67 @@ export function flowAlong(rings: Path[], spine: Path, opts: FillOptions): Path[]
   if (runs.length === 0) return null;
   if (hasExposedSegment(runs, oriented)) return null; // never slash past the edge
   if (satinCoverage(oriented, runs) < FLOW_ALONG_MIN_COVERAGE) return null;
+  return runs;
+}
+
+/** Shortest fur-lock spine (mm) worth flowing — below TURN_MIN_SPINE_MM on
+ *  purpose: fur locks are smaller than banners, and a short lock reads fine
+ *  straight. */
+const FUR_FLOW_MIN_SPINE_MM = 8;
+/** The lock must be elongated (spine ≥ this × its mean width), not a blob. */
+const FUR_FLOW_MIN_ASPECT = 1.5;
+/** Spine bow (1 − chord/arc) window. The floor sits a hair above
+ *  TURN_MIN_CURVE — straight locks keep straight per-region tatami, the
+ *  commercial reference's own grain. The CEILING is the anti-wedge gate:
+ *  wave-1's radial fans came from the medial spine CURLING on broad wavy
+ *  locks; a spine bowed past this is curl, not flow. */
+const FUR_FLOW_MIN_CURVE = 0.05;
+const FUR_FLOW_MAX_CURVE = 0.35;
+/** Same break budget as TURN_MAX_BREAKS: a fanning result shatters its
+ *  serpentine and declines here. */
+const FUR_FLOW_MAX_BREAKS = 2;
+
+/**
+ * FUR-only curved flow for MEDIUM locks (the 4–8mm half-width band the fur
+ * dispatch excludes from `turningFill`): rows follow the lock's own medial
+ * spine when it is long, elongated and GENTLY curved; declines (null) to the
+ * straight per-region tatami — wave-1 behavior — otherwise. Unlike `flowAlong`
+ * this keeps `marchSpine`'s break count, the anti-fan defense `turningFill`
+ * relies on.
+ */
+export function furFlowFill(rings: Path[], opts: FillOptions): Path[] | null {
+  const oriented = orientByDepth(rings);
+  if (oriented.length === 0 || oriented[0].length < 3) return null;
+  if (oriented.length > TURN_MAX_RINGS) return null;
+
+  // Spine = the longest medial centerline (turningFill's source; the two never
+  // both run — turningFill handles the ≤4mm band, this the broader locks).
+  const cols = medialColumns(oriented, { density: opts.density, pullScale: 0 });
+  if (cols.length === 0) return null;
+  const sorted = cols.slice().sort((a, b) => polylineLength(b.centerline) - polylineLength(a.centerline));
+  const spine = sorted[0].centerline;
+  const arc = polylineLength(spine);
+  if (arc < FUR_FLOW_MIN_SPINE_MM || spine.length < 2) return null;
+
+  const outer = oriented.reduce((a, b) => (polygonArea(b) > polygonArea(a) ? b : a));
+  const per = polygonPerimeter(outer);
+  const meanWidth = per > 0 ? (2 * Math.abs(polygonArea(outer))) / per : 0;
+  if (meanWidth <= 0 || arc < FUR_FLOW_MIN_ASPECT * meanWidth) return null; // a blob, not a lock
+
+  const chord = distance(spine[0], spine[spine.length - 1]);
+  const curvy = 1 - chord / arc;
+  if (curvy < FUR_FLOW_MIN_CURVE || curvy > FUR_FLOW_MAX_CURVE) return null;
+
+  const density = Math.max(MIN_FILL_DENSITY, opts.density);
+  const stitch = opts.stitchLength ?? FILL_STITCH_LENGTH;
+  const comp = Math.max(0, opts.pullCompMm ?? 0);
+  const half = bboxDiag(oriented);
+
+  // Kill medial wiggle before marching so the station perpendiculars don't
+  // jitter (0.6mm is the tracer's own straighten scale).
+  const smoothed = douglasPeucker(spine, 0.6);
+  const { runs, breaks } = marchSpine(smoothed, oriented, density, stitch, comp, half);
+  if (runs.length === 0 || breaks > FUR_FLOW_MAX_BREAKS) return null;
+  if (hasExposedSegment(runs, oriented)) return null; // never slash
   return runs;
 }
