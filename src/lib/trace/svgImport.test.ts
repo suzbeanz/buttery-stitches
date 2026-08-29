@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { svgShapesToObjects, type SvgShape } from "./svgImport";
+import { svgShapesToObjects, blendWithWhite, clipShapeRings, type SvgShape } from "./svgImport";
 import { polygonArea } from "./classify";
 import { pathsBounds } from "../geometry";
 
@@ -7,6 +7,65 @@ import { pathsBounds } from "../geometry";
 function square(x: number, y: number, s: number): SvgShape["rings"][number] {
   return [{ x, y }, { x: x + s, y }, { x: x + s, y: y + s }, { x, y: y + s }];
 }
+
+describe("blendWithWhite", () => {
+  it("keeps full-alpha colors exact and blends translucents toward white (flat art over fabric)", () => {
+    expect(blendWithWhite([200, 30, 30], 1)).toEqual([200, 30, 30]);
+    expect(blendWithWhite([0, 0, 0], 0.5)).toEqual([128, 128, 128]);
+    expect(blendWithWhite([100, 200, 40], 0)).toEqual([255, 255, 255]);
+    // Out-of-range alphas clamp instead of extrapolating.
+    expect(blendWithWhite([10, 10, 10], 2)).toEqual([10, 10, 10]);
+    expect(blendWithWhite([10, 10, 10], -1)).toEqual([255, 255, 255]);
+    expect(blendWithWhite([10, 10, 10], NaN)).toEqual([10, 10, 10]); // non-finite = opaque
+  });
+});
+
+describe("clipShapeRings", () => {
+  it("returns the same rings (by reference) when the shape sits fully inside the clip", () => {
+    const rings = [square(10, 10, 20)];
+    expect(clipShapeRings(rings, [square(0, 0, 100)])).toBe(rings);
+  });
+
+  it("cuts away the part outside the clip region", () => {
+    // 100x100 shape clipped by its 50x50 corner → ~2500 area, confined to it.
+    const out = clipShapeRings([square(0, 0, 100)], [square(0, 0, 50)]);
+    expect(out.length).toBeGreaterThan(0);
+    const area = out.reduce((s, r) => s + Math.abs(polygonArea(r)), 0);
+    expect(area).toBeGreaterThan(2200);
+    expect(area).toBeLessThan(2800);
+    for (const r of out)
+      for (const p of r) {
+        expect(p.x).toBeLessThan(53);
+        expect(p.y).toBeLessThan(53);
+      }
+  });
+
+  it("a hole in the clip stays unfilled in the result", () => {
+    // Clip is an annulus (outer 100 + inner 40 hole, even-odd) — the clipped
+    // shape must not cover the hole.
+    const out = clipShapeRings([square(0, 0, 100)], [square(0, 0, 100), square(30, 30, 40)]);
+    const area = out.reduce((s, r) => s + Math.abs(polygonArea(r)), 0);
+    // Ring areas sum outer + hole ring ≈ 10000 + 1600 (hole ring counts positive
+    // here); net filled ≈ 8400 — assert via ring count instead: result carries
+    // an inner ring (the hole survived).
+    expect(out.length).toBeGreaterThanOrEqual(2);
+    expect(area).toBeGreaterThan(10000); // outer ≈10000 plus the hole ring
+  });
+
+  it("returns [] for a disjoint clip and for an empty clip (clip to nothing)", () => {
+    expect(clipShapeRings([square(0, 0, 10)], [square(50, 50, 10)])).toEqual([]);
+    expect(clipShapeRings([square(0, 0, 10)], [])).toEqual([]);
+  });
+
+  it("holds up at tiny icon-viewBox scale (24-unit art)", () => {
+    // booleanOp's mm-tuned cell floor would give a 24-unit icon a ~13-cell
+    // grid; the adaptive rescale must keep real resolution at any unit scale.
+    const out = clipShapeRings([square(0, 0, 24)], [square(0, 0, 12)]);
+    const area = out.reduce((s, r) => s + Math.abs(polygonArea(r)), 0);
+    expect(area).toBeGreaterThan(120);
+    expect(area).toBeLessThan(168); // ~144 ±17%
+  });
+});
 
 describe("svgShapesToObjects", () => {
   it("places shapes in the hoop at exact scaled geometry, one object per shape in document order", () => {

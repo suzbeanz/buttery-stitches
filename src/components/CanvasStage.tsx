@@ -121,6 +121,7 @@ export default function CanvasStage() {
   const fabricColor = useEditorStore((s) => s.fabricColor);
   const startDismissed = useEditorStore((s) => s.startDismissed);
   const setStartDismissed = useEditorStore((s) => s.setStartDismissed);
+  const reviewActive = useEditorStore((s) => s.reviewIds !== null);
   const activeColorId = useEditorStore((s) => s.activeColorId);
   const addDraftPoint = useEditorStore((s) => s.addDraftPoint);
   const setCursor = useEditorStore((s) => s.setCursor);
@@ -673,6 +674,22 @@ export default function CanvasStage() {
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tool, draftEmpty, selectedIds, activeColorId, smooth]);
+
+  // The welcome card offers an X and click-outside to dismiss — give keyboard
+  // users the path they'll try first: Escape closes it too. (The card is a
+  // non-modal hint, so the aria-modal guard above doesn't cover it.)
+  const startVisible =
+    viewMode === "edit" && project.objects.length === 0 && draftEmpty && !startDismissed;
+  useEffect(() => {
+    if (!startVisible) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (document.querySelector('[aria-modal="true"]')) return; // a real modal is on top
+      setStartDismissed(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [startVisible, setStartDismissed]);
 
   // Drop the ruler segment when you leave the Measure tool.
   useEffect(() => {
@@ -1709,10 +1726,7 @@ export default function CanvasStage() {
         </div>
       )}
 
-      {viewMode === "edit" &&
-        project.objects.length === 0 &&
-        draftEmpty &&
-        !startDismissed && (
+      {startVisible && (
         // Tapping the empty area dismisses the hint; the X button gives the keyboard path.
         // eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
         <div
@@ -1739,7 +1753,7 @@ export default function CanvasStage() {
               <StartButton
                 icon={ImageIcon}
                 label="Use an image"
-                hint="Turn a photo or logo into stitches"
+                hint="Turn a logo or drawing into stitches"
                 onClick={() => {
                   useEditorStore.getState().setPendingStart("image");
                   setStartDismissed(true);
@@ -1783,11 +1797,16 @@ export default function CanvasStage() {
         </div>
       )}
 
-      <div className="pointer-events-none absolute bottom-2 left-3 rounded-sm bg-navy/85 px-2 py-0.5 font-mono text-[11px] tracking-wide text-butter-100">
-        {rulerUnit === "inch"
-          ? `${mmToInch(project.widthMm).toFixed(2)} × ${mmToInch(project.heightMm).toFixed(2)} in`
-          : `${project.widthMm.toFixed(0)} × ${project.heightMm.toFixed(0)} mm`}
-      </div>
+      {/* Hidden while the region-review card floats over the same bottom edge —
+          a half-covered "3.94 × 3…" reads as broken, and the size is redundant
+          mid-review. */}
+      {!reviewActive && (
+        <div className="pointer-events-none absolute bottom-2 left-3 rounded-sm bg-navy/85 px-2 py-0.5 font-mono text-[11px] tracking-wide text-butter-100">
+          {rulerUnit === "inch"
+            ? `${mmToInch(project.widthMm).toFixed(2)} × ${mmToInch(project.heightMm).toFixed(2)} in`
+            : `${project.widthMm.toFixed(0)} × ${project.heightMm.toFixed(0)} mm`}
+        </div>
+      )}
 
       {menu && <ContextMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
     </main>

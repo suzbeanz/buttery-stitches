@@ -13,13 +13,64 @@
 import type { EmbObject, Path, ThreadColor } from "../../types/project";
 import { newId } from "../id";
 import { makeObjectFromPaths } from "../objects";
-import { railsFromCenterline, pointInRing } from "../geometry";
+import { railsFromCenterline, pointInRing, pathsBounds } from "../geometry";
+import { booleanOp } from "../boolean";
 import { douglasPeucker } from "./simplify";
 import { polygonArea } from "./classify";
 import { nameForRgb } from "./colorname";
 import type { DigitizeResult } from "./index";
 
 export type RGB = [number, number, number];
+
+/**
+ * Flatten translucency to a solid thread colour by blending toward WHITE.
+ * Embroidery has no alpha, and this app's art class is flat-colour logos on a
+ * white page / light fabric — so a 40%-opacity overlay reads as its colour
+ * washed toward white, exactly what a digitizer would pick. alpha 1 returns
+ * the colour untouched; out-of-range/non-finite alphas clamp (NaN = opaque).
+ */
+export function blendWithWhite(rgb: RGB, alpha: number): RGB {
+  const a = Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1;
+  if (a === 1) return rgb;
+  return [0, 1, 2].map((k) => Math.round(rgb[k] * a + 255 * (1 - a))) as RGB;
+}
+
+/** Even-odd containment of a point in a multi-ring region (holes cut). */
+export function insideEvenOdd(p: { x: number; y: number }, rings: Path[]): boolean {
+  let n = 0;
+  for (const r of rings) if (pointInRing(p, r)) n++;
+  return n % 2 === 1;
+}
+
+/** Grid span for clip intersections: booleanOp rasterizes, and its cell floor
+ *  (0.08, tuned for mm-space) is unit-blind — a 24-unit icon viewBox would get
+ *  a ~13-cell grid. Rescaling into a fixed grid keeps real resolution at any
+ *  user-unit scale (~0.4% of the artwork span per cell). */
+const CLIP_GRID = 256;
+
+/**
+ * Intersect a shape's rings with a clipPath's flattened rings (both even-odd,
+ * so a hole in the clip stays unfilled). FAST PATH: when every shape vertex
+ * lies inside the clip region the rings return unchanged (by reference) — the
+ * ubiquitous Figma/Illustrator full-canvas clip wrapper costs nothing. The
+ * vertex test is sound because callers pass densely flattened rings (svgParse
+ * samples every ~1.5 user units), so no segment can stray far between
+ * vertices. Otherwise the sets intersect on booleanOp's raster grid, rescaled
+ * to CLIP_GRID cells across the combined extent. An empty clip means "clip to
+ * nothing" and returns [].
+ */
+export function clipShapeRings(rings: Path[], clip: Path[]): Path[] {
+  if (rings.length === 0 || clip.length === 0) return [];
+  if (rings.every((r) => r.every((p) => insideEvenOdd(p, clip)))) return rings;
+  const bb = pathsBounds([...rings, ...clip]);
+  if (!bb) return [];
+  const span = Math.max(bb.maxX - bb.minX, bb.maxY - bb.minY);
+  if (!(span > 0) || !Number.isFinite(span)) return [];
+  const s = CLIP_GRID / span;
+  const scale = (paths: Path[], k: number): Path[] =>
+    paths.map((r) => r.map((p) => ({ x: p.x * k, y: p.y * k })));
+  return scale(booleanOp(scale(rings, s), scale(clip, s), "intersect", 1), 1 / s);
+}
 
 /** One shape from an SVG, already in a single user-unit space (all transforms
  *  baked in). Either a FILLED shape (rings; sub-path rings are its own holes via

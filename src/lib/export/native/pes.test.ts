@@ -201,4 +201,14 @@ describe("encodePes (v1)", () => {
   it("throws on an appliqué STOP (caller routes those to the Python path)", () => {
     expect(() => encodePes({ blocks: [{ rgb: 0, cmds: [["s", 0, 0], ["stop"]] }] })).toThrow();
   });
+
+  it("stamps the design label into the PEC LA: field, sanitized to printable ASCII", () => {
+    const plan: StitchPlan = { blocks: [{ rgb: 0, cmds: [["s", 0, 0], ["s", 50, 0]] }] };
+    const bytes = encodePes(plan, { label: "FoxéCub extra long" });
+    const pec = u32(bytes, 8);
+    const la = new TextDecoder("latin1").decode(bytes.slice(pec, pec + 20));
+    // 8 chars max (Brother's own truncation), space-padded to 16, no high bytes.
+    expect(la.startsWith("LA:Fox Cub ")).toBe(true);
+    expect(la).toMatch(/^LA:[\x20-\x7e]{16}\r$/);
+  });
 });

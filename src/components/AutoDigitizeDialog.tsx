@@ -153,6 +153,10 @@ export default function AutoDigitizeDialog({
   const [advanced, setAdvanced] = useState(false);
   const [updating, setUpdating] = useState(true); // a trace is in flight
   const [error, setError] = useState<string | null>(null);
+  // The source file couldn't be decoded at all (corrupt / unsupported format).
+  // Everything downstream is dead, so the panes show a clear error state
+  // instead of a broken-image glyph and a forever-"Updating…" veil.
+  const [loadFailed, setLoadFailed] = useState(false);
   // The live trace result. Re-runs (debounced) whenever the settings change.
   const [result, setResult] = useState<{ colors: ThreadColor[]; objects: EmbObject[] } | null>(null);
   const [keptIds, setKeptIds] = useState<Set<string>>(new Set());
@@ -210,11 +214,17 @@ export default function AutoDigitizeDialog({
 
   useEffect(() => {
     let alive = true;
+    setLoadFailed(false);
     loadImageData(file)
       .then((d) => alive && setImageData(d))
       .catch((e) => {
         logError(`Couldn't load image: ${(e as Error).message}`, (e as Error).stack);
-        if (alive) setError((e as Error).message);
+        if (!alive) return;
+        // No pixels → no trace will ever run: end the "updating" veil and show
+        // a recoverable error instead of an eternal spinner.
+        setLoadFailed(true);
+        setUpdating(false);
+        setError("Couldn't read that image file. Try a PNG, JPG, GIF, WebP, or SVG export of your artwork.");
       });
     // Vector source: also parse its shapes for the exact-geometry import path.
     if (isSvg) {
@@ -235,6 +245,9 @@ export default function AutoDigitizeDialog({
     [imageData],
   );
   const looksLikePhoto = complexity > PHOTO_COMPLEXITY;
+  // Visible <text> elements in a vector import: deliberately NOT traced
+  // (rasterized type sews badly) — the notice points at the native Text tool.
+  const svgTextCount = isSvg ? svgShapes?.shapes?.textCount ?? 0 : 0;
   // Live-Paint detection: does the image read as outlined line art (a dark
   // connected line network enclosing flat color faces)? Raster sources only.
   const lineArt = useMemo(
@@ -619,8 +632,16 @@ export default function AutoDigitizeDialog({
               Your image
             </figcaption>
             <div className="flex h-28 items-center justify-center rounded border border-navy/10 bg-[repeating-conic-gradient(#eee_0_25%,#fff_0_50%)] bg-[length:16px_16px] p-2 sm:h-40">
-              {/* eslint-disable-next-line jsx-a11y/img-redundant-alt */}
-              <img src={previewUrl} alt="Image to digitize" className="max-h-full max-w-full object-contain" />
+              {loadFailed ? (
+                // The browser's broken-image glyph explains nothing — name the problem.
+                <span className="flex items-center gap-1.5 text-[12px] text-navy/50">
+                  <AlertTriangle size={14} className="shrink-0 text-stamp" aria-hidden />
+                  Couldn&apos;t read this file
+                </span>
+              ) : (
+                // eslint-disable-next-line jsx-a11y/img-redundant-alt
+                <img src={previewUrl} alt="Image to digitize" className="max-h-full max-w-full object-contain" />
+              )}
             </div>
           </figure>
           <figure className="m-0">
@@ -639,6 +660,19 @@ export default function AutoDigitizeDialog({
                 This looks like a photo. Embroidery is flat color and clean lines — photos
                 aren&apos;t supported and won&apos;t digitize well. Clean illustrations, logos and
                 outlined artwork give great results.
+              </span>
+            </p>
+          </div>
+        )}
+
+        {svgTextCount > 0 && (
+          <div className="mb-3 rounded bg-butter-200 px-2 py-1.5 text-[12px] text-navy">
+            <p className="flex gap-1.5">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0 text-stamp" aria-hidden />
+              <span>
+                This SVG has {svgTextCount === 1 ? "a text element" : `${svgTextCount} text elements`} that
+                won&apos;t be traced. After adding the artwork, use the studio&apos;s Text tool to set
+                the words as crisp lettering.
               </span>
             </p>
           </div>
@@ -770,7 +804,7 @@ export default function AutoDigitizeDialog({
           </div>
           <p className="mb-3 text-[11px] text-navy/55">
             More colors catch finer detail and thin parts (and add thread changes); fewer keep it bold
-            and simple. Logos look best at 3–5; try 6–8 for a busy photo. The preview updates as you change this.
+            and simple. Logos look best at 3–5; try 6–8 for detailed multi-shade artwork. The preview updates as you change this.
           </p>
 
           {/* Detail level — steers trace smoothing, simplification, and despeckling. */}
@@ -1050,7 +1084,11 @@ export default function AutoDigitizeDialog({
           </p>
         )}
 
-        {error && <p className="mb-3 text-[12px] text-stamp">{error}</p>}
+        {error && (
+          <p role="alert" className="mb-3 text-[12px] text-stamp">
+            {error}
+          </p>
+        )}
 
         <div className="flex items-center justify-between gap-2">
           <button

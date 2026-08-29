@@ -48,6 +48,22 @@ vi.mock("../lib/trace", () => ({
     stats: { opaqueFraction: 1, furMassCount: 0, ladderDeltaL: 0, maxFamilyHueDeg: 0 },
   })),
 }));
+// SVG vector-import path: jsdom has no SVG geometry engine (getCTM /
+// getPointAtLength), so parseSvgShapes is mocked; the pure svgShapesToObjects
+// mapping still runs for real on the mocked shapes.
+vi.mock("../lib/trace/svgParse", () => ({
+  parseSvgShapes: vi.fn(() => ({
+    shapes: [
+      {
+        rings: [[{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }]],
+        fill: [200, 30, 30] as [number, number, number],
+      },
+    ],
+    contentW: 100,
+    contentH: 100,
+    textCount: 2,
+  })),
+}));
 // jsdom can't fetch the font — load a real .ttf from disk so the text-retype
 // path actually places lettering (keeps the other tests' fonts.ts constants).
 vi.mock("../lib/text/fonts", async (importActual) => {
@@ -65,6 +81,7 @@ vi.mock("../lib/text/fonts", async (importActual) => {
 
 import AutoDigitizeDialog from "./AutoDigitizeDialog";
 import { imageDataToObjects, detectLineArt, detectFurArt, livePaintObjects, furObjects } from "../lib/trace";
+import { loadImageData } from "../lib/image";
 
 const LINE_ART_YES = {
   isLineArt: true,
@@ -149,6 +166,22 @@ describe("AutoDigitizeDialog (wizard)", () => {
     // jsdom throws on canvas getContext; the preview guards on a null context, so
     // stub it to null (the kept-object count is asserted via the data attribute).
     HTMLCanvasElement.prototype.getContext = vi.fn(() => null) as never;
+  });
+
+  it("an unreadable file ends the Updating veil and shows a recoverable error", async () => {
+    // A corrupt / unsupported file: decoding rejects, so no trace can ever run.
+    vi.mocked(loadImageData).mockRejectedValueOnce(new Error("Could not decode that image."));
+    renderDialog();
+    // The error is announced (role=alert) with guidance, not a stack message.
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/couldn't read that image file/i);
+    // The "Updating…" veil must NOT spin forever — the trace will never arrive.
+    expect(screen.queryByText(/updating…/i)).toBeNull();
+    // The source pane explains itself instead of a broken-image glyph.
+    expect(screen.getByText(/couldn't read this file/i)).toBeTruthy();
+    // No result → the primary action stays disabled; Cancel is the way out.
+    expect((screen.getByRole("button", { name: "Next" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
   });
 
   it("auto-traces on the Image step and shows a live preview; color chips wait on step 2", async () => {
@@ -612,5 +645,22 @@ describe("AutoDigitizeDialog (wizard)", () => {
     expect(project.colors.map((c) => c.id)).toEqual(["cw", "cw2", "cink"]);
     const last = project.objects[project.objects.length - 1];
     expect(last.params.lineArt).toBe(true);
+  });
+
+  it("an SVG with <text> shows the Text-tool notice; rasters never do", async () => {
+    // Vector import deliberately skips <text> (no rasterizing type) — the
+    // dialog must say so and point at the studio's native Text tool.
+    const file = new File(["<svg/>"], "logo.svg", { type: "image/svg+xml" });
+    // jsdom's File lacks Blob.text(); the dialog reads the SVG source with it.
+    (file as unknown as { text: () => Promise<string> }).text = async () => "<svg/>";
+    render(<AutoDigitizeDialog file={file} hoop={HOOP} onApply={vi.fn()} onClose={vi.fn()} />);
+    await waitFor(() => expect(previewCount()).toBe("1"), { timeout: 2000 });
+    expect(screen.getByText(/Text tool/)).toBeTruthy();
+    expect(screen.getByText(/2 text elements/)).toBeTruthy();
+    cleanup();
+    // A raster source (the parse mock is SVG-only) never shows the notice.
+    renderDialog();
+    await waitForTrace();
+    expect(screen.queryByText(/Text tool/)).toBeNull();
   });
 });

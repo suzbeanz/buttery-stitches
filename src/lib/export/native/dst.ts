@@ -71,7 +71,10 @@ export interface DstHeaderInfo {
 interface TernaryStreamResult {
   /** the 3-byte records incl. the EOF record. */
   records: number[];
-  stitchCount: number;
+  /** Machine record count excluding the EOF record — what Tajima `ST:` reports
+   *  (stitches + jumps + trim moves + color changes; the machine executes and
+   *  counts every record, so a penetrations-only figure under-reports). */
+  recordCount: number;
   colorChanges: number;
   minX: number;
   maxX: number;
@@ -98,7 +101,6 @@ function encodeTernaryStream(plan: StitchPlan, stopAsColorChange: boolean): Tern
   let maxX = 0;
   let minY = 0;
   let maxY = 0;
-  let stitchCount = 0;
   let colorChanges = 0;
 
   let lastTrim = false;
@@ -137,13 +139,14 @@ function encodeTernaryStream(plan: StitchPlan, stopAsColorChange: boolean): Tern
       push(ddx, -ddy, !isStitch, false); // DST Y points up → negate
       cx = sx;
       cy = sy;
-      if (isStitch) {
-        stitchCount++;
-        if (cx < minX) minX = cx;
-        if (cx > maxX) maxX = cx;
-        if (cy < minY) minY = cy;
-        if (cy > maxY) maxY = cy;
-      }
+      // Extents cover EVERY move — the frame travels on jumps too, and the
+      // header's ±X/±Y are what the machine's hoop check / pre-stitch trace
+      // read. (The zero-net trim jitter is synthetic ±2-unit records and is
+      // excluded, matching the reference implementation's header.)
+      if (cx < minX) minX = cx;
+      if (cx > maxX) maxX = cx;
+      if (cy < minY) minY = cy;
+      if (cy > maxY) maxY = cy;
     }
   };
 
@@ -176,27 +179,40 @@ function encodeTernaryStream(plan: StitchPlan, stopAsColorChange: boolean): Tern
   });
   // End-of-file record.
   records.push(0x00, 0x00, 0xf3);
-  return { records, stitchCount, colorChanges, minX, maxX, minY, maxY, px: cx, py: cy };
+  const recordCount = records.length / 3 - 1; // every record but the EOF
+  return { records, recordCount, colorChanges, minX, maxX, minY, maxY, px: cx, py: cy };
+}
+
+/** Header label: printable ASCII only (the 512-byte header is an ASCII block —
+ *  control bytes corrupt field parsing, high bytes render as garbage on the
+ *  machine panel), truncated/padded to exactly 16. */
+function sanitizeLabel(label: string): string {
+  return label
+    .replace(/[^\x20-\x7e]+/g, " ")
+    .slice(0, 16)
+    .padEnd(16, " ");
 }
 
 /** Encode a stitch plan as DST file bytes (512-byte header + ternary records). */
 export function encodeDst(plan: StitchPlan, info: DstHeaderInfo = {}): Uint8Array {
-  const { records, stitchCount, colorChanges, minX, maxX, minY, maxY, px, py } =
+  const { records, recordCount, colorChanges, minX, maxX, minY, maxY, px, py } =
     encodeTernaryStream(plan, false);
 
   // Header (512 bytes, space-padded). Field formats mirror pyembroidery/Tajima.
   const header = new Uint8Array(HEADER_SIZE).fill(0x20);
   const pad = (n: number, width: number) => String(n).padStart(width, " ");
   const padSigned = (n: number, width: number) => (n >= 0 ? "+" : "-") + String(Math.abs(n)).padStart(width, " ");
-  const label = (info.label ?? "Untitled").slice(0, 16).padEnd(16, " ");
+  const label = sanitizeLabel(info.label ?? "Untitled");
   let o = 0;
   o = writeHeaderField(header, o, `LA:${label}\r`);
-  o = writeHeaderField(header, o, `ST:${pad(stitchCount, 7)}\r`);
+  o = writeHeaderField(header, o, `ST:${pad(recordCount, 7)}\r`);
   o = writeHeaderField(header, o, `CO:${pad(colorChanges, 3)}\r`);
-  o = writeHeaderField(header, o, `+X:${pad(maxX, 5)}\r`);
-  o = writeHeaderField(header, o, `-X:${pad(-minX, 5)}\r`);
-  o = writeHeaderField(header, o, `+Y:${pad(maxY, 5)}\r`);
-  o = writeHeaderField(header, o, `-Y:${pad(-minY, 5)}\r`);
+  // ±X/±Y are extent MAGNITUDES (frame travel each direction from the start
+  // point) — clamped at 0, never signed values.
+  o = writeHeaderField(header, o, `+X:${pad(Math.max(0, maxX), 5)}\r`);
+  o = writeHeaderField(header, o, `-X:${pad(Math.max(0, -minX), 5)}\r`);
+  o = writeHeaderField(header, o, `+Y:${pad(Math.max(0, maxY), 5)}\r`);
+  o = writeHeaderField(header, o, `-Y:${pad(Math.max(0, -minY), 5)}\r`);
   o = writeHeaderField(header, o, `AX:${padSigned(px, 5)}\r`);
   o = writeHeaderField(header, o, `AY:${padSigned(-py, 5)}\r`);
   o = writeHeaderField(header, o, `MX:${padSigned(0, 5)}\r`);

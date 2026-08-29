@@ -10,7 +10,7 @@ import { effectiveProfile } from "./profile";
 import { underlapObjects } from "../trace/underlap";
 import { distance, railsFromCenterline, pathsBounds, offsetPolyline } from "../geometry";
 import { runningStitch } from "./running";
-import { satinColumn } from "./satin";
+import { autoPullCompMm, satinColumn } from "./satin";
 import { tatamiFill, tatamiConcaveRuns, multiBlendFill, motifFill, motifRunAlong, carvePoints, splitFillRegions, autoFillAngleForRegions, autoFillAngle } from "./fill";
 import { contourFill } from "./contour";
 import { medialColumns, columnsFromCenterlines, satinCoverage, residualRegions, type SatinColumn } from "./medial";
@@ -21,7 +21,7 @@ import { polygonArea } from "../trace/classify";
 import { weldNonzero, ringsOverlap } from "../boolean";
 import { columnUnderlay, fillUnderlayRuns, satinUnderlay } from "./underlay";
 import { routeInkPieces, partitionInkComponents, type InkPiece } from "./inkroute";
-import { dropShortStitches, splitLongTravels } from "./resample";
+import { dropShortStitches, resampleByCount, splitLongTravels } from "./resample";
 
 export * from "./running";
 export * from "./satin";
@@ -134,6 +134,17 @@ function tieStitches(anchor: Point, toward: Point): Point[] {
   for (let i = 0; i < TIE_COUNT; i++) out.push(i % 2 === 0 ? near : { ...anchor });
   out.push({ ...anchor }); // always finish exactly on the anchor
   return out;
+}
+
+/** Mean rail-to-rail width (mm) of a satin column's rail pair, sampled at a few
+ *  matched arc fractions — the width autoPullCompMm scales its comp by. */
+function railPairWidth(left: Point[], right: Point[]): number {
+  const n = 8;
+  const ls = resampleByCount(left, n);
+  const rs = resampleByCount(right, n);
+  let sum = 0;
+  for (let i = 0; i < n; i++) sum += Math.hypot(ls[i].x - rs[i].x, ls[i].y - rs[i].y);
+  return sum / n;
 }
 
 /**
@@ -1019,9 +1030,17 @@ export function generateObjectRuns(
         addRun(runs, dropShortStitches(run, SATIN_MIN_STITCH), true);
       }
     }
+    // Width-driven AUTO pull compensation, matching the auto-digitize (medial)
+    // path: wider columns gather the fabric more, so a hand-drawn/imported
+    // column left on the default comp gets autoPullCompMm for its own measured
+    // width instead of the flat default. An explicit user pullComp always wins.
+    const satinPull =
+      object.params.pullComp === undefined
+        ? autoPullCompMm(railPairWidth(left, right), fabric.pullMul)
+        : pullComp;
     addRun(
       runs,
-      dropShortStitches(satinColumn(left, right, { density, pullComp, push: pushComp }), SATIN_MIN_STITCH),
+      dropShortStitches(satinColumn(left, right, { density, pullComp: satinPull, push: pushComp }), SATIN_MIN_STITCH),
       false,
     );
     return runs;
@@ -1031,7 +1050,13 @@ export function generateObjectRuns(
   // appliqué fabric) → tackdown run → STOP (operator trims the excess) → satin
   // cover that finishes the raw edge. One object, the whole production sequence.
   if (p.applique) {
-    return appliqueRuns(object.paths, density, pullComp, stitchLength);
+    // The cover column is APPLIQUE_COVER_MM wide — same width-driven auto comp
+    // as any other satin unless the user pinned pullComp explicitly.
+    const coverPull =
+      object.params.pullComp === undefined
+        ? autoPullCompMm(APPLIQUE_COVER_MM, fabric.pullMul)
+        : pullComp;
+    return appliqueRuns(object.paths, density, coverPull, stitchLength);
   }
 
   // fill — underlay then top, per connected region. Keeping each pass a separate

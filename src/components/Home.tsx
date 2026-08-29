@@ -154,9 +154,8 @@ export default function Home({ onStart }: { onStart: () => void }) {
         <p className="max-w-2xl font-body text-[17px] leading-relaxed text-char">
           Professional digitizing software runs{" "}
           <b className="text-ink">hundreds or even thousands</b> of dollars,
-          making the barrier to entry out of reach for most people
-        
-          I made Buttery Stitches to help anyone make embroidery patterns easily and freely.
+          putting it out of reach for most people. I made Buttery Stitches to
+          help anyone make embroidery patterns easily and freely.
         </p>
         <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <Feature title="Free Forever">
