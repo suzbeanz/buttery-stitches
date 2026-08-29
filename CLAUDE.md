@@ -1,5 +1,12 @@
 # Buttery Stitches — agent notes
 
+## Standing practice: watch code reviews
+Always watch code reviews — regardless of branch, commit, or PR. On every PR
+you open: subscribe to its activity, request a Copilot review, address review
+findings (fix + push + resolve the thread), and keep it watched until merged
+or closed. Periodically sweep ALL open PRs for unresolved review threads and
+red CI, and handle what's actionable.
+
 ## Product constraint: input art class
 Source images are ALWAYS simple flat-color artwork — logos, line art, and
 soft-shaded cartoon/animal art. NEVER photos. Photos are deliberately out of
