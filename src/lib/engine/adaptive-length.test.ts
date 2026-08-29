@@ -50,8 +50,21 @@ describe("size-adaptive fill stitch length (professional multi-size curve)", () 
   });
 
   it("an explicit user fill stitch length always wins", () => {
-    const med = medianRealSegment(square(25, { fillStitchLength: 4 }));
-    expect(med).toBeGreaterThan(3.7); // no adaptation when the user set it
+    // p75, not median: a 25mm square at 4mm has only ~4 interior penetrations
+    // per row, so the row-edge steps every serpentine legitimately carries (the
+    // brick phase, the boundary-end clearance segment, the one-row-spacing
+    // connector) are near half the segments. The interior rows must still sew
+    // at the user's 4mm — adaptation (2.1mm at this size) fails this at any
+    // quantile.
+    const d = designFor(square(25, { fillStitchLength: 4 }));
+    const L: number[] = [];
+    for (let i = 1; i < d.length; i++) {
+      const a = d[i - 1], b = d[i];
+      if (a.jump || b.jump || a.trim || b.trim || a.stop || b.stop) continue;
+      L.push(Math.hypot(b.x - a.x, b.y - a.y));
+    }
+    L.sort((x, y) => x - y);
+    expect(L[Math.floor(L.length * 0.75)]).toBeGreaterThan(3.7); // no adaptation when the user set it
   });
 
   it("the fitted curve itself: clamped linear-to-cap", () => {

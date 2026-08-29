@@ -67,8 +67,12 @@ const TIE_AMPLITUDE = 0.8;
 /** Smallest a tie tap may be (mm). A lock that bites only as far as a dense
  *  neighbour (~0.3 mm on tight fill/satin) punches nearly the anchor's own hole
  *  three times over → thread pile-up → machine JAM. So on a short neighbour we
- *  still throw a full segment along the run direction rather than collapsing in. */
-const TIE_MIN_BITE = 0.5;
+ *  still throw a full segment along the run direction rather than collapsing in.
+ *  A hair above the 0.5 mm inner-turn leveling floor: a tie is a deliberate
+ *  sharp reversal, and a bite of exactly the floor left its survival to FP
+ *  rounding — a leveled-away tap degraded the lock to a coincident double
+ *  punch (caught by the fur-pipeline lock gate). */
+const TIE_MIN_BITE = 0.55;
 /** Number of penetrations in one tie/lock cluster. */
 const TIE_COUNT = 3;
 /** Stitch length (mm) for a travel run connecting nearby same-color shapes.
@@ -762,6 +766,17 @@ function polylineLength(line: Point[]): number {
  */
 const SATIN_MIN_STITCH = 0.3;
 
+/**
+ * Min-stitch for FILL TOP runs (tatami/turned/flow). A serpentine fill's
+ * row-end connector is the same species as a satin rail step — one row spacing
+ * long (0.30–0.45 mm at the density floor). Merging at the general 0.5 mm floor
+ * swallowed the NEXT row's boundary penetration whenever the connector sat
+ * under it, retracting row starts up to a full stitch inside the shape — the
+ * serrated silhouette measured on the wave-2 corpus renders. Same value (and
+ * the same needle-safety rationale) as {@link SATIN_MIN_STITCH}.
+ */
+const FILL_MIN_STITCH = 0.3;
+
 /** Densest row spacing (mm) the engine will ever stitch — denser packs/jams. */
 const MIN_SAFE_DENSITY = 0.3;
 
@@ -1163,8 +1178,9 @@ export function generateObjectRuns(
     const usingSatin = columns.length > 0;
     const contour = !usingSatin && p.fillStyle === "contour";
     const travelMax = usingSatin ? 8 : 6;
-    // Satin and contour rows are dense like satin; tatami uses the general floor.
-    const minStitch = usingSatin || contour ? SATIN_MIN_STITCH : undefined;
+    // Satin and contour rows are dense like satin; tatami's floor must clear its
+    // own row-end connectors (one row spacing) so boundary penetrations survive.
+    const minStitch = usingSatin || contour ? SATIN_MIN_STITCH : FILL_MIN_STITCH;
     // Tatami flows along the region's grain (its own for an elongated region of
     // a multi-part object, the object's shared one otherwise). Underlay follows
     // the same angle.
@@ -2467,10 +2483,15 @@ export function generateDesign(
 
   // Hoop clamp runs FIRST so the spacing/coincidence safety passes apply to the
   // clamped coordinates (snapping two edge stitches onto the boundary line can
-  // otherwise compress their gap below the jam floor).
+  // otherwise compress their gap below the jam floor). Spacing is enforced
+  // AGAIN after inner-turn leveling: dropping a turn apex fuses its neighbours,
+  // and on a clamped hoop edge the fused pair can land under the jam floor —
+  // the final enforce is what actually guarantees the spacing invariant.
   return capStitchLength(
-    levelInnerTurns(
-      enforceMinSpacing(collapseCoincident(clampCompToHoop(out, project.widthMm, project.heightMm))),
+    enforceMinSpacing(
+      levelInnerTurns(
+        enforceMinSpacing(collapseCoincident(clampCompToHoop(out, project.widthMm, project.heightMm))),
+      ),
     ),
   );
 }

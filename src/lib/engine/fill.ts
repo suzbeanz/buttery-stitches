@@ -495,6 +495,18 @@ function staggerOffset(k: number): number {
   return q / 4 + scatterFrac(k) * 0.1; // 0.25–0.85: safely off both span ends
 }
 
+/** Keep the last interior penetration at least this far (mm) from a row's exact
+ *  end. The end point IS the region boundary crossing (plus pull comp); when an
+ *  interior grid point crowds it, the machine-safety short-stitch merge eats the
+ *  boundary penetration and the row retracts inside the shape — on any edge
+ *  oblique to the rows that alternates per row and sews as a serrated
+ *  silhouette (the wave-2 corpus renders). Sliding the crowding grid point back
+ *  keeps every segment ≤ the stitch length AND the boundary point safely clear
+ *  of the merge floor (MIN_STITCH_LENGTH in resample.ts). A hair above that
+ *  0.5mm floor — the row is built in a rotated frame, and an exactly-0.5mm
+ *  segment lands a rounding hair under the floor after rotating back. */
+const ROW_END_CLEARANCE_MM = 0.55;
+
 /** Penetrations across one row span, with a phase offset for brick staggering. */
 function alongRow(x0: number, x1: number, y: number, spacing: number, phase: number): Point[] {
   const pts: Point[] = [{ x: x0, y }];
@@ -503,7 +515,17 @@ function alongRow(x0: number, x1: number, y: number, spacing: number, phase: num
     pts.push({ x, y });
     x += spacing;
   }
-  if (x1 - x0 > 1e-6) pts.push({ x: x1, y });
+  if (x1 - x0 > 1e-6) {
+    // A last interior point crowding the end slides back to the clearance (or
+    // is dropped when the row is too short to hold both).
+    if (pts.length > 1 && x1 - pts[pts.length - 1].x < ROW_END_CLEARANCE_MM) {
+      const back = x1 - ROW_END_CLEARANCE_MM;
+      const prevX = pts.length > 2 ? pts[pts.length - 2].x : x0;
+      if (back > prevX + 1e-6) pts[pts.length - 1].x = back;
+      else pts.pop();
+    }
+    pts.push({ x: x1, y });
+  }
   return pts;
 }
 
