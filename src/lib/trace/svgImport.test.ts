@@ -107,14 +107,32 @@ describe("svgShapesToObjects", () => {
       }, // page + two thin cross bars, one compound path
     ];
     const res = svgShapesToObjects(shapes, { contentW: 100, contentH: 100, hoopWmm: 100, hoopHmm: 100 });
-    const white = res.objects.filter((o) => o.colorId === res.objects[1].colorId);
     const flagged = res.objects.filter((o) => o.suspectedBackground);
     expect(flagged.length).toBe(1);
     expect(flagged[0].paths.length).toBe(1); // the page ring alone
-    const cross = res.objects.find((o) => !o.suspectedBackground && o.colorId === flagged[0].colorId)!;
-    expect(cross).toBeTruthy();
-    expect(cross.paths.length).toBe(2); // both bars kept, same white thread
-    expect(white.length).toBeGreaterThanOrEqual(1);
+    // Exactly TWO white objects on the SAME thread: the skipped page and the
+    // kept cross (keyed off the flagged object's color, not object ordering).
+    const whiteObjs = res.objects.filter((o) => o.colorId === flagged[0].colorId);
+    expect(whiteObjs.length).toBe(2);
+    const cross = whiteObjs.find((o) => !o.suspectedBackground)!;
+    expect(cross.paths.length).toBe(2); // both bars kept
+  });
+
+  it("page detection nests parity: an island inside a counter adds back", () => {
+    // Page ring + a 38×38 counter + a 10×10 island inside it, one compound
+    // path. Parity-correct net = 10000 − 1444 + 100 = 8656 ≥ 85% → page.
+    // Blanket subtraction (the reviewed bug) gave 8456 and missed it.
+    const shapes: SvgShape[] = [
+      { rings: [square(20, 20, 60)], fill: [200, 16, 46] },
+      {
+        rings: [square(0, 0, 100), square(30, 30, 38), square(44, 44, 10)],
+        fill: [255, 255, 255],
+      },
+    ];
+    const res = svgShapesToObjects(shapes, { contentW: 100, contentH: 100, hoopWmm: 100, hoopHmm: 100 });
+    const flagged = res.objects.filter((o) => o.suspectedBackground);
+    expect(flagged.length).toBe(1);
+    expect(flagged[0].paths.length).toBe(1);
   });
 
   it("keeps a compound path's DISJOINT islands (an '=' sign) — does not cancel them as holes", () => {

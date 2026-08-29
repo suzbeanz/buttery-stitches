@@ -287,20 +287,22 @@ export function svgShapesToObjects(shapes: SvgShape[], opts: SvgImportOptions): 
       if (p.y > y1) y1 = p.y;
     }
     if (x1 - x0 < 0.96 * artW || y1 - y0 < 0.96 * artH) return false;
-    // NET filled area, holes subtracted: a border FRAME's outer ring spans the
-    // artwork too, but its interior is one big hole — only a mostly-FILLED
-    // full-span ring is a page. Sibling rings inside r count as its holes.
-    let net = Math.abs(polygonArea(r));
-    for (const o of siblings) {
-      if (o === r || o.length === 0) continue;
+    // NET filled area with even–odd PARITY: a border FRAME's outer ring spans
+    // the artwork too, but its interior is one big hole — only a mostly-FILLED
+    // full-span ring is a page. Reuse svgNetArea over r plus the sibling rings
+    // nested inside it, so parity nests correctly: a directly-contained ring
+    // subtracts as a hole, but an island inside that hole adds back (blanket
+    // subtraction under-counted and misclassified nested-ring compounds).
+    const contained = siblings.filter((o) => {
+      if (o === r || o.length === 0) return false;
       let cx = 0, cy = 0;
       for (const p of o) {
         cx += p.x;
         cy += p.y;
       }
-      if (pointInRing({ x: cx / o.length, y: cy / o.length }, r)) net -= Math.abs(polygonArea(o));
-    }
-    return net >= 0.85 * artW * artH;
+      return pointInRing({ x: cx / o.length, y: cy / o.length }, r);
+    });
+    return svgNetArea([r, ...contained]) >= 0.85 * artW * artH;
   };
 
   const objects: EmbObject[] = [];
