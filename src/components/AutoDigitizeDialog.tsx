@@ -307,6 +307,7 @@ export default function AutoDigitizeDialog({
                 hoopWmm: hoop.wMm,
                 hoopHmm: hoop.hMm,
                 maxColors: numColors,
+                removeBackground,
               })
             : liveArt
               ? livePaintObjects(imageData, numColors, traceOpts)

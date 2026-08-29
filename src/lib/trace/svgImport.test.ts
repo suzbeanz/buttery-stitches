@@ -46,6 +46,41 @@ describe("svgShapesToObjects", () => {
     expect(res.objects.length).toBe(0);
   });
 
+  it("flags a leading full-coverage backdrop WITHOUT tainting same-color art", () => {
+    // A white page rect painted first, a red flag field, and a white cross ON
+    // the flag. The page is flagged object-level (excluded-by-default chip in
+    // the dialog); the cross shares the SAME white thread but must stay
+    // unflagged — skipping the white COLOR was eating design elements.
+    const shapes: SvgShape[] = [
+      { rings: [square(0, 0, 100)], fill: [255, 255, 255] }, // page
+      { rings: [square(20, 20, 60)], fill: [200, 16, 46] }, // flag field
+      { rings: [square(45, 20, 10)], fill: [255, 255, 255] }, // white cross bar
+    ];
+    const res = svgShapesToObjects(shapes, { contentW: 100, contentH: 100, hoopWmm: 100, hoopHmm: 100 });
+    expect(res.objects.length).toBe(3);
+    expect(res.objects[0].suspectedBackground).toBe(true);
+    expect(res.objects[1].suspectedBackground).toBeUndefined();
+    expect(res.objects[2].suspectedBackground).toBeUndefined();
+    // One shared white thread — the split is per OBJECT, not per color.
+    expect(res.objects[0].colorId).toBe(res.objects[2].colorId);
+  });
+
+  it("does not flag backdrops when removeBackground is off, or for partial covers", () => {
+    const page: SvgShape = { rings: [square(0, 0, 100)], fill: [255, 255, 255] };
+    const art: SvgShape = { rings: [square(30, 30, 30)], fill: [20, 20, 200] };
+    const off = svgShapesToObjects([page, art], { contentW: 100, contentH: 100, hoopWmm: 100, hoopHmm: 100, removeBackground: false });
+    expect(off.objects[0].suspectedBackground).toBeUndefined();
+    // A big-but-partial leading shape (80% span) is a design field, not a page.
+    const partial = svgShapesToObjects(
+      [{ rings: [square(0, 0, 80)], fill: [255, 255, 255] }, art],
+      { contentW: 100, contentH: 100, hoopWmm: 100, hoopHmm: 100 },
+    );
+    expect(partial.objects[0].suspectedBackground).toBeUndefined();
+    // A full-coverage shape painted AFTER real art is a deliberate field.
+    const late = svgShapesToObjects([art, page], { contentW: 100, contentH: 100, hoopWmm: 100, hoopHmm: 100 });
+    expect(late.objects[1].suspectedBackground).toBeUndefined();
+  });
+
   it("keeps a compound path's DISJOINT islands (an '=' sign) — does not cancel them as holes", () => {
     // One shape, two equal disjoint bars (the '=' glyph). The old net-area rule
     // subtracted the second bar as a "hole" → net ~0 → the whole glyph vanished.

@@ -48,6 +48,13 @@ export interface SvgImportOptions {
   maxColors?: number;
   /** Drop shapes smaller than this (mm², default 1). */
   minAreaMm2?: number;
+  /** Flag a leading full-coverage BACKDROP shape (a page/card rect painted
+   *  first, under everything) as `suspectedBackground`, so the dialog can
+   *  exclude it by default with a visible keep/skip chip. Object-level on
+   *  purpose: a white card and a design's white cross often share one thread
+   *  color, and skipping the COLOR would eat the design element too.
+   *  Default true (matching the raster path's remove-background default). */
+  removeBackground?: boolean;
   /** Simplify flattened rings at this tolerance (mm, default 0.2 — vectors are
    *  already clean, so this only drops collinear run points). */
   simplifyTolMm?: number;
@@ -172,6 +179,7 @@ export function svgShapesToObjects(shapes: SvgShape[], opts: SvgImportOptions): 
     maxColors = 0,
     minAreaMm2 = 1,
     simplifyTolMm = 0.2,
+    removeBackground = true,
   } = opts;
   // Guard non-finite too: `NaN <= 0` is false, so a NaN content box would slip
   // past a bare `<= 0` check and turn every mapped coordinate into NaN.
@@ -260,17 +268,45 @@ export function svgShapesToObjects(shapes: SvgShape[], opts: SvgImportOptions): 
     }
     return cid;
   };
+  // BACKDROP detection: a page/card rect painted FIRST, spanning (nearly) the
+  // whole artwork. Leading shapes only — once any real art has painted, a big
+  // shape is a design field, not a page. Judged per OBJECT so a white card and
+  // a design's white cross (one thread color) stay separable in the dialog.
+  const artW = contentW * mmPerUnit;
+  const artH = contentH * mmPerUnit;
+  const isBackdrop = (s: (typeof scaled)[number]): boolean => {
+    if (!removeBackground || !s.rings || s.rings.length === 0) return false;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const r of s.rings)
+      for (const p of r) {
+        if (p.x < x0) x0 = p.x;
+        if (p.y < y0) y0 = p.y;
+        if (p.x > x1) x1 = p.x;
+        if (p.y > y1) y1 = p.y;
+      }
+    return (
+      x1 - x0 >= 0.96 * artW &&
+      y1 - y0 >= 0.96 * artH &&
+      s.area >= 0.85 * artW * artH
+    );
+  };
+
   const objects: EmbObject[] = [];
+  let leading = true;
   for (const s of scaled) {
     const cid = colorIdFor(finalFill(s.fill));
     const cname = colors.find((c) => c.id === cid)?.name;
     if (s.satin) {
+      leading = false;
       // Each stroked sub-path is its own satin column (left/right rails).
       for (const [left, right] of s.satin.rails) {
         objects.push(makeObjectFromPaths("satin", [left, right], cid, cname));
       }
     } else {
-      objects.push(makeObjectFromPaths("fill", s.rings!, cid, cname));
+      const obj = makeObjectFromPaths("fill", s.rings!, cid, cname);
+      if (leading && isBackdrop(s)) obj.suspectedBackground = true;
+      else leading = false;
+      objects.push(obj);
     }
   }
   // Color-seam underlap now happens at STITCH time (generateDesign), so every
