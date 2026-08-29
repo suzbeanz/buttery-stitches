@@ -152,7 +152,11 @@ function flattenElement(el: SVGGraphicsElement, rootCTM: DOMMatrix): Path[] {
   return rings;
 }
 
-const FILLABLE = "path, rect, circle, ellipse, polygon";
+/** Geometry elements the walk flattens. <line> and <polyline> are stroke-first
+ *  geometry (icon linework, underlines, zig-zag borders): both flatten fine via
+ *  getTotalLength/getPointAtLength. A <polyline> can also carry a fill (painted
+ *  as if closed); a <line> encloses no area, so its fill is ignored. */
+const FILLABLE = "path, rect, circle, ellipse, polygon, polyline, line";
 
 /** Containers whose shape content is NOT rendered directly: definitions
  *  (gradients' probe shapes, clip/mask/pattern content, symbol templates).
@@ -210,7 +214,8 @@ export function parseSvgShapes(svgText: string): { shapes: SvgShape[]; contentW:
       // internals) is not itself artwork, and hidden elements don't render.
       if (el.closest(NON_RENDERED)) continue;
       if (isHidden(el, live)) continue;
-      const fill = parseFill(el);
+      // A <line> encloses no area — fill paints nothing on it per spec.
+      const fill = el.tagName.toLowerCase() === "line" ? null : parseFill(el);
       const stroke = parseStroke(el);
       if (!fill && !stroke) continue;
       const rings = flattenElement(el, rootCTM);
