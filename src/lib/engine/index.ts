@@ -1491,11 +1491,20 @@ export function generateObjectRuns(
         }
       });
       for (const patch of residualRegions(region, tops, 0.2, TIP_PATCH_MIN_MM2)) {
-        if (Math.abs(polygonArea(patch)) > 8) continue;
-        const fill =
-          sliverMendRun(patch, stitchLength) ??
-          smallPatchSatinBlock(patch, density, fabric.pullMul) ??
-          sliverMendRun(patch, stitchLength, true);
+        // A LARGE residual is a locally-thick chunk the medial satin declined
+        // (a fat tail, a solid ear left in the stroke network by the trace's
+        // blob split). Leaving ~90mm² of declared ink bare is strictly worse
+        // than filling it: sew it as plain tatami in the same thread — exactly
+        // what the trace's "Ink solids" object would have done. NEVER for
+        // sparkle: its bare margin around each single pass is the point.
+        if (p.sparkle) break;
+        const bigPatch = Math.abs(polygonArea(patch)) > 8;
+        const fill = bigPatch
+          ? (tatamiFill([patch], { density, angle: p.angle, stitchLength: fillStitchLength }) ??
+            sliverMendRun(patch, stitchLength, true))
+          : (sliverMendRun(patch, stitchLength) ??
+            smallPatchSatinBlock(patch, density, fabric.pullMul) ??
+            sliverMendRun(patch, stitchLength, true));
         if (!fill) continue;
         for (const sub of splitLongTravels(deloopRun(fill), travelMax)) {
           const r = dropShortStitches(sub);

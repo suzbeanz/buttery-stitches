@@ -200,6 +200,19 @@ describe("detectFurArt (auto-preselect)", () => {
     expect(d.isFurArt).toBe(false);
   });
 
+  it("rejects a black mark on a white field — poles, not a ladder (the logo class)", () => {
+    // Both masses are NEUTRAL (one hue family by chroma) and ΔL ≈ 92 — but a
+    // real coat climbs in ~20 L* steps. Measured on a real crest JPEG and a
+    // black/white/green cartoon: both must stay Standard.
+    const d = detectFurArt(
+      paint(200, 200, (x, y) =>
+        Math.hypot(x - 100, y - 100) < 60 ? [15, 15, 15] : [250, 250, 250],
+      ),
+    );
+    expect(d.isFurArt).toBe(false);
+    expect(d.stats.ladderDeltaL).toBeGreaterThan(45); // it IS the poles case
+  });
+
   it("rejects a red/blue two-block logo — big masses, but not one hue family", () => {
     // Both halves pass the area/span mass gates; the hue gate must refuse
     // (red 36.3° vs blue 300.7° in Lab — 95.6° apart, far past the 20° bar).

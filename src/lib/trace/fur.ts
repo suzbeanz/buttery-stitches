@@ -66,6 +66,13 @@ const FUR_NEUTRAL_CHROMA = 10;
 /** A real shade LADDER spans at least this much L* (fixture steps ≈ 20);
  *  two shades closer than the dialog's ΔE-10 merge bar are trace noise. */
 const FUR_MIN_LADDER_DL = 12;
+/** …and CLIMBS IN STEPS: adjacent shades in a real coat sit ~17–35 L* apart
+ *  (measured: Cavapoo 17, fox 19, the sawtooth fixture ≈ 20, a grey coat
+ *  ≈ 34). A family whose sorted lightnesses jump farther than this in one
+ *  step is poles, not a ladder — a black mark on a white field (the most
+ *  common logo composition, measured ΔL 92) or black/white/green cartoon
+ *  blocks (max step 67) must never read as fur. */
+const FUR_MAX_STEP_DL = 45;
 /** Detection ignores near-transparent art (same floor as detectLineArt). */
 const FUR_DETECT_MIN_OPAQUE = 0.05;
 
@@ -179,10 +186,15 @@ export function detectFurArt(imageData: ImageData): FurArtDetection {
       }
     }
   }
-  const Ls = family.map((c) => c.L);
-  const ladderDeltaL = Ls.length ? Math.max(...Ls) - Math.min(...Ls) : 0;
+  const Ls = family.map((c) => c.L).sort((a, b) => a - b);
+  const ladderDeltaL = Ls.length ? Ls[Ls.length - 1] - Ls[0] : 0;
+  let maxStepDL = 0;
+  for (let i = 1; i < Ls.length; i++) maxStepDL = Math.max(maxStepDL, Ls[i] - Ls[i - 1]);
   return {
-    isFurArt: family.length >= MIN_FUR_COLORS && ladderDeltaL >= FUR_MIN_LADDER_DL,
+    isFurArt:
+      family.length >= MIN_FUR_COLORS &&
+      ladderDeltaL >= FUR_MIN_LADDER_DL &&
+      maxStepDL <= FUR_MAX_STEP_DL,
     stats: {
       opaqueFraction,
       furMassCount: family.length,
