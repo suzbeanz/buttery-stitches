@@ -1,5 +1,6 @@
 import type { Path, Point } from "../../types/project";
-import { runningStitch } from "./running";
+import { capSegmentLength, dropShortStitches } from "./resample";
+import { douglasPeucker } from "../trace/simplify";
 
 /**
  * Graph-native routing for a LINE-ART stroke network.
@@ -44,6 +45,41 @@ const NAV_GLUE_MM = 1.4;
 /** Connectors shorter than this are skipped — the assembler continues with a
  *  plain stitch across a sub-jump gap anyway. */
 const MIN_CONNECTOR_MM = 1.5;
+/** Max chord deviation (mm) a connector stitch may cut from its skeleton chain,
+ *  so the run stays ON the ink it is buried under. Resampling the chain at the
+ *  travel pitch alone chorded a curved chain straight across the open fabric
+ *  between small letters (the wave-2 crest's visible slash between its 4mm
+ *  glyphs): a 3.5mm chord on a 2.5mm-radius bend sags ~0.7mm off the stroke.
+ *  Tight — under half of the thinnest bean-rendered stroke (~0.55mm) — because
+ *  a connector's only cover is the stroke line it retraces: at 0.45mm the
+ *  chord ran visibly alongside the crest's hairline S-tail instead of on it. */
+const CONNECTOR_MAX_DEV_MM = 0.2;
+/** Chamfer (mm) cut off a SHARP connector-chain corner — the skeleton junction
+ *  vertex. Every connector that crosses a junction walks through the same
+ *  graph node; punching that exact hole once per transit (on top of the satin
+ *  fan pivot and the underlay that already land there) piles thread in one
+ *  needle hole (a measured 6-punch pivot pushed a smurf junction cell to the
+ *  density danger ceiling). Cutting the corner spreads each transit onto its
+ *  own hole — still within the on-ink deviation budget, and only at real
+ *  corners so a smooth curve's samples are untouched. */
+const CONNECTOR_CHAMFER_MM = 0.3;
+/** Turn angle (deg) at a chain vertex above which it counts as a sharp corner
+ *  (a junction), not a smooth curve sample. */
+const CONNECTOR_CHAMFER_DEG = 35;
+/** Cost multiplier on GLUE edges (the hop between two different pieces'
+ *  samples) in the nav graph. A glue hop is the only stretch of a connector
+ *  that can cross open fabric (everything else rides a centerline), so the
+ *  shortest-path walk must treat bare millimetres as several times worse than
+ *  on-ink millimetres — the route then crosses at the letters' narrowest gap
+ *  instead of wherever the plain Euclidean walk found first. */
+const BARE_HOP_COST_MUL = 3;
+/** Min step (mm) between connector penetrations. A connector is a hidden pass
+ *  over already-sewn strokes; the tight-deviation resample keeps sub-mm chain
+ *  samples on junction curls, and several transits through one junction then
+ *  stack near-duplicate holes into a density hot cell. Thinning to ~one step
+ *  per mm (real corners kept — they carry the on-ink route) sheds the
+ *  duplicates for at most a fraction of the deviation budget. */
+const CONNECTOR_MIN_STEP_MM = 0.9;
 /** Euclidean prefilter: only the nearest K unsewn pieces get a network-distance
  *  check per step (the greedy walk is O(pieces × dijkstra) otherwise). */
 const CANDIDATE_K = 6;
@@ -58,6 +94,41 @@ interface NavNode {
 
 function dist(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+/** Cut {@link CONNECTOR_CHAMFER_MM} off each SHARP interior corner of a chain
+ *  (toward its neighbours' midpoint), so repeated junction transits don't all
+ *  punch the junction node's exact hole. Smooth curve samples turn far less
+ *  than the corner threshold and stay put. `serial` — the connector's emission
+ *  index — additionally staggers the cut per transit: an out-and-back through
+ *  one junction is two chains with the SAME corner geometry, and without the
+ *  stagger their chamfered points landed in one hole anyway. */
+function chamferSharpCorners(path: Path, serial: number): Path {
+  if (path.length < 3) return path;
+  const stagger = 0.6 + 0.25 * (serial % 3); // 0.6 / 0.85 / 1.1 × the base cut
+  const out: Point[] = [path[0]];
+  for (let i = 1; i < path.length - 1; i++) {
+    const a = path[i - 1];
+    const v = path[i];
+    const b = path[i + 1];
+    const l1 = dist(a, v);
+    const l2 = dist(v, b);
+    if (l1 < 1e-9 || l2 < 1e-9) continue;
+    const cos = ((v.x - a.x) * (b.x - v.x) + (v.y - a.y) * (b.y - v.y)) / (l1 * l2);
+    const turn = (Math.acos(Math.max(-1, Math.min(1, cos))) * 180) / Math.PI;
+    if (turn < CONNECTOR_CHAMFER_DEG) {
+      out.push(v);
+      continue;
+    }
+    const mx = (a.x + b.x) / 2 - v.x;
+    const my = (a.y + b.y) / 2 - v.y;
+    const L = Math.hypot(mx, my);
+    const cut = CONNECTOR_CHAMFER_MM * stagger;
+    const t = L > 1e-9 ? Math.min(cut, L / 2) / L : 0;
+    out.push({ x: v.x + mx * t, y: v.y + my * t });
+  }
+  out.push(path[path.length - 1]);
+  return out;
 }
 
 /** Resample a centerline at ≤ NAV_SAMPLE_MM, always keeping both endpoints. */
@@ -205,11 +276,14 @@ export function routeInkPieces(
           if (j <= i || nodes[j].piece === n.piece) continue;
           const d = dist(n, nodes[j]);
           if (d <= NAV_GLUE_MM) {
-            // Keep the cheapest glue if multiple samples qualify.
+            // Keep the cheapest glue if multiple samples qualify. Glue hops
+            // carry the bare-fabric cost multiplier (route length stays true —
+            // only the walk's preference changes).
+            const w = d * BARE_HOP_COST_MUL;
             const prev = n.adj.get(j);
-            if (prev === undefined || d < prev) {
-              n.adj.set(j, d);
-              nodes[j].adj.set(i, d);
+            if (prev === undefined || w < prev) {
+              n.adj.set(j, w);
+              nodes[j].adj.set(i, w);
             }
           }
         }
@@ -358,7 +432,18 @@ export function routeInkPieces(
         const chain: Point[] = [];
         for (let v = chosenNode; v !== -1; v = parent[v]) chain.push({ x: nodes[v].x, y: nodes[v].y });
         chain.reverse();
-        const run = runningStitch(chain, travelPitchMm);
+        // Curvature-faithful resample: simplify only within the on-ink
+        // deviation budget (keeps every bend of the skeleton the chain rides),
+        // then split what remains to the travel pitch. A plain pitch resample
+        // chorded curved chains across the open fabric between strokes.
+        const run = capSegmentLength(
+          dropShortStitches(
+            chamferSharpCorners(douglasPeucker(chain, CONNECTOR_MAX_DEV_MM), out.length),
+            CONNECTOR_MIN_STEP_MM,
+            true, // corners carry the on-ink route — never merge them away
+          ),
+          travelPitchMm,
+        );
         if (run.length >= 2) out.push(run);
       }
       curNode = emit(chosen, nodes[chosenNode]);

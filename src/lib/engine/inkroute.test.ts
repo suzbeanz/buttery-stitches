@@ -70,6 +70,52 @@ describe("routeInkPieces", () => {
     }
   });
 
+  it("a connector around a tight curve hugs the ink — no chord across the bend's void", () => {
+    // Two vertical strokes joined only through a tight semicircular track
+    // (r = 2.5mm — small-lettering scale, the wave-2 crest's ST LOUIS). The
+    // connector between them must ride the arc: resampling the chain at the
+    // travel pitch (3.5mm) chords it with a ~0.7mm sagitta, and on a 0.6mm
+    // stroke that chord lies on OPEN FABRIC — the visible white slash between
+    // letters on the corpus render.
+    const R = 2.5;
+    const arc: Path = [];
+    for (let a = 180; a >= 0; a -= 5) {
+      arc.push({ x: R * Math.cos((a * Math.PI) / 180), y: R * Math.sin((a * Math.PI) / 180) });
+    }
+    const pieces = [
+      bar({ x: -R, y: -5 }, { x: -R, y: 0 }),
+      bar({ x: R, y: 0 }, { x: R, y: -5 }),
+    ];
+    const runs = routeInkPieces(pieces, { x: -R, y: -6 }, 3.5, [arc]);
+    // Both strokes sewn, one connector between them.
+    expect(runs.length).toBe(3);
+    // Every segment of every run (midpoints included) stays within half a
+    // stroke width of the network — strokes plus the arc track.
+    const tracks: Path[] = [...pieces.map((p) => p.centerline), arc];
+    const distToTracks = (p: Point): number => {
+      let best = Infinity;
+      for (const t of tracks) {
+        for (let i = 1; i < t.length; i++) {
+          const a = t[i - 1];
+          const b = t[i];
+          const vx = b.x - a.x;
+          const vy = b.y - a.y;
+          const len2 = vx * vx + vy * vy || 1;
+          let u = ((p.x - a.x) * vx + (p.y - a.y) * vy) / len2;
+          u = u < 0 ? 0 : u > 1 ? 1 : u;
+          best = Math.min(best, Math.hypot(a.x + vx * u - p.x, a.y + vy * u - p.y));
+        }
+      }
+      return best;
+    };
+    for (const r of runs) {
+      for (let i = 1; i < r.length; i++) {
+        const mid = { x: (r[i - 1].x + r[i].x) / 2, y: (r[i - 1].y + r[i].y) / 2 };
+        expect(distToTracks(mid), `segment midpoint (${mid.x.toFixed(2)},${mid.y.toFixed(2)})`).toBeLessThanOrEqual(0.5);
+      }
+    }
+  });
+
   it("a cursor already on the network is entered through it (pass transitions chain)", () => {
     // Needle sits at an arm end (previous pass ended there); the walk must
     // reach the far arm with a connector, not leave a gap for the assembler.
