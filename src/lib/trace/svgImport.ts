@@ -268,46 +268,60 @@ export function svgShapesToObjects(shapes: SvgShape[], opts: SvgImportOptions): 
     }
     return cid;
   };
-  // BACKDROP detection: a page/card rect painted FIRST, spanning (nearly) the
-  // whole artwork. Leading shapes only — once any real art has painted, a big
-  // shape is a design field, not a page. Judged per OBJECT so a white card and
-  // a design's white cross (one thread color) stay separable in the dialog.
+  // BACKDROP detection, per RING: a page/card ring spans (nearly) the whole
+  // artwork with a filled interior. Ring-level on purpose, twice over: icon
+  // exports often draw the white page and the design's white cross as ONE
+  // compound path (object-level flagging would eat the cross with the page —
+  // measured on a real flag SVG, the whole White thread vanished), and the
+  // page rect isn't always the first element in the file. A full-artwork ring
+  // is a page whatever paints around it — hiding everything beneath is no
+  // design move in this flat-art class — and the chip keeps it reversible.
   const artW = contentW * mmPerUnit;
   const artH = contentH * mmPerUnit;
-  const isBackdrop = (s: (typeof scaled)[number]): boolean => {
-    if (!removeBackground || !s.rings || s.rings.length === 0) return false;
+  const isPageRing = (r: Path, siblings: Path[]): boolean => {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const r of s.rings)
-      for (const p of r) {
-        if (p.x < x0) x0 = p.x;
-        if (p.y < y0) y0 = p.y;
-        if (p.x > x1) x1 = p.x;
-        if (p.y > y1) y1 = p.y;
+    for (const p of r) {
+      if (p.x < x0) x0 = p.x;
+      if (p.y < y0) y0 = p.y;
+      if (p.x > x1) x1 = p.x;
+      if (p.y > y1) y1 = p.y;
+    }
+    if (x1 - x0 < 0.96 * artW || y1 - y0 < 0.96 * artH) return false;
+    // NET filled area, holes subtracted: a border FRAME's outer ring spans the
+    // artwork too, but its interior is one big hole — only a mostly-FILLED
+    // full-span ring is a page. Sibling rings inside r count as its holes.
+    let net = Math.abs(polygonArea(r));
+    for (const o of siblings) {
+      if (o === r || o.length === 0) continue;
+      let cx = 0, cy = 0;
+      for (const p of o) {
+        cx += p.x;
+        cy += p.y;
       }
-    return (
-      x1 - x0 >= 0.96 * artW &&
-      y1 - y0 >= 0.96 * artH &&
-      s.area >= 0.85 * artW * artH
-    );
+      if (pointInRing({ x: cx / o.length, y: cy / o.length }, r)) net -= Math.abs(polygonArea(o));
+    }
+    return net >= 0.85 * artW * artH;
   };
 
   const objects: EmbObject[] = [];
-  let leading = true;
   for (const s of scaled) {
     const cid = colorIdFor(finalFill(s.fill));
     const cname = colors.find((c) => c.id === cid)?.name;
     if (s.satin) {
-      leading = false;
       // Each stroked sub-path is its own satin column (left/right rails).
       for (const [left, right] of s.satin.rails) {
         objects.push(makeObjectFromPaths("satin", [left, right], cid, cname));
       }
-    } else {
-      const obj = makeObjectFromPaths("fill", s.rings!, cid, cname);
-      if (leading && isBackdrop(s)) obj.suspectedBackground = true;
-      else leading = false;
-      objects.push(obj);
+      continue;
     }
+    const pageRings = removeBackground ? s.rings!.filter((r) => isPageRing(r, s.rings!)) : [];
+    const artRings = pageRings.length ? s.rings!.filter((r) => !pageRings.includes(r)) : s.rings!;
+    if (pageRings.length > 0) {
+      const page = makeObjectFromPaths("fill", pageRings, cid, cname);
+      page.suspectedBackground = true;
+      objects.push(page);
+    }
+    if (artRings.length > 0) objects.push(makeObjectFromPaths("fill", artRings, cid, cname));
   }
   // Color-seam underlap now happens at STITCH time (generateDesign), so every
   // project gets the same gap-proofing no matter how it was authored — the
