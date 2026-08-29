@@ -235,4 +235,32 @@ describe("live-paint ordering through fixStitches", () => {
     );
     expect(survives, "hairline ring survives dropSliverRings").toBe(true);
   });
+
+  it("drops an unsewable detached ink crumb but keeps a deliberate ink dot", () => {
+    // Inside the smurf-like drawing's rooms: a 2×10px (0.4×2mm) detached
+    // aliasing crumb is thinner than one thread bite and too small to sew —
+    // it must NOT become an ink ring (it used to pass the bare 0.3mm² area
+    // floor and sew as a 1–2 stitch scratch plus a trim). The 10px (2mm)
+    // round ink dot in the other room is a deliberate mark — a cartoon
+    // nostril — and must survive.
+    const base = smurfLike({ background: "white" });
+    const img = build(480, 480, (x, y) => {
+      const inCrumb = y >= 150 && y < 152 && x >= 100 && x < 110;
+      const inDot = Math.hypot(x - 350, y - 150) <= 5;
+      if (inCrumb || inDot) return INK;
+      const i = (y * 480 + x) * 4;
+      return [base.data[i], base.data[i + 1], base.data[i + 2], base.data[i + 3]];
+    });
+    const res = livePaintObjects(img, 5, OPTS);
+    const rings = res.objects.flatMap((o) => o.paths);
+    const near = (cx: number, cy: number, maxAreaMm2: number) =>
+      rings.filter((r) => {
+        const mx = r.reduce((s, p) => s + p.x, 0) / r.length;
+        const my = r.reduce((s, p) => s + p.y, 0) / r.length;
+        return Math.hypot(mx - cx, my - cy) < 2.5 && Math.abs(polygonArea(r)) < maxAreaMm2;
+      });
+    // crumb centre ≈ (21mm, 30.2mm); dot centre ≈ (70mm, 30mm)
+    expect(near(21, 30.2, 3), "aliasing crumb dropped").toHaveLength(0);
+    expect(near(70, 30, 8).length, "deliberate dot kept").toBeGreaterThan(0);
+  });
 });
