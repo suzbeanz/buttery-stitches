@@ -81,6 +81,7 @@ vi.mock("../lib/text/fonts", async (importActual) => {
 
 import AutoDigitizeDialog from "./AutoDigitizeDialog";
 import { imageDataToObjects, detectLineArt, detectFurArt, livePaintObjects, furObjects } from "../lib/trace";
+import { loadImageData } from "../lib/image";
 
 const LINE_ART_YES = {
   isLineArt: true,
@@ -165,6 +166,22 @@ describe("AutoDigitizeDialog (wizard)", () => {
     // jsdom throws on canvas getContext; the preview guards on a null context, so
     // stub it to null (the kept-object count is asserted via the data attribute).
     HTMLCanvasElement.prototype.getContext = vi.fn(() => null) as never;
+  });
+
+  it("an unreadable file ends the Updating veil and shows a recoverable error", async () => {
+    // A corrupt / unsupported file: decoding rejects, so no trace can ever run.
+    vi.mocked(loadImageData).mockRejectedValueOnce(new Error("Could not decode that image."));
+    renderDialog();
+    // The error is announced (role=alert) with guidance, not a stack message.
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/couldn't read that image file/i);
+    // The "Updating…" veil must NOT spin forever — the trace will never arrive.
+    expect(screen.queryByText(/updating…/i)).toBeNull();
+    // The source pane explains itself instead of a broken-image glyph.
+    expect(screen.getByText(/couldn't read this file/i)).toBeTruthy();
+    // No result → the primary action stays disabled; Cancel is the way out.
+    expect((screen.getByRole("button", { name: "Next" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
   });
 
   it("auto-traces on the Image step and shows a live preview; color chips wait on step 2", async () => {
