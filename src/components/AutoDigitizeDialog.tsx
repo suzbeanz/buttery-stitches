@@ -1189,6 +1189,23 @@ function DigitizePreview({
           }
           continue;
         }
+        if (o.type === "satin" && o.paths.length >= 2) {
+          // A satin column's paths are its two OPEN rails; even-odd closing
+          // each rail separately renders an invisible sliver (an SVG logo's
+          // stroked pole vanished from the preview). Paint the band between
+          // the rails instead — one rail forward, the other back.
+          const [left, right] = o.paths;
+          if (left.length >= 2 && right.length >= 2) {
+            ctx.beginPath();
+            ctx.moveTo(px(left[0].x), py(left[0].y));
+            for (let i = 1; i < left.length; i++) ctx.lineTo(px(left[i].x), py(left[i].y));
+            for (let i = right.length - 1; i >= 0; i--) ctx.lineTo(px(right[i].x), py(right[i].y));
+            ctx.closePath();
+            ctx.fillStyle = fillStyle;
+            ctx.fill();
+            continue;
+          }
+        }
         ctx.beginPath();
         for (const ring of o.paths) {
           if (ring.length < 3) continue;
