@@ -121,6 +121,7 @@ export default function CanvasStage() {
   const fabricColor = useEditorStore((s) => s.fabricColor);
   const startDismissed = useEditorStore((s) => s.startDismissed);
   const setStartDismissed = useEditorStore((s) => s.setStartDismissed);
+  const reviewActive = useEditorStore((s) => s.reviewIds !== null);
   const activeColorId = useEditorStore((s) => s.activeColorId);
   const addDraftPoint = useEditorStore((s) => s.addDraftPoint);
   const setCursor = useEditorStore((s) => s.setCursor);
@@ -1796,11 +1797,16 @@ export default function CanvasStage() {
         </div>
       )}
 
-      <div className="pointer-events-none absolute bottom-2 left-3 rounded-sm bg-navy/85 px-2 py-0.5 font-mono text-[11px] tracking-wide text-butter-100">
-        {rulerUnit === "inch"
-          ? `${mmToInch(project.widthMm).toFixed(2)} × ${mmToInch(project.heightMm).toFixed(2)} in`
-          : `${project.widthMm.toFixed(0)} × ${project.heightMm.toFixed(0)} mm`}
-      </div>
+      {/* Hidden while the region-review card floats over the same bottom edge —
+          a half-covered "3.94 × 3…" reads as broken, and the size is redundant
+          mid-review. */}
+      {!reviewActive && (
+        <div className="pointer-events-none absolute bottom-2 left-3 rounded-sm bg-navy/85 px-2 py-0.5 font-mono text-[11px] tracking-wide text-butter-100">
+          {rulerUnit === "inch"
+            ? `${mmToInch(project.widthMm).toFixed(2)} × ${mmToInch(project.heightMm).toFixed(2)} in`
+            : `${project.widthMm.toFixed(0)} × ${project.heightMm.toFixed(0)} mm`}
+        </div>
+      )}
 
       {menu && <ContextMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
     </main>

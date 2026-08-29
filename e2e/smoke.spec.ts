@@ -81,6 +81,62 @@ test("an unreadable image file shows a recoverable wizard error, not an eternal 
   await expect(page.getByRole("button", { name: "Next" })).toBeDisabled();
 });
 
+test("wizard happy path: flat-color PNG → traced artwork → region review", async ({ page }) => {
+  await page.goto("/app");
+  // Draw a small flat-color logo in-page (product scope: logos/line art, no
+  // photos) so the test needs no committed binary fixture.
+  const dataUrl = await page.evaluate(() => {
+    const c = document.createElement("canvas");
+    c.width = 160;
+    c.height = 160;
+    const g = c.getContext("2d")!;
+    g.fillStyle = "#ffffff";
+    g.fillRect(0, 0, 160, 160);
+    g.fillStyle = "#173a7a";
+    g.beginPath();
+    g.arc(80, 80, 60, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = "#f5c842";
+    g.beginPath();
+    g.moveTo(80, 40);
+    g.lineTo(110, 110);
+    g.lineTo(50, 110);
+    g.closePath();
+    g.fill();
+    return c.toDataURL("image/png");
+  });
+  const [chooser] = await Promise.all([
+    page.waitForEvent("filechooser"),
+    page.getByRole("button", { name: /use an image/i }).click(),
+  ]);
+  await chooser.setFiles({
+    name: "logo.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(dataUrl.split(",")[1], "base64"),
+  });
+
+  // Step 1 traces live; Next enables when the preview lands.
+  await expect(page.getByText("Turn an image into stitches")).toBeVisible();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(page.getByText(/Colors found/i)).toBeVisible();
+  await page.getByRole("button", { name: "Add artwork" }).click();
+
+  // The guided region review takes over…
+  await expect(page.getByText(/Region 1 of \d+/)).toBeVisible();
+  // …and the canvas size badge yields to it (a half-covered badge read as broken).
+  await expect(page.getByText("3.94 × 3.94 in")).toBeHidden();
+
+  // Walk to the end of the review and finish.
+  const next = page.getByRole("button", { name: "Next region" });
+  while (await next.isVisible()) await next.click();
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByText(/Region \d+ of \d+/)).toBeHidden();
+  await expect(page.getByText("3.94 × 3.94 in")).toBeVisible();
+
+  // The artwork landed as editable objects.
+  await expect(page.getByText(/^[1-9] objects?$/)).toBeVisible();
+});
+
 test("draws a running stitch and switches its type to satin", async ({ page }) => {
   await page.goto("/app");
   await page.getByRole("button", { name: "Close" }).first().click(); // dismiss start hint
