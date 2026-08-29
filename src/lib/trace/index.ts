@@ -3,8 +3,7 @@ import type { EmbObject, Path, Point, ThreadColor } from "../../types/project";
 import { newId } from "../id";
 import { makeObjectFromPaths } from "../objects";
 import { pathsBounds } from "../geometry";
-import { smoothRingKeepingCorners } from "../smooth";
-import { douglasPeucker } from "./simplify";
+import { douglasPeucker, refineTracedRing } from "./simplify";
 import { polygonArea, polygonPerimeter } from "./classify";
 import { recognizeShape } from "./recognize";
 import { idealizeDesign } from "./idealize";
@@ -163,8 +162,17 @@ export function tracedataToObjects(
     strokeMaxWidthMm = STROKE_MAX_WIDTH_MM,
   } = opts;
 
-  const simp = (pts: Point[]): Path =>
-    douglasPeucker(toMm(pts, mmPerPx, offsetX, offsetY), simplifyTolMm);
+  // Primary simplification is WIDTH-AWARE: the tolerance is capped at a
+  // fraction of the ring's own mean width, so a 0.4–0.6 mm stroke (thinner
+  // than the default tolerance) keeps its shape instead of collapsing into a
+  // degenerate sliver before classification ever sees it.
+  const simp = (pts: Point[]): Path => {
+    const mm = toMm(pts, mmPerPx, offsetX, offsetY);
+    const area = polygonArea(mm);
+    const perim = polygonPerimeter(mm);
+    const meanWidth = perim > 0 ? (2 * area) / perim : 0;
+    return douglasPeucker(mm, Math.max(0.08, Math.min(simplifyTolMm, meanWidth * 0.35)));
+  };
 
   // The artwork can never legitimately exceed its own raster: a snapped
   // primitive (an ellipse fitted to a region touching the image edge) can
@@ -289,11 +297,11 @@ export function tracedataToObjects(
     // thin fringe (length) are despeckled. The nonzero fill engine handles each
     // object's disjoint blobs + holes together.
     // Ring cleanup: snap a true primitive (circle/ellipse/rectangle/polygon) if one
-    // fits, else STRAIGHTEN — re-simplify at ~0.5 mm so the trace's small smooth bow
-    // on a "straight" edge collapses to a true straight line (real corners deviate far
-    // more and survive DP), then corner-aware smooth so genuine curves stay smooth.
+    // fits, else refine CORNER-AWARE (see refineTracedRing): pin true corners found
+    // by arm-turn on the dense outline, rebuild clipped apexes, DP each stretch at a
+    // width-capped tolerance, and smooth only the genuinely curved stretches.
     // This is what kills the "shakily drawn" look regardless of the detail preset.
-    const straighten = (r: Path) => smoothRingKeepingCorners(douglasPeucker(r, straightenTolMm), 0.6);
+    const straighten = (r: Path) => refineTracedRing(r, straightenTolMm);
     const clean = (r: Path) =>
       shapeSnap ? (recognizeShape(r, 1.0)?.ring ?? straighten(r)) : straighten(r);
     const fillRings: Path[] = [];

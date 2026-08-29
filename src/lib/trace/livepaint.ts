@@ -2,8 +2,7 @@ import type { EmbObject, Path, Point, ThreadColor } from "../../types/project";
 import { newId } from "../id";
 import { makeObjectFromPaths } from "../objects";
 import { marchingSquares } from "../paintbucket";
-import { smoothRingKeepingCorners } from "../smooth";
-import { douglasPeucker } from "./simplify";
+import { refineTracedRing } from "./simplify";
 import { polygonArea } from "./classify";
 import { nameForRgb } from "./colorname";
 import {
@@ -692,7 +691,7 @@ export function livePaintObjects(
   // visibly pushed knuckle-sized faces past their ink boundary (blue spilling
   // outside the lines). Faces hug the linework — fidelity beats idealization.
   const cleanRing = (ringPx: Point[]): Path =>
-    clampToImage(smoothRingKeepingCorners(douglasPeucker(toMmRing(ringPx), simplifyTolMm), 0.6));
+    clampToImage(refineTracedRing(toMmRing(ringPx), simplifyTolMm));
 
   const colors: ThreadColor[] = [];
   const objects: EmbObject[] = [];
@@ -893,7 +892,7 @@ export function livePaintObjects(
       if (bl >= 0 && !keepBlob[bl]) blobs[p] = 0;
     }
     const blobRings = marchingSquares(blobs, W, H)
-      .map((r) => clampToImage(smoothRingKeepingCorners(douglasPeucker(toMmRing(r), simplifyTolMm), 0.6)))
+      .map((r) => clampToImage(refineTracedRing(toMmRing(r), simplifyTolMm)))
       .filter((r) => r.length >= 3 && Math.abs(polygonArea(r)) >= INK_BLOB_MIN_MM2 * 0.5);
     if (blobRings.length > 0) {
       colors.push({ id: inkColorId, rgb: inkRgb, name: nameForRgb(inkRgb) });
@@ -914,7 +913,7 @@ export function livePaintObjects(
 
   const inkRingsRaw = marchingSquares(closed, W, H);
   const inkRings = inkRingsRaw
-    .map((r) => clampToImage(smoothRingKeepingCorners(douglasPeucker(toMmRing(r), simplifyTolMm), 0.6)))
+    .map((r) => clampToImage(refineTracedRing(toMmRing(r), simplifyTolMm)))
     .filter((r) => r.length >= 3 && Math.abs(polygonArea(r)) >= 0.3);
   if (inkRings.length > 0) {
     if (!inkColorUsed) colors.push({ id: inkColorId, rgb: inkRgb, name: nameForRgb(inkRgb) });
