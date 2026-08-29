@@ -27,6 +27,56 @@ function cssToRgb(el: Element, css: string): RGB | null {
   return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
 }
 
+/**
+ * Resolve a paint that may be a url(#gradient) reference. Embroidery is flat
+ * colour, so a gradient flattens to its VISUAL MIDPOINT — the interpolated
+ * colour at offset 0.5 (a red field shaded e0304e→c8102e→8e0a20 sews as the
+ * middle red, exactly what a digitizer would pick). Follows one href level
+ * (stops defined on a referenced base gradient, the common icon-pack export).
+ * An unresolvable reference (a pattern, a missing id) returns null so the
+ * shape is SKIPPED — never CSS's inherited-colour fallback, which painted
+ * every gradient-filled logo as one black slab.
+ */
+function paintToRgb(el: Element, css: string): RGB | null {
+  const ref = css.match(/url\(\s*["']?#([^"')\s]+)/i);
+  if (!ref) return cssToRgb(el, css);
+  const doc = el.ownerDocument!;
+  let node: Element | null = doc.getElementById(ref[1]);
+  let stops = node ? Array.from(node.querySelectorAll("stop")) : [];
+  if (node && stops.length === 0) {
+    const href = node.getAttribute("href") || node.getAttribute("xlink:href") || "";
+    node = href.startsWith("#") ? doc.getElementById(href.slice(1)) : null;
+    if (node) stops = Array.from(node.querySelectorAll("stop"));
+  }
+  const parsed = stops
+    .map((s) => {
+      const raw = (s.getAttribute("offset") || "0").trim();
+      const n = parseFloat(raw);
+      const o = !isFinite(n) ? 0 : raw.endsWith("%") ? n / 100 : n;
+      const color =
+        (s.getAttribute("stop-color") || (s as SVGElement).style?.stopColor || "").trim() ||
+        (el.ownerDocument?.defaultView?.getComputedStyle(s).stopColor ?? "");
+      const rgb = color ? cssToRgb(s, color) : null;
+      return rgb ? { o: Math.max(0, Math.min(1, o)), rgb } : null;
+    })
+    .filter((s): s is { o: number; rgb: RGB } => s !== null)
+    .sort((a, b) => a.o - b.o);
+  if (parsed.length === 0) return null;
+  const t = 0.5;
+  let lo = parsed[0];
+  let hi = parsed[parsed.length - 1];
+  for (const s of parsed) {
+    if (s.o <= t) lo = s;
+    if (s.o >= t) {
+      hi = s;
+      break;
+    }
+  }
+  if (hi.o <= lo.o) return lo.rgb;
+  const f = (t - lo.o) / (hi.o - lo.o);
+  return [0, 1, 2].map((k) => Math.round(lo.rgb[k] + (hi.rgb[k] - lo.rgb[k]) * f)) as RGB;
+}
+
 /** The element's FILL colour, or null when unpainted (fill:none / transparent). */
 function parseFill(el: Element): RGB | null {
   const win = el.ownerDocument?.defaultView;
@@ -34,7 +84,7 @@ function parseFill(el: Element): RGB | null {
   const fill = (style?.fill || el.getAttribute("fill") || "").trim();
   const opacity = parseFloat(style?.fillOpacity || el.getAttribute("fill-opacity") || "1");
   if (!fill || fill === "none" || opacity === 0) return null;
-  return cssToRgb(el, fill);
+  return paintToRgb(el, fill);
 }
 
 /** The element's STROKE paint + width (user units), or null when unstroked.
@@ -48,7 +98,7 @@ function parseStroke(el: Element): { rgb: RGB; width: number } | null {
   if (!stroke || stroke === "none" || opacity === 0) return null;
   const width = parseFloat(style?.strokeWidth || el.getAttribute("stroke-width") || "1");
   if (!(width > 0)) return null;
-  const rgb = cssToRgb(el, stroke);
+  const rgb = paintToRgb(el, stroke);
   return rgb ? { rgb, width } : null;
 }
 
