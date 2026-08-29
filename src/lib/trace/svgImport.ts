@@ -278,6 +278,12 @@ export function svgShapesToObjects(shapes: SvgShape[], opts: SvgImportOptions): 
   // design move in this flat-art class — and the chip keeps it reversible.
   const artW = contentW * mmPerUnit;
   const artH = contentH * mmPerUnit;
+  // Only a PAGE-COLORED shape can be a page: near-white / neutral-light, the
+  // way real export backdrops arrive (white, cream, pale grey — matching the
+  // raster path's border-background convention). A full-bleed SATURATED field
+  // (a navy patch ground) is deliberate art and must stay kept by default.
+  const isPageColor = (rgb: RGB): boolean =>
+    Math.min(rgb[0], rgb[1], rgb[2]) >= 225 && Math.max(rgb[0], rgb[1], rgb[2]) - Math.min(rgb[0], rgb[1], rgb[2]) <= 30;
   const isPageRing = (r: Path, siblings: Path[]): boolean => {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const p of r) {
@@ -316,7 +322,8 @@ export function svgShapesToObjects(shapes: SvgShape[], opts: SvgImportOptions): 
       }
       continue;
     }
-    const pageRings = removeBackground ? s.rings!.filter((r) => isPageRing(r, s.rings!)) : [];
+    const pageRings =
+      removeBackground && isPageColor(s.fill) ? s.rings!.filter((r) => isPageRing(r, s.rings!)) : [];
     const artRings = pageRings.length ? s.rings!.filter((r) => !pageRings.includes(r)) : s.rings!;
     if (pageRings.length > 0) {
       const page = makeObjectFromPaths("fill", pageRings, cid, cname);

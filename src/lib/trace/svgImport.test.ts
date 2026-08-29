@@ -88,6 +88,13 @@ describe("svgShapesToObjects", () => {
     );
     expect(frame.objects[0].suspectedBackground).toBeUndefined();
     expect(frame.objects[0].paths.length).toBe(2); // rim + its hole stay together
+    // A full-bleed SATURATED field (a navy patch ground) is deliberate art —
+    // only page-colored (near-white / neutral-light) shapes can be pages.
+    const field = svgShapesToObjects(
+      [{ rings: [square(0, 0, 100)], fill: [20, 40, 120] }, art],
+      { contentW: 100, contentH: 100, hoopWmm: 100, hoopHmm: 100 },
+    );
+    expect(field.objects[0].suspectedBackground).toBeUndefined();
   });
 
   it("splits a COMPOUND white page+cross path so the cross survives the skip", () => {
