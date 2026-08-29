@@ -76,9 +76,23 @@ def import_design(data, fmt):
 
     threads = [_thread_rgb(t) for t in pattern.threadlist]
 
+    # Formats that store no thread colors at all (EXP; DST without a TC:
+    # extended header) would otherwise import every block as black. Use the
+    # same distinct placeholder palette as the native DST/T01 decoder
+    # (ternary-decode.ts) so blocks stay tellable-apart and editable.
+    _PLACEHOLDER_RGB = [
+        0x173A7A, 0xB23A2E, 0x288A46, 0xD8A830,
+        0x8054B2, 0x1C8A8A, 0x6C1A28, 0x37393E,
+    ]
+
+    def _block_rgb(idx):
+        if idx < len(threads):
+            return threads[idx]
+        return _PLACEHOLDER_RGB[idx % len(_PLACEHOLDER_RGB)]
+
     blocks = []
     color_idx = 0
-    cur = {"rgb": threads[0] if threads else 0, "runs": []}
+    cur = {"rgb": _block_rgb(0), "runs": []}
     run = []
 
     def flush():
@@ -99,8 +113,7 @@ def import_design(data, fmt):
             flush()
             blocks.append(cur)
             color_idx += 1
-            rgb = threads[color_idx] if color_idx < len(threads) else 0
-            cur = {"rgb": rgb, "runs": []}
+            cur = {"rgb": _block_rgb(color_idx), "runs": []}
         else:
             # JUMP, TRIM, STOP, END, … all break the current contiguous run.
             flush()
@@ -168,6 +181,12 @@ def export_bytes(plan_json, fmt, pes_version=1):
     buf = io.BytesIO()
     if fmt == "pes":
         writer(pattern, buf, {"version": int(pes_version)})
+    elif fmt == "jef":
+        # pyembroidery DROPS every TRIM from JEF output unless asked. Janome
+        # machines cut thread when they see the explicit trim signal (a run of
+        # zero-move jump commands, 0x80 0x02 00 00 ×3); without it the machine
+        # drags a loose thread across every gap the design asked to cut.
+        writer(pattern, buf, {"trims": True})
     else:
         writer(pattern, buf)
     return buf.getvalue()
