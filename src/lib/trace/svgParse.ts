@@ -8,7 +8,7 @@
  * lives in svgImport.ts and is headless-tested.
  */
 import type { Path } from "../../types/project";
-import { blendWithWhite } from "./svgImport";
+import { blendWithWhite, clipShapeRings, insideEvenOdd } from "./svgImport";
 import type { RGB, SvgShape } from "./svgImport";
 
 /** Sample step (user units) when flattening a path — fine enough that even a big
@@ -178,6 +178,76 @@ function flattenElement(el: SVGGraphicsElement, rootCTM: DOMMatrix): Path[] {
  *  as if closed); a <line> encloses no area, so its fill is ignored. */
 const FILLABLE = "path, rect, circle, ellipse, polygon, polyline, line";
 
+/**
+ * Flatten one clipPath's content to rings in root user space. userSpaceOnUse
+ * (the default) means the clip's coordinates live in the REFERENCING element's
+ * user space, so the clip children are re-mounted under a temporary group
+ * carrying that element's root-relative matrix — the DOM engine then resolves
+ * their CTMs (own transforms included) exactly as it would in a real render.
+ * objectBoundingBox units prepend the element's bbox mapping.
+ */
+function flattenClipRings(
+  clipEl: Element,
+  refEl: SVGGraphicsElement,
+  live: SVGSVGElement,
+  rootCTM: DOMMatrix,
+): Path[] {
+  let rel = rootCTM.inverse().multiply(refEl.getCTM() ?? new DOMMatrix());
+  if (clipEl.getAttribute("clipPathUnits") === "objectBoundingBox") {
+    try {
+      const bb = refEl.getBBox();
+      rel = rel.translate(bb.x, bb.y).scale(bb.width || 1, bb.height || 1);
+    } catch {
+      /* bbox unavailable — fall back to user space */
+    }
+  }
+  const g = live.ownerDocument.createElementNS(SVGNS, "g");
+  g.setAttribute("transform", `matrix(${rel.a} ${rel.b} ${rel.c} ${rel.d} ${rel.e} ${rel.f})`);
+  for (const child of Array.from(clipEl.children)) g.appendChild(child.cloneNode(true));
+  live.appendChild(g);
+  try {
+    const rings: Path[] = [];
+    for (const c of Array.from(g.querySelectorAll(FILLABLE)) as SVGGraphicsElement[]) {
+      rings.push(...flattenElement(c, rootCTM));
+    }
+    return rings;
+  } finally {
+    g.remove();
+  }
+}
+
+/**
+ * Every clip region applying to `el`: one flattened ring-set per `clip-path`
+ * on the element or an ancestor (Figma/Illustrator wrap whole exports in a
+ * clip group). Returns null when a clipPath resolves to no geometry — per
+ * spec that clips the element to NOTHING, so it isn't rendered. A dangling
+ * url(#missing) clip reference applies no clipping (modern css-masking
+ * behavior, matching what the browser actually paints).
+ */
+function collectClips(el: Element, live: SVGSVGElement, rootCTM: DOMMatrix): Path[][] | null {
+  const win = el.ownerDocument?.defaultView;
+  const sets: Path[][] = [];
+  for (let a: Element | null = el; a; a = a.parentElement) {
+    const raw = a.getAttribute("clip-path") || (win ? win.getComputedStyle(a).clipPath : "") || "";
+    const m = raw.match(/url\(\s*["']?#([^"')\s]+)/i);
+    if (m) {
+      let clipEl: Element | null = null;
+      try {
+        clipEl = live.querySelector(`#${CSS.escape(m[1])}`);
+      } catch {
+        clipEl = null;
+      }
+      if (clipEl && clipEl.tagName.toLowerCase() === "clippath") {
+        const rings = flattenClipRings(clipEl, a as SVGGraphicsElement, live, rootCTM);
+        if (rings.length === 0) return null;
+        sets.push(rings);
+      }
+    }
+    if (a === live) break;
+  }
+  return sets;
+}
+
 /** Containers whose shape content is NOT rendered directly: definitions
  *  (gradients' probe shapes, clip/mask/pattern content, symbol templates).
  *  Walking them imported phantom shapes — a pattern's swatch rect or a
@@ -319,25 +389,41 @@ export function parseSvgShapes(svgText: string): { shapes: SvgShape[]; contentW:
       // translucent overlay reads as its colour washed toward the white page.
       const alpha = groupOpacity(el, live);
       if (alpha === 0) continue;
+      // clip-path on the element or an ancestor. null = clipped to nothing.
+      const clips = collectClips(el, live, rootCTM);
+      if (clips === null) continue;
       const rings = flattenElement(el, rootCTM);
       if (rings.length === 0) continue;
       if (fill) {
-        shapes.push({ rings, fill: blendWithWhite(fill.rgb, fill.alpha * alpha) });
-        grow(rings);
+        let fillRings = rings;
+        for (const c of clips) {
+          fillRings = clipShapeRings(fillRings, c);
+          if (fillRings.length === 0) break;
+        }
+        if (fillRings.length > 0) {
+          shapes.push({ rings: fillRings, fill: blendWithWhite(fill.rgb, fill.alpha * alpha) });
+          grow(fillRings);
+        }
       }
       if (stroke) {
         // The stroke rides the same flattened geometry: each sub-path ring is a
-        // centerline; closed when its ends meet.
-        const closed = rings.map((r) => {
-          const a = r[0], b = r[r.length - 1];
-          return Math.hypot(a.x - b.x, a.y - b.y) < FLATTEN_STEP * 2;
-        });
-        shapes.push({
-          rings: [],
-          fill: blendWithWhite(stroke.rgb, stroke.alpha * alpha),
-          stroke: { centerlines: rings, widthUnits: stroke.width, closed },
-        });
-        grow(rings);
+        // centerline; closed when its ends meet. Clip LIMIT for strokes: a
+        // centerline entirely outside a clip is dropped, but a partially
+        // clipped one keeps its full run — splitting satin columns at the clip
+        // edge is disproportionate for this flat-art class.
+        const kept = rings.filter((r) => clips.every((c) => r.some((p) => insideEvenOdd(p, c))));
+        if (kept.length > 0) {
+          const closed = kept.map((r) => {
+            const a = r[0], b = r[r.length - 1];
+            return Math.hypot(a.x - b.x, a.y - b.y) < FLATTEN_STEP * 2;
+          });
+          shapes.push({
+            rings: [],
+            fill: blendWithWhite(stroke.rgb, stroke.alpha * alpha),
+            stroke: { centerlines: kept, widthUnits: stroke.width, closed },
+          });
+          grow(kept);
+        }
       }
     }
     if (shapes.length === 0 || !isFinite(minX)) return null;
