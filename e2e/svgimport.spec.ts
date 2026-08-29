@@ -26,6 +26,7 @@ const GRADIENT_FLAG_SVG = `
   <path d="M430 330 L590 1010" stroke="#3d1f0e" stroke-width="40" stroke-linecap="round" fill="none"/>
   <path d="M440 320 C 650 230 800 330 960 240 L 1000 560 C 820 660 640 560 470 650 Z" fill="url(#red)"/>
   <path d="M480 470 L 985 385 L 995 475 L 492 562 Z" fill="url(#white)"/>
+  <rect x="900" y="900" width="200" height="200" fill="url(#missing) #00a651"/>
 </svg>`;
 
 test("gradient SVG imports with flattened colors and a visible stroked pole", async ({ page }) => {
@@ -63,6 +64,7 @@ test("gradient SVG imports with flattened colors and a visible stroked pole", as
     const d = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
     let red = 0;
     let brown = 0;
+    let green = 0;
     let black = 0;
     let painted = 0;
     for (let i = 0; i < d.length; i += 4) {
@@ -71,13 +73,16 @@ test("gradient SVG imports with flattened colors and a visible stroked pole", as
       const [r, g, b] = [d[i], d[i + 1], d[i + 2]];
       if (r > 150 && g < 90 && b < 100) red++;
       else if (r > 40 && r < 110 && g > 15 && g < 70 && b < 40) brown++;
+      else if (r < 90 && g > 120 && b < 130) green++;
       else if (r < 40 && g < 40 && b < 40) black++;
     }
-    return { red, brown, black, painted };
+    return { red, brown, green, black, painted };
   });
   expect(counts).not.toBeNull();
   expect(counts!.red, "gradient red field flattened to a real red").toBeGreaterThan(200);
   expect(counts!.brown, "stroked pole visible as a satin band").toBeGreaterThan(50);
+  // SVG paint fallback: url(#missing) with an explicit fallback color paints it.
+  expect(counts!.green, "unresolvable url() honours the author's fallback color").toBeGreaterThan(50);
   // No black slab: black may only be a sliver of the painted area.
   expect(counts!.black / Math.max(1, counts!.painted)).toBeLessThan(0.1);
 });
