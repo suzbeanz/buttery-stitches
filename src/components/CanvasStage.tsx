@@ -674,6 +674,22 @@ export default function CanvasStage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tool, draftEmpty, selectedIds, activeColorId, smooth]);
 
+  // The welcome card offers an X and click-outside to dismiss — give keyboard
+  // users the path they'll try first: Escape closes it too. (The card is a
+  // non-modal hint, so the aria-modal guard above doesn't cover it.)
+  const startVisible =
+    viewMode === "edit" && project.objects.length === 0 && draftEmpty && !startDismissed;
+  useEffect(() => {
+    if (!startVisible) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (document.querySelector('[aria-modal="true"]')) return; // a real modal is on top
+      setStartDismissed(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [startVisible, setStartDismissed]);
+
   // Drop the ruler segment when you leave the Measure tool.
   useEffect(() => {
     if (tool !== "measure") {
@@ -1709,10 +1725,7 @@ export default function CanvasStage() {
         </div>
       )}
 
-      {viewMode === "edit" &&
-        project.objects.length === 0 &&
-        draftEmpty &&
-        !startDismissed && (
+      {startVisible && (
         // Tapping the empty area dismisses the hint; the X button gives the keyboard path.
         // eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
         <div
@@ -1739,7 +1752,7 @@ export default function CanvasStage() {
               <StartButton
                 icon={ImageIcon}
                 label="Use an image"
-                hint="Turn a photo or logo into stitches"
+                hint="Turn a logo or drawing into stitches"
                 onClick={() => {
                   useEditorStore.getState().setPendingStart("image");
                   setStartDismissed(true);
