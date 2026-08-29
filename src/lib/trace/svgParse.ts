@@ -8,6 +8,7 @@
  * lives in svgImport.ts and is headless-tested.
  */
 import type { Path } from "../../types/project";
+import { blendWithWhite } from "./svgImport";
 import type { RGB, SvgShape } from "./svgImport";
 
 /** Sample step (user units) when flattening a path — fine enough that even a big
@@ -92,20 +93,23 @@ function paintToRgb(el: Element, css: string): RGB | null {
   return [0, 1, 2].map((k) => Math.round(lo.rgb[k] + (hi.rgb[k] - lo.rgb[k]) * f)) as RGB;
 }
 
-/** The element's FILL colour, or null when unpainted (fill:none / transparent). */
-function parseFill(el: Element): RGB | null {
+/** The element's FILL colour + fill-opacity, or null when unpainted
+ *  (fill:none / fill-opacity 0). Partial opacity is returned for the caller to
+ *  flatten (blend toward white), not dropped. */
+function parseFill(el: Element): { rgb: RGB; alpha: number } | null {
   const win = el.ownerDocument?.defaultView;
   const style = win ? win.getComputedStyle(el) : null;
   const fill = (style?.fill || el.getAttribute("fill") || "").trim();
   const opacity = parseFloat(style?.fillOpacity || el.getAttribute("fill-opacity") || "1");
   if (!fill || fill === "none" || opacity === 0) return null;
-  return paintToRgb(el, fill);
+  const rgb = paintToRgb(el, fill);
+  return rgb ? { rgb, alpha: Number.isFinite(opacity) ? opacity : 1 } : null;
 }
 
-/** The element's STROKE paint + width (user units), or null when unstroked.
- *  Logos often draw their linework (an arch, a divider) as strokes — dropping
- *  those silently loses whole design elements. */
-function parseStroke(el: Element): { rgb: RGB; width: number } | null {
+/** The element's STROKE paint + width (user units) + stroke-opacity, or null
+ *  when unstroked. Logos often draw their linework (an arch, a divider) as
+ *  strokes — dropping those silently loses whole design elements. */
+function parseStroke(el: Element): { rgb: RGB; width: number; alpha: number } | null {
   const win = el.ownerDocument?.defaultView;
   const style = win ? win.getComputedStyle(el) : null;
   const stroke = (style?.stroke || el.getAttribute("stroke") || "").trim();
@@ -114,7 +118,23 @@ function parseStroke(el: Element): { rgb: RGB; width: number } | null {
   const width = parseFloat(style?.strokeWidth || el.getAttribute("stroke-width") || "1");
   if (!(width > 0)) return null;
   const rgb = paintToRgb(el, stroke);
-  return rgb ? { rgb, width } : null;
+  return rgb ? { rgb, width, alpha: Number.isFinite(opacity) ? opacity : 1 } : null;
+}
+
+/** Cumulative element `opacity` from el up through the mounted root. Unlike
+ *  fill-opacity it applies to the whole subtree, doesn't inherit, and stacks
+ *  multiplicatively — a shape at opacity .8 inside a group at opacity .5
+ *  renders at .4. */
+function groupOpacity(el: Element, root: Element): number {
+  const win = el.ownerDocument?.defaultView;
+  if (!win) return 1;
+  let alpha = 1;
+  for (let a: Element | null = el; a; a = a.parentElement) {
+    const o = parseFloat(win.getComputedStyle(a).opacity || "1");
+    if (Number.isFinite(o)) alpha *= Math.max(0, Math.min(1, o));
+    if (a === root) break;
+  }
+  return alpha;
 }
 
 /** Apply an SVGMatrix (element's CTM relative to the root) to a point. */
@@ -294,10 +314,15 @@ export function parseSvgShapes(svgText: string): { shapes: SvgShape[]; contentW:
       const fill = el.tagName.toLowerCase() === "line" ? null : parseFill(el);
       const stroke = parseStroke(el);
       if (!fill && !stroke) continue;
+      // Whole-subtree translucency (element/group `opacity`) flattens into the
+      // colour: embroidery has no alpha, and in this flat-art class a
+      // translucent overlay reads as its colour washed toward the white page.
+      const alpha = groupOpacity(el, live);
+      if (alpha === 0) continue;
       const rings = flattenElement(el, rootCTM);
       if (rings.length === 0) continue;
       if (fill) {
-        shapes.push({ rings, fill });
+        shapes.push({ rings, fill: blendWithWhite(fill.rgb, fill.alpha * alpha) });
         grow(rings);
       }
       if (stroke) {
@@ -307,7 +332,11 @@ export function parseSvgShapes(svgText: string): { shapes: SvgShape[]; contentW:
           const a = r[0], b = r[r.length - 1];
           return Math.hypot(a.x - b.x, a.y - b.y) < FLATTEN_STEP * 2;
         });
-        shapes.push({ rings: [], fill: stroke.rgb, stroke: { centerlines: rings, widthUnits: stroke.width, closed } });
+        shapes.push({
+          rings: [],
+          fill: blendWithWhite(stroke.rgb, stroke.alpha * alpha),
+          stroke: { centerlines: rings, widthUnits: stroke.width, closed },
+        });
         grow(rings);
       }
     }

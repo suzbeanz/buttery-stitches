@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { svgShapesToObjects, type SvgShape } from "./svgImport";
+import { svgShapesToObjects, blendWithWhite, type SvgShape } from "./svgImport";
 import { polygonArea } from "./classify";
 import { pathsBounds } from "../geometry";
 
@@ -7,6 +7,18 @@ import { pathsBounds } from "../geometry";
 function square(x: number, y: number, s: number): SvgShape["rings"][number] {
   return [{ x, y }, { x: x + s, y }, { x: x + s, y: y + s }, { x, y: y + s }];
 }
+
+describe("blendWithWhite", () => {
+  it("keeps full-alpha colors exact and blends translucents toward white (flat art over fabric)", () => {
+    expect(blendWithWhite([200, 30, 30], 1)).toEqual([200, 30, 30]);
+    expect(blendWithWhite([0, 0, 0], 0.5)).toEqual([128, 128, 128]);
+    expect(blendWithWhite([100, 200, 40], 0)).toEqual([255, 255, 255]);
+    // Out-of-range alphas clamp instead of extrapolating.
+    expect(blendWithWhite([10, 10, 10], 2)).toEqual([10, 10, 10]);
+    expect(blendWithWhite([10, 10, 10], -1)).toEqual([255, 255, 255]);
+    expect(blendWithWhite([10, 10, 10], NaN)).toEqual([10, 10, 10]); // non-finite = opaque
+  });
+});
 
 describe("svgShapesToObjects", () => {
   it("places shapes in the hoop at exact scaled geometry, one object per shape in document order", () => {

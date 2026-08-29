@@ -21,6 +21,19 @@ import type { DigitizeResult } from "./index";
 
 export type RGB = [number, number, number];
 
+/**
+ * Flatten translucency to a solid thread colour by blending toward WHITE.
+ * Embroidery has no alpha, and this app's art class is flat-colour logos on a
+ * white page / light fabric — so a 40%-opacity overlay reads as its colour
+ * washed toward white, exactly what a digitizer would pick. alpha 1 returns
+ * the colour untouched; out-of-range/non-finite alphas clamp (NaN = opaque).
+ */
+export function blendWithWhite(rgb: RGB, alpha: number): RGB {
+  const a = Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1;
+  if (a === 1) return rgb;
+  return [0, 1, 2].map((k) => Math.round(rgb[k] * a + 255 * (1 - a))) as RGB;
+}
+
 /** One shape from an SVG, already in a single user-unit space (all transforms
  *  baked in). Either a FILLED shape (rings; sub-path rings are its own holes via
  *  fill-rule parity) or a STROKED path (centerline + width) — linework a logo
