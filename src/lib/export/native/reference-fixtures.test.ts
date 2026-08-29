@@ -60,8 +60,10 @@ describe("reference fixtures (pyembroidery-written, independent of our writers)"
       );
     const a = fields(ours);
     const b = fields(ref);
-    // ST is informational and writer-specific (pyembroidery counts commands,
-    // we count penetrations); everything a machine positions by must agree.
+    // ST is informational and writer-specific (pyembroidery counts pattern
+    // entries — a trim is 1 entry but 3 records; we count actual machine
+    // records, the Tajima convention); everything a machine positions by must
+    // agree.
     for (const key of ["LA", "CO", "+X", "-X", "+Y", "-Y", "AX", "AY"]) {
       expect(a[key], `header field ${key}`).toBe(b[key]);
     }

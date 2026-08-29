@@ -106,4 +106,59 @@ describe("encodeDst", () => {
   it("throws on an appliqué STOP (caller routes those to the Python path)", () => {
     expect(() => encodeDst({ blocks: [{ rgb: 0, cmds: [["s", 0, 0], ["stop"]] }] })).toThrow();
   });
+
+  it("ST: counts every machine record (stitches, jumps, trims, color changes), not just penetrations", () => {
+    // Tajima ST is the record total the machine displays and tracks progress by.
+    // A jump-and-trim-heavy design has far more records than penetrations; a
+    // penetrations-only count under-reports.
+    const plan: StitchPlan = {
+      blocks: [
+        { rgb: 0xcc0000, cmds: [["s", 0, 0], ["s", 50, 0], ["t"], ["j", 500, 0], ["s", 500, 50]] },
+        { rgb: 0x0000cc, cmds: [["s", 600, 0], ["s", 650, 0]] },
+      ],
+    };
+    const bytes = encodeDst(splitPlanForFormat(plan, "dst"));
+    const totalRecords = (bytes.length - HEADER) / 3;
+    const st = Number(headerText(bytes).match(/ST:\s*(\d+)/)?.[1]);
+    // Every 3-byte record except the end-of-file record counts.
+    expect(st).toBe(totalRecords - 1);
+  });
+
+  it("extents cover jump travel, not just penetrations (the frame moves on jumps too)", () => {
+    // Jump out to x=800 and come back; only stitch out to x=100. The machine's
+    // frame really travels to 800 — the header must say so or the pre-stitch
+    // trace/hoop check lies.
+    const plan: StitchPlan = {
+      blocks: [
+        { rgb: 0, cmds: [["s", 0, 0], ["s", 100, 0], ["j", 800, 0], ["s", 100, 10]] },
+      ],
+    };
+    const bytes = encodeDst(splitPlanForFormat(plan, "dst"));
+    const plusX = Number(headerText(bytes).match(/\+X:\s*(\d+)/)?.[1]);
+    expect(plusX).toBe(800);
+  });
+
+  it("extent magnitudes are clamped at zero (all-positive anchored designs)", () => {
+    // A design sitting entirely in +X/+Y must report -X/-Y as 0 (distance the
+    // frame travels in the negative direction), never a negative number.
+    const plan: StitchPlan = { blocks: [{ rgb: 0, cmds: [["s", 10, 10], ["s", 60, 60]] }] };
+    const bytes = encodeDst(plan);
+    const h = headerText(bytes);
+    expect(h).toMatch(/-X:\s*0\r/);
+    expect(h).toMatch(/-Y:\s*0\r/);
+    expect(h).not.toMatch(/-X:\s*-/);
+  });
+
+  it("sanitizes the label: control/non-ASCII bytes never reach the header", () => {
+    const bytes = encodeDst(
+      { blocks: [{ rgb: 0, cmds: [["s", 0, 0], ["s", 50, 0]] }] },
+      { label: "Bad\rLabel\u00e9\u2603 name" },
+    );
+    const h = headerText(bytes);
+    // The label field is exactly LA: + 16 bytes + \r, all printable ASCII.
+    const la = h.match(/^LA:(.{16})\r/);
+    expect(la).not.toBeNull();
+    expect(la![1]).toMatch(/^[\x20-\x7e]{16}$/);
+    expect(la![1]).toContain("Bad Label");
+  });
 });
