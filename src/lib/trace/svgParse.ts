@@ -193,26 +193,41 @@ function applyCTM(m: DOMMatrix, x: number, y: number): { x: number; y: number } 
   return { x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f };
 }
 
-/** Flatten one <path>/<rect>/<circle>/<ellipse>/<polygon> into closed rings in
- *  root user units (transforms baked in via its CTM). A path with sub-paths (an
- *  'O', a letter with a counter) yields one ring per sub-path. */
-function flattenElement(el: SVGGraphicsElement, rootCTM: DOMMatrix): Path[] {
+/** Hard cap on samples per element — a guard against a pathological CTM scale
+ *  turning one path into millions of points. */
+const MAX_SAMPLES = 20000;
+
+/** Flatten one geometry element into closed rings in root user units
+ *  (transforms baked in via its CTM). A path with sub-paths (an 'O', a letter
+ *  with a counter) yields one ring per sub-path. `stepUnits` is the sample
+ *  step in ROOT user units. */
+function flattenElement(el: SVGGraphicsElement, rootCTM: DOMMatrix, stepUnits = FLATTEN_STEP): Path[] {
   const total = (el as SVGGeometryElement).getTotalLength?.() ?? 0;
   if (!total) return [];
-  const ctm = el.getCTM();
-  // CTM maps element space → nearest viewport; compose with the inverse root so
-  // every shape lands in ONE shared space.
+  // SCREEN CTMs, not getCTM: getCTM stops at the NEAREST viewport, so a shape
+  // inside a nested <svg> (a materialised <symbol> instance) would lose every
+  // transform outside it. The screen CTM carries the full chain — composing
+  // with the inverse root screen CTM cancels the offscreen-mount offset and
+  // lands every shape in ONE shared root-user-unit space.
+  const ctm = el.getScreenCTM() ?? el.getCTM();
   const m = rootCTM.inverse().multiply(ctm ?? new DOMMatrix());
+  // getTotalLength is LOCAL length; samples must land ~stepUnits apart in ROOT
+  // space or a scaled-up instance (a symbol's 30x viewport, a scale() group)
+  // makes every sample step exceed the sub-path discontinuity threshold below
+  // and the whole shape shreds into sub-3-point "rings" and vanishes. Scale =
+  // the matrix's largest axis growth (exact for the rotate/scale/translate
+  // transforms flat art uses).
+  const scale = Math.max(Math.hypot(m.a, m.b), Math.hypot(m.c, m.d)) || 1;
+  const n = Math.max(2, Math.min(MAX_SAMPLES, Math.ceil((total * scale) / stepUnits)));
   const rings: Path[] = [];
   let cur: Path = [];
   let prev: { x: number; y: number } | null = null;
-  const n = Math.max(2, Math.ceil(total / FLATTEN_STEP));
   for (let i = 0; i <= n; i++) {
     const pt = (el as SVGGeometryElement).getPointAtLength((total * i) / n);
     const p = applyCTM(m, pt.x, pt.y);
     // A large jump = a new sub-path (getPointAtLength walks them contiguously,
     // so a discontinuity marks the boundary between an outer and a counter).
-    if (prev && Math.hypot(p.x - prev.x, p.y - prev.y) > FLATTEN_STEP * 8) {
+    if (prev && Math.hypot(p.x - prev.x, p.y - prev.y) > stepUnits * 8) {
       if (cur.length >= 3) rings.push(cur);
       cur = [];
     }
@@ -242,8 +257,9 @@ function flattenClipRings(
   refEl: SVGGraphicsElement,
   live: SVGSVGElement,
   rootCTM: DOMMatrix,
+  stepUnits: number,
 ): Path[] {
-  let rel = rootCTM.inverse().multiply(refEl.getCTM() ?? new DOMMatrix());
+  let rel = rootCTM.inverse().multiply(refEl.getScreenCTM() ?? refEl.getCTM() ?? new DOMMatrix());
   if (clipEl.getAttribute("clipPathUnits") === "objectBoundingBox") {
     try {
       const bb = refEl.getBBox();
@@ -259,7 +275,7 @@ function flattenClipRings(
   try {
     const rings: Path[] = [];
     for (const c of Array.from(g.querySelectorAll(FILLABLE)) as SVGGraphicsElement[]) {
-      rings.push(...flattenElement(c, rootCTM));
+      rings.push(...flattenElement(c, rootCTM, stepUnits));
     }
     return rings;
   } finally {
@@ -275,7 +291,12 @@ function flattenClipRings(
  * url(#missing) clip reference applies no clipping (modern css-masking
  * behavior, matching what the browser actually paints).
  */
-function collectClips(el: Element, live: SVGSVGElement, rootCTM: DOMMatrix): Path[][] | null {
+function collectClips(
+  el: Element,
+  live: SVGSVGElement,
+  rootCTM: DOMMatrix,
+  stepUnits: number,
+): Path[][] | null {
   const win = el.ownerDocument?.defaultView;
   const sets: Path[][] = [];
   for (let a: Element | null = el; a; a = a.parentElement) {
@@ -289,7 +310,7 @@ function collectClips(el: Element, live: SVGSVGElement, rootCTM: DOMMatrix): Pat
         clipEl = null;
       }
       if (clipEl && clipEl.tagName.toLowerCase() === "clippath") {
-        const rings = flattenClipRings(clipEl, a as SVGGraphicsElement, live, rootCTM);
+        const rings = flattenClipRings(clipEl, a as SVGGraphicsElement, live, rootCTM, stepUnits);
         if (rings.length === 0) return null;
         sets.push(rings);
       }
@@ -419,7 +440,17 @@ export function parseSvgShapes(
     // Materialise use/symbol instances first: their shadow-rendered shapes are
     // invisible to querySelectorAll, and the walk below needs real elements.
     expandUses(live);
-    const rootCTM = live.getCTM() ?? live.getScreenCTM() ?? new DOMMatrix();
+    // Screen CTM so nested viewports resolve — see flattenElement.
+    const rootCTM = live.getScreenCTM() ?? live.getCTM() ?? new DOMMatrix();
+    // Sample step in root user units. FLATTEN_STEP is tuned for the common
+    // few-hundred-to-few-thousand-unit viewBox; a 24-unit icon viewBox would
+    // flatten a circle to ~16 points, so small canvases scale the step down
+    // (the mm-space simplify drops any excess).
+    const vb = live.viewBox?.baseVal;
+    const step =
+      vb && vb.width > 0 && vb.height > 0
+        ? Math.min(FLATTEN_STEP, Math.max(vb.width, vb.height) / 512)
+        : FLATTEN_STEP;
     // Visible <text> with real content — surfaced, never traced.
     const textCount = Array.from(live.querySelectorAll("text")).filter(
       (t) => !t.closest(NON_RENDERED) && (t.textContent ?? "").trim().length > 0 && !isHidden(t, live),
@@ -450,9 +481,9 @@ export function parseSvgShapes(
       const alpha = groupOpacity(el, live);
       if (alpha === 0) continue;
       // clip-path on the element or an ancestor. null = clipped to nothing.
-      const clips = collectClips(el, live, rootCTM);
+      const clips = collectClips(el, live, rootCTM, step);
       if (clips === null) continue;
-      const rings = flattenElement(el, rootCTM);
+      const rings = flattenElement(el, rootCTM, step);
       if (rings.length === 0) continue;
       if (fill) {
         let fillRings = rings;
@@ -475,7 +506,7 @@ export function parseSvgShapes(
         if (kept.length > 0) {
           const closed = kept.map((r) => {
             const a = r[0], b = r[r.length - 1];
-            return Math.hypot(a.x - b.x, a.y - b.y) < FLATTEN_STEP * 2;
+            return Math.hypot(a.x - b.x, a.y - b.y) < step * 2;
           });
           shapes.push({
             rings: [],
