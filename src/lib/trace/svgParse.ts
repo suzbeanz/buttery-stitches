@@ -154,6 +154,30 @@ function flattenElement(el: SVGGraphicsElement, rootCTM: DOMMatrix): Path[] {
 
 const FILLABLE = "path, rect, circle, ellipse, polygon";
 
+/** Containers whose shape content is NOT rendered directly: definitions
+ *  (gradients' probe shapes, clip/mask/pattern content, symbol templates).
+ *  Walking them imported phantom shapes — a pattern's swatch rect or a
+ *  symbol's template landed in the artwork at a bogus transform. Matching is
+ *  case-sensitive for SVG elements in an HTML document, so the camelCase
+ *  names are written as-is. */
+const NON_RENDERED = "defs, symbol, clipPath, mask, pattern, marker, linearGradient, radialGradient";
+
+/** True when the element doesn't render: `display:none` on it or any ancestor
+ *  (display does not inherit, so every ancestor is checked), or a computed
+ *  `visibility` other than visible (visibility DOES inherit — and a child
+ *  re-showing itself with visibility:visible correctly reads visible here). */
+function isHidden(el: Element, root: Element): boolean {
+  const win = el.ownerDocument?.defaultView;
+  if (!win) return false;
+  const vis = win.getComputedStyle(el).visibility;
+  if (vis === "hidden" || vis === "collapse") return true;
+  for (let a: Element | null = el; a; a = a.parentElement) {
+    if (win.getComputedStyle(a).display === "none") return true;
+    if (a === root) break;
+  }
+  return false;
+}
+
 /** Parse SVG text into flattened, fill-resolved shapes plus the artwork bbox.
  *  Returns null if the string isn't a usable SVG. */
 export function parseSvgShapes(svgText: string): { shapes: SvgShape[]; contentW: number; contentH: number } | null {
@@ -182,6 +206,10 @@ export function parseSvgShapes(svgText: string): { shapes: SvgShape[]; contentW:
         }
     };
     for (const el of Array.from(live.querySelectorAll(FILLABLE)) as SVGGraphicsElement[]) {
+      // Definition content (defs/pattern/clipPath/symbol/gradient/mask/marker
+      // internals) is not itself artwork, and hidden elements don't render.
+      if (el.closest(NON_RENDERED)) continue;
+      if (isHidden(el, live)) continue;
       const fill = parseFill(el);
       const stroke = parseStroke(el);
       if (!fill && !stroke) continue;
