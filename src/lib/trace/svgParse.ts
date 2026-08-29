@@ -29,6 +29,45 @@ function cssToRgb(el: Element, css: string): RGB | null {
 }
 
 /**
+ * A pattern fill flattens to the pattern content's DOMINANT flat colour —
+ * embroidery can't sew a repeating swatch, and in this art class a pattern is
+ * a texture whose overall read IS its main colour (dot grids, hatching on a
+ * ground). Colours are weighted by each pattern shape's bbox area, so the
+ * ground rect outweighs the dots riding on it. Children painted with nested
+ * url() paints are skipped (no recursive resolution). Null when the pattern
+ * paints nothing resolvable.
+ */
+function patternDominantRgb(pattern: Element): RGB | null {
+  const win = pattern.ownerDocument?.defaultView;
+  const buckets = new Map<string, { rgb: RGB; w: number }>();
+  for (const child of Array.from(pattern.querySelectorAll(FILLABLE)) as SVGGraphicsElement[]) {
+    const raw = (
+      child.getAttribute("fill") ||
+      (child as SVGElement).style?.fill ||
+      (win ? win.getComputedStyle(child).fill : "") ||
+      ""
+    ).trim();
+    if (!raw || raw.toLowerCase() === "none" || /url\(/i.test(raw)) continue;
+    const rgb = cssToRgb(child, raw);
+    if (!rgb) continue;
+    let w = 1;
+    try {
+      const bb = child.getBBox();
+      w = Math.max(1, bb.width * bb.height);
+    } catch {
+      /* getBBox can throw for unrendered content — weight it once */
+    }
+    const key = rgb.join(",");
+    const b = buckets.get(key);
+    if (b) b.w += w;
+    else buckets.set(key, { rgb, w });
+  }
+  let best: { rgb: RGB; w: number } | null = null;
+  for (const b of buckets.values()) if (!best || b.w > best.w) best = b;
+  return best?.rgb ?? null;
+}
+
+/**
  * Resolve a paint that may be a url(#gradient) reference. Embroidery is flat
  * colour, so a gradient flattens to its VISUAL MIDPOINT — the interpolated
  * colour at offset 0.5 (a red field shaded e0304e→c8102e→8e0a20 sews as the
@@ -58,6 +97,18 @@ function paintToRgb(el: Element, css: string): RGB | null {
     }
   };
   let node: Element | null = byId(ref[1]);
+  if (node && node.tagName.toLowerCase() === "pattern") {
+    // Pattern fill → the content's dominant flat colour. Follows one href
+    // level for content-less patterns (a base pattern carrying the tiles),
+    // mirroring the gradient href convention below.
+    let pat: Element | null = node;
+    if (!pat.querySelector(FILLABLE)) {
+      const href = pat.getAttribute("href") || pat.getAttribute("xlink:href") || "";
+      pat = href.startsWith("#") ? byId(href.slice(1)) : null;
+    }
+    const dominant = pat ? patternDominantRgb(pat) : null;
+    return dominant ?? fallbackRgb();
+  }
   let stops = node ? Array.from(node.querySelectorAll("stop")) : [];
   if (node && stops.length === 0) {
     const href = node.getAttribute("href") || node.getAttribute("xlink:href") || "";
