@@ -166,6 +166,79 @@ const FILLABLE = "path, rect, circle, ellipse, polygon, polyline, line";
  *  names are written as-is. */
 const NON_RENDERED = "defs, symbol, clipPath, mask, pattern, marker, linearGradient, radialGradient";
 
+const SVGNS = "http://www.w3.org/2000/svg";
+
+/** <use> attributes that must NOT copy onto the instance group: geometry and
+ *  linking live on the group/instance itself; everything else (fill, stroke,
+ *  class, style, opacity, clip-path, display…) inherits into the instance
+ *  exactly as SVG specifies for use shadows. */
+const USE_OWN_ATTRS = new Set(["href", "xlink:href", "x", "y", "width", "height", "id", "transform"]);
+
+/**
+ * Materialise every <use> instance as a real subtree, IN PLACE. querySelectorAll
+ * never returns the shapes a live <use> instantiates (they render in a closed
+ * shadow tree), so icon-pack exports built on use/symbol imported as nothing.
+ * Each <use> becomes a <g transform="{use transform} translate(x y)"> holding a
+ * clone of its target — the DOM engine then resolves the full CTM chain for the
+ * walk exactly as it does for authored shapes. A <symbol>/<svg> target becomes
+ * a nested <svg> carrying the symbol's viewBox plus the use's width/height, so
+ * the engine bakes the symbol's viewport mapping into getCTM too. Passes are
+ * bounded so nested (or maliciously cyclic) use chains terminate.
+ */
+function expandUses(root: SVGSVGElement): void {
+  const doc = root.ownerDocument;
+  for (let pass = 0; pass < 6; pass++) {
+    const uses = Array.from(root.querySelectorAll("use"));
+    if (uses.length === 0) return;
+    for (const use of uses) {
+      const g = doc.createElementNS(SVGNS, "g");
+      const x = parseFloat(use.getAttribute("x") || "0") || 0;
+      const y = parseFloat(use.getAttribute("y") || "0") || 0;
+      const tf = use.getAttribute("transform") ?? "";
+      // Per spec the x/y shift applies AFTER the use's own transform.
+      g.setAttribute("transform", `${tf} translate(${x} ${y})`.trim());
+      for (const attr of Array.from(use.attributes)) {
+        if (!USE_OWN_ATTRS.has(attr.name)) g.setAttribute(attr.name, attr.value);
+      }
+      const href = use.getAttribute("href") || use.getAttribute("xlink:href") || "";
+      let target: Element | null = null;
+      if (href.startsWith("#")) {
+        try {
+          target = root.querySelector(`#${CSS.escape(href.slice(1))}`);
+        } catch {
+          target = null;
+        }
+      }
+      if (target) {
+        const clone = target.cloneNode(true) as SVGElement;
+        clone.removeAttribute("id"); // instances must not duplicate the target id
+        const tag = clone.tagName.toLowerCase();
+        if (tag === "symbol" || tag === "svg") {
+          // Instantiate as a real nested <svg> so the viewBox→viewport mapping
+          // lands in the children's CTMs. Size precedence per spec: the use's
+          // width/height, else the symbol's own; with neither, fall back to the
+          // root's viewBox size (the offscreen mount has a 0-sized viewport, so
+          // the spec's 100% default would collapse the instance to nothing).
+          const inst = doc.createElementNS(SVGNS, "svg");
+          for (const attr of Array.from(clone.attributes)) inst.setAttribute(attr.name, attr.value);
+          const w = use.getAttribute("width");
+          const h = use.getAttribute("height");
+          if (w) inst.setAttribute("width", w);
+          if (h) inst.setAttribute("height", h);
+          const vb = root.viewBox?.baseVal;
+          if (!inst.getAttribute("width")) inst.setAttribute("width", String(vb?.width || 100));
+          if (!inst.getAttribute("height")) inst.setAttribute("height", String(vb?.height || 100));
+          while (clone.firstChild) inst.appendChild(clone.firstChild);
+          g.appendChild(inst);
+        } else {
+          g.appendChild(clone);
+        }
+      }
+      use.replaceWith(g);
+    }
+  }
+}
+
 /** True when the element doesn't render: `display:none` on it or any ancestor
  *  (display does not inherit, so every ancestor is checked), or a computed
  *  `visibility` other than visible (visibility DOES inherit — and a child
@@ -197,6 +270,9 @@ export function parseSvgShapes(svgText: string): { shapes: SvgShape[]; contentW:
   host.appendChild(live);
   document.body.appendChild(host);
   try {
+    // Materialise use/symbol instances first: their shadow-rendered shapes are
+    // invisible to querySelectorAll, and the walk below needs real elements.
+    expandUses(live);
     const rootCTM = live.getCTM() ?? live.getScreenCTM() ?? new DOMMatrix();
     const shapes: SvgShape[] = [];
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
