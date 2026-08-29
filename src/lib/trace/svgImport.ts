@@ -268,46 +268,69 @@ export function svgShapesToObjects(shapes: SvgShape[], opts: SvgImportOptions): 
     }
     return cid;
   };
-  // BACKDROP detection: a page/card rect painted FIRST, spanning (nearly) the
-  // whole artwork. Leading shapes only — once any real art has painted, a big
-  // shape is a design field, not a page. Judged per OBJECT so a white card and
-  // a design's white cross (one thread color) stay separable in the dialog.
+  // BACKDROP detection, per RING: a page/card ring spans (nearly) the whole
+  // artwork with a filled interior. Ring-level on purpose, twice over: icon
+  // exports often draw the white page and the design's white cross as ONE
+  // compound path (object-level flagging would eat the cross with the page —
+  // measured on a real flag SVG, the whole White thread vanished), and the
+  // page rect isn't always the first element in the file. A full-artwork ring
+  // is a page whatever paints around it — hiding everything beneath is no
+  // design move in this flat-art class — and the chip keeps it reversible.
   const artW = contentW * mmPerUnit;
   const artH = contentH * mmPerUnit;
-  const isBackdrop = (s: (typeof scaled)[number]): boolean => {
-    if (!removeBackground || !s.rings || s.rings.length === 0) return false;
+  // Only a PAGE-COLORED shape can be a page: near-white / neutral-light, the
+  // way real export backdrops arrive (white, cream, pale grey — matching the
+  // raster path's border-background convention). A full-bleed SATURATED field
+  // (a navy patch ground) is deliberate art and must stay kept by default.
+  const isPageColor = (rgb: RGB): boolean =>
+    Math.min(rgb[0], rgb[1], rgb[2]) >= 225 && Math.max(rgb[0], rgb[1], rgb[2]) - Math.min(rgb[0], rgb[1], rgb[2]) <= 30;
+  const isPageRing = (r: Path, siblings: Path[]): boolean => {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const r of s.rings)
-      for (const p of r) {
-        if (p.x < x0) x0 = p.x;
-        if (p.y < y0) y0 = p.y;
-        if (p.x > x1) x1 = p.x;
-        if (p.y > y1) y1 = p.y;
+    for (const p of r) {
+      if (p.x < x0) x0 = p.x;
+      if (p.y < y0) y0 = p.y;
+      if (p.x > x1) x1 = p.x;
+      if (p.y > y1) y1 = p.y;
+    }
+    if (x1 - x0 < 0.96 * artW || y1 - y0 < 0.96 * artH) return false;
+    // NET filled area with even–odd PARITY: a border FRAME's outer ring spans
+    // the artwork too, but its interior is one big hole — only a mostly-FILLED
+    // full-span ring is a page. Reuse svgNetArea over r plus the sibling rings
+    // nested inside it, so parity nests correctly: a directly-contained ring
+    // subtracts as a hole, but an island inside that hole adds back (blanket
+    // subtraction under-counted and misclassified nested-ring compounds).
+    const contained = siblings.filter((o) => {
+      if (o === r || o.length === 0) return false;
+      let cx = 0, cy = 0;
+      for (const p of o) {
+        cx += p.x;
+        cy += p.y;
       }
-    return (
-      x1 - x0 >= 0.96 * artW &&
-      y1 - y0 >= 0.96 * artH &&
-      s.area >= 0.85 * artW * artH
-    );
+      return pointInRing({ x: cx / o.length, y: cy / o.length }, r);
+    });
+    return svgNetArea([r, ...contained]) >= 0.85 * artW * artH;
   };
 
   const objects: EmbObject[] = [];
-  let leading = true;
   for (const s of scaled) {
     const cid = colorIdFor(finalFill(s.fill));
     const cname = colors.find((c) => c.id === cid)?.name;
     if (s.satin) {
-      leading = false;
       // Each stroked sub-path is its own satin column (left/right rails).
       for (const [left, right] of s.satin.rails) {
         objects.push(makeObjectFromPaths("satin", [left, right], cid, cname));
       }
-    } else {
-      const obj = makeObjectFromPaths("fill", s.rings!, cid, cname);
-      if (leading && isBackdrop(s)) obj.suspectedBackground = true;
-      else leading = false;
-      objects.push(obj);
+      continue;
     }
+    const pageRings =
+      removeBackground && isPageColor(s.fill) ? s.rings!.filter((r) => isPageRing(r, s.rings!)) : [];
+    const artRings = pageRings.length ? s.rings!.filter((r) => !pageRings.includes(r)) : s.rings!;
+    if (pageRings.length > 0) {
+      const page = makeObjectFromPaths("fill", pageRings, cid, cname);
+      page.suspectedBackground = true;
+      objects.push(page);
+    }
+    if (artRings.length > 0) objects.push(makeObjectFromPaths("fill", artRings, cid, cname));
   }
   // Color-seam underlap now happens at STITCH time (generateDesign), so every
   // project gets the same gap-proofing no matter how it was authored — the

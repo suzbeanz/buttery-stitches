@@ -76,9 +76,70 @@ describe("svgShapesToObjects", () => {
       { contentW: 100, contentH: 100, hoopWmm: 100, hoopHmm: 100 },
     );
     expect(partial.objects[0].suspectedBackground).toBeUndefined();
-    // A full-coverage shape painted AFTER real art is a deliberate field.
+    // A full-coverage page is flagged wherever it paints in document order —
+    // real files put it mid-stack too, and hiding all art beneath is no design
+    // move in this flat-art class (the chip keeps the call reversible).
     const late = svgShapesToObjects([art, page], { contentW: 100, contentH: 100, hoopWmm: 100, hoopHmm: 100 });
-    expect(late.objects[1].suspectedBackground).toBeUndefined();
+    expect(late.objects[1].suspectedBackground).toBe(true);
+    // A border FRAME spans the artwork but is mostly hole — never a page.
+    const frame = svgShapesToObjects(
+      [{ rings: [square(0, 0, 100), square(6, 6, 88)], fill: [255, 255, 255] }, art],
+      { contentW: 100, contentH: 100, hoopWmm: 100, hoopHmm: 100 },
+    );
+    expect(frame.objects[0].suspectedBackground).toBeUndefined();
+    expect(frame.objects[0].paths.length).toBe(2); // rim + its hole stay together
+    // A full-bleed SATURATED field (a navy patch ground) is deliberate art —
+    // only page-colored (near-white / neutral-light) shapes can be pages.
+    const field = svgShapesToObjects(
+      [{ rings: [square(0, 0, 100)], fill: [20, 40, 120] }, art],
+      { contentW: 100, contentH: 100, hoopWmm: 100, hoopHmm: 100 },
+    );
+    expect(field.objects[0].suspectedBackground).toBeUndefined();
+  });
+
+  it("splits a COMPOUND white page+cross path so the cross survives the skip", () => {
+    // The icon-pack export that ate the flag's white: page rect and cross bars
+    // drawn as ONE path with one fill. The page ring becomes its own
+    // suspectedBackground object; the bars stay a kept object on the SAME
+    // white thread.
+    const shapes: SvgShape[] = [
+      { rings: [square(20, 20, 60)], fill: [200, 16, 46] }, // red field
+      {
+        rings: [
+          square(0, 0, 100),
+          [{ x: 45, y: 20 }, { x: 55, y: 20 }, { x: 55, y: 80 }, { x: 45, y: 80 }],
+          [{ x: 20, y: 45 }, { x: 80, y: 45 }, { x: 80, y: 55 }, { x: 20, y: 55 }],
+        ],
+        fill: [255, 255, 255],
+      }, // page + two thin cross bars, one compound path
+    ];
+    const res = svgShapesToObjects(shapes, { contentW: 100, contentH: 100, hoopWmm: 100, hoopHmm: 100 });
+    const flagged = res.objects.filter((o) => o.suspectedBackground);
+    expect(flagged.length).toBe(1);
+    expect(flagged[0].paths.length).toBe(1); // the page ring alone
+    // Exactly TWO white objects on the SAME thread: the skipped page and the
+    // kept cross (keyed off the flagged object's color, not object ordering).
+    const whiteObjs = res.objects.filter((o) => o.colorId === flagged[0].colorId);
+    expect(whiteObjs.length).toBe(2);
+    const cross = whiteObjs.find((o) => !o.suspectedBackground)!;
+    expect(cross.paths.length).toBe(2); // both bars kept
+  });
+
+  it("page detection nests parity: an island inside a counter adds back", () => {
+    // Page ring + a 38×38 counter + a 10×10 island inside it, one compound
+    // path. Parity-correct net = 10000 − 1444 + 100 = 8656 ≥ 85% → page.
+    // Blanket subtraction (the reviewed bug) gave 8456 and missed it.
+    const shapes: SvgShape[] = [
+      { rings: [square(20, 20, 60)], fill: [200, 16, 46] },
+      {
+        rings: [square(0, 0, 100), square(30, 30, 38), square(44, 44, 10)],
+        fill: [255, 255, 255],
+      },
+    ];
+    const res = svgShapesToObjects(shapes, { contentW: 100, contentH: 100, hoopWmm: 100, hoopHmm: 100 });
+    const flagged = res.objects.filter((o) => o.suspectedBackground);
+    expect(flagged.length).toBe(1);
+    expect(flagged[0].paths.length).toBe(1);
   });
 
   it("keeps a compound path's DISJOINT islands (an '=' sign) — does not cancel them as holes", () => {
