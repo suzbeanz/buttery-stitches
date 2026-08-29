@@ -235,6 +235,9 @@ export default function AutoDigitizeDialog({
     [imageData],
   );
   const looksLikePhoto = complexity > PHOTO_COMPLEXITY;
+  // Visible <text> elements in a vector import: deliberately NOT traced
+  // (rasterized type sews badly) — the notice points at the native Text tool.
+  const svgTextCount = isSvg ? svgShapes?.shapes?.textCount ?? 0 : 0;
   // Live-Paint detection: does the image read as outlined line art (a dark
   // connected line network enclosing flat color faces)? Raster sources only.
   const lineArt = useMemo(
@@ -639,6 +642,19 @@ export default function AutoDigitizeDialog({
                 This looks like a photo. Embroidery is flat color and clean lines — photos
                 aren&apos;t supported and won&apos;t digitize well. Clean illustrations, logos and
                 outlined artwork give great results.
+              </span>
+            </p>
+          </div>
+        )}
+
+        {svgTextCount > 0 && (
+          <div className="mb-3 rounded bg-butter-200 px-2 py-1.5 text-[12px] text-navy">
+            <p className="flex gap-1.5">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0 text-stamp" aria-hidden />
+              <span>
+                This SVG has {svgTextCount === 1 ? "a text element" : `${svgTextCount} text elements`} that
+                won&apos;t be traced. After adding the artwork, use the studio&apos;s Text tool to set
+                the words as crisp lettering.
               </span>
             </p>
           </div>

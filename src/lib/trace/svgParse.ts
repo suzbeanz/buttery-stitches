@@ -397,8 +397,13 @@ function isHidden(el: Element, root: Element): boolean {
 }
 
 /** Parse SVG text into flattened, fill-resolved shapes plus the artwork bbox.
- *  Returns null if the string isn't a usable SVG. */
-export function parseSvgShapes(svgText: string): { shapes: SvgShape[]; contentW: number; contentH: number } | null {
+ *  `textCount` reports visible <text> elements — deliberately NOT traced
+ *  (rasterized type sews badly; the studio's Text tool sets crisp lettering),
+ *  so the dialog can point the user there. Returns null if the string isn't a
+ *  usable SVG. */
+export function parseSvgShapes(
+  svgText: string,
+): { shapes: SvgShape[]; contentW: number; contentH: number; textCount: number } | null {
   if (typeof document === "undefined") return null;
   const doc = new DOMParser().parseFromString(svgText, "image/svg+xml");
   const svg = doc.querySelector("svg");
@@ -415,6 +420,10 @@ export function parseSvgShapes(svgText: string): { shapes: SvgShape[]; contentW:
     // invisible to querySelectorAll, and the walk below needs real elements.
     expandUses(live);
     const rootCTM = live.getCTM() ?? live.getScreenCTM() ?? new DOMMatrix();
+    // Visible <text> with real content — surfaced, never traced.
+    const textCount = Array.from(live.querySelectorAll("text")).filter(
+      (t) => !t.closest(NON_RENDERED) && (t.textContent ?? "").trim().length > 0 && !isHidden(t, live),
+    ).length;
     const shapes: SvgShape[] = [];
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     const grow = (rings: Path[]) => {
@@ -487,7 +496,7 @@ export function parseSvgShapes(svgText: string): { shapes: SvgShape[]; contentW:
       s.rings = s.rings.map(shift);
       if (s.stroke) s.stroke.centerlines = s.stroke.centerlines.map(shift);
     }
-    return { shapes, contentW, contentH };
+    return { shapes, contentW, contentH, textCount };
   } finally {
     host.remove();
   }
