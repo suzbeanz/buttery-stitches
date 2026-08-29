@@ -61,6 +61,19 @@ const yellows = (rgb: [number, number, number]) => rgb[0] > 170 && rgb[1] > 140 
 const greens = (rgb: [number, number, number]) => rgb[1] > 110 && rgb[0] < 120 && rgb[2] < 120;
 const blues = (rgb: [number, number, number]) => rgb[2] > 140 && rgb[0] < 120;
 const darks = (rgb: [number, number, number]) => rgb[0] < 90 && rgb[1] < 90 && rgb[2] < 90;
+const pinks = (rgb: [number, number, number]) =>
+  rgb[0] > 150 && rgb[1] < 130 && rgb[2] > 80 && rgb[0] - rgb[1] > 50;
+
+/** Linear color blend for antialiased boundaries (t clamped to [0,1]). */
+const mixRGBA = (a: RGBA, b: RGBA, t: number): RGBA => {
+  const u = Math.max(0, Math.min(1, t));
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * u),
+    Math.round(a[1] + (b[1] - a[1]) * u),
+    Math.round(a[2] + (b[2] - a[2]) * u),
+    Math.round(a[3] + (b[3] - a[3]) * u),
+  ];
+};
 
 export function corpusImages(): CorpusImage[] {
   const out: CorpusImage[] = [];
@@ -205,6 +218,38 @@ export function corpusImages(): CorpusImage[] {
         return [225, 170, 120, 255]; // the face
       }
       return [252, 252, 252, 255];
+    }),
+  });
+
+  // 6b. ANTIALIASED soft-shaded features — the browser-rendered/resampled
+  // upload. Blend ramps line every shade boundary and the tiny eye/tongue sit
+  // below the consolidation floor; the quantizer's detail rescue (plus the
+  // fringe-merge compact-detail guard on Apply) is what keeps them stitched.
+  out.push({
+    name: "aa-soft-features",
+    stresses: "antialiased shading: tiny distinct details keep their threads end-to-end",
+    colors: 5,
+    mmPerPx: 0.4,
+    expectColors: [4, 7],
+    removeBackground: true,
+    mustKeep: [
+      { name: "dark eye", test: darks },
+      { name: "pink tongue", test: pinks },
+    ],
+    image: build(200, 150, (x, y) => {
+      const white: RGBA = [252, 252, 252, 255];
+      if (!inEllipse(x, y, 100, 75, 88, 62)) return white;
+      // Face of two soft shades split by a wavy antialiased seam (2px ramp).
+      const brown: RGBA = [150, 105, 60, 255];
+      const tan: RGBA = [205, 160, 110, 255];
+      const d = y - (75 + 10 * Math.sin(x / 14));
+      let c = mixRGBA(brown, tan, 0.5 + d / 4);
+      // Tiny AA-rimmed details, each well under 0.4% of the subject.
+      const eye = Math.hypot(x - 70, y - 55) - 4.5;
+      const tongue = Math.hypot((x - 120) / 1.4, y - 100) - 4.5;
+      if (tongue < 1.5) c = mixRGBA([210, 90, 120, 255], c, 0.5 + tongue / 3);
+      if (eye < 1.5) c = mixRGBA([25, 22, 20, 255], c, 0.5 + eye / 3);
+      return c;
     }),
   });
 

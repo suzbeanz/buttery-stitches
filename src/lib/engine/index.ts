@@ -14,7 +14,7 @@ import { satinColumn } from "./satin";
 import { tatamiFill, tatamiConcaveRuns, multiBlendFill, motifFill, motifRunAlong, carvePoints, splitFillRegions, autoFillAngleForRegions, autoFillAngle } from "./fill";
 import { contourFill } from "./contour";
 import { medialColumns, columnsFromCenterlines, satinCoverage, residualRegions, type SatinColumn } from "./medial";
-import { turningFill, flowFill, flowAlong } from "./turning";
+import { turningFill, flowFill, flowAlong, furFlowFill } from "./turning";
 import { guidanceFieldFill, multiAngleFill } from "./field";
 import { isSmallRoundFill, meanStrokeWidthMm, isBroadlyThick, splitComponents } from "./classify";
 import { polygonArea } from "../trace/classify";
@@ -1273,9 +1273,14 @@ export function generateObjectRuns(
           });
         };
         tops = keep.map((c) =>
-          c.widthMm < LINE_ART_SATIN_MIN_MM
-            ? beanPath(runningStitch(c.centerline, stitchLength), LINE_ART_BEAN_REPEATS)
-            : widen(c),
+          p.sparkle
+            ? // SPARKLE: one sparse pass down the centerline, always — the fur
+              // mode's highlight streaks are light single strokes glinting over
+              // the coat, never a bean retrace or a solid satin bar.
+              runningStitch(c.centerline, stitchLength)
+            : c.widthMm < LINE_ART_SATIN_MIN_MM
+              ? beanPath(runningStitch(c.centerline, stitchLength), LINE_ART_BEAN_REPEATS)
+              : widen(c),
         );
         tatamiNoBareTravel = true; // a fill: order for shortest travel, never slash a bare gap
         lineArtFill = true;
@@ -1362,9 +1367,32 @@ export function generateObjectRuns(
       // the way every professional reference fills it. Judged by INSCRIBED
       // thickness (isBroadlyThick), which a boundary notch can't fool the way
       // it inflates perimeter-based mean width.
-      const bandLike = !isBroadlyThick(region, BAND_MAX_HALF_WIDTH_MM);
+      // FUR fills opt every region of a multi-region object into the turning
+      // path: each elongated lock follows its own flow — the "patchwork" the
+      // single-region rule exists to prevent is exactly the fur look (the
+      // commercial reference angles every lock separately). All the safety
+      // gates below (bandLike, self-validation, MIN_TURNED_COVERAGE, tip
+      // patching) still judge each region on its own. Fur uses a TIGHTER band
+      // bar: on a broad wavy lock the spine curls and turned rows fan into
+      // radial wedges (measured on the fur fixture) — and the commercial
+      // reference sews broad locks as straight per-lock grain anyway, so only
+      // genuinely narrow locks turn and the rest take per-region-angled tatami.
+      const furStyle = p.fillStyle === "fur";
+      const bandLike = !isBroadlyThick(region, furStyle ? 4 : BAND_MAX_HALF_WIDTH_MM);
       const autoSingle =
-        !manualDirection && !flowSpineMm && !guidesMm && regions.length === 1 && bandLike;
+        !manualDirection && !flowSpineMm && !guidesMm && (regions.length === 1 || furStyle) && bandLike;
+      // MEDIUM fur lock: too broad for the tight fur band bar, still band-scale
+      // (≤ the general 8mm half-width). furFlowFill gives it gently-curved rows
+      // along its own spine — with its own curl ceiling and break budget so the
+      // wave-1 radial-wedge fans cannot return; anything it declines keeps the
+      // straight per-region grain.
+      const furMedium =
+        furStyle &&
+        !bandLike &&
+        !manualDirection &&
+        !flowSpineMm &&
+        !guidesMm &&
+        !isBroadlyThick(region, BAND_MAX_HALF_WIDTH_MM);
       // A clean single-spine band (banner, leaf, crescent) turns. The guidance FIELD
       // is the promoted default there — it sweeps the form cap-to-cap and beats the
       // spine-march on coverage + long-stitch count (bench: crescent-field) — with
@@ -1379,7 +1407,12 @@ export function generateObjectRuns(
       // — the turned rows must win there or the crown sews as a patched web.
       let turned = multiAngle ?? userFlow ?? null;
       if (!turned && autoTurn) {
-        const field = guidanceFieldFill(region, fillOpts);
+        // FUR skips the harmonic field: on a blobby wavy lock the field can
+        // develop a VORTEX (rows swirling 360° around an interior point,
+        // leaving radial bare wedges the halo-credited coverage gate misses —
+        // measured around the fixture's eye). Spine-marched turning can't
+        // swirl; fur locks keep it exclusively.
+        const field = furStyle ? null : guidanceFieldFill(region, fillOpts);
         if (field) {
           const covField = satinCoverage(region, field);
           const covTurn = satinCoverage(region, autoTurn);
@@ -1389,6 +1422,8 @@ export function generateObjectRuns(
         }
       } else if (!turned && autoSingle) {
         turned = flowFill(region, fillOpts);
+      } else if (!turned && furMedium) {
+        turned = furFlowFill(region, fillOpts);
       }
       // HARD coverage gate on every fancy fill: a turned/field/flow output that
       // leaves real bare area (a pathological ring — e.g. one deformed by the
@@ -1449,18 +1484,27 @@ export function generateObjectRuns(
       };
       lineArtPieces.forEach((pc, i) => {
         push(topByComp, labels[i], { ...pc, top: deloopRun(pc.top, region) });
-        if (p.underlay && !motifMode && (pc.widthMm ?? 0) >= LINE_ART_SATIN_MIN_MM) {
+        if (p.underlay && !motifMode && !p.sparkle && (pc.widthMm ?? 0) >= LINE_ART_SATIN_MIN_MM) {
           for (const run of columnUnderlay(pc.centerline, pc.widthMm!, weight, underlayType)) {
             push(ulByComp, labels[i], { top: run, centerline: pc.centerline });
           }
         }
       });
       for (const patch of residualRegions(region, tops, 0.2, TIP_PATCH_MIN_MM2)) {
-        if (Math.abs(polygonArea(patch)) > 8) continue;
-        const fill =
-          sliverMendRun(patch, stitchLength) ??
-          smallPatchSatinBlock(patch, density, fabric.pullMul) ??
-          sliverMendRun(patch, stitchLength, true);
+        // A LARGE residual is a locally-thick chunk the medial satin declined
+        // (a fat tail, a solid ear left in the stroke network by the trace's
+        // blob split). Leaving ~90mm² of declared ink bare is strictly worse
+        // than filling it: sew it as plain tatami in the same thread — exactly
+        // what the trace's "Ink solids" object would have done. NEVER for
+        // sparkle: its bare margin around each single pass is the point.
+        if (p.sparkle) break;
+        const bigPatch = Math.abs(polygonArea(patch)) > 8;
+        const fill = bigPatch
+          ? (tatamiFill([patch], { density, angle: p.angle, stitchLength: fillStitchLength }) ??
+            sliverMendRun(patch, stitchLength, true))
+          : (sliverMendRun(patch, stitchLength) ??
+            smallPatchSatinBlock(patch, density, fabric.pullMul) ??
+            sliverMendRun(patch, stitchLength, true));
         if (!fill) continue;
         for (const sub of splitLongTravels(deloopRun(fill), travelMax)) {
           const r = dropShortStitches(sub);

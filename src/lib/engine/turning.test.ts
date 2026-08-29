@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
 import type { Path, Point } from "../../types/project";
-import { turningFill, flowFill, flowAlong } from "./turning";
+import { turningFill, flowFill, flowAlong, furFlowFill } from "./turning";
 import { golfGreenRegion } from "./turning.fixture";
+import { satinCoverage } from "./medial";
+import { generateObjectRuns } from "./index";
+import { makeObjectFromPaths } from "../objects";
 
 const opts = { density: 0.6, angle: 0, stitchLength: 3, pullCompMm: 0.2 };
 
@@ -64,6 +67,72 @@ describe("turningFill", () => {
       { x: 30, y: 12 }, { x: 14, y: 12 }, { x: 14, y: 40 }, { x: 0, y: 40 },
     ];
     expect(turningFill([u], opts)).toBeNull();
+  });
+});
+
+describe("furFlowFill (medium fur locks, 4–8mm half-width)", () => {
+  it("flows a gently-curved medium lock along its own spine, covering it", () => {
+    // The crescent's 14mm wall (7mm half-width) sits in the medium band the
+    // fur dispatch excludes from turningFill; its bow (~0.23) is inside the
+    // [0.05, 0.35] window.
+    const runs = furFlowFill([crescent], opts);
+    expect(runs).not.toBeNull();
+    expect(satinCoverage([crescent], runs!)).toBeGreaterThanOrEqual(0.85);
+    // Rows genuinely rotate with the arc.
+    const dirs: number[] = [];
+    for (const run of runs!) {
+      if (run.length > 4) {
+        const d0 = Math.atan2(run[1].y - run[0].y, run[1].x - run[0].x);
+        const dN = Math.atan2(
+          run[run.length - 1].y - run[run.length - 2].y,
+          run[run.length - 1].x - run[run.length - 2].x,
+        );
+        dirs.push(Math.abs(d0 - dN));
+      }
+    }
+    expect(Math.max(...dirs, 0)).toBeGreaterThan(0.35); // > ~20° of turn
+    // Never slashes: every point stays inside the band.
+    for (const run of runs!) for (const p of run) expect(inCrescent(p)).toBe(true);
+  });
+
+  it("declines a STRAIGHT medium bar (straight grain is the reference norm)", () => {
+    const bar: Path = [{ x: 0, y: 0 }, { x: 60, y: 0 }, { x: 60, y: 11 }, { x: 0, y: 11 }];
+    expect(furFlowFill([bar], opts)).toBeNull();
+  });
+
+  it("declines a round blob (no lock to flow along)", () => {
+    const disc = arc(30, 30, 14, 0, 2 * Math.PI, 48);
+    expect(furFlowFill([disc], opts)).toBeNull();
+  });
+
+  it("declines a strongly CURLED band (the wave-1 radial-wedge shape)", () => {
+    // A 250° annulus band bows past the 0.35 curl ceiling — flowing it is how
+    // the fans happened; it must fall back to straight tatami.
+    const curled: Path = [
+      ...arc(50, 50, 30, 10 * D, 260 * D, 80),
+      ...arc(50, 50, 19, 260 * D, 10 * D, 80),
+    ];
+    expect(furFlowFill([curled], opts)).toBeNull();
+  });
+
+  it("the ENGINE flows a medium fur lock that wave 1 sewed straight", () => {
+    const o = makeObjectFromPaths("fill", [crescent], "c1");
+    o.params = { fillStyle: "fur", underlay: false };
+    const tops = generateObjectRuns(o).filter((r) => !r.underlay);
+    // Collect long-segment directions (folded to [0,π)) across the fill; a
+    // straight tatami is single-angle, the flow spans the arc's rotation.
+    const angles: number[] = [];
+    for (const run of tops) {
+      for (let i = 1; i < run.pts.length; i++) {
+        const dx = run.pts[i].x - run.pts[i - 1].x;
+        const dy = run.pts[i].y - run.pts[i - 1].y;
+        if (Math.hypot(dx, dy) < 2) continue;
+        angles.push(((Math.atan2(dy, dx) * 180) / Math.PI + 180) % 180);
+      }
+    }
+    expect(angles.length).toBeGreaterThan(30);
+    const spread = Math.max(...angles) - Math.min(...angles);
+    expect(spread, `direction spread ${spread.toFixed(0)}°`).toBeGreaterThan(25);
   });
 });
 

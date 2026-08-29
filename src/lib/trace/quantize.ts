@@ -87,7 +87,7 @@ const CHROMA_WEIGHT = 5;
 /** Perceptual-ish squared distance: luma + weighted chroma (YCbCr-style).
  *  Linear in RGB, so cluster means computed in RGB are also means under this
  *  metric — Lloyd iterations stay valid. */
-function dist2(a: RGB, r: number, g: number, b: number): number {
+export function dist2(a: RGB, r: number, g: number, b: number): number {
   const y1 = 0.299 * a[0] + 0.587 * a[1] + 0.114 * a[2];
   const y2 = 0.299 * r + 0.587 * g + 0.114 * b;
   const cb1 = a[2] - y1, cb2 = b - y2;
@@ -471,10 +471,10 @@ function stripCardOnce(
 
 /** How close (squared RGB) a sliver's colour must sit to the SEGMENT between
  *  its two neighbours' colours to count as their anti-alias blend. */
-const BLEND_SEGMENT_MAX_DIST2 = 60 * 60;
+export const BLEND_SEGMENT_MAX_DIST2 = 60 * 60;
 
 /** Squared distance from colour c to the segment a→b in RGB space. */
-function distToSegment2(c: RGB, a: RGB, b: RGB): number {
+export function distToSegment2(c: RGB, a: RGB, b: RGB): number {
   const abx = b[0] - a[0], aby = b[1] - a[1], abz = b[2] - a[2];
   const acx = c[0] - a[0], acy = c[1] - a[1], acz = c[2] - a[2];
   const len2 = abx * abx + aby * aby + abz * abz;
@@ -484,18 +484,16 @@ function distToSegment2(c: RGB, a: RGB, b: RGB): number {
 }
 
 /**
- * Dissolve thin blend-band components (see the call site) in place. Each band's
- * pixels flow to whichever of its two bordering colours they touch, growing both
- * sides inward until the band is consumed — so the boundary lands mid-band, the
- * same place the source's edge actually is.
+ * Label the 4-connected components of equal value in a label map (−1 entries are
+ * skipped). Returns the per-pixel component id (−1 = skipped) and each
+ * component's pixel list in raster discovery order — the shared first step of
+ * every region-shape pass over the quantized label map.
  */
-function dissolveBlendSlivers(
+function labelComponents4(
   labels: Int16Array,
   width: number,
   height: number,
-  palette: RGB[],
-  maxThickPx: number,
-): void {
+): { comp: Int32Array; compPixels: number[][] } {
   const total = width * height;
   const comp = new Int32Array(total).fill(-1);
   const compPixels: number[][] = [];
@@ -520,6 +518,23 @@ function dissolveBlendSlivers(
     }
     compPixels.push(pixels);
   }
+  return { comp, compPixels };
+}
+
+/**
+ * Dissolve thin blend-band components (see the call site) in place. Each band's
+ * pixels flow to whichever of its two bordering colours they touch, growing both
+ * sides inward until the band is consumed — so the boundary lands mid-band, the
+ * same place the source's edge actually is.
+ */
+function dissolveBlendSlivers(
+  labels: Int16Array,
+  width: number,
+  height: number,
+  palette: RGB[],
+  maxThickPx: number,
+): void {
+  const { comp, compPixels } = labelComponents4(labels, width, height);
 
   const tally = new Map<number, number>();
   for (const pixels of compPixels) {
@@ -581,6 +596,158 @@ function dissolveBlendSlivers(
       for (const [k, to] of assign) labels[k] = to;
       frontier = next;
     }
+  }
+}
+
+/** A pixel is a RESCUE OUTLIER when its true color sits farther than this
+ *  (chroma-weighted, see dist2) from its assigned palette color. Calibrated
+ *  against measured residuals: shading flecks consolidated into a near shade
+ *  land ≤ ~3,900 and adjacent-shade anti-alias bands ≈ 1,200, while genuine
+ *  starved features start ≈ 10,300 (a black eye on dark-brown fur) and
+ *  ≈ 13,400 (a pink tongue on light fur). 6,500 splits those worlds. */
+export const RESCUE_OUTLIER_MIN_DIST2 = 6500;
+/** Outlier clumps below this share of the opaque area are noise, not features.
+ *  Fraction-of-opaque is scale-free under the pre-quantize upscale (both the
+ *  clump and the image scale by factor²). A traced pet eye measures ≈ 0.2–0.5%. */
+const RESCUE_MIN_AREA_FRACTION = 0.0008;
+/** …and an absolute floor so a couple of stray pixels never earn a thread. */
+const RESCUE_MIN_AREA_PX = 12;
+/** Rescue slots are ADDITIVE — the user's color count keeps meaning "main
+ *  palette" (the same philosophy as the +1 opaque-background slot), and this
+ *  cap keeps a noisy photo from sprouting a dozen extra threads. */
+const RESCUE_MAX_EXTRA_COLORS = 4;
+
+/**
+ * DETAIL RESCUE, the final label-map pass: give tiny-but-distinct features the
+ * palette slot that population-weighted k-means starved them of. On antialiased
+ * art the blend-band pixel mass along every soft boundary out-votes a dog's
+ * 2000-px eye, so no cluster lands near it and the eye quantizes into the fur.
+ * Find the 4-connected clumps of pixels whose TRUE color (from `data`, which
+ * the label passes never modify) sits far from their assigned palette color,
+ * reject the ones shaped like anti-alias blends, and give the rest their color
+ * back. Runs AFTER consolidateRegions/dissolveBlendSlivers on purpose: those
+ * passes can legally dissolve a small dark feature into a near-enough surround
+ * (their merge gate is wider than the rescue threshold), and nothing may run
+ * after a rescue that could eat it again. On clean flat art every pixel sits on
+ * its palette color, the mask is empty, and this is a no-op.
+ */
+function rescueDetailComponents(
+  labels: Int16Array,
+  width: number,
+  height: number,
+  data: Uint8ClampedArray,
+  palette: RGB[],
+  maxThickPx: number,
+): void {
+  const total = width * height;
+  const mask = new Int16Array(total).fill(-1);
+  let opaqueCount = 0;
+  let outliers = 0;
+  for (let i = 0; i < total; i++) {
+    if (labels[i] < 0) continue;
+    opaqueCount++;
+    const o = i * 4;
+    if (dist2(palette[labels[i]], data[o], data[o + 1], data[o + 2]) > RESCUE_OUTLIER_MIN_DIST2) {
+      mask[i] = 0;
+      outliers++;
+    }
+  }
+  if (outliers === 0) return;
+
+  const minArea = Math.max(RESCUE_MIN_AREA_PX, Math.floor(opaqueCount * RESCUE_MIN_AREA_FRACTION));
+  const { comp, compPixels } = labelComponents4(mask, width, height);
+  const candidates: Array<{ pixels: number[]; mean: RGB }> = [];
+  const tally = new Map<number, number>();
+  for (const pixels of compPixels) {
+    if (pixels.length < minArea) continue;
+    // Mean TRUE color, perimeter, and which palette labels border the clump.
+    let r = 0, g = 0, b = 0, perim = 0;
+    tally.clear();
+    for (const k of pixels) {
+      const o = k * 4;
+      r += data[o];
+      g += data[o + 1];
+      b += data[o + 2];
+      const kx = k % width;
+      const ky = (k / width) | 0;
+      const nb = [
+        kx > 0 ? k - 1 : -1,
+        kx < width - 1 ? k + 1 : -1,
+        ky > 0 ? k - width : -1,
+        ky < height - 1 ? k + width : -1,
+      ];
+      for (const ni of nb) {
+        if (ni >= 0 && comp[ni] === comp[k]) continue; // interior edge
+        perim++;
+        const nl = ni < 0 ? -1 : labels[ni];
+        if (nl >= 0) tally.set(nl, (tally.get(nl) ?? 0) + 1);
+      }
+    }
+    const n = pixels.length;
+    const mean: RGB = [Math.round(r / n), Math.round(g / n), Math.round(b / n)];
+    // ANTI-ALIAS rejection, mirroring dissolveBlendSlivers' shape gates: a thin
+    // ribbon is a blend band however far its color sits from the palette…
+    if (perim > 0 && (2 * n) / perim <= maxThickPx) continue;
+    // …and a WIDE soft gradient between two colors still betrays itself by
+    // sitting on the segment between its two dominant neighbours — but only
+    // when it is a genuine MIX of them: both sides hold a real border share
+    // (the dissolveBlendSlivers rule) and the mean projects onto the segment's
+    // INTERIOR. A blend band's mean lands mid-segment; a distinct feature that
+    // happens to border two colors projects at an endpoint (a pink tongue on a
+    // two-shade coat sits ~50 RGB units from the tan itself — near in RGB only
+    // because plain RGB underweights its chroma, which is why it is in the
+    // outlier mask at all).
+    const neighbors = [...tally.entries()].sort((a, c) => c[1] - a[1]);
+    if (neighbors.length >= 2) {
+      const [[A, cntA], [B, cntB]] = neighbors;
+      const totalN = neighbors.reduce((s, [, c]) => s + c, 0);
+      const pa = palette[A];
+      const pb = palette[B];
+      const abx = pb[0] - pa[0], aby = pb[1] - pa[1], abz = pb[2] - pa[2];
+      const len2 = abx * abx + aby * aby + abz * abz;
+      const tMix =
+        len2 > 0
+          ? ((mean[0] - pa[0]) * abx + (mean[1] - pa[1]) * aby + (mean[2] - pa[2]) * abz) / len2
+          : 0;
+      if (
+        (cntA + cntB) / totalN >= 0.85 &&
+        Math.min(cntA, cntB) / totalN >= 0.15 &&
+        tMix >= 0.15 &&
+        tMix <= 0.85 &&
+        distToSegment2(mean, pa, pb) <= BLEND_SEGMENT_MAX_DIST2
+      )
+        continue;
+    }
+    candidates.push({ pixels, mean });
+  }
+
+  // Largest first (tie-break: raster order) so the cap keeps the features a
+  // viewer reads first; deterministic throughout.
+  candidates.sort((a, b) => b.pixels.length - a.pixels.length || a.pixels[0] - b.pixels[0]);
+  let added = 0;
+  for (const c of candidates) {
+    let best = -1;
+    let bd = Infinity;
+    for (let i = 0; i < palette.length; i++) {
+      const d = dist2(palette[i], c.mean[0], c.mean[1], c.mean[2]);
+      if (d < bd) {
+        bd = d;
+        best = i;
+      }
+    }
+    let target = -1;
+    if (bd <= RESCUE_OUTLIER_MIN_DIST2) {
+      // A near-enough color already exists (possibly an earlier rescue — two
+      // eyes share one slot): restore the clump to it, consuming no slot.
+      target = best;
+    } else if (added < RESCUE_MAX_EXTRA_COLORS) {
+      palette.push(c.mean);
+      target = palette.length - 1;
+      added++;
+    }
+    // Relabel ONLY the clump's pixels — an image-wide nearest-color re-run
+    // would speckle dissolved anti-alias bands with the rescued colors.
+    if (target >= 0) for (const k of c.pixels) labels[k] = target;
   }
 }
 
@@ -661,6 +828,10 @@ export function quantizeImage(
     // intermediate-coloured FEATURE (a grey hubcap disc) is blobby, not thin,
     // and survives.
     dissolveBlendSlivers(labels, width, height, palette, opts.blendSliverMaxPx ?? 4);
+    // LAST, so no later pass can eat what it restores: hand starved
+    // tiny-but-distinct features (a pet's eye against soft-shaded fur) their
+    // own palette slot back. See rescueDetailComponents.
+    rescueDetailComponents(labels, width, height, data, palette, opts.blendSliverMaxPx ?? 4);
   }
 
   const out = new Uint8ClampedArray(data.length);
@@ -755,29 +926,7 @@ function consolidateRegions(labels: Int16Array, width: number, height: number, p
   );
 
   // Label 4-connected components of equal value (comp id per pixel, −1 = transparent).
-  const comp = new Int32Array(total).fill(-1);
-  const compPixels: number[][] = [];
-  const stack: number[] = [];
-  for (let start = 0; start < total; start++) {
-    if (labels[start] < 0 || comp[start] !== -1) continue;
-    const id = compPixels.length;
-    const val = labels[start];
-    const pixels: number[] = [];
-    comp[start] = id;
-    stack.length = 0;
-    stack.push(start);
-    while (stack.length) {
-      const k = stack.pop()!;
-      pixels.push(k);
-      const kx = k % width;
-      const ky = (k / width) | 0;
-      if (kx > 0 && comp[k - 1] === -1 && labels[k - 1] === val) { comp[k - 1] = id; stack.push(k - 1); }
-      if (kx < width - 1 && comp[k + 1] === -1 && labels[k + 1] === val) { comp[k + 1] = id; stack.push(k + 1); }
-      if (ky > 0 && comp[k - width] === -1 && labels[k - width] === val) { comp[k - width] = id; stack.push(k - width); }
-      if (ky < height - 1 && comp[k + width] === -1 && labels[k + width] === val) { comp[k + width] = id; stack.push(k + width); }
-    }
-    compPixels.push(pixels);
-  }
+  const { compPixels } = labelComponents4(labels, width, height);
 
   // Smallest components first: a fleck dissolves into a mid region, which can then
   // dissolve into the big one — so a shattered area cascades down to a few shapes.

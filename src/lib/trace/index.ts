@@ -14,6 +14,11 @@ import {
   borderIsTransparent,
   borderIsSolidOpaque,
   removeInnerBackdrop,
+  dist2 as colorDist2,
+  distToSegment2,
+  RESCUE_OUTLIER_MIN_DIST2,
+  BLEND_SEGMENT_MAX_DIST2,
+  type RGB,
 } from "./quantize";
 import { stackSmallFeatures } from "./stack";
 import { nameForRgb } from "./colorname";
@@ -29,6 +34,7 @@ export * from "./quantize";
 export * from "./types";
 export * from "./upscale";
 export * from "./livepaint";
+export * from "./fur";
 export type { DigitizeDetail, DigitizeOptions, DigitizeResult };
 
 /** The slice of imagetracerjs's tracedata we consume. */
@@ -152,6 +158,9 @@ export function tracedataToObjects(
     simplifyTolMm = 0.3,
     minAreaMm2 = 2,
     removeBackground = true,
+    shapeSnap = true,
+    straightenTolMm = STRAIGHTEN_TOL_MM,
+    strokeMaxWidthMm = STROKE_MAX_WIDTH_MM,
   } = opts;
 
   const simp = (pts: Point[]): Path =>
@@ -284,8 +293,9 @@ export function tracedataToObjects(
     // on a "straight" edge collapses to a true straight line (real corners deviate far
     // more and survive DP), then corner-aware smooth so genuine curves stay smooth.
     // This is what kills the "shakily drawn" look regardless of the detail preset.
+    const straighten = (r: Path) => smoothRingKeepingCorners(douglasPeucker(r, straightenTolMm), 0.6);
     const clean = (r: Path) =>
-      recognizeShape(r, 1.0)?.ring ?? smoothRingKeepingCorners(douglasPeucker(r, STRAIGHTEN_TOL_MM), 0.6);
+      shapeSnap ? (recognizeShape(r, 1.0)?.ring ?? straighten(r)) : straighten(r);
     const fillRings: Path[] = [];
     const strokeRings: Path[] = [];
     // Suspected page-background rings (the halo gate below) go into their OWN
@@ -360,7 +370,7 @@ export function tracedataToObjects(
       // mess of medial stubs.
       let isStroke =
         isNetwork ||
-        (meanWidth < STROKE_MAX_WIDTH_MM && length >= STROKE_MIN_LENGTH_MM && elongation >= STROKE_MIN_ELONGATION);
+        (meanWidth < strokeMaxWidthMm && length >= STROKE_MIN_LENGTH_MM && elongation >= STROKE_MIN_ELONGATION);
       // A LETTERFORM-scale shape — thin like a stroke but short and compact (the
       // glyphs of small crest text) — sews far better through the FILL path: the
       // engine's auto-satin there is the same machinery the fonts use (junction
@@ -642,8 +652,25 @@ export function estimateColorComplexity(imageData: ImageData): number {
  * its parents' buckets) and a bucket counts as a thread-worthy colour when it
  * covers ≥1.5% of the subject. Counting DISTINCT meaningful colours — not area
  * coverage — is what keeps a small feature (a gold pole, a dark hole) counted
- * even when one big colour dominates the pixels.
+ * even when one big colour dominates the pixels. Below the 1.5% bar, a RARE
+ * bucket still counts when it is perceptually far from every major colour AND
+ * off the blend segment between every major pair — a pet's dark eye is a real
+ * thread at 0.3% of the pixels, while the anti-alias mid-grey between black and
+ * white (equally far from both) is not.
  */
+/** A sub-1.5% bucket can still count as a thread only above this share —
+ *  below it single noise pixels would masquerade as details. */
+const SUGGEST_DETAIL_MIN_SHARE = 0.002;
+/** …and only with several corroborating samples: one or two stray pixels can
+ *  land anywhere (and a lone sample has zero scatter by definition), while a
+ *  real feature turns up repeatedly under the strided scan. */
+const SUGGEST_DETAIL_MIN_SAMPLES = 3;
+/** …and only when its samples are TIGHT: summed per-channel variance of a
+ *  genuine flat detail (a pet's eye) is ≈0, while noise or anti-alias samples
+ *  that happen to share a coarse bucket scatter across its 32-unit span
+ *  (uniform spread ≈ 32²/12 ≈ 85 per channel, ≈250 summed). */
+const SUGGEST_DETAIL_MAX_SCATTER = 150;
+
 export function suggestColorCount(imageData: ImageData, min = 2, max = 12): number {
   let img: { data: Uint8ClampedArray | number[] } = imageData;
   if (borderIsTransparent(imageData)) {
@@ -652,16 +679,65 @@ export function suggestColorCount(imageData: ImageData, min = 2, max = 12): numb
   }
   const data = img.data as Uint8ClampedArray;
   const counts = new Map<number, number>();
+  // Per-bucket channel sums and squared sums: means for the distance tests,
+  // variance for the tightness test.
+  const sums = new Map<number, [number, number, number, number, number, number]>();
   const step = Math.max(4, Math.floor(data.length / 4 / 4000)) * 4;
   let total = 0;
   for (let i = 0; i + 3 < data.length; i += step) {
     if (data[i + 3] < 8) continue; // skip transparent
     const key = ((data[i] >> 5) << 10) | ((data[i + 1] >> 5) << 5) | (data[i + 2] >> 5);
     counts.set(key, (counts.get(key) ?? 0) + 1);
+    const s = sums.get(key) ?? [0, 0, 0, 0, 0, 0];
+    for (let c = 0; c < 3; c++) {
+      s[c] += data[i + c];
+      s[c + 3] += data[i + c] * data[i + c];
+    }
+    sums.set(key, s);
     total++;
   }
   if (total === 0) return min;
+  const meanOf = (key: number): RGB => {
+    const s = sums.get(key)!;
+    const f = counts.get(key)!;
+    return [Math.round(s[0] / f), Math.round(s[1] / f), Math.round(s[2] / f)];
+  };
+  const majors: RGB[] = [];
   let n = 0;
-  for (const f of counts.values()) if (f / total >= 0.015) n++;
+  for (const [key, f] of counts) {
+    if (f / total >= 0.015) {
+      n++;
+      majors.push(meanOf(key));
+    }
+  }
+  // Rare-but-distinct details. Known limit: below SUGGEST_DETAIL_MIN_SHARE the
+  // deterministic-but-noisy single-sample buckets would count, so a truly tiny
+  // feature relies on the quantizer's rescue pass (which sees every pixel), not
+  // on this suggestion.
+  for (const [key, f] of counts) {
+    const share = f / total;
+    if (share >= 0.015 || share < SUGGEST_DETAIL_MIN_SHARE) continue;
+    if (f < SUGGEST_DETAIL_MIN_SAMPLES) continue;
+    const s = sums.get(key)!;
+    const scatter =
+      (s[3] + s[4] + s[5]) / f -
+      ((s[0] / f) ** 2 + (s[1] / f) ** 2 + (s[2] / f) ** 2);
+    if (scatter > SUGGEST_DETAIL_MAX_SCATTER) continue; // noise/AA sharing a bucket
+    const mean = meanOf(key);
+    const farFromAll = majors.every(
+      (m) => colorDist2(m, mean[0], mean[1], mean[2]) > RESCUE_OUTLIER_MIN_DIST2,
+    );
+    if (!farFromAll) continue;
+    // Anti-alias mid-tones are far from BOTH parents yet sit on the straight
+    // line between them — the same segment test the blend-sliver dissolver uses.
+    let onBlendSegment = false;
+    for (let a = 0; a < majors.length && !onBlendSegment; a++)
+      for (let b = a + 1; b < majors.length; b++)
+        if (distToSegment2(mean, majors[a], majors[b]) <= BLEND_SEGMENT_MAX_DIST2) {
+          onBlendSegment = true;
+          break;
+        }
+    if (!onBlendSegment) n++;
+  }
   return Math.max(min, Math.min(max, n));
 }

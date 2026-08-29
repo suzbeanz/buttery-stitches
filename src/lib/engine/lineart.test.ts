@@ -45,6 +45,45 @@ describe("line-art bold (bean) outlines", () => {
   });
 });
 
+describe("sparkle strokes sew as ONE sparse pass (fur highlight streaks)", () => {
+  // The fur mode's sparkle: light single strokes glinting over the coat —
+  // never a bean retrace (3× the thread) and never a solid satin bar, and no
+  // underlay under a highlight.
+  function sparkleObject(rings: Path[]) {
+    const o = makeObjectFromPaths("fill", rings, "c1");
+    o.params = { fillStyle: "satin", lineArt: true, sparkle: true, underlay: true };
+    return o;
+  }
+  // A 40mm bar at 0.8mm width — over the 0.55mm line-art satin bar, so WITHOUT
+  // sparkle it would sew as a satin column with underlay.
+  const bar: Path = [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 0.8 }, { x: 0, y: 0.8 }];
+
+  it("no underlay, no retrace, no satin throws — one pass down the centerline", () => {
+    const runs = generateObjectRuns(sparkleObject([bar]));
+    expect(runs.some((r) => r.underlay)).toBe(false);
+    const tops = runs.filter((r) => !r.underlay);
+    // Single pass: total drawn length ≈ the 40mm centerline (a bean triple
+    // would be ≈120mm, a satin bar far more).
+    let drawn = 0;
+    for (const run of tops)
+      for (let i = 1; i < run.pts.length; i++)
+        drawn += Math.hypot(run.pts[i].x - run.pts[i - 1].x, run.pts[i].y - run.pts[i - 1].y);
+    expect(drawn).toBeGreaterThan(30);
+    expect(drawn).toBeLessThan(64); // < 1.6× the centerline — no retrace/satin
+    // Every stitch rides the centerline (y ≈ 0.4), not the rails.
+    for (const run of tops)
+      for (const p of run.pts) expect(Math.abs(p.y - 0.4)).toBeLessThan(0.35);
+  });
+
+  it("the same bar WITHOUT sparkle still satins (guards the contrast)", () => {
+    const runs = generateObjectRuns(lineArtObject([bar]));
+    const tops = runs.filter((r) => !r.underlay);
+    // Satin throws cross the (≥0.8mm-widened) column: points reach both rails.
+    const ys = tops.flatMap((r) => r.pts.map((p) => p.y));
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0.6);
+  });
+});
+
 describe("line-art strokes sew as satin ACROSS the stroke", () => {
   // A tire: an annulus with a 3 mm wall. A hand digitizer sews it as RADIAL satin
   // (throws across the wall, marching around the ring) — solid, with the spoke

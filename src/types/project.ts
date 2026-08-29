@@ -90,8 +90,11 @@ export interface EmbObjectParams {
    *  contour (rows that echo the shape's outline), gradient (tatami whose row
    *  spacing ramps for a shaded/ombré effect), motif (a tiled decorative
    *  motif), sketch (open single-angle rows whose visible texture is the look —
-   *  the professional "light fill"), or crosshatch (two sketch passes at
-   *  crossing angles, the layered shading of the reference animal designs). */
+   *  the professional "light fill"), crosshatch (two sketch passes at crossing
+   *  angles, the layered shading of the reference animal designs), or fur (a
+   *  dense solid whose every elongated region turns along its own flow — the
+   *  layered-fur look; also exempt from seam knockdown so baked shade overlaps
+   *  survive Clean up). */
   fillStyle?:
     | "tatami"
     | "satin"
@@ -101,11 +104,16 @@ export interface EmbObjectParams {
     | "blend"
     | "field"
     | "sketch"
-    | "crosshatch";
+    | "crosshatch"
+    | "fur";
   /** LINE-ART: render this (satin) object's medial columns as clean RUNNING lines
    *  down their centerline rather than filled satin — for outlines and fine detail
    *  strokes (auto-set by the tracer on thin regions). */
   lineArt?: boolean;
+  /** LINE-ART SPARKLE: every stroke sews as ONE sparse running pass down its
+   *  centerline — no bean retrace, no satin, no underlay. The fur mode's
+   *  highlight streaks: light single strokes glinting over the coat. */
+  sparkle?: boolean;
   /** second thread color id for fillStyle "blend" (a two-thread ombré). The fill
    *  fades from the object's colorId to this across the shape. */
   blendColorId?: string;
@@ -303,6 +311,7 @@ export const DEFAULT_PARAMS: Required<EmbObjectParams> = {
   outline: true,
   fillStyle: "tatami",
   lineArt: false,
+  sparkle: false,
   blendColorId: "",
   motif: "wave",
   motifSizeMm: 4,
@@ -373,6 +382,7 @@ export function resolveParams(
     outline: params.outline ?? DEFAULT_PARAMS.outline,
     fillStyle: params.fillStyle ?? DEFAULT_PARAMS.fillStyle,
     lineArt: params.lineArt ?? DEFAULT_PARAMS.lineArt,
+    sparkle: params.sparkle ?? DEFAULT_PARAMS.sparkle,
     blendColorId: params.blendColorId ?? DEFAULT_PARAMS.blendColorId,
     motif: params.motif ?? DEFAULT_PARAMS.motif,
     motifSizeMm: safeLen(params.motifSizeMm, DEFAULT_PARAMS.motifSizeMm, 0.5, 100),

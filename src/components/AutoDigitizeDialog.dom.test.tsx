@@ -42,6 +42,11 @@ vi.mock("../lib/trace", () => ({
     suggestedColors: 4,
   })),
   livePaintObjects: vi.fn(() => ({ colors: COLORS, objects: OBJECTS })),
+  furObjects: vi.fn(() => ({ colors: COLORS, objects: OBJECTS })),
+  detectFurArt: vi.fn(() => ({
+    isFurArt: false,
+    stats: { opaqueFraction: 1, furMassCount: 0, ladderDeltaL: 0, maxFamilyHueDeg: 0 },
+  })),
 }));
 // jsdom can't fetch the font — load a real .ttf from disk so the text-retype
 // path actually places lettering (keeps the other tests' fonts.ts constants).
@@ -59,7 +64,7 @@ vi.mock("../lib/text/fonts", async (importActual) => {
 });
 
 import AutoDigitizeDialog from "./AutoDigitizeDialog";
-import { imageDataToObjects, detectLineArt, livePaintObjects } from "../lib/trace";
+import { imageDataToObjects, detectLineArt, detectFurArt, livePaintObjects, furObjects } from "../lib/trace";
 
 const LINE_ART_YES = {
   isLineArt: true,
@@ -128,10 +133,15 @@ describe("AutoDigitizeDialog (wizard)", () => {
     // mockReturnValue override otherwise, leaking into later tests).
     vi.mocked(imageDataToObjects).mockReturnValue({ colors: COLORS, objects: OBJECTS });
     vi.mocked(livePaintObjects).mockReturnValue({ colors: COLORS, objects: OBJECTS });
+    vi.mocked(furObjects).mockReturnValue({ colors: COLORS, objects: OBJECTS });
     vi.mocked(detectLineArt).mockReturnValue({
       isLineArt: false,
       stats: { ...LINE_ART_YES.stats, inkFraction: 0, enclosedFaces: 0 },
       suggestedColors: 4,
+    });
+    vi.mocked(detectFurArt).mockReturnValue({
+      isFurArt: false,
+      stats: { opaqueFraction: 1, furMassCount: 0, ladderDeltaL: 0, maxFamilyHueDeg: 0 },
     });
     // jsdom lacks object URLs.
     URL.createObjectURL = vi.fn(() => "blob:x");
@@ -477,6 +487,58 @@ describe("AutoDigitizeDialog (wizard)", () => {
     await waitForTrace();
     fireEvent.click(screen.getByRole("button", { name: "Standard trace" }));
     await waitFor(() => expect(vi.mocked(imageDataToObjects)).toHaveBeenCalled());
+  });
+
+  const FUR_ART_YES = {
+    isFurArt: true,
+    stats: { opaqueFraction: 0.6, furMassCount: 3, ladderDeltaL: 40, maxFamilyHueDeg: 5 },
+  };
+
+  it("auto-preselects Fur for detected soft-shaded art and traces via furObjects", async () => {
+    vi.mocked(detectFurArt).mockReturnValue(FUR_ART_YES);
+    renderDialog();
+    await waitForTrace();
+    const btn = screen.getByRole("button", { name: "Fur" }) as HTMLButtonElement;
+    expect(btn.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText(/soft-shaded fur art, so we picked this/)).toBeTruthy();
+    expect(vi.mocked(furObjects)).toHaveBeenCalled();
+    expect(vi.mocked(imageDataToObjects)).not.toHaveBeenCalled();
+  });
+
+  it("Line art WINS when both detections fire (outlined shaded art is line art first)", async () => {
+    vi.mocked(detectLineArt).mockReturnValue(LINE_ART_YES);
+    vi.mocked(detectFurArt).mockReturnValue(FUR_ART_YES);
+    vi.mocked(livePaintObjects).mockReturnValue({ colors: LP_COLORS, objects: LP_OBJECTS });
+    renderDialog();
+    await waitForTrace();
+    const btn = screen.getByRole("button", { name: "Line art" }) as HTMLButtonElement;
+    expect(btn.getAttribute("aria-pressed")).toBe("true");
+    expect(vi.mocked(furObjects)).not.toHaveBeenCalled();
+  });
+
+  it("the Deep shade-overlap preset re-traces with furOverlapMm 1.2", async () => {
+    vi.mocked(detectFurArt).mockReturnValue(FUR_ART_YES);
+    renderDialog();
+    await waitForTrace();
+    fireEvent.click(screen.getByRole("button", { name: "Deep" }));
+    await waitFor(() => {
+      const calls = vi.mocked(furObjects).mock.calls;
+      expect(calls[calls.length - 1][2]).toMatchObject({ furOverlapMm: 1.2 });
+    });
+    // …and the default preset traces at the measured 0.9mm norm.
+    expect(vi.mocked(furObjects).mock.calls[0][2]).toMatchObject({ furOverlapMm: 0.9 });
+  });
+
+  it("the per-color style select offers Fur and apply stamps fillStyle: 'fur'", async () => {
+    const onApply = renderDialog();
+    await toColors();
+    fireEvent.click(screen.getByRole("button", { name: /Advanced options/ }));
+    fireEvent.change(screen.getByLabelText(/Stitch style for Red/) as HTMLSelectElement, {
+      target: { value: "fur" },
+    });
+    const project = await addArtwork(onApply);
+    const red = project.objects.find((o) => o.colorId === "c1")!;
+    expect(red.params.fillStyle).toBe("fur");
   });
 
   it("Sketch look maps big faces to open sketch fills; ink, text and small faces stay solid", async () => {

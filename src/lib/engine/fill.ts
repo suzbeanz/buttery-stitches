@@ -196,17 +196,47 @@ export function splitFillRegions(rings: Path[]): Path[][] {
     // Two outers in one region whose rings ACTUALLY INTERSECT (a traced shoe
     // grazing the pants) cannot sew as-is: the even-odd scanline cancels
     // their overlap, and one solid's fill collapses (a cartoon's pants sewed
-    // three rows then nothing). Union such solids into clean welded outers
-    // first; disjoint outers sharing a region (mere bbox overlap) untouched.
+    // three rows then nothing). Union such solids into clean welded outers —
+    // but ONLY the solids that actually cross each other. Blanket-unioning
+    // every outer swallowed a solid legitimately NESTED inside another (a
+    // solid loop inside a stroke network's silhouette ring — measured on real
+    // line art, an 89mm² loop vanished and its band sewed bare): a nested
+    // solid crosses nothing and must keep its own ring.
     if (solids.length > 1 && ringsOverlap(solids)) {
-      let acc: Path[] = [solids[0]];
-      for (let k = 1; k < solids.length; k++) {
-        const u = booleanOp(acc, [solids[k]], "union", 0.15);
-        if (u.length) acc = u;
-        else acc.push(solids[k]); // raster failure — keep both, old behavior
+      const parentG = solids.map((_, i) => i);
+      const findG = (x: number): number => {
+        while (parentG[x] !== x) {
+          parentG[x] = parentG[parentG[x]];
+          x = parentG[x];
+        }
+        return x;
+      };
+      for (let a = 0; a < solids.length; a++)
+        for (let b = a + 1; b < solids.length; b++)
+          if (ringsOverlap([solids[a], solids[b]])) parentG[findG(a)] = findG(b);
+      const byGroup = new Map<number, Path[]>();
+      solids.forEach((r, i) => {
+        const g = findG(i);
+        let arr = byGroup.get(g);
+        if (!arr) byGroup.set(g, (arr = []));
+        arr.push(r);
+      });
+      const next: Path[] = [];
+      for (const group of byGroup.values()) {
+        if (group.length === 1) {
+          next.push(group[0]);
+          continue;
+        }
+        let acc: Path[] = [group[0]];
+        for (let k = 1; k < group.length; k++) {
+          const u = booleanOp(acc, [group[k]], "union", 0.15);
+          if (u.length) acc = u;
+          else acc.push(group[k]); // raster failure — keep both, old behavior
+        }
+        const dd = depthsOf(acc);
+        next.push(...acc.map((r, i) => orientRing(r, dd[i] % 2 === 0)));
       }
-      const dd = depthsOf(acc);
-      solids = acc.map((r, i) => orientRing(r, dd[i] % 2 === 0));
+      solids = next;
     }
     result.push([...solids, ...(holesOf.get(root) ?? [])]);
   }

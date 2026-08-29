@@ -8,7 +8,9 @@ import {
   estimateColorComplexity,
   suggestColorCount,
   detectLineArt,
+  detectFurArt,
   livePaintObjects,
+  furObjects,
   type DigitizeDetail,
 } from "../lib/trace";
 import { ocrWords } from "../lib/trace/ocr";
@@ -57,10 +59,10 @@ const MIN_COLORS = 2;
 const MAX_COLORS = 12;
 
 /** Per-color stitch style the user can force in the dialog. */
-type StitchStyle = "auto" | "satin" | "outline" | "sketch" | "crosshatch";
+type StitchStyle = "auto" | "satin" | "outline" | "sketch" | "crosshatch" | "fur";
 
 /** How the image becomes stitches (Image-step choice, auto-preselected). */
-type DigitizeMethod = "standard" | "lineart";
+type DigitizeMethod = "standard" | "lineart" | "fur";
 
 /** Overall FILL LOOK for line art: flat solid color (a patch), or the open
  *  sketch rows of the hand-drawn commercial style (fabric shows through). */
@@ -81,6 +83,10 @@ function styleObject(o: EmbObject, style: StitchStyle): EmbObject {
   if (style === "outline") return { ...o, type: "running" };
   if (style === "sketch" || style === "crosshatch")
     return { ...o, type: "fill", params: { ...o.params, fillStyle: style, density: SKETCH_DENSITY } };
+  // Per-color fur: unlocks per-region turning + the knockdown exemption. (The
+  // trace-time fur pipeline — dark→light ordering, baked shade overlaps — is
+  // the Fur METHOD's job; this is the à-la-carte version for one color.)
+  if (style === "fur") return { ...o, type: "fill", params: { ...o.params, fillStyle: "fur" } };
   return o;
 }
 
@@ -126,6 +132,10 @@ export default function AutoDigitizeDialog({
   // texture of the hand-drawn commercial style. A pure param overlay — no
   // re-trace — mapped over the faces at preview/apply time.
   const [look, setLook] = useState<FillLook>("solid");
+  // SHADE OVERLAP (fur only): how far each darker shade tucks under the next
+  // lighter one, baked into the traced geometry. 0.9mm = the measured
+  // commercial norm; the presets bracket it.
+  const [furOverlap, setFurOverlap] = useState(0.9);
   const [removeBackground, setRemoveBackground] = useState(true);
   const [detail, setDetail] = useState<DigitizeDetail>("balanced");
   const [recognizeText, setRecognizeText] = useState(false);
@@ -232,12 +242,23 @@ export default function AutoDigitizeDialog({
     [imageData, isSvg],
   );
 
-  // Auto-preselect the Line art method for detected outlined artwork — the
-  // posterize trace visibly butchers this art class (its ink becomes filled
-  // blobs that swallow the faces). The user's explicit choice always wins.
+  // Fur detection: a ladder of same-hue shades laid as large interlocking
+  // masses — the soft-shaded coat look. Raster sources only.
+  const furDetect = useMemo(
+    () => (imageData && !isSvg ? detectFurArt(imageData) : null),
+    [imageData, isSvg],
+  );
+
+  // Auto-preselect the method for detected art classes — the posterize trace
+  // visibly butchers both (line art's ink becomes filled blobs; a shade
+  // ladder loses its dark→light layering and overlaps). Line art wins when
+  // both fire: outlined cartoon art with shaded fills is line art first. The
+  // user's explicit choice always wins.
   useEffect(() => {
-    if (lineArt?.isLineArt && !userSetMethod) setMethod("lineart");
-  }, [lineArt, userSetMethod]);
+    if (userSetMethod) return;
+    if (lineArt?.isLineArt) setMethod("lineart");
+    else if (furDetect?.isFurArt) setMethod("fur");
+  }, [lineArt, furDetect, userSetMethod]);
 
   // Adaptive default color count, graded to the image's dominant-color count
   // (flat logos land low, busy art/photos higher) instead of a binary 4/8. Once
@@ -250,7 +271,10 @@ export default function AutoDigitizeDialog({
       setNumColors(Math.max(MIN_COLORS, Math.min(MAX_COLORS, lineArt.suggestedColors)));
       return;
     }
-    setNumColors(suggestColorCount(imageData, MIN_COLORS, MAX_COLORS));
+    // Fur needs room for the shade ladder: the commercial norm is 4 fur shades
+    // plus at least one detail color, so floor the suggestion at 5.
+    const floor = method === "fur" ? 5 : MIN_COLORS;
+    setNumColors(Math.max(floor, suggestColorCount(imageData, MIN_COLORS, MAX_COLORS)));
   }, [imageData, userSetColors, method, lineArt]);
 
   // LIVE re-trace: whenever the image or any setting changes, re-digitize after a
@@ -273,6 +297,8 @@ export default function AutoDigitizeDialog({
         // LINE-ART path: the Live-Paint model — faces between the dark linework
         // fill flat, the ink network sews last on top.
         const liveArt = method === "lineart" && !isSvg;
+        const furArt = method === "fur" && !isSvg;
+        const traceOpts = { mmPerPx, offsetX, offsetY, removeBackground, detail, furOverlapMm: furOverlap };
         const traced =
           isSvg && svgShapes?.shapes
             ? svgShapesToObjects(svgShapes.shapes.shapes, {
@@ -283,20 +309,10 @@ export default function AutoDigitizeDialog({
                 maxColors: numColors,
               })
             : liveArt
-              ? livePaintObjects(imageData, numColors, {
-                  mmPerPx,
-                  offsetX,
-                  offsetY,
-                  removeBackground,
-                  detail,
-                })
-              : imageDataToObjects(imageData, numColors, {
-                  mmPerPx,
-                  offsetX,
-                  offsetY,
-                  removeBackground,
-                  detail,
-                });
+              ? livePaintObjects(imageData, numColors, traceOpts)
+              : furArt
+                ? furObjects(imageData, numColors, traceOpts)
+                : imageDataToObjects(imageData, numColors, traceOpts);
         // Collapse near-duplicate palette entries k-means split off a flat region
         // (anti-alias bands, thin shadow shades) so the body doesn't fragment and
         // thread slots aren't wasted. Area-aware, so distinct colors stay.
@@ -305,7 +321,10 @@ export default function AutoDigitizeDialog({
         // ΔE30 fringe rule could merge an eye-white into the hat-white, or a
         // dark face color INTO the ink colorId — dragging the ink group forward
         // in fixStitches' color-grouped ordering).
-        const { colors, objects } = liveArt
+        // FUR skips it too: adjacent fur SHADES are close by design, and a ΔE
+        // merge would collapse the very layering (and its dark→light order)
+        // the mode exists to produce.
+        const { colors, objects } = liveArt || furArt
           ? traced
           : consolidateFringeColors(
               {
@@ -369,7 +388,7 @@ export default function AutoDigitizeDialog({
       alive = false;
       clearTimeout(handle);
     };
-  }, [imageData, svgShapes, isSvg, numColors, removeBackground, detail, recognizeText, hoop.wMm, hoop.hMm, hoop.name, method]);
+  }, [imageData, svgShapes, isSvg, numColors, removeBackground, detail, recognizeText, hoop.wMm, hoop.hMm, hoop.name, method, furOverlap]);
 
   // Load the lettering font once — the text-retype assist needs it.
   useEffect(() => {
@@ -465,11 +484,15 @@ export default function AutoDigitizeDialog({
     // Live paint: the ink color/object sit out the merge. A ΔE≤10 merge of a
     // near-black face color INTO the ink colorId would remap ids and drag the
     // ink group forward in fixStitches' color-grouped ordering — the linework
-    // must stay the last thing sewn.
+    // must stay the last thing sewn. Fur: the SHADE ladder sits out entirely —
+    // adjacent fur shades are close by design, and merging two collapses the
+    // dark→light layering the mode exists to produce.
     const inkIds = new Set(
       method === "lineart"
         ? result.objects.filter((o) => o.params.lineArt).map((o) => o.colorId)
-        : [],
+        : method === "fur"
+          ? result.objects.filter((o) => o.params.fillStyle === "fur").map((o) => o.colorId)
+          : [],
     );
     const mergeColors = result.colors.filter((c) => !inkIds.has(c.id));
     const mergeObjects = result.objects.filter((o) => !inkIds.has(o.colorId));
@@ -630,7 +653,7 @@ export default function AutoDigitizeDialog({
               role="group"
               aria-label="Digitizing method"
             >
-              {([["standard", "Standard trace"], ["lineart", "Line art"]] as const).map(
+              {([["standard", "Standard trace"], ["lineart", "Line art"], ["fur", "Fur"]] as const).map(
                 ([value, label]) => (
                   <button
                     key={value}
@@ -651,9 +674,14 @@ export default function AutoDigitizeDialog({
             <p className="mt-1 text-[11px] text-navy/55">
               {method === "lineart"
                 ? "Outlined cartoon art: every area between the lines fills flat with its own color, and the dark linework sews last on top."
-                : "Flattens the image to solid color regions and stitches each one."}
+                : method === "fur"
+                  ? "Layered fur: shades sew dark to light, each lock fills along its own flow, and neighboring shades tuck under each other — the soft-shaded animal look, no outlines."
+                  : "Flattens the image to solid color regions and stitches each one."}
               {method === "lineart" && lineArt?.isLineArt && !userSetMethod && (
                 <span className="text-navy/45"> Looks like outlined line art, so we picked this for you.</span>
+              )}
+              {method === "fur" && furDetect?.isFurArt && !userSetMethod && (
+                <span className="text-navy/45"> Looks like soft-shaded fur art, so we picked this for you.</span>
               )}
             </p>
 
@@ -683,6 +711,35 @@ export default function AutoDigitizeDialog({
                   {look === "sketch"
                     ? "Open pencil-stroke rows, like hand-drawn shading — the fabric shows through. Small details stay solid. The preview shows flat color; Stitch view shows the open rows."
                     : "Flat color like a patch — every area fills fully."}
+                </p>
+              </div>
+            )}
+
+            {/* SHADE OVERLAP — fur only: how far each darker shade tucks under
+                the next lighter one (baked into the traced shapes). */}
+            {method === "fur" && (
+              <div className="mt-2">
+                <div
+                  className="inline-flex overflow-hidden rounded-sm border-2 border-ink/30"
+                  role="group"
+                  aria-label="Shade overlap"
+                >
+                  {([[0.6, "Subtle"], [0.9, "Standard"], [1.2, "Deep"]] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      onClick={() => setFurOverlap(value)}
+                      aria-pressed={furOverlap === value}
+                      className={`px-3 py-1 font-label text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ink ${
+                        furOverlap === value ? "bg-ink text-cream" : "bg-cream text-navy/70 hover:bg-butter-200"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1 text-[11px] text-navy/55">
+                  How far each darker shade tucks under the next — Deep hides seams on loose knits,
+                  Subtle keeps thin locks light.
                 </p>
               </div>
             )}
@@ -886,6 +943,7 @@ export default function AutoDigitizeDialog({
                         <option value="outline">Outline</option>
                         <option value="sketch">Sketch</option>
                         <option value="crosshatch">Crosshatch</option>
+                        <option value="fur">Fur</option>
                       </select>
                     )}
                     <button

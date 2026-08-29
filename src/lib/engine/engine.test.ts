@@ -127,6 +127,39 @@ describe("splitFillRegions", () => {
     expect(regions).toHaveLength(2);
     for (const r of regions) expect(r).toHaveLength(2);
   });
+
+  it("welding two CROSSING outers must not swallow a NESTED solid (real line art)", () => {
+    // The rat regression: a stroke network's silhouette ring + its face hole,
+    // a solid loop nested INSIDE the hole (an eye/ear drawn solid), and two
+    // small outers that genuinely CROSS each other. The crossing pair must
+    // union — but the nested loop crosses nothing and must keep its own ring,
+    // not vanish into the silhouette disc (measured: an 89mm² loop sewed bare).
+    const silhouette = square(0, 0, 60);
+    const face = square(5, 5, 50); // hole
+    const nested = square(20, 20, 12); // solid inside the hole (depth 2)
+    const nestedHole = square(24, 24, 4); // its enclosed background (depth 3)
+    // Two little outers that overlap each other → trigger the weld path.
+    const crossA = square(70, 10, 10);
+    const crossB = square(76, 16, 10);
+    const regions = splitFillRegions([silhouette, face, nested, nestedHole, crossA, crossB]);
+    // The nested solid survives: SOME region still contains a ring whose
+    // bbox matches it (the union path used to delete it entirely).
+    const hasNested = regions.some((r) =>
+      r.some((ring) => {
+        const xs = ring.map((p) => p.x);
+        const ys = ring.map((p) => p.y);
+        return (
+          Math.min(...xs) > 15 && Math.max(...xs) < 37 &&
+          Math.min(...ys) > 15 && Math.max(...ys) < 37 &&
+          Math.max(...xs) - Math.min(...xs) > 8
+        );
+      }),
+    );
+    expect(hasNested).toBe(true);
+    // …and the crossing pair really did weld into one outer (not two).
+    const around = regions.flatMap((r) => r.filter((ring) => ring.some((p) => p.x > 65)));
+    expect(around.length).toBe(1);
+  });
 });
 
 function maxSeg(path: Path): number {
