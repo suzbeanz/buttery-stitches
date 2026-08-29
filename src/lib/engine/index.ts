@@ -487,7 +487,7 @@ function acceptableSatin(
       // fills 55% of its bbox, enough to fool isSmallRoundFill) is NOT a dot:
       // one straight block leaves its hooks bare and its throws crisscross the
       // bends. Let it fall through to its medial columns instead.
-      if (cols.length && satinCoverage(region, cols.map((c) => c.throws), Math.min(0.5, cellMm * 2.5)) >= MIN_SATIN_COVERAGE) {
+      if (cols.length && satinCoverage(region, cols.map((c) => c.gateThrows), Math.min(0.5, cellMm * 2.5)) >= MIN_SATIN_COVERAGE) {
         return cols;
       }
     }
@@ -506,11 +506,11 @@ function acceptableSatin(
     // candidate (its stroke ORDER and junction splits are deliberate).
     const cols = columnsFromCenterlines(region, authored, { density, pullScale, cellMm });
     const authoredCov = cols.length
-      ? satinCoverage(region, cols.map((c) => c.throws))
+      ? satinCoverage(region, cols.map((c) => c.gateThrows))
       : 0;
     if (authoredCov >= AUTHORED_MIN_COVERAGE) {
       const auto = medialColumns(region, { density, pullScale, cellMm, regularize });
-      const autoCov = auto.length ? satinCoverage(region, auto.map((c) => c.throws)) : 0;
+      const autoCov = auto.length ? satinCoverage(region, auto.map((c) => c.gateThrows)) : 0;
       if (autoCov > authoredCov + 0.015) {
         // The auto skeleton measurably covers better here — take it.
         const widths = auto.map((c) => c.widthMm).sort((a, b) => a - b);
@@ -528,7 +528,7 @@ function acceptableSatin(
   const medianWidth = widths[widths.length >> 1];
   if (medianWidth > MAX_SATIN_STROKE_MM) return [];
 
-  const coverage = satinCoverage(region, columns.map((c) => c.throws));
+  const coverage = satinCoverage(region, columns.map((c) => c.gateThrows));
   return coverage >= MIN_SATIN_COVERAGE ? columns : [];
 }
 
@@ -1610,7 +1610,14 @@ export function generateObjectRuns(
       // 0.2mm cells: the coarser 0.3 grid's one-cell halo forgave ~0.45mm
       // around every stitch and literally could not see a 1.3mm-wide bare
       // arm-end that a finer sweep (and the eye) catches.
-      for (const patch of residualRegions(region, tops, 0.2, TIP_PATCH_MIN_MM2)) {
+      // Measure against the geometry that will actually SEW (exactly like the
+      // tatami branch below): emission de-loops and drops sub-minimum
+      // penetrations, and each pass can shave a piece the mend must cover —
+      // measured raw, a shaved fan left a 2.6mm² bare patch unmended.
+      const preSatin = tops.flatMap((run) =>
+        splitLongTravels(run, travelMax).map((sub) => deloopRun(dropShortStitches(sub, minStitch))),
+      );
+      for (const patch of residualRegions(region, preSatin, 0.2, TIP_PATCH_MIN_MM2)) {
         // A thin SLIVER (a curve apex's crescent, an edge-hugging trail) mends
         // with quiet running passes along its own spine — a block or tatami
         // across it sprays visible stitches against the column grain. A SMALL

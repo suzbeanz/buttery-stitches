@@ -689,6 +689,14 @@ const OVERSHOOT_MM = 0.1;
 export interface SatinColumn {
   centerline: Path;
   throws: Path;
+  /** The throws BEFORE fan densification — what the throw selector produced on
+   *  its own. The satin-acceptance gate judges THESE: densification papers over
+   *  caustic pitch gaps on a genuine stroke, but it must not lift a borderline
+   *  BLOB (whose columns structurally miss part of the shape) over the
+   *  acceptance bar — a compact tongue blob sewed 0.93 real coverage as
+   *  gate-passing satin exactly that way, where the old rejection fell back to
+   *  tatami and covered fully. */
+  gateThrows: Path;
   widthMm: number;
   /** The two smoothed edge rails of the stroke (aligned, equal length). Lets a
    *  caller fill the column with parallel passes ALONG the stroke (between the
@@ -1491,6 +1499,15 @@ function buildColumn(
         // forced forward step produced. Dropping instead thinned sustained
         // tight curls (a fist's spiral, a small ear ring) to a 1–2mm ladder —
         // every other throw of the whole arc died here.
+        //
+        // The lagging side is chosen by advance — but at a fan pivot the inner
+        // rail WOBBLES (ray hits on a tight inner curve oscillate ±0.2-0.4mm),
+        // and a wobble spike can make the true inner side look like the bigger
+        // advance. Sharing the wrong side leaves the crossing in place, and the
+        // old drop then opened a 2-3× pitch gap at the OUTER rail — the ground
+        // colour showed through radial V-slits at the sewn letter's shoulder
+        // (measured on the wave-2 corpus C). So when the advance-picked share
+        // still crosses, share the OTHER side before giving up.
         if (dl <= dr) chosenL[k] = { ...chosenL[p] };
         else chosenR[k] = { ...chosenR[p] };
         if (throwsCross(chosenL[p], chosenR[p], chosenL[k], chosenR[k])) continue; // degenerate — drop
@@ -1520,19 +1537,81 @@ function buildColumn(
     keep.push(k);
   }
 
+  // FAN DENSIFICATION — the coverage guarantee the throw selector alone can't
+  // give. The rails are built by casting perpendicular rays off the centerline;
+  // where a bend's boundary radius comes close to the rail distance (a letter
+  // bowl's outer shoulder turning under the stroke width) the ray hits sit on
+  // a CAUSTIC and jump 3-4× the sampling step between consecutive samples.
+  // Consecutive throws then leave a stretch of rail with no endpoint at all —
+  // the sewn glyph shows ground colour through radial V-slits (the wave-2
+  // corpus C: 1.09mm² of slits at its shoulders, each one under the mend
+  // pass's 0.5mm² patch floor). Enforce the density-compensation invariant
+  // directly: wherever consecutive kept throws leave more than ~1.4 spacings
+  // of rail uncovered, insert interpolated throws so neither rail's pitch ever
+  // opens past the spacing. Interpolants of two non-crossing spokes stay
+  // between them, and on a curve the chord they ride cuts inside the true
+  // boundary only by the sagitta of a sub-mm chord (a few hundredths of a mm).
+  const seated: [Point, Point][] = keep.map((k) => [chosenL[k], chosenR[k]]);
+  const dense2: [Point, Point][] = seated.length ? [seated[0]] : [];
+  const lerpPt = (a: Point, b: Point, t: number): Point => ({
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t,
+  });
+  for (let j = 1; j < seated.length; j++) {
+    const [pl, pr] = dense2[dense2.length - 1];
+    const [cl, cr] = seated[j];
+    const gapL = Math.hypot(cl.x - pl.x, cl.y - pl.y);
+    const gapR = Math.hypot(cr.x - pr.x, cr.y - pr.y);
+    const gap = Math.max(gapL, gapR);
+    // FAN gaps only: one rail pivots (tiny advance) while the other opens, and
+    // the two spokes still point the same way. When BOTH rails leap the column
+    // is transitioning across a junction or a deliberate fold-back drop —
+    // bridging that would lay a second layer over the crossing column that
+    // already covers it (a script ligature junction measured a density-danger
+    // cell exactly there). And when the spokes are far from parallel the rail
+    // correspondence has flipped (a loop column's bowtie) — interpolants would
+    // sweep across the region interior (a crescent tongue sewed a spray of
+    // long spokes through its counter this way).
+    const la = Math.hypot(cr.x - cl.x, cr.y - cl.y) || 1;
+    const lb = Math.hypot(pr.x - pl.x, pr.y - pl.y) || 1;
+    const parallel =
+      ((cr.x - cl.x) * (pr.x - pl.x) + (cr.y - cl.y) * (pr.y - pl.y)) / (la * lb) > 0.5;
+    if (gap > step * 1.4 && Math.min(gapL, gapR) <= step && parallel) {
+      const n = Math.min(8, Math.ceil(gap / step) - 1);
+      for (let s = 1; s <= n; s++) {
+        const t = s / (n + 1);
+        const il = lerpPt(pl, cl, t);
+        const ir = lerpPt(pr, cr, t);
+        // Every interpolated spoke must stay ON the stroke: its midpoint off
+        // the ink means the chord left the region (a concave stretch) — skip
+        // that one rather than sew across open ground.
+        const mid = lerpPt(il, ir, 0.5);
+        if (!inside(mid.x, mid.y, oriented)) continue;
+        dense2.push([il, ir]);
+      }
+    }
+    dense2.push([cl, cr]);
+  }
   // Alternate the leading rail each throw so they chain into a zig-zag; split
   // any over-wide throw into scattered sub-stitches (split satin, no seam).
-  const pairs: [Point, Point][] = keep.map((k, j) =>
-    j % 2 === 0 ? [chosenL[k], chosenR[k]] : [chosenR[k], chosenL[k]],
+  const pairs: [Point, Point][] = dense2.map(([l, r], j) =>
+    j % 2 === 0 ? [l, r] : [r, l],
   );
   const capped = staggeredSatin(pairs, MAX_THROW_MM, true);
   if (capped.length < 2) return null;
+  // The gate throws: the selector's own (undensified) output, for acceptance
+  // coverage — see SatinColumn.gateThrows.
+  const gatePairs: [Point, Point][] = seated.map(([l, r], j) =>
+    j % 2 === 0 ? [l, r] : [r, l],
+  );
+  const gateThrows =
+    dense2.length === seated.length ? capped : staggeredSatin(gatePairs, MAX_THROW_MM, true);
   // Representative stroke width = median rail-to-rail span (drop the edge
   // overshoot we added), used to decide satin-vs-fill upstream.
   const sorted = [...halves].sort((p, q) => p - q);
   const medianHalf = sorted[sorted.length >> 1] ?? 0;
   const widthMm = Math.max(0, 2 * (medianHalf - OVERSHOOT_MM));
-  return { centerline: center, throws: capped, widthMm, left, right };
+  return { centerline: center, throws: capped, gateThrows, widthMm, left, right };
 }
 
 /**
@@ -1563,9 +1642,13 @@ function dedupeColumns(cols: SatinColumn[], oriented: Path[], cellMm: number): S
           if (cx >= 0 && cy >= 0 && cx < w && cy < h) cells.add(cy * w + cx);
         }
     };
-    for (let i = 1; i < c.throws.length; i++) {
-      const a = c.throws[i - 1];
-      const b = c.throws[i];
+    // Judge redundancy on the selector's OWN throws (gateThrows): fan
+    // densification thickens a column's footprint at bends, and that inflated
+    // footprint made a genuinely COMPLEMENTARY second column look redundant
+    // (a tongue blob lost its upper column and sewed a 2.6mm² bare patch).
+    for (let i = 1; i < c.gateThrows.length; i++) {
+      const a = c.gateThrows[i - 1];
+      const b = c.gateThrows[i];
       const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / (cellMm * 0.75)));
       for (let s = 0; s <= steps; s++) mark(a.x + ((b.x - a.x) * s) / steps, a.y + ((b.y - a.y) * s) / steps);
     }
