@@ -111,14 +111,36 @@ def import_design(data, fmt):
     return json.dumps({"blocks": blocks})
 
 
+def _clean_label(name):
+    """Printable ASCII, 16 chars max — format headers (DST LA:, PEC LA:) are
+    fixed-width ASCII fields shown on the machine panel; control or high bytes
+    corrupt field parsing or render as garbage."""
+    cleaned = "".join(c if " " <= c <= "~" else " " for c in str(name))
+    cleaned = cleaned.strip()[:16]
+    return cleaned or None
+
+
 def build_pattern(plan):
     pattern = pe.EmbPattern()
+    name = _clean_label(plan.get("name") or "")
+    if name:
+        # Writers read this for their header label (DST "LA:", PEC "LA:", ...).
+        pattern.extras["name"] = name
     blocks = plan.get("blocks", [])
     for i, block in enumerate(blocks):
         if i > 0:
             pattern.add_command(pe.TRIM)
             pattern.add_command(pe.COLOR_CHANGE)
-        pattern.add_thread({"rgb": int(block.get("rgb", 0))})
+        # Thread metadata (when present) reaches formats with thread records —
+        # VP3 stores name/brand/catalog per color; others ignore the extras.
+        thread = {"rgb": int(block.get("rgb", 0))}
+        if block.get("threadName"):
+            thread["name"] = str(block["threadName"])
+        if block.get("threadBrand"):
+            thread["brand"] = str(block["threadBrand"])
+        if block.get("threadCode"):
+            thread["catalog"] = str(block["threadCode"])
+        pattern.add_thread(thread)
         for cmd in block.get("cmds", []):
             kind = cmd[0]
             if kind == "s":

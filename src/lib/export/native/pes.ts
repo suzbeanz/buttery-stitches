@@ -762,7 +762,9 @@ function pecEncode(w: ByteWriter, stitches: Stitch[]): void {
  *  the fixed padding to a 512-byte-aligned-ish header. Returns the per-thread
  *  chart indices (for the colour-change byte sequence count). */
 function writePecHeader(w: ByteWriter, label: string, threadRgbs: number[]): void {
-  const name = label.slice(0, 8);
+  // Printable ASCII only (the PEC header is a fixed ASCII block shown on the
+  // machine panel; control/high bytes corrupt it), 8 chars max like Brother.
+  const name = label.replace(/[^\x20-\x7e]+/g, " ").slice(0, 8);
   w.ascii(`LA:${name.padEnd(16, " ")}\r`);
   w.bytes([0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0xff, 0x00]);
   w.u8(Math.trunc(48 / 8)); // PEC byte stride (icon width 48)

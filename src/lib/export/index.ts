@@ -30,14 +30,25 @@ export type PlanCmd =
   | ["t"]
   | ["stop"];
 
-/** One thread color and its command stream. */
+/** One thread color and its command stream. Optional thread metadata rides
+ *  along so formats that store thread records (VP3; DST/PES headers indirectly)
+ *  can write real names/brands/codes instead of blanks. */
 export interface PlanBlock {
   rgb: number;
   cmds: PlanCmd[];
+  /** Thread display name (e.g. "Kelly Green"). */
+  threadName?: string;
+  /** Thread brand line (e.g. "Madeira Polyneon"). */
+  threadBrand?: string;
+  /** Thread catalog number (e.g. "1651"). */
+  threadCode?: string;
 }
 
 export interface StitchPlan {
   blocks: PlanBlock[];
+  /** Design name — written into format headers that carry one (DST `LA:`,
+   *  PES/PEC `LA:`, pyembroidery metadata for the Python-path writers). */
+  name?: string;
 }
 
 /** Pack a ThreadColor's rgb triple into a single 0xRRGGBB integer. */
@@ -55,7 +66,7 @@ export function planFromDesign(
   design: EngineStitch[],
   colors: ThreadColor[],
 ): StitchPlan {
-  const rgbById = new Map(colors.map((c) => [c.id, packRgb(c)]));
+  const colorById = new Map(colors.map((c) => [c.id, c]));
   const blocks: PlanBlock[] = [];
   let current: PlanBlock | null = null;
   let currentColor: string | null = null;
@@ -67,7 +78,13 @@ export function planFromDesign(
     if (!Number.isFinite(s.x) || !Number.isFinite(s.y)) return;
     const startsBlock = s.colorId !== currentColor;
     if (startsBlock) {
-      current = { rgb: rgbById.get(s.colorId) ?? 0, cmds: [] };
+      const color = colorById.get(s.colorId);
+      current = { rgb: color ? packRgb(color) : 0, cmds: [] };
+      // Thread metadata (when the palette carries it) so thread-record formats
+      // (VP3) export real names/brands/codes, not blanks.
+      if (color?.name) current.threadName = color.name;
+      if (color?.brand) current.threadBrand = color.brand;
+      if (color?.code) current.threadCode = color.code;
       blocks.push(current);
       currentColor = s.colorId;
     }
@@ -130,7 +147,7 @@ export function enforceMinSpacingTenths(blocks: PlanBlock[]): PlanBlock[] {
       if (interior) continue;
       cmds.push(c);
     }
-    return { rgb: b.rgb, cmds };
+    return { ...b, cmds };
   });
 }
 
@@ -148,7 +165,7 @@ export function anchorBlocks(blocks: PlanBlock[]): PlanBlock[] {
   }
   if (!Number.isFinite(minX) || (minX === 0 && minY === 0)) return blocks;
   return blocks.map((b) => ({
-    rgb: b.rgb,
+    ...b,
     cmds: b.cmds.map((c) => (c[0] === "s" || c[0] === "j" ? [c[0], c[1] - minX, c[2] - minY] : c)),
   }));
 }
@@ -206,9 +223,9 @@ export function splitPlanForFormat(plan: StitchPlan, format: EmbFormat): StitchP
       py = y;
       have = true;
     }
-    return { rgb: b.rgb, cmds };
+    return { ...b, cmds };
   });
-  return { blocks };
+  return { ...plan, blocks };
 }
 
 /** Build a plan directly from a project (runs the stitch engine). */
@@ -234,6 +251,9 @@ async function ensurePython(pyodide: PyodideInterface): Promise<void> {
 export interface ExportOptions {
   format: EmbFormat;
   pesVersion?: PesVersion;
+  /** Design name for format headers (DST/PEC `LA:` etc.). Overrides
+   *  `plan.name`; falls back to it, then to the writers' "Untitled". */
+  label?: string;
   onStage?: (stage: LoadStage) => void;
 }
 
@@ -250,15 +270,19 @@ function planHasStop(plan: StitchPlan): boolean {
 
 export async function exportToBytes(
   plan: StitchPlan,
-  { format, pesVersion = 1, onStage }: ExportOptions,
+  { format, pesVersion = 1, label, onStage }: ExportOptions,
 ): Promise<Uint8Array> {
+  // The design name every writer stamps into its header (when the format has
+  // one). Explicit option wins; the plan can carry its own; writers default
+  // to "Untitled" and sanitize/truncate per format.
+  const name = label ?? plan.name;
   // Native, runtime-free path for DST (universal format). No Pyodide download —
   // works on memory-constrained mobile browsers where the Python runtime fails.
   // Validated sew-equivalent to pyembroidery (scripts/oracle-dst.ts). STOPs fall
   // through to Python until the native writer encodes them.
   if (format === "dst" && !planHasStop(plan)) {
     onStage?.("ready");
-    return encodeDst(splitPlanForFormat(plan, "dst"));
+    return encodeDst(splitPlanForFormat(plan, "dst"), { label: name });
   }
 
   // Native PES version 1 — the format the user's Brother machine reads. Same
@@ -268,7 +292,7 @@ export async function exportToBytes(
   // STOP-bearing plans stay on the Python path.
   if (format === "pes" && pesVersion === 1 && !planHasStop(plan)) {
     onStage?.("ready");
-    return encodePes(splitPlanForFormat(plan, "pes"));
+    return encodePes(splitPlanForFormat(plan, "pes"), { label: name });
   }
 
   // Native T01 — always: pyembroidery 1.5.1 has no T01 writer, and the format
@@ -281,8 +305,10 @@ export async function exportToBytes(
   }
 
   // Split any over-long stitch/jump for the target format before serializing,
-  // so the machine never silently turns a long stitch into a jump/trim.
-  const safe = splitPlanForFormat(plan, format);
+  // so the machine never silently turns a long stitch into a jump/trim. The
+  // plan JSON carries the design name to the Python-path writers (pyembroidery
+  // metadata) — no separate channel needed through the worker protocol.
+  const safe = { ...splitPlanForFormat(plan, format), name };
 
   // Preferred: run Pyodide in a WORKER, so the multi-second first load (CDN
   // download + WASM compile + wheel install) and the encode itself never
@@ -337,7 +363,7 @@ export async function exportBundle(
 ): Promise<Uint8Array> {
   const entries: { name: string; data: Uint8Array }[] = [];
   for (const format of formats) {
-    const data = await exportToBytes(plan, { format, pesVersion, onStage });
+    const data = await exportToBytes(plan, { format, pesVersion, label: baseName, onStage });
     entries.push({ name: `${baseName}.${format}`, data });
   }
   return zipStore(entries);
@@ -438,7 +464,10 @@ export async function exportAndDownload(
   filename: string,
   options: ExportOptions,
 ): Promise<void> {
-  const bytes = await exportToBytes(plan, options);
+  // The downloaded file's base name is the design's identity — stamp it into
+  // the format headers too (machine panels show LA:, not the filename).
+  const base = filename.replace(/\.[a-z0-9]+$/i, "");
+  const bytes = await exportToBytes(plan, { ...options, label: options.label ?? base });
   const name = filename.toLowerCase().endsWith(`.${options.format}`)
     ? filename
     : `${filename}.${options.format}`;

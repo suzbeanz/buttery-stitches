@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { packRgb, planFromDesign, planStitchCount, friendlyExportError } from "./index";
+import {
+  packRgb,
+  planFromDesign,
+  planStitchCount,
+  friendlyExportError,
+  splitPlanForFormat,
+  type StitchPlan,
+} from "./index";
 import type { EngineStitch } from "../engine";
 import { mmToTenths } from "../units";
 
@@ -111,6 +118,45 @@ describe("export plan", () => {
     const plan = planFromDesign([], colors);
     expect(plan.blocks).toHaveLength(0);
     expect(planStitchCount(plan)).toBe(0);
+  });
+
+  it("carries thread metadata (name/brand/code) onto plan blocks", () => {
+    const richColors = [
+      { id: "a", rgb: [0x20, 0x50, 0xc0] as [number, number, number], name: "Royal Blue", brand: "Madeira Polyneon", code: "1966" },
+      { id: "b", rgb: [255, 0, 0] as [number, number, number] }, // no metadata → none emitted
+    ];
+    const design: EngineStitch[] = [
+      { x: 0, y: 0, colorId: "a", objectId: "o1" },
+      { x: 5, y: 0, colorId: "a", objectId: "o1" },
+      { x: 10, y: 0, colorId: "b", objectId: "o2" },
+      { x: 15, y: 0, colorId: "b", objectId: "o2" },
+    ];
+    const plan = planFromDesign(design, richColors);
+    expect(plan.blocks[0].threadName).toBe("Royal Blue");
+    expect(plan.blocks[0].threadBrand).toBe("Madeira Polyneon");
+    expect(plan.blocks[0].threadCode).toBe("1966");
+    expect(plan.blocks[1].threadName).toBeUndefined();
+  });
+
+  it("preserves plan name and thread metadata through splitPlanForFormat", () => {
+    const plan: StitchPlan = {
+      name: "Fox Cub",
+      blocks: [
+        {
+          rgb: 0x2050c0,
+          threadName: "Royal Blue",
+          threadBrand: "Madeira Polyneon",
+          threadCode: "1966",
+          cmds: [["s", 0, 0], ["s", 400, 0]], // forces a split
+        },
+      ],
+    };
+    const out = splitPlanForFormat(plan, "dst");
+    expect(out.name).toBe("Fox Cub");
+    expect(out.blocks[0].threadName).toBe("Royal Blue");
+    expect(out.blocks[0].threadBrand).toBe("Madeira Polyneon");
+    expect(out.blocks[0].threadCode).toBe("1966");
+    expect(out.blocks[0].cmds.length).toBeGreaterThan(2);
   });
 });
 
