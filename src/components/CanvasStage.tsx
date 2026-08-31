@@ -1750,13 +1750,13 @@ export default function CanvasStage() {
                 const ps = useProjectStore.getState();
                 ps.addObjects(sel.map((o) => cloneObject(o, 4, 4)));
               }}
-              className="rounded-[2px] px-2 py-1 font-label text-[11px] font-semibold uppercase tracking-wide text-ink hover:bg-butter-200"
+              className="tap-target rounded-[2px] px-2 py-1 font-label text-[11px] font-semibold uppercase tracking-wide text-ink hover:bg-butter-200"
             >
               Duplicate
             </button>
             <button
               onClick={() => useProjectStore.getState().removeObjects(selectedIds)}
-              className="rounded-[2px] px-2 py-1 font-label text-[11px] font-semibold uppercase tracking-wide text-stamp hover:bg-butter-200"
+              className="tap-target rounded-[2px] px-2 py-1 font-label text-[11px] font-semibold uppercase tracking-wide text-stamp hover:bg-butter-200"
             >
               Delete
             </button>
