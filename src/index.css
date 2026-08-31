@@ -438,3 +438,20 @@ body::after {
   scrollbar-width: thin;
   scrollbar-color: rgba(32, 48, 95, 0.45) transparent;
 }
+
+/* iOS Safari zooms the whole viewport when a form control with a font under
+   16px gains focus — and with the shell locked to overflow:hidden the user is
+   left stranded half-zoomed. Give EVERY typeable/pickable field a 16px face on
+   touch devices — the branded .input/.select classes and the bare fields in
+   the wizard alike. Deliberately unlayered and AFTER the Tailwind utilities
+   (with [class] bumping specificity past text-xs/text-sm utilities) so no
+   compact desktop type sneaks back in on a phone. Desktop keeps its type. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
+  textarea,
+  textarea[class],
+  select,
+  select[class] {
+    font-size: 16px;
+  }
+}

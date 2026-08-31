@@ -419,6 +419,7 @@ function ThreadsSection() {
           <div className="mb-1">Reduce to colors</div>
           <input
             type="number"
+            inputMode="numeric"
             min={1}
             max={colors.length}
             value={reduceN}
@@ -576,6 +577,7 @@ function LabeledNumber({
       <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/60">{label}</span>
       <input
         type="number"
+        inputMode="decimal"
         value={text}
         onFocus={() => setEditing(true)}
         onChange={(e) => setText(e.target.value)}

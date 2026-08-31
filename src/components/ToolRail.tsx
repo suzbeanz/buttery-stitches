@@ -28,11 +28,13 @@ import {
  * CONTENT (words · image · shapes) lives in the top bar's Insert group, not here,
  * so nothing is duplicated.
  *
- * ONE component, two orientations (same buttons, handlers and aria — only CSS
+ * ONE component, three arrangements (same buttons, handlers and aria — only CSS
  * reflows): at lg+ it's the classic left vertical column; below lg it's a
  * horizontal, swipe-scrollable strip pinned above the SimulatorBar, so a phone's
- * canvas isn't crushed by a fixed side column. The Studio grid in App.tsx places
- * it via the col/row-start classes below.
+ * canvas isn't crushed by a fixed side column — except on `short` screens (a
+ * phone held sideways), where it becomes a slim scrollable left column again
+ * because height, not width, is the scarce axis. The Studio grid in App.tsx
+ * places it via the col/row-start classes below.
  */
 export default function ToolRail() {
   const tool = useEditorStore((s) => s.tool);
@@ -56,19 +58,24 @@ export default function ToolRail() {
 
   return (
     // Below lg: a horizontal overflow-x-auto bottom strip (grid row 2, above the
-    // SimulatorBar) that swipes sideways through the kit. At lg+: the vertical
-    // left column, overflow-visible (not -auto) so the right-side tooltips
-    // aren't clipped — the compact two-column layout fits the kit without it.
+    // SimulatorBar) that swipes sideways through the kit. On `short` screens (a
+    // phone held sideways) it becomes a slim vertical left column instead —
+    // height is the scarce axis there. At lg+: the classic vertical left
+    // column, overflow-visible (not -auto) so the right-side tooltips aren't
+    // clipped — the compact two-column layout fits the kit without it.
+    // Stitch view below lg: every tool here is paused, so the strip hides
+    // entirely and gives its row (or column) back to the simulator + canvas;
+    // the SimulatorBar hosts the Edit/Stitch toggle. At lg+ the rail stays.
     <aside
       aria-label="Drawing tools"
-      className="col-start-1 row-start-2 flex min-w-0 flex-row gap-0.5 overflow-x-auto border-t-2 border-ink bg-cream px-1 py-1 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:w-28 lg:flex-col lg:overflow-visible lg:border-r-2 lg:border-t-0 lg:px-0 lg:py-1.5"
+      className={`${locked ? "hidden lg:flex" : "flex"} col-start-1 row-start-2 min-w-0 flex-row gap-0.5 overflow-x-auto border-t-2 border-ink bg-cream px-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-1 short:col-start-2 short:row-span-2 short:row-start-1 short:flex-col short:overflow-y-auto short:border-r-2 short:border-t-0 short:px-0.5 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:w-28 lg:flex-col lg:overflow-visible lg:border-r-2 lg:border-t-0 lg:px-0 lg:pb-[max(0.375rem,env(safe-area-inset-bottom))] lg:pt-1.5`}
     >
       {/* Phones: the Edit/Stitch switch lives HERE (always in reach, first in
           the strip) and the SimulatorBar row disappears in edit view — a whole
           row was spent on this one toggle. At lg+ the switch stays in the
           SimulatorBar as always. */}
-      <div className="flex shrink-0 items-center self-center px-1 lg:hidden">
-        <div className="flex overflow-hidden rounded-sm border-2 border-ink">
+      <div className="flex shrink-0 items-center self-center px-1 short:flex-col lg:hidden">
+        <div className="flex overflow-hidden rounded-sm border-2 border-ink short:flex-col">
           {([
             { m: "edit" as const, label: "Edit", Icon: Pencil },
             { m: "stitch" as const, label: "Stitch view", Icon: Eye },
@@ -187,8 +194,8 @@ export default function ToolRail() {
 
       {/* Units toggle — pinned to the bottom of the column at lg+, trailing the
           horizontal strip below lg. */}
-      <div className="flex shrink-0 items-center px-1 lg:mt-auto lg:block lg:px-2 lg:pt-2">
-        <div className="flex w-20 overflow-hidden rounded-sm border-2 border-ink text-[11px] lg:w-auto">
+      <div className="flex shrink-0 items-center px-1 short:mt-auto short:px-0.5 short:pt-2 lg:mt-auto lg:block lg:px-2 lg:pt-2">
+        <div className="flex w-20 overflow-hidden rounded-sm border-2 border-ink text-[11px] short:w-full lg:w-auto">
           {(["in", "mm"] as const).map((u) => {
             const unit: RulerUnit = u === "in" ? "inch" : "mm";
             const on = rulerUnit === unit;
@@ -213,13 +220,13 @@ export default function ToolRail() {
 
 function Group({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="shrink-0 px-1.5">
+    <div className="shrink-0 px-1.5 short:px-0.5">
       <div className="mb-0.5 text-center font-label text-[9px] font-semibold uppercase tracking-[0.18em] text-ink/80">
         {label}
       </div>
       {/* Below lg the group lays its buttons in a swipeable row; at lg+ two
           columns so the whole kit fits at a glance without scrolling. */}
-      <div className="flex gap-1 lg:grid lg:grid-cols-2">{children}</div>
+      <div className="flex gap-1 short:flex-col lg:grid lg:grid-cols-2">{children}</div>
     </div>
   );
 }
@@ -227,7 +234,7 @@ function Group({ label, children }: { label: string; children: ReactNode }) {
 function Rule() {
   // Divider follows the rail's orientation: vertical hairline in the horizontal
   // strip, horizontal hairline in the lg+ column.
-  return <div className="my-1 shrink-0 border-l border-ink/15 lg:mx-3 lg:my-0.5 lg:border-l-0 lg:border-t" />;
+  return <div className="my-1 shrink-0 border-l border-ink/15 short:mx-2 short:my-0.5 short:border-l-0 short:border-t lg:mx-3 lg:my-0.5 lg:border-l-0 lg:border-t" />;
 }
 
 /** A tool selector button (icon + label) that sets the active tool. */

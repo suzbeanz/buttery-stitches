@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { EmbObject, Point, StitchType } from "../types/project";
 import type { ShapeKind } from "../lib/shapes";
+import { isCoarsePointer } from "../lib/transform";
 
 /** Whether the welcome panel has been dismissed before (persisted so it stays
  *  gone across reloads). Guarded for SSR / privacy-mode where storage may throw. */
@@ -87,6 +88,14 @@ interface EditorState {
    * use a densified spline polyline instead of straight segments.
    */
   smooth: boolean;
+  /**
+   * Corner-handle resize keeps the selection's aspect ratio. Defaults LOCKED on
+   * touch-first devices (the Figma/Canva mobile convention — fingers have no
+   * Shift key) and FREE on desktop, preserving the muscle memory where Shift
+   * temporarily inverts whichever way the lock points. Side handles always
+   * stretch one axis regardless.
+   */
+  aspectLocked: boolean;
   /** snap moving/resizing objects to the hoop and other objects (default on). */
   snapEnabled: boolean;
   /** draw alignment guide lines while dragging (default on). */
@@ -142,6 +151,8 @@ interface EditorState {
   setRulerUnit: (unit: RulerUnit) => void;
   setSmooth: (smooth: boolean) => void;
   toggleSmooth: () => void;
+  setAspectLocked: (locked: boolean) => void;
+  toggleAspectLock: () => void;
   toggleSnap: () => void;
   toggleGuides: () => void;
   toggleRealistic: () => void;
@@ -184,6 +195,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   activeColorId: null,
   rulerUnit: "inch",
   smooth: false,
+  aspectLocked: isCoarsePointer(),
   snapEnabled: true,
   guidesEnabled: true,
   realistic: true,
@@ -219,6 +231,8 @@ export const useEditorStore = create<EditorState>((set) => ({
   setRulerUnit: (unit) => set({ rulerUnit: unit }),
   setSmooth: (smooth) => set({ smooth }),
   toggleSmooth: () => set((s) => ({ smooth: !s.smooth })),
+  setAspectLocked: (aspectLocked) => set({ aspectLocked }),
+  toggleAspectLock: () => set((s) => ({ aspectLocked: !s.aspectLocked })),
   toggleSnap: () => set((s) => ({ snapEnabled: !s.snapEnabled })),
   toggleGuides: () => set((s) => ({ guidesEnabled: !s.guidesEnabled })),
   toggleRealistic: () => set((s) => ({ realistic: !s.realistic })),

@@ -162,6 +162,23 @@ function Studio({ onHome, saveStatus }: { onHome: () => void; saveStatus: SaveSt
     setPropertiesOpen(!isNarrow);
   }, [isNarrow, setLayersOpen, setPropertiesOpen]);
 
+  // Escape closes an open slide-over drawer — the keyboard twin of the scrim
+  // tap. Skips while a modal/menu is up (those own Escape) and while typing in
+  // a field (Escape there means "revert", not "close the panel").
+  useEffect(() => {
+    if (!isNarrow || (!layersOpen && !propertiesOpen)) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const el = document.activeElement;
+      if (el && ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)) return;
+      if (document.querySelector('[aria-modal="true"], [role="menu"]')) return;
+      setLayersOpen(false);
+      setPropertiesOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isNarrow, layersOpen, propertiesOpen, setLayersOpen, setPropertiesOpen]);
+
   // One-time touch hint: long-press is the stand-in for right-click. Surface it
   // the first time there's an object to act on, so the gesture is discoverable
   // (a finger has no hover tooltip to lean on). Shown once per browser.
@@ -181,18 +198,23 @@ function Studio({ onHome, saveStatus }: { onHome: () => void; saveStatus: SaveSt
   const overlay = "absolute inset-y-0 z-40 shadow-press";
 
   return (
-    <div className="flex h-full flex-col bg-paper text-navy">
+    // px env(): on notched phones held sideways, the whole studio steps in from
+    // the camera cutout (the butter-paper body shows in the spared strip).
+    <div className="flex h-full flex-col bg-paper pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] text-navy">
       <TopBar onHelp={() => setShowHelp((v) => !v)} onHome={onHome} saveStatus={saveStatus} />
-      {/* Studio body — one grid, two arrangements (pure CSS, same DOM):
+      {/* Studio body — one grid, three arrangements (pure CSS, same DOM):
             • below lg: a single column of rows — canvas (1fr) / ToolRail strip /
               SimulatorBar — so the tools become a bottom toolbar and the canvas
               gets the full phone width;
+            • `short` (a phone held sideways: sm-wide but under 500px tall): the
+              column arrangement below, so the rail spends the plentiful WIDTH
+              and the canvas keeps the scarce height;
             • at lg+: columns — [layers] [ToolRail] [canvas+simulator] [properties]
               — the classic desktop shell, with the rail and side panels spanning
               both rows (i.e. running beside the simulator, exactly as before).
           Each child pins itself with col/row-start classes; the ToolRail carries
           its own (see ToolRail.tsx). */}
-      <div className="relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto_auto] overflow-hidden lg:grid-cols-[auto_auto_minmax(0,1fr)_auto] lg:grid-rows-[minmax(0,1fr)_auto]">
+      <div className="relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto_auto] overflow-hidden short:grid-cols-[auto_auto_minmax(0,1fr)_auto] short:grid-rows-[minmax(0,1fr)_auto] lg:grid-cols-[auto_auto_minmax(0,1fr)_auto] lg:grid-rows-[minmax(0,1fr)_auto]">
         {layersOpen && (
           <div className={isNarrow ? `${overlay} anim-drawer-l left-0` : "col-start-1 row-span-2 row-start-1 min-h-0"}>
             <LayerPanel />
@@ -201,7 +223,7 @@ function Studio({ onHome, saveStatus }: { onHome: () => void; saveStatus: SaveSt
 
         <ToolRail />
 
-        <div className="relative col-start-1 row-start-1 flex min-h-0 min-w-0 flex-col lg:col-start-3">
+        <div className="relative col-start-1 row-start-1 flex min-h-0 min-w-0 flex-col short:col-start-3 lg:col-start-3">
           {/* Own boundary: a canvas render error must not blank the panels/topbar —
               the project state survives and the fallback offers reload/report. */}
           <ErrorBoundary>
@@ -209,7 +231,7 @@ function Studio({ onHome, saveStatus }: { onHome: () => void; saveStatus: SaveSt
           </ErrorBoundary>
           <ReviewBar />
         </div>
-        <div className="col-start-1 row-start-3 min-w-0 lg:col-start-3 lg:row-start-2">
+        <div className="col-start-1 row-start-3 min-w-0 short:col-start-3 short:row-start-2 lg:col-start-3 lg:row-start-2">
           <SimulatorBar />
         </div>
 

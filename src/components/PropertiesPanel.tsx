@@ -25,6 +25,7 @@ import {
   Trash2,
   Check,
   Type as TypeIcon,
+  X,
   PenLine as PenLineIcon,
   Copy as CopyIcon,
   ClipboardPaste as ClipboardPasteIcon,
@@ -76,6 +77,7 @@ export default function PropertiesPanel() {
   const smoothObjects = useProjectStore((s) => s.smoothObjects);
   const tab = useEditorStore((s) => s.propertiesTab);
   const setTab = useEditorStore((s) => s.setPropertiesTab);
+  const setPropertiesOpen = useEditorStore((s) => s.setPropertiesOpen);
 
   const selected = useMemo(
     () => objects.filter((o) => selectedIds.includes(o.id)),
@@ -103,10 +105,20 @@ export default function PropertiesPanel() {
   return (
     <aside
       aria-label="Properties and threads"
-      className="flex h-full w-64 shrink-0 flex-col border-l border-navy/25 bg-butter-100"
+      className="flex h-full w-64 shrink-0 flex-col border-l border-navy/25 bg-butter-100 pb-[env(safe-area-inset-bottom)]"
     >
       <div className="flex items-center gap-1.5 border-b border-ink/20 px-3 py-2.5 font-label text-xs font-semibold uppercase tracking-[0.18em] text-ink-deep">
         <SlidersHorizontal size={14} className="text-ink-deep" aria-hidden /> Properties
+        {/* In-panel close for the slide-over drawer (below xl): the top-bar
+            toggle that opened it is a thumb-stretch away on a phone. Inline
+            panels at xl+ keep only the top-bar toggle. */}
+        <button
+          onClick={() => setPropertiesOpen(false)}
+          aria-label="Close properties"
+          className="tap-target -my-1.5 ml-auto grid h-8 w-8 place-items-center rounded text-navy/60 hover:bg-butter-200 hover:text-ink xl:hidden"
+        >
+          <X size={15} />
+        </button>
       </div>
 
       {/* Tabs keep each area focused so the panel is never one long scroll. */}
@@ -1266,6 +1278,10 @@ function NumberField({
         </button>
         <input
           type="number"
+          // Non-negative fields ask phones for the decimal keypad. Fields that
+          // accept negatives (X/Y position, angle) keep the default keyboard —
+          // the iOS decimal pad has no minus sign.
+          inputMode={min != null && min >= 0 ? "decimal" : undefined}
           value={draft}
           step={step}
           min={min}

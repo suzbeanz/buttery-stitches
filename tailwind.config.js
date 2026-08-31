@@ -8,6 +8,16 @@ export default {
         // bar wraps instead of scrolling (a scroll container there breaks
         // fixed-position dialogs on iOS Safari).
         xs: "360px",
+        // A phone held sideways: wide enough for sm/md styles but with almost
+        // no height. The studio flips to the side-rail column layout here so
+        // the canvas keeps the short edge (capped below lg, where the real
+        // desktop column layout takes over).
+        short: { raw: "(max-width: 1023px) and (max-height: 499px)" },
+        // "Roomy": there is genuine room for the top bar's extras (wordmark,
+        // inline clean-up, counter, help) — a desktop-class width, or an sm+
+        // width that ALSO has height. A sideways phone is sm-wide but not
+        // roomy, and gets the compact phone bar instead of a two-row wrap.
+        deck: { raw: "(min-width: 1024px), ((min-width: 640px) and (min-height: 500px))" },
       },
       colors: {
         // Butter-wrapper inks (Edition 01). Flat colors, printed on cream stock.

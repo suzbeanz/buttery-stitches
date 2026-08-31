@@ -67,10 +67,13 @@ export default function SimulatorBar() {
     // gives its height back to the canvas. Stitch view keeps the row at every
     // size (playback controls). At lg+ nothing changes.
     <div
-      className={`${viewMode === "edit" ? "hidden lg:flex" : "flex"} flex-wrap items-center gap-3 border-t-2 border-ink/20 bg-cream px-3 py-1.5`}
+      className={`${viewMode === "edit" ? "hidden lg:flex" : "flex"} flex-wrap items-center gap-3 border-t-2 border-ink/20 bg-cream px-3 pb-[max(0.375rem,env(safe-area-inset-bottom))] pt-1.5`}
     >
-      {/* Edit / Stitch view toggle — lg+ only; the ToolRail strip hosts it below. */}
-      <div className="hidden overflow-hidden rounded-sm border-2 border-ink text-xs lg:flex">
+      {/* Edit / Stitch view toggle. Below lg it matters most in STITCH view:
+          the paused tool rail (which hosts the toggle in edit view) hides
+          there, so this is the way back to editing. In edit view below lg the
+          whole bar is hidden, so the toggle never doubles up. */}
+      <div className="flex overflow-hidden rounded-sm border-2 border-ink text-xs">
         {([
           { m: "edit" as const, label: "Edit", Icon: Pencil },
           { m: "stitch" as const, label: "Stitch view", Icon: Eye },
@@ -116,7 +119,10 @@ export default function SimulatorBar() {
               setSimPlaying(false);
               setSimIndex(Number(e.target.value));
             }}
-            className="h-1.5 flex-1 cursor-pointer accent-ink"
+            // A finger needs a real grab zone: the visible track stays slim, but
+            // on coarse pointers the input box grows to a 44px hit area (the
+            // native track centers itself inside it).
+            className="h-1.5 min-w-24 flex-1 cursor-pointer accent-ink [@media(pointer:coarse)]:h-11"
             aria-label="Scrub stitches"
           />
 

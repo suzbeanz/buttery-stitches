@@ -11,9 +11,11 @@ import {
   ListOrdered,
   ChevronUp,
   ChevronDown,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { useProjectStore } from "../store/projectStore";
+import { useEditorStore } from "../store/editorStore";
 import { toast } from "../store/toastStore";
 import { TEMPLATES, buildTemplate } from "../lib/templates";
 import { loadFont, DEFAULT_FONT_ID } from "../lib/text/fonts";
@@ -40,6 +42,7 @@ export default function LayerPanel() {
   const reorderObjects = useProjectStore((s) => s.reorderObjects);
   const moveOrder = useProjectStore((s) => s.moveOrder);
   const sortByColor = useProjectStore((s) => s.sortByColor);
+  const setLayersOpen = useEditorStore((s) => s.setLayersOpen);
 
   // Thread-change economy: how many color BLOCKS the current order sews vs the
   // minimum possible (one per distinct color). When they differ, offer the fix.
@@ -107,23 +110,35 @@ export default function LayerPanel() {
   return (
     <aside
       aria-label="Layers and stitch order"
-      className="flex h-full w-60 shrink-0 flex-col border-r border-navy/25 bg-butter-100"
+      className="flex h-full w-60 shrink-0 flex-col border-r border-navy/25 bg-butter-100 pb-[env(safe-area-inset-bottom)]"
     >
       <div className="flex items-center gap-1.5 border-b border-ink/20 px-3 py-2.5 font-label text-xs font-semibold uppercase tracking-[0.18em] text-ink-deep">
         <ListOrdered size={14} className="text-ink-deep" aria-hidden /> Stitch Order
-        {colorBlocks > distinctColors && (
+        <span className="ml-auto flex items-center gap-1">
+          {colorBlocks > distinctColors && (
+            <button
+              onClick={() => {
+                sortByColor();
+                toast("Re-sequenced — same-color objects now sew together", "success");
+              }}
+              data-tip={`Sew each color once (${colorBlocks} thread changes → ${distinctColors})`}
+              data-tip-side="bottom"
+              className="rounded-sm border border-ink/40 px-1.5 py-0.5 font-label text-[9px] font-semibold uppercase tracking-[0.08em] text-ink/80 hover:bg-butter-200"
+            >
+              Sort by color
+            </button>
+          )}
+          {/* In-panel close for the slide-over drawer (below xl): the top-bar
+              toggle that opened it is a thumb-stretch away on a phone. Inline
+              panels at xl+ keep only the top-bar toggle. */}
           <button
-            onClick={() => {
-              sortByColor();
-              toast("Re-sequenced — same-color objects now sew together", "success");
-            }}
-            data-tip={`Sew each color once (${colorBlocks} thread changes → ${distinctColors})`}
-            data-tip-side="bottom"
-            className="ml-auto rounded-sm border border-ink/40 px-1.5 py-0.5 font-label text-[9px] font-semibold uppercase tracking-[0.08em] text-ink/80 hover:bg-butter-200"
+            onClick={() => setLayersOpen(false)}
+            aria-label="Close layers"
+            className="tap-target -my-1.5 grid h-8 w-8 place-items-center rounded text-navy/60 hover:bg-butter-200 hover:text-ink xl:hidden"
           >
-            Sort by color
+            <X size={15} />
           </button>
-        )}
+        </span>
       </div>
 
       {objects.length === 0 ? (

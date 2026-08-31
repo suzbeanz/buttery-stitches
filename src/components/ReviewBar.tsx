@@ -107,102 +107,111 @@ export default function ReviewBar() {
     updateObject(current.id, { visible: !current.visible });
 
   return (
+    // Phones: a full-width two-row sheet — identity (progress · name · keep)
+    // over actions (type · nav · close) — because the old single flex-wrap row
+    // broke into 2-3 ragged rows over the exact region being reviewed. From sm
+    // up both wrappers dissolve (`sm:contents`) and the classic one-row bar is
+    // back, DOM unchanged.
     <div
       role="group"
       aria-label="Review regions"
-      className="anim-press-in pointer-events-auto absolute inset-x-0 bottom-3 z-20 mx-auto flex w-fit max-w-[calc(100%-1rem)] flex-wrap items-center gap-3 rounded-sm border-2 border-ink bg-cream px-3 py-2 shadow-press"
+      className="anim-press-in pointer-events-auto absolute inset-x-2 bottom-2 z-20 mx-auto flex flex-col gap-2 rounded-sm border-2 border-ink bg-cream px-3 py-2 shadow-press sm:inset-x-0 sm:bottom-3 sm:w-fit sm:max-w-[calc(100%-1rem)] sm:flex-row sm:flex-wrap sm:items-center sm:gap-3"
     >
-      <span className="font-label text-xs font-semibold uppercase tracking-wide text-ink-deep">
-        Region {reviewIndex + 1} of {total}
-      </span>
+      <div className="flex min-w-0 items-center gap-2 sm:contents">
+        <span className="shrink-0 font-label text-xs font-semibold uppercase tracking-wide text-ink-deep">
+          Region {reviewIndex + 1} of {total}
+        </span>
 
-      <span className="flex min-w-0 items-center gap-1.5 text-sm text-navy">
-        <span
-          className="h-3.5 w-3.5 shrink-0 rounded-sm border border-navy/30"
-          style={{ backgroundColor: color ? `rgb(${color.rgb.join(",")})` : "#888" }}
-        />
-        <span className="max-w-[10rem] truncate">{current.name}</span>
-        <span className="hidden text-navy/50 sm:inline">· {detectedLabel(current)}</span>
-      </span>
+        <span className="flex min-w-0 flex-1 items-center gap-1.5 text-sm text-navy sm:flex-initial">
+          <span
+            className="h-3.5 w-3.5 shrink-0 rounded-sm border border-navy/30"
+            style={{ backgroundColor: color ? `rgb(${color.rgb.join(",")})` : "#888" }}
+          />
+          <span className="max-w-[10rem] truncate">{current.name}</span>
+          <span className="hidden text-navy/50 sm:inline">· {detectedLabel(current)}</span>
+        </span>
 
-      {/* Stitch type switch */}
-      <div className="flex overflow-hidden rounded-sm border-2 border-ink text-xs">
-        {(["running", "satin", "fill"] as StitchType[]).map((t) => {
-          const Icon = TYPE_ICON[t];
-          const active = current.type === t;
-          return (
-            <button
-              key={t}
-              onClick={() => setType(t)}
-              aria-pressed={active}
-              data-tip={TYPE_LABEL[t]}
-              data-tip-side="top"
-              className={`tap-target flex items-center gap-1 px-2.5 py-1 font-label font-semibold uppercase tracking-wide ${
-                active ? "bg-ink text-cream" : "bg-cream text-ink hover:bg-butter-200"
-              }`}
-            >
-              <Icon size={14} />
-              <span className="hidden sm:inline">{TYPE_LABEL[t]}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Keep / skip — skip reuses the visible flag (excluded from stitchout). */}
-      <button
-        onClick={toggleKeep}
-        aria-pressed={!current.visible}
-        className={`tap-target flex items-center gap-1 rounded-sm border-2 border-ink px-2.5 py-1 font-label text-xs font-semibold uppercase tracking-wide ${
-          current.visible
-            ? "bg-cream text-ink hover:bg-butter-200"
-            : "bg-stamp text-cream"
-        }`}
-      >
-        {current.visible ? <Eye size={14} /> : <EyeOff size={14} />}
-        {current.visible ? "Skip" : "Skipped"}
-      </button>
-
-      {/* Navigation */}
-      <div className="flex items-center gap-1">
+        {/* Keep / skip — skip reuses the visible flag (excluded from stitchout). */}
         <button
-          onClick={reviewPrev}
-          disabled={reviewIndex === 0}
-          aria-label="Previous region"
-          data-tip="Back"
-          data-tip-side="top"
-          className="tap-target grid h-8 w-8 place-items-center rounded-sm border-2 border-ink bg-cream text-ink hover:bg-butter-200 disabled:opacity-40"
+          onClick={toggleKeep}
+          aria-pressed={!current.visible}
+          className={`tap-target flex shrink-0 items-center gap-1 rounded-sm border-2 border-ink px-2.5 py-1 font-label text-xs font-semibold uppercase tracking-wide ${
+            current.visible
+              ? "bg-cream text-ink hover:bg-butter-200"
+              : "bg-stamp text-cream"
+          }`}
         >
-          <ChevronLeft size={16} />
+          {current.visible ? <Eye size={14} /> : <EyeOff size={14} />}
+          {current.visible ? "Skip" : "Skipped"}
         </button>
-        {isLast ? (
-          <button
-            onClick={endReview}
-            className="tap-target rounded-sm border-2 border-ink bg-ink px-3 py-1 font-label text-xs font-semibold uppercase tracking-wide text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none"
-          >
-            Done
-          </button>
-        ) : (
-          <button
-            onClick={reviewNext}
-            aria-label="Next region"
-            data-tip="Next"
-            data-tip-side="top"
-            className="tap-target grid h-8 w-8 place-items-center rounded-sm border-2 border-ink bg-ink text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none"
-          >
-            <ChevronRight size={16} />
-          </button>
-        )}
       </div>
 
-      <button
-        onClick={endReview}
-        aria-label="Close review"
-        data-tip="Close"
-        data-tip-side="top"
-        className="tap-target grid h-7 w-7 place-items-center rounded-sm text-navy/60 hover:bg-butter-200 hover:text-ink"
-      >
-        <X size={15} />
-      </button>
+      <div className="flex items-center justify-between gap-2 sm:contents">
+        {/* Stitch type switch */}
+        <div className="flex overflow-hidden rounded-sm border-2 border-ink text-xs">
+          {(["running", "satin", "fill"] as StitchType[]).map((t) => {
+            const Icon = TYPE_ICON[t];
+            const active = current.type === t;
+            return (
+              <button
+                key={t}
+                onClick={() => setType(t)}
+                aria-pressed={active}
+                data-tip={TYPE_LABEL[t]}
+                data-tip-side="top"
+                className={`tap-target flex items-center gap-1 px-2.5 py-1 font-label font-semibold uppercase tracking-wide ${
+                  active ? "bg-ink text-cream" : "bg-cream text-ink hover:bg-butter-200"
+                }`}
+              >
+                <Icon size={14} />
+                <span className="hidden sm:inline">{TYPE_LABEL[t]}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Navigation */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={reviewPrev}
+            disabled={reviewIndex === 0}
+            aria-label="Previous region"
+            data-tip="Back"
+            data-tip-side="top"
+            className="tap-target grid h-8 w-8 place-items-center rounded-sm border-2 border-ink bg-cream text-ink hover:bg-butter-200 disabled:opacity-40"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          {isLast ? (
+            <button
+              onClick={endReview}
+              className="tap-target rounded-sm border-2 border-ink bg-ink px-3 py-1 font-label text-xs font-semibold uppercase tracking-wide text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none"
+            >
+              Done
+            </button>
+          ) : (
+            <button
+              onClick={reviewNext}
+              aria-label="Next region"
+              data-tip="Next"
+              data-tip-side="top"
+              className="tap-target grid h-8 w-8 place-items-center rounded-sm border-2 border-ink bg-ink text-cream shadow-press-sm transition-transform hover:bg-ink-deep active:translate-y-[2px] active:shadow-none"
+            >
+              <ChevronRight size={16} />
+            </button>
+          )}
+        </div>
+
+        <button
+          onClick={endReview}
+          aria-label="Close review"
+          data-tip="Close"
+          data-tip-side="top"
+          className="tap-target grid h-7 w-7 place-items-center rounded-sm text-navy/60 hover:bg-butter-200 hover:text-ink"
+        >
+          <X size={15} />
+        </button>
+      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import LayerPanel from "./LayerPanel";
 import { useProjectStore } from "../store/projectStore";
+import { useEditorStore } from "../store/editorStore";
 import { resetStores } from "../test/setup";
 import { makeObject } from "../lib/objects";
 import { createEmptyProject } from "../lib/project";
@@ -92,6 +93,16 @@ describe("LayerPanel", () => {
     fireEvent.change(input, { target: { value: "Tapped" } });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(useProjectStore.getState().project.objects[0].name).toBe("Tapped");
+  });
+
+  it("has an in-panel close for the phone drawer (the top-bar toggle is a thumb-stretch away)", () => {
+    useEditorStore.setState({ layersOpen: true });
+    render(<LayerPanel />);
+    const close = screen.getByRole("button", { name: "Close layers" });
+    // Hidden at xl+ where the panel sits inline and the top-bar toggle owns it.
+    expect(close.className).toContain("xl:hidden");
+    fireEvent.click(close);
+    expect(useEditorStore.getState().layersOpen).toBe(false);
   });
 
   it("⌘/Ctrl-click toggles a row in and out of the selection", () => {
