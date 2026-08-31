@@ -61,7 +61,7 @@ export default function ToolRail() {
     // aren't clipped — the compact two-column layout fits the kit without it.
     <aside
       aria-label="Drawing tools"
-      className="col-start-1 row-start-2 flex min-w-0 flex-row gap-0.5 overflow-x-auto border-t-2 border-ink bg-cream px-1 py-1 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:w-28 lg:flex-col lg:overflow-visible lg:border-r-2 lg:border-t-0 lg:px-0 lg:py-1.5"
+      className="col-start-1 row-start-2 flex min-w-0 flex-row gap-0.5 overflow-x-auto border-t-2 border-ink bg-cream px-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-1 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:w-28 lg:flex-col lg:overflow-visible lg:border-r-2 lg:border-t-0 lg:px-0 lg:pb-[max(0.375rem,env(safe-area-inset-bottom))] lg:pt-1.5"
     >
       {/* Phones: the Edit/Stitch switch lives HERE (always in reach, first in
           the strip) and the SimulatorBar row disappears in edit view — a whole

@@ -181,7 +181,9 @@ function Studio({ onHome, saveStatus }: { onHome: () => void; saveStatus: SaveSt
   const overlay = "absolute inset-y-0 z-40 shadow-press";
 
   return (
-    <div className="flex h-full flex-col bg-paper text-navy">
+    // px env(): on notched phones held sideways, the whole studio steps in from
+    // the camera cutout (the butter-paper body shows in the spared strip).
+    <div className="flex h-full flex-col bg-paper pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] text-navy">
       <TopBar onHelp={() => setShowHelp((v) => !v)} onHome={onHome} saveStatus={saveStatus} />
       {/* Studio body — one grid, two arrangements (pure CSS, same DOM):
             • below lg: a single column of rows — canvas (1fr) / ToolRail strip /

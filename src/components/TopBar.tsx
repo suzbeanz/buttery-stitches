@@ -319,7 +319,9 @@ export default function TopBar({
     // container, and iOS Safari clips `position: fixed` descendants of
     // scroll containers — every dialog mounted in this bar (image digitizer,
     // words, check) collapsed to a clipped sliver on a real iPhone.
-    <header className="relative z-30 flex flex-wrap items-center gap-0.5 border-b border-navy-dark bg-navy px-1 py-2 text-butter-100 shadow-press xs:flex-nowrap sm:flex-wrap sm:gap-1 sm:px-2">
+    // pt env(): with viewport-fit=cover the navy bar paints up under a notch,
+    // but its controls start below it.
+    <header className="relative z-30 flex flex-wrap items-center gap-0.5 border-b border-navy-dark bg-navy px-1 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] text-butter-100 shadow-press xs:flex-nowrap sm:flex-wrap sm:gap-1 sm:px-2">
       <BarButton
         label={layersOpen ? "Hide layers" : "Show layers"}
         onClick={toggleLayers}
