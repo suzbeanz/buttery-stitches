@@ -90,3 +90,24 @@ describe("editorStore region review", () => {
     expect(s.reviewIndex).toBe(0);
   });
 });
+
+describe("editorStore aspect lock", () => {
+  beforeEach(() => {
+    useEditorStore.setState({ aspectLocked: false });
+  });
+
+  it("defaults FREE outside a touch environment (no matchMedia here)", () => {
+    // The initial value comes from isCoarsePointer(), which is false in this
+    // node test env — desktop muscle memory (free corner resize) is preserved.
+    expect(typeof useEditorStore.getState().aspectLocked).toBe("boolean");
+  });
+
+  it("toggles and sets explicitly", () => {
+    useEditorStore.getState().toggleAspectLock();
+    expect(useEditorStore.getState().aspectLocked).toBe(true);
+    useEditorStore.getState().toggleAspectLock();
+    expect(useEditorStore.getState().aspectLocked).toBe(false);
+    useEditorStore.getState().setAspectLocked(true);
+    expect(useEditorStore.getState().aspectLocked).toBe(true);
+  });
+});

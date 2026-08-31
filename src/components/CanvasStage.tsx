@@ -9,6 +9,8 @@ import {
   Maximize2,
   Spline,
   Trash2,
+  Lock,
+  Unlock,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -22,7 +24,7 @@ import {
   Shape,
   Transformer,
 } from "react-konva";
-import type Konva from "konva";
+import Konva from "konva";
 import { useProjectStore } from "../store/projectStore";
 import { useEditorStore, isDrawTool, isPointTool } from "../store/editorStore";
 import type { EmbObject, Path, Point, TextSpec, ThreadColor } from "../types/project";
@@ -33,7 +35,6 @@ import { bucketFill } from "../lib/paintbucket";
 import {
   translatePaths,
   dedupePath,
-  applyMatrix,
   pathsBounds,
   distance,
   type Matrix,
@@ -42,6 +43,15 @@ import {
 import { cloneObject } from "../lib/objects";
 import { relayoutTextObject, nextSizeMm } from "../lib/text/relayout";
 import { snap } from "../lib/snap";
+import {
+  isCoarsePointer,
+  effectiveKeepRatio,
+  meanScaleOf,
+  bakeMatrixOnPaths,
+  bakeMatrixOnNodes,
+  scaleTextSpec,
+  type MmSpace,
+} from "../lib/transform";
 import { douglasPeucker } from "../lib/trace/simplify";
 import { toast } from "../store/toastStore";
 import { rectFromPoints, rectSpanMm, marqueeSelect } from "../lib/marquee";
@@ -79,6 +89,19 @@ const JOIN_SNAP_MM = 3; // snap the closing end of a fill polygon to its start
 const HOOP_BAND = 14; // px thickness of the hoop frame in the mockup
 const HOOP_MARGIN = 18; // px of fabric/plastic between the stitch field and the frame opening
 
+// Touch-first device (finger = primary pointer): bigger transform-handle and
+// node-handle hit areas, and corner resize defaults to keeping aspect ratio.
+const COARSE = isCoarsePointer();
+// Finger pad: minimum square touch target for transformer anchors and node
+// handles on coarse pointers (Apple HIG 44pt / Material 48dp territory).
+const TOUCH_TARGET = 44;
+// Transformer anchor visual size — a touch more visible under a finger, still
+// the same cream/navy chip on desktop.
+const ANCHOR_SIZE = COARSE ? 14 : 9;
+// The rotate handle hangs this far above the box; pushed out on touch so the
+// finger pads of the rotater and the top-center anchor don't collide.
+const ROTATE_OFFSET = COARSE ? 56 : 50;
+
 const C = {
   cream: "#F6EFCB", // wrapper-cream paper, the canvas surround
   fabric: "#ECE8DE", // soft neutral "fabric" so light thread colors stay visible
@@ -88,6 +111,29 @@ const C = {
   navySoft: "#2E4F8C",
   salted: "#B23A2E", // stamp red accent
 };
+
+/** hitFunc: pad a Rect-shaped handle's hit area out to TOUCH_TARGET, centered
+ *  on the visual chip, so a fingertip near the handle still grabs it. */
+function padRectHit(ctx: Konva.Context, shape: Konva.Shape) {
+  const pad = Math.max(0, (TOUCH_TARGET - shape.width()) / 2);
+  ctx.beginPath();
+  ctx.rect(-pad, -pad, shape.width() + pad * 2, shape.height() + pad * 2);
+  ctx.closePath();
+  ctx.fillStrokeShape(shape);
+}
+
+/** hitFunc: TOUCH_TARGET-diameter hit disc for a Circle-shaped handle. */
+function padCircleHit(ctx: Konva.Context, shape: Konva.Shape) {
+  ctx.beginPath();
+  ctx.arc(0, 0, TOUCH_TARGET / 2, 0, Math.PI * 2);
+  ctx.closePath();
+  ctx.fillStrokeShape(shape);
+}
+
+/** Give a Transformer anchor (rotater included) the finger-sized hit pad. */
+function padAnchorHit(anchor: Konva.Rect) {
+  anchor.hitFunc(padRectHit);
+}
 
 /** Closest point on segment a→b to p, and the distance to it. */
 function projectOnSegment(p: Point, a: Point, b: Point): { point: Point; dist: number } {
@@ -129,6 +175,8 @@ export default function CanvasStage() {
   const smooth = useEditorStore((s) => s.smooth);
   const selectedNode = useEditorStore((s) => s.selectedNode);
   const guidesEnabled = useEditorStore((s) => s.guidesEnabled); // workspace gridlines
+  // Corner-resize aspect lock (touch default: locked; desktop default: free).
+  const aspectLocked = useEditorStore((s) => s.aspectLocked);
 
   // Viewport zoom (1 = fit-to-workspace) and pan (px), shared by edit + stitch.
   const [zoom, setZoom] = useState(1);
@@ -510,12 +558,19 @@ export default function CanvasStage() {
     };
   }, []);
 
-  // Hold Shift to lock a resize to the object's aspect ratio (like Figma/Illustrator).
-  // The Transformer's `shiftBehavior="none"` stops Konva from inverting on Shift, so we
-  // drive keepRatio ourselves: Konva then handles the proportional anchor math.
+  // Corner-resize aspect policy (like Figma/Illustrator): the store's lock is
+  // the base — LOCKED by default on touch devices, FREE on desktop — and
+  // holding Shift inverts it for the moment. The Transformer's
+  // `shiftBehavior="none"` stops Konva from consulting Shift itself, so we
+  // drive keepRatio (its `keepRatio` prop covers the base; this effect covers
+  // the mid-gesture Shift flips): Konva then handles the proportional anchor
+  // math. Side/middle anchors ignore keepRatio and always stretch one axis.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Shift") trRef.current?.keepRatio(e.type === "keydown");
+      if (e.key === "Shift")
+        trRef.current?.keepRatio(
+          effectiveKeepRatio(useEditorStore.getState().aspectLocked, e.type === "keydown"),
+        );
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("keyup", onKey);
@@ -845,6 +900,11 @@ export default function CanvasStage() {
     const stage = e.target.getStage();
     if (!stage) return;
     if (e.evt.touches.length >= 2) {
+      // A second finger landing MID-GESTURE must not hijack an anchor resize or
+      // an object drag into a stage zoom — the half-done transform would ride a
+      // moving coordinate system. Let the transform keep both fingers' events;
+      // pinch only starts from a clean stage.
+      if (trRef.current?.isTransforming() || Konva.isDragging()) return;
       // Begin a pinch — cancel any single-finger marquee/tap/long-press in progress.
       setMarquee(null);
       touchStartRef.current = null;
@@ -1552,7 +1612,7 @@ export default function CanvasStage() {
                 <Transformer
                   ref={trRef}
                   rotateEnabled
-                  keepRatio={false}
+                  keepRatio={aspectLocked}
                   shiftBehavior="none"
                   ignoreStroke
                   anchorFill={C.cream}
@@ -1561,7 +1621,14 @@ export default function CanvasStage() {
                   anchorCornerRadius={2}
                   borderStroke={C.navy}
                   borderStrokeWidth={1.5}
-                  anchorSize={9}
+                  anchorSize={ANCHOR_SIZE}
+                  rotateAnchorOffset={ROTATE_OFFSET}
+                  // Touch devices: pad every anchor's HIT area (rotater included)
+                  // out to a full finger target while the visual chip stays small.
+                  // Without this the 9-14px anchors need pixel-precise fingers,
+                  // and a near-miss falls through to the stage — which starts a
+                  // marquee and clears the selection mid-resize.
+                  anchorStyleFunc={COARSE ? padAnchorHit : undefined}
                 />
               </>
             )}
@@ -1607,7 +1674,16 @@ export default function CanvasStage() {
         const b = pathsBounds(sel.flatMap((o) => o.paths));
         if (!b) return null;
         const midX = Math.min(Math.max(px((b.minX + b.maxX) / 2), 120), size.width - 120);
-        const topY = Math.min(Math.max(py(b.minY) - 52, 8), size.height - 48);
+        // The bar must CLEAR the rotate handle, which hangs ROTATE_OFFSET px
+        // above the selection top — parked at minY-52 it sat exactly on the
+        // rotater and swallowed every rotate attempt (tap hit "Duplicate").
+        // Prefer above with clearance; when the selection is too close to the
+        // top edge, flip below the bottom anchors instead of covering handles.
+        const above = py(b.minY) - 52 - ROTATE_OFFSET - (COARSE ? 12 : 0);
+        const topY =
+          above >= 8
+            ? above
+            : Math.min(py(b.maxY) + ANCHOR_SIZE + 20, size.height - 48);
         const textObj = sel.length === 1 && sel[0].text ? sel[0] : null;
         return (
           <div
@@ -1650,6 +1726,25 @@ export default function CanvasStage() {
                 </button>
               </>
             )}
+            {/* Aspect-ratio lock for the corner handles — the touch stand-in for
+                holding Shift (and a visible switch on desktop too). Locked =
+                corners scale proportionally; side handles always stretch. */}
+            <button
+              aria-label="Lock aspect ratio"
+              aria-pressed={aspectLocked}
+              data-tip={
+                aspectLocked
+                  ? "Corners keep proportions — tap for free resize"
+                  : "Corners resize freely — tap to keep proportions"
+              }
+              onClick={() => useEditorStore.getState().toggleAspectLock()}
+              className={`tap-target grid h-7 w-7 place-items-center rounded-[2px] ${
+                aspectLocked ? "bg-butter-200 text-ink" : "text-ink hover:bg-butter-200"
+              }`}
+            >
+              {aspectLocked ? <Lock size={14} strokeWidth={2.25} /> : <Unlock size={14} strokeWidth={2.25} />}
+            </button>
+            <div className="h-6 w-px bg-ink/15" />
             <button
               onClick={() => {
                 const ps = useProjectStore.getState();
@@ -2399,83 +2494,28 @@ const ObjectShape = memo(function ObjectShape({
         // immune only because onDragEnd copies x/y primitives first).
         const m = [...node.getTransform().getMatrix()] as unknown as Matrix;
         node.setAttrs({ x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 });
+        const space: MmSpace = { px, py, toMm };
         // Area-true mean scale of the transform — what a satin's column width
         // and a text spec's letter height grow by under this resize.
-        const meanScale = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2])) || 1;
+        const meanScale = meanScaleOf(m);
         // Text objects carry a layout RECIPE in mm; scale it with the object so
         // a later relayout reproduces the resized text instead of reverting.
-        // Baseline path points transform through the full matrix (like paths);
-        // scalar mm sizes take the mean scale; glyph nudges are mm offsets too.
         const textPatch: Partial<TextSpec> | undefined = object.text
-          ? {
-              heightMm: object.text.heightMm * meanScale,
-              letterSpacingMm: object.text.letterSpacingMm * meanScale,
-              ...(object.text.circleRadiusMm !== undefined
-                ? { circleRadiusMm: object.text.circleRadiusMm * meanScale }
-                : {}),
-              ...(object.text.pathMm
-                ? {
-                    pathMm: applyMatrix(
-                      [object.text.pathMm.map((p) => ({ x: px(p.x), y: py(p.y) }))],
-                      m,
-                    )[0].map((p) => toMm(p.x, p.y)),
-                  }
-                : {}),
-              ...(object.text.glyphTweaks
-                ? {
-                    glyphTweaks: Object.fromEntries(
-                      Object.entries(object.text.glyphTweaks).map(([k, t]) => [
-                        k,
-                        {
-                          ...t,
-                          dx: t.dx !== undefined ? t.dx * meanScale : undefined,
-                          dy: t.dy !== undefined ? t.dy * meanScale : undefined,
-                        },
-                      ]),
-                    ),
-                  }
-                : {}),
-            }
+          ? scaleTextSpec(object.text, m, space)
           : undefined;
         if (nodeRings) {
           // Transform the control NODES (keep curve-editability through scale/rotate).
-          // Bézier handles are relative mm vectors: the matrix's LINEAR part
-          // (rotation/scale — no translation) applies to them directly, since
-          // mm→px is a uniform scale that commutes with it.
-          const linear = (v: { x: number; y: number }) => ({
-            x: m[0] * v.x + m[2] * v.y,
-            y: m[1] * v.x + m[3] * v.y,
-          });
-          const pxNodes = nodeRings.map((r) => r.map((nd) => ({ x: px(nd.x), y: py(nd.y) })));
-          const movedNodes = applyMatrix(pxNodes, m).map((r, ri) =>
-            r.map((p, pi) => {
-              const src = nodeRings[ri][pi];
-              return {
-                ...toMm(p.x, p.y),
-                smooth: src.smooth,
-                hIn: src.hIn ? linear(src.hIn) : undefined,
-                hOut: src.hOut ? linear(src.hOut) : undefined,
-              };
-            }),
-          );
-          onCommitNodes(object.id, movedNodes, meanScale, textPatch);
+          onCommitNodes(object.id, bakeMatrixOnNodes(nodeRings, m, space), meanScale, textPatch);
           return;
         }
-        const pxPaths = object.paths.map((path) =>
-          path.map((p) => ({ x: px(p.x), y: py(p.y) })),
-        );
-        const movedMm = applyMatrix(pxPaths, m).map((path) =>
-          path.map((p) => toMm(p.x, p.y)),
-        );
         // Carry authored satin centerlines through the same matrix so they stay
         // glued to the glyphs after a free scale/rotate.
-        const movedCenters = object.satinCenterlines
-          ? applyMatrix(
-              object.satinCenterlines.map((path) => path.map((p) => ({ x: px(p.x), y: py(p.y) }))),
-              m,
-            ).map((path) => path.map((p) => toMm(p.x, p.y)))
-          : undefined;
-        onCommitPaths(object.id, movedMm, movedCenters, textPatch);
+        onCommitPaths(
+          object.id,
+          bakeMatrixOnPaths(object.paths, m, space),
+          object.satinCenterlines ? bakeMatrixOnPaths(object.satinCenterlines, m, space) : undefined,
+          textPatch,
+        );
       }}
     >
       {/* Fill objects get a translucent body drawn with the nonzero rule (rings
@@ -2537,7 +2577,9 @@ const ObjectShape = memo(function ObjectShape({
           strokeWidth={selected ? 2.5 : outlineOn ? 1.5 : 0}
           closed={object.type === "fill"}
           listening={selectable}
-          hitStrokeWidth={editingNodes ? 14 : 10}
+          // Fingers need a wider corridor than a mouse both to select the
+          // outline and to tap it for node insertion.
+          hitStrokeWidth={editingNodes ? (COARSE ? 26 : 14) : COARSE ? 18 : 10}
           // In node mode, clicking the outline (not a handle) inserts a new node
           // on the nearest segment so you can add detail anywhere.
           onClick={
@@ -2600,11 +2642,21 @@ const ObjectShape = memo(function ObjectShape({
               onDragMove: liveMove,
               onDragEnd: commit,
             };
-            const r = focused ? 6 : 4.5;
+            // Touch: bigger chips AND a full fingertip hit pad — a 9px handle
+            // needed a pixel-perfect finger, and a near-miss deselected.
+            const r = COARSE ? (focused ? 9 : 7) : focused ? 6 : 4.5;
             return nd.smooth ? (
-              <Circle key={`${pi}-${ti}`} {...common} radius={r} />
+              <Circle key={`${pi}-${ti}`} {...common} radius={r} hitFunc={COARSE ? padCircleHit : undefined} />
             ) : (
-              <Rect key={`${pi}-${ti}`} {...common} x={px(nd.x) - r} y={py(nd.y) - r} width={r * 2} height={r * 2} />
+              <Rect
+                key={`${pi}-${ti}`}
+                {...common}
+                x={px(nd.x) - r}
+                y={py(nd.y) - r}
+                width={r * 2}
+                height={r * 2}
+                hitFunc={COARSE ? padRectHit : undefined}
+              />
             );
           }),
         )}
@@ -2653,11 +2705,12 @@ const ObjectShape = memo(function ObjectShape({
                 <Circle
                   x={tipX}
                   y={tipY}
-                  radius={4}
+                  radius={COARSE ? 6 : 4}
                   fill={C.cream}
                   stroke={C.salted}
                   strokeWidth={1.5}
                   draggable
+                  hitFunc={COARSE ? padCircleHit : undefined}
                   onDragMove={(e) => dragTo(e, false)}
                   onDragEnd={(e) => dragTo(e, true)}
                 />
@@ -2679,11 +2732,12 @@ const ObjectShape = memo(function ObjectShape({
               key={`${pi}-${ti}`}
               x={px(p.x)}
               y={py(p.y)}
-              radius={focused ? 6 : 4.5}
+              radius={COARSE ? (focused ? 9 : 7) : focused ? 6 : 4.5}
               fill={focused ? C.butterDeep : C.cream}
               stroke={C.navy}
               strokeWidth={1.5}
               draggable
+              hitFunc={COARSE ? padCircleHit : undefined}
               onClick={() =>
                 useEditorStore.getState().setSelectedNode({
                   objectId: object.id,
