@@ -102,6 +102,22 @@ describe("ReviewBar", () => {
     expect(useEditorStore.getState().reviewIds).toBeNull();
   });
 
+  it("groups controls into two phone rows that dissolve into one at sm+ (sm:contents)", () => {
+    // On a 360-412px phone the old single flex-wrap row broke into 2-3 ragged
+    // rows over the canvas. The layout now has an identity row (progress +
+    // name + keep/skip) and an action row (type switch + nav + close); both
+    // wrappers are `sm:contents` so wider screens keep the classic one-row bar.
+    const ids = seed(2);
+    startReview(ids, 0);
+    render(<ReviewBar />);
+    const group = screen.getByRole("group", { name: "Review regions" });
+    const rows = group.querySelectorAll(":scope > div.sm\\:contents");
+    expect(rows.length).toBe(2);
+    expect(rows[0].textContent).toContain("Region 1 of 2");
+    expect(rows[1].contains(screen.getByRole("button", { name: "Next region" }))).toBe(true);
+    expect(rows[1].contains(screen.getByRole("button", { name: "Close review" }))).toBe(true);
+  });
+
   it("closes review gracefully when none of the reviewed ids survive (undo)", () => {
     seed(2);
     // Simulate an undo that wiped the digitized objects: ids no longer present.
