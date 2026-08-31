@@ -157,7 +157,9 @@ export default function ExportMenu({
         data-tip="Export a machine file (PES, DST…)"
         aria-label="Export a machine file"
         aria-expanded={open}
-        className="tap-target flex h-9 min-w-10 shrink-0 items-center gap-1.5 rounded-sm border-2 border-butter-200/70 px-2 font-label text-xs font-semibold uppercase tracking-[0.08em] text-butter-100 hover:bg-butter-200/15 sm:px-2.5"
+        // min-w mirrors the top bar's BarButton floor: 36px below sm so all nine
+        // controls fit a 344px screen on one row, 40px from sm up.
+        className="tap-target flex h-9 min-w-9 shrink-0 items-center justify-center gap-1.5 rounded-sm border-2 border-butter-200/70 px-1.5 font-label text-xs font-semibold uppercase tracking-[0.08em] text-butter-100 hover:bg-butter-200/15 sm:min-w-10 sm:px-2.5"
       >
         <Download size={16} />
         <span className="hidden sm:inline">Export</span>

@@ -53,6 +53,28 @@ test("phone layout: one-row top bar, unclipped quick-start, rail view toggle", a
   await expect(page.getByRole("button", { name: /Play|Pause/ })).toBeVisible();
 });
 
+test("small phone (360px): the whole top bar fits — properties toggle included", async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) > 640, "phone-only layout rules");
+  // 360×740 — the small-Android floor. The Pixel 7 width (412) hid a real bug:
+  // nine 40px controls + gaps = 384px, so at 360 the bar overflowed by 20px and
+  // the properties toggle sat off-screen with no way to scroll to it.
+  await page.setViewportSize({ width: 360, height: 740 });
+  await page.goto("/app");
+  await expect(page.getByText(/Let's make something/i)).toBeVisible();
+
+  const header = page.locator("header");
+  const box = (await header.boundingBox())!;
+  expect(box.height).toBeLessThan(70); // one row, no wrap
+  const overflow = await header.evaluate((el) => el.scrollWidth - el.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0); // nothing hangs off the edge
+  // Every end-of-row control is genuinely tappable — fully inside the viewport.
+  for (const name of [/^Undo/, /^Redo/, /Show properties|Hide properties/]) {
+    const b = (await page.getByRole("button", { name }).boundingBox())!;
+    expect(b.x).toBeGreaterThanOrEqual(0);
+    expect(b.x + b.width).toBeLessThanOrEqual(360);
+  }
+});
+
 test("phone dialogs escape the top bar (iOS fixed-in-scroller regression)", async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 0) > 640, "phone-only layout rules");
   await page.goto("/app");

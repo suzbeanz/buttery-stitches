@@ -321,7 +321,10 @@ export default function TopBar({
     // words, check) collapsed to a clipped sliver on a real iPhone.
     // pt env(): with viewport-fit=cover the navy bar paints up under a notch,
     // but its controls start below it.
-    <header className="relative z-30 flex flex-wrap items-center gap-0.5 border-b border-navy-dark bg-navy px-1 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] text-butter-100 shadow-press xs:flex-nowrap sm:flex-wrap sm:gap-1 sm:px-2">
+    // Below sm the row runs gapless with slim edge padding: 9 × 36px controls +
+    // 4px = 328px, so the full bar (properties toggle included) fits a 344px
+    // Galaxy-Fold cover screen, not just a 412px Pixel.
+    <header className="relative z-30 flex flex-wrap items-center gap-0 border-b border-navy-dark bg-navy px-0.5 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] text-butter-100 shadow-press xs:flex-nowrap sm:flex-wrap sm:gap-1 sm:px-2">
       <BarButton
         label={layersOpen ? "Hide layers" : "Show layers"}
         onClick={toggleLayers}
@@ -657,11 +660,12 @@ function BarButton({
       aria-pressed={popup ? undefined : active}
       aria-haspopup={popup ? "menu" : undefined}
       aria-expanded={popup ? active : undefined}
-      // min-w-10 relaxes the coarse-pointer 44px tap floor to 40px for THIS row
-      // only — it's the one place nine controls must share a phone's width
-      // (40px still clears WCAG 2.2 target-size with room).
-      className={`tap-target flex h-9 min-w-10 shrink-0 items-center justify-center gap-1.5 rounded-lg text-butter-100 transition-transform hover:bg-butter-200/15 active:translate-y-px active:bg-butter-200/25 disabled:cursor-not-allowed disabled:text-butter-200/40 disabled:hover:bg-transparent ${
-        text ? "px-2" : "w-9"
+      // min-w relaxes the coarse-pointer 44px tap floor for THIS row only —
+      // it's the one place nine controls must share a phone's width: 36px below
+      // sm (9 × 36 = 324, so the row fits a 344px fold-cover screen), 40px from
+      // sm up (both clear WCAG 2.2 target-size with room; height stays 44px).
+      className={`tap-target flex h-9 min-w-9 shrink-0 items-center justify-center gap-1.5 rounded-lg text-butter-100 transition-transform hover:bg-butter-200/15 active:translate-y-px active:bg-butter-200/25 disabled:cursor-not-allowed disabled:text-butter-200/40 disabled:hover:bg-transparent sm:min-w-10 ${
+        text ? "px-1.5 sm:px-2" : "w-9"
       } ${active ? "bg-butter-200/15 text-butter-200" : ""}`}
     >
       {children}
