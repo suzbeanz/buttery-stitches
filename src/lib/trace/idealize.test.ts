@@ -57,6 +57,33 @@ describe("unifyCircles", () => {
     expect(Math.abs(radiusOf(out[0].paths[0]) - radiusOf(out[1].paths[0]))).toBeLessThan(1e-6);
   });
 
+  it("never unifies CONCENTRIC circles (a badge's ring wall)", () => {
+    // A badge border traces as an annulus: outer circle + hole a few % smaller,
+    // both centred on the design. Unifying them to the median radius collapses
+    // the ring wall to zero width — the whole border band vanishes from the
+    // sewn design. The white inner disc shares the hole's circle too.
+    const objs = [
+      makeObjectFromPaths("fill", [circle(50, 50, 47.5), circle(50, 50, 42.8)], "green"),
+      makeObjectFromPaths("fill", [circle(50, 50, 42.8)], "white"),
+    ];
+    const out = unifyCircles(objs);
+    expect(radiusOf(out[0].paths[0])).toBeCloseTo(47.5, 3);
+    expect(radiusOf(out[0].paths[1])).toBeCloseTo(42.8, 3);
+    // the annulus keeps its wall
+    const wall = radiusOf(out[0].paths[0]) - radiusOf(out[0].paths[1]);
+    expect(wall).toBeGreaterThan(4);
+  });
+
+  it("still unifies disjoint near-equal circles when a concentric pair shares the cluster radius-wise", () => {
+    // Two far-apart wheels plus one unrelated bigger ring elsewhere: wheels unify.
+    const objs = [
+      makeObjectFromPaths("fill", [circle(0, 0, 5.0)], "c1"),
+      makeObjectFromPaths("fill", [circle(40, 0, 5.4)], "c1"),
+    ];
+    const out = unifyCircles(objs);
+    expect(Math.abs(radiusOf(out[0].paths[0]) - radiusOf(out[1].paths[0]))).toBeLessThan(1e-6);
+  });
+
   it("leaves circles of clearly different size alone", () => {
     const objs = [
       makeObjectFromPaths("fill", [circle(0, 0, 5)], "c1"),

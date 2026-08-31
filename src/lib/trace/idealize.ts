@@ -188,6 +188,19 @@ export function unifyCircles(objects: EmbObject[]): EmbObject[] {
   let changed = false;
   for (const cl of clusters) {
     if (cl.length < 2) continue;
+    // NESTED/CONCENTRIC GUARD. Congruent design elements (a vehicle's two
+    // wheels, a row of dots) are spatially DISJOINT — centres farther apart
+    // than the radii sum. Near-equal radii at (nearly) the same centre are a
+    // RING WALL instead: a badge's outer edge and the hole where its inner
+    // disc starts trace as two concentric circles a few % apart, and snapping
+    // both to the median radius collapses the annulus to zero width — the
+    // entire border band of the design silently vanishes. Any overlapping
+    // pair disqualifies its whole cluster (conservative, like the rest of
+    // this pass: a missed unification is invisible, a false one destroys art).
+    const disjoint = cl.every((f, i) =>
+      cl.every((g, j) => j <= i || Math.hypot(f.c.x - g.c.x, f.c.y - g.c.y) > f.r + g.r),
+    );
+    if (!disjoint) continue;
     const R = median(cl.map((f) => f.r));
     for (const f of cl) { paths[f.oi][f.ri] = makeCircle(f.c, R); changed = true; }
   }

@@ -889,3 +889,178 @@ describe("screenshot edge artifacts", () => {
     expect(maxX).toBeLessThan(55);
   });
 });
+
+// ── Corner-aware ring cleanup (refineTracedRing via tracedataToObjects) ──────
+// Dense, jittered polylines simulating what the tracer hands the cleanup: the
+// true geometry plus sub-raster aliasing noise. Reproduces three measured
+// failure classes of the old DP-then-smooth cleanup: blob-smoothed low-vertex
+// rings (a triangle bowed up to 3 mm), shallow 135°-interior corners smoothed
+// into curves (measured rounded to ~170°, edges bowed 1.9 mm), and thin
+// strokes collapsed into degenerate 3-vertex slivers by a tolerance wider
+// than the stroke itself.
+describe("corner-aware ring cleanup", () => {
+  // Dense ring along a polygon boundary: step ~0.4mm with deterministic
+  // perpendicular jitter (±0.12mm) standing in for raster aliasing.
+  function densePath(poly: { x: number; y: number }[], isholepath = false) {
+    const pts: { x: number; y: number }[] = [];
+    let k = 0;
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i];
+      const b = poly[(i + 1) % poly.length];
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      const nx = -(b.y - a.y) / len;
+      const ny = (b.x - a.x) / len;
+      const steps = Math.max(1, Math.round(len / 0.4));
+      for (let s = 0; s < steps; s++) {
+        const t = s / steps;
+        const j = s === 0 ? 0 : 0.12 * Math.sin(k * 2.399); // corners stay exact
+        k++;
+        pts.push({ x: a.x + (b.x - a.x) * t + nx * j, y: a.y + (b.y - a.y) * t + ny * j });
+      }
+    }
+    return {
+      segments: pts.map((p, i) => {
+        const q = pts[(i + 1) % pts.length];
+        return { type: "L", x1: p.x, y1: p.y, x2: q.x, y2: q.y };
+      }),
+      isholepath,
+      holechildren: [],
+    };
+  }
+
+  function traceOne(poly: { x: number; y: number }[]) {
+    const td = {
+      width: 100,
+      height: 100,
+      palette: [
+        { r: 255, g: 255, b: 255, a: 255 }, // background
+        { r: 200, g: 30, b: 30, a: 255 },
+      ],
+      layers: [[sq(0, 0, 100, 100)], [densePath(poly)]],
+    } as unknown as Tracedata;
+    const { objects } = tracedataToObjects(td, { mmPerPx: 1 });
+    expect(objects.length).toBeGreaterThan(0);
+    // largest ring across the traced objects
+    let best: { x: number; y: number }[] = [];
+    let bestA = 0;
+    for (const o of objects)
+      for (const r of o.paths) {
+        const a = Math.abs(polygonArea(r));
+        if (a > bestA) {
+          bestA = a;
+          best = r;
+        }
+      }
+    return { objects, ring: best };
+  }
+
+  const ptSeg = (p: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) => {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const l2 = dx * dx + dy * dy || 1e-9;
+    const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2));
+    return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+  };
+  const maxDevFromPoly = (ring: { x: number; y: number }[], poly: { x: number; y: number }[]) => {
+    let maxDev = 0;
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i];
+      const b = ring[(i + 1) % ring.length];
+      const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 0.5));
+      for (let s = 0; s < steps; s++) {
+        const q = { x: a.x + ((b.x - a.x) * s) / steps, y: a.y + ((b.y - a.y) * s) / steps };
+        let d = Infinity;
+        for (let j = 0; j < poly.length; j++) d = Math.min(d, ptSeg(q, poly[j], poly[(j + 1) % poly.length]));
+        maxDev = Math.max(maxDev, d);
+      }
+    }
+    return maxDev;
+  };
+  // Interior angle (deg) of the ring at the vertex nearest `corner`, measured
+  // across ~2.5mm arms so densified curves read as their true rounding.
+  const angleNear = (ring: { x: number; y: number }[], corner: { x: number; y: number }) => {
+    const n = ring.length;
+    let vi = 0;
+    let vd = Infinity;
+    ring.forEach((q, qi) => {
+      const d = Math.hypot(q.x - corner.x, q.y - corner.y);
+      if (d < vd) {
+        vd = d;
+        vi = qi;
+      }
+    });
+    const walk = (dir: 1 | -1) => {
+      let acc = 0;
+      let i = vi;
+      while (acc < 2.5) {
+        const j = (i + dir + n) % n;
+        acc += Math.hypot(ring[j].x - ring[i].x, ring[j].y - ring[i].y);
+        i = j;
+        if (i === vi) break;
+      }
+      return ring[i];
+    };
+    const a = walk(-1);
+    const b = walk(1);
+    const p = ring[vi];
+    const dot = (a.x - p.x) * (b.x - p.x) + (a.y - p.y) * (b.y - p.y);
+    const l = Math.hypot(a.x - p.x, a.y - p.y) * Math.hypot(b.x - p.x, b.y - p.y) || 1e-9;
+    return (Math.acos(Math.max(-1, Math.min(1, dot / l))) * 180) / Math.PI;
+  };
+
+  it("keeps a traced triangle's edges straight and its sharp apex sharp", () => {
+    // A 4-vertex DP result used to fall into whole-ring blob smoothing: the
+    // triangle's straight edges bowed by up to 3 mm and the 24° apex rounded.
+    const half = 40 * Math.tan((15 * Math.PI) / 180);
+    const tri = [
+      { x: 50 - half, y: 75 },
+      { x: 50, y: 25 },
+      { x: 50 + half, y: 75 },
+    ];
+    const { ring } = traceOne(tri);
+    expect(maxDevFromPoly(ring, tri)).toBeLessThan(0.4);
+    // apex position error
+    const apexErr = Math.min(...ring.map((p) => Math.hypot(p.x - 50, p.y - 25)));
+    expect(apexErr).toBeLessThan(0.45);
+    expect(angleNear(ring, { x: 50, y: 25 })).toBeLessThan(45);
+  });
+
+  it("keeps a chevron's shallow 135° corners as corners, not curves", () => {
+    const chevron = [
+      { x: 20, y: 30 },
+      { x: 60, y: 30 },
+      { x: 80, y: 50 },
+      { x: 60, y: 70 },
+      { x: 20, y: 70 },
+      { x: 35, y: 50 },
+    ];
+    const { ring } = traceOne(chevron);
+    expect(maxDevFromPoly(ring, chevron)).toBeLessThan(0.4);
+    // The two 135°-interior corners used to smooth away to ~170°.
+    expect(angleNear(ring, { x: 60, y: 30 })).toBeLessThan(150);
+    expect(angleNear(ring, { x: 60, y: 70 })).toBeLessThan(150);
+  });
+
+  it("preserves a 0.5mm-wide stroke instead of collapsing it to a sliver", () => {
+    // The straighten tolerance (0.5mm) exceeded the stroke's width, so DP
+    // collapsed the ring into a degenerate ~3-vertex triangle (area ~2.5mm²
+    // for a true 10mm² stroke). The width-aware tolerance keeps its shape.
+    const stroke = [
+      { x: 20, y: 40 },
+      { x: 40, y: 40 },
+      { x: 40, y: 40.5 },
+      { x: 20, y: 40.5 },
+    ];
+    const { objects, ring } = traceOne(stroke);
+    const area = Math.abs(polygonArea(ring));
+    expect(area).toBeGreaterThan(7);
+    expect(area).toBeLessThan(14);
+    const perim = polygonPerimeter(ring);
+    const meanW = (2 * area) / perim;
+    expect(meanW).toBeGreaterThan(0.3);
+    expect(meanW).toBeLessThan(0.8);
+    // …and it still classifies as line-art (satin stroke), not a mangled fill.
+    const owner = objects.find((o) => o.paths.includes(ring));
+    expect(owner?.params?.lineArt).toBe(true);
+  });
+});

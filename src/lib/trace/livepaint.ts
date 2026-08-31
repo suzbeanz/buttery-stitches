@@ -2,9 +2,8 @@ import type { EmbObject, Path, Point, ThreadColor } from "../../types/project";
 import { newId } from "../id";
 import { makeObjectFromPaths } from "../objects";
 import { marchingSquares } from "../paintbucket";
-import { smoothRingKeepingCorners } from "../smooth";
-import { douglasPeucker } from "./simplify";
-import { polygonArea } from "./classify";
+import { refineTracedRing } from "./simplify";
+import { polygonArea, polygonPerimeter } from "./classify";
 import { nameForRgb } from "./colorname";
 import {
   borderIsTransparent,
@@ -66,6 +65,11 @@ const MAX_PIXELS = 4_000_000;
 const INK_BLOB_MIN_HALF_MM = 0.8;
 /** A blob smaller than this (mm²) stays part of the stroke network. */
 const INK_BLOB_MIN_MM2 = 2.5;
+/** A detached ink ring BOTH thinner (mean width, mm) than one 40wt thread
+ *  bite and smaller (mm²) than a deliberate dot is an unsewable aliasing
+ *  crumb — dropped (or, as a hole, filled) by the sewability floor. */
+const INK_SPECK_MAX_WIDTH_MM = 0.45;
+const INK_SPECK_MAX_AREA_MM2 = 1.2;
 
 interface Raster {
   width: number;
@@ -692,7 +696,7 @@ export function livePaintObjects(
   // visibly pushed knuckle-sized faces past their ink boundary (blue spilling
   // outside the lines). Faces hug the linework — fidelity beats idealization.
   const cleanRing = (ringPx: Point[]): Path =>
-    clampToImage(smoothRingKeepingCorners(douglasPeucker(toMmRing(ringPx), simplifyTolMm), 0.6));
+    clampToImage(refineTracedRing(toMmRing(ringPx), simplifyTolMm));
 
   const colors: ThreadColor[] = [];
   const objects: EmbObject[] = [];
@@ -893,7 +897,7 @@ export function livePaintObjects(
       if (bl >= 0 && !keepBlob[bl]) blobs[p] = 0;
     }
     const blobRings = marchingSquares(blobs, W, H)
-      .map((r) => clampToImage(smoothRingKeepingCorners(douglasPeucker(toMmRing(r), simplifyTolMm), 0.6)))
+      .map((r) => clampToImage(refineTracedRing(toMmRing(r), simplifyTolMm)))
       .filter((r) => r.length >= 3 && Math.abs(polygonArea(r)) >= INK_BLOB_MIN_MM2 * 0.5);
     if (blobRings.length > 0) {
       colors.push({ id: inkColorId, rgb: inkRgb, name: nameForRgb(inkRgb) });
@@ -913,9 +917,22 @@ export function livePaintObjects(
   }
 
   const inkRingsRaw = marchingSquares(closed, W, H);
+  // SEWABILITY FLOOR for detached ink crumbs: a ring that is BOTH sub-thread
+  // thin (mean width under ~one 0.4mm thread) AND tiny is an aliasing remnant
+  // — the engine would render it as a 1–2 stitch scratch plus a travel/trim,
+  // pure noise on fabric. A deliberate small mark stays: a 1mm ink dot is
+  // ~0.5mm mean width (kept by width) and a real whisker is long enough to
+  // clear the area bar. Same-size HOLE rings inside the ink (white specks an
+  // aliased line leaves) get filled by the same rule — unsewable either way.
+  const isInkSpeck = (r: Path): boolean => {
+    const a = Math.abs(polygonArea(r));
+    if (a >= INK_SPECK_MAX_AREA_MM2) return false;
+    const p = polygonPerimeter(r);
+    return p > 0 && (2 * a) / p < INK_SPECK_MAX_WIDTH_MM;
+  };
   const inkRings = inkRingsRaw
-    .map((r) => clampToImage(smoothRingKeepingCorners(douglasPeucker(toMmRing(r), simplifyTolMm), 0.6)))
-    .filter((r) => r.length >= 3 && Math.abs(polygonArea(r)) >= 0.3);
+    .map((r) => clampToImage(refineTracedRing(toMmRing(r), simplifyTolMm)))
+    .filter((r) => r.length >= 3 && Math.abs(polygonArea(r)) >= 0.3 && !isInkSpeck(r));
   if (inkRings.length > 0) {
     if (!inkColorUsed) colors.push({ id: inkColorId, rgb: inkRgb, name: nameForRgb(inkRgb) });
     const inkObj = makeObjectFromPaths("fill", inkRings, inkColorId, "Ink lines");
