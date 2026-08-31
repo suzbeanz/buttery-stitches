@@ -438,6 +438,7 @@ export default function TextDialog({
             </div>
             <input
               type="number"
+              inputMode="decimal"
               aria-label="Text height"
               min={0}
               step={sizeStep}

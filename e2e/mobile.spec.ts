@@ -53,6 +53,27 @@ test("phone layout: one-row top bar, unclipped quick-start, rail view toggle", a
   await expect(page.getByRole("button", { name: /Play|Pause/ })).toBeVisible();
 });
 
+test("slide-over drawers close from within: in-panel X and Escape", async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) > 640, "drawers are narrow-screen-only");
+  await page.goto("/app");
+  await page.getByRole("button", { name: /^close$/i }).first().click();
+
+  // The layers drawer carries its own close button — the top-bar toggle that
+  // opened it is a thumb-stretch away on a phone.
+  await page.getByRole("button", { name: "Show layers" }).click();
+  const layers = page.getByLabel("Layers and stitch order");
+  await expect(layers).toBeVisible();
+  await page.getByRole("button", { name: "Close layers" }).click();
+  await expect(layers).toBeHidden();
+
+  // Escape is the keyboard twin of the scrim tap.
+  await page.getByRole("button", { name: "Show properties" }).click();
+  const props = page.getByLabel("Properties and threads");
+  await expect(props).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(props).toBeHidden();
+});
+
 test("small phone (360px): the whole top bar fits — properties toggle included", async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 0) > 640, "phone-only layout rules");
   // 360×740 — the small-Android floor. The Pixel 7 width (412) hid a real bug:

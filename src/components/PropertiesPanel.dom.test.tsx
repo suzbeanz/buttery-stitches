@@ -65,6 +65,27 @@ describe("PropertiesPanel", () => {
     expect(screen.queryByText(/Density/i)).toBeNull();
   });
 
+  it("has an in-panel close for the phone drawer (the top-bar toggle is a thumb-stretch away)", () => {
+    resetStores();
+    useEditorStore.setState({ propertiesOpen: true });
+    render(<PropertiesPanel />);
+    const close = screen.getByRole("button", { name: "Close properties" });
+    // Hidden at xl+ where the panel sits inline and the top-bar toggle owns it.
+    expect(close.className).toContain("xl:hidden");
+    fireEvent.click(close);
+    expect(useEditorStore.getState().propertiesOpen).toBe(false);
+  });
+
+  it("number fields ask phones for the numeric keyboard (inputMode)", () => {
+    seedSelectedFill();
+    render(<PropertiesPanel />);
+    const density = screen
+      .getByText("Density (mm/row)")
+      .closest("label")!
+      .querySelector("input")!;
+    expect(density.getAttribute("inputmode")).toBe("decimal");
+  });
+
   it("shows the satin column-width control for a satin object", () => {
     seedSelectedSatin();
     render(<PropertiesPanel />);

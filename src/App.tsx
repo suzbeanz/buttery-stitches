@@ -162,6 +162,23 @@ function Studio({ onHome, saveStatus }: { onHome: () => void; saveStatus: SaveSt
     setPropertiesOpen(!isNarrow);
   }, [isNarrow, setLayersOpen, setPropertiesOpen]);
 
+  // Escape closes an open slide-over drawer — the keyboard twin of the scrim
+  // tap. Skips while a modal/menu is up (those own Escape) and while typing in
+  // a field (Escape there means "revert", not "close the panel").
+  useEffect(() => {
+    if (!isNarrow || (!layersOpen && !propertiesOpen)) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const el = document.activeElement;
+      if (el && ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)) return;
+      if (document.querySelector('[aria-modal="true"], [role="menu"]')) return;
+      setLayersOpen(false);
+      setPropertiesOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isNarrow, layersOpen, propertiesOpen, setLayersOpen, setPropertiesOpen]);
+
   // One-time touch hint: long-press is the stand-in for right-click. Surface it
   // the first time there's an object to act on, so the gesture is discoverable
   // (a finger has no hover tooltip to lean on). Shown once per browser.
