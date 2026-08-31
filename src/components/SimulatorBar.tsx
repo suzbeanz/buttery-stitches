@@ -116,7 +116,10 @@ export default function SimulatorBar() {
               setSimPlaying(false);
               setSimIndex(Number(e.target.value));
             }}
-            className="h-1.5 flex-1 cursor-pointer accent-ink"
+            // A finger needs a real grab zone: the visible track stays slim, but
+            // on coarse pointers the input box grows to a 44px hit area (the
+            // native track centers itself inside it).
+            className="h-1.5 min-w-24 flex-1 cursor-pointer accent-ink [@media(pointer:coarse)]:h-11"
             aria-label="Scrub stitches"
           />
 
