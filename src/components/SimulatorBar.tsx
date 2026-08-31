@@ -69,8 +69,11 @@ export default function SimulatorBar() {
     <div
       className={`${viewMode === "edit" ? "hidden lg:flex" : "flex"} flex-wrap items-center gap-3 border-t-2 border-ink/20 bg-cream px-3 pb-[max(0.375rem,env(safe-area-inset-bottom))] pt-1.5`}
     >
-      {/* Edit / Stitch view toggle — lg+ only; the ToolRail strip hosts it below. */}
-      <div className="hidden overflow-hidden rounded-sm border-2 border-ink text-xs lg:flex">
+      {/* Edit / Stitch view toggle. Below lg it matters most in STITCH view:
+          the paused tool rail (which hosts the toggle in edit view) hides
+          there, so this is the way back to editing. In edit view below lg the
+          whole bar is hidden, so the toggle never doubles up. */}
+      <div className="flex overflow-hidden rounded-sm border-2 border-ink text-xs">
         {([
           { m: "edit" as const, label: "Edit", Icon: Pencil },
           { m: "stitch" as const, label: "Stitch view", Icon: Eye },

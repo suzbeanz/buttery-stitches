@@ -96,6 +96,37 @@ test("small phone (360px): the whole top bar fits — properties toggle included
   }
 });
 
+test("phone landscape: one-row bar, side rail, canvas keeps real height", async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) > 640, "phone-only layout rules");
+  // Pixel 7 rotated. Before the `short` layout, the top bar wrapped to two
+  // rows (109px) and the bottom tool strip left a 182px canvas sliver.
+  await page.setViewportSize({ width: 863, height: 360 });
+  await page.goto("/app");
+  await page.getByRole("button", { name: /^close$/i }).first().click();
+
+  // Top bar stays one compact row even at sm+ widths when the screen is short.
+  const header = (await page.locator("header").boundingBox())!;
+  expect(header.height).toBeLessThan(70);
+
+  // The tool rail turns back into a vertical side column…
+  const rail = (await page.getByLabel("Drawing tools").boundingBox())!;
+  expect(rail.width).toBeLessThan(100);
+  expect(rail.height).toBeGreaterThan(200);
+
+  // …so the canvas keeps most of the short edge.
+  const canvas = (await page.locator("canvas").first().boundingBox())!;
+  expect(canvas.height).toBeGreaterThan(240);
+
+  // Stitch view below lg: the paused tool rail hides entirely and the
+  // SimulatorBar hosts the Edit/Stitch toggle, so the way back stays on screen.
+  await page.getByRole("button", { name: "Stitch view" }).first().click();
+  await expect(page.getByRole("button", { name: /Play|Pause/ })).toBeVisible();
+  await expect(page.getByLabel("Drawing tools")).toBeHidden();
+  await expect(page.getByRole("button", { name: "Edit", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await expect(page.getByLabel("Drawing tools")).toBeVisible();
+});
+
 test("phone dialogs escape the top bar (iOS fixed-in-scroller regression)", async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 0) > 640, "phone-only layout rules");
   await page.goto("/app");

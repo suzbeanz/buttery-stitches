@@ -324,7 +324,7 @@ export default function TopBar({
     // Below sm the row runs gapless with slim edge padding: 9 × 36px controls +
     // 4px = 328px, so the full bar (properties toggle included) fits a 344px
     // Galaxy-Fold cover screen, not just a 412px Pixel.
-    <header className="relative z-30 flex flex-wrap items-center gap-0 border-b border-navy-dark bg-navy px-0.5 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] text-butter-100 shadow-press xs:flex-nowrap sm:flex-wrap sm:gap-1 sm:px-2">
+    <header className="relative z-30 flex flex-wrap items-center gap-0 border-b border-navy-dark bg-navy px-0.5 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] text-butter-100 shadow-press xs:flex-nowrap deck:flex-wrap deck:gap-1 deck:px-2">
       <BarButton
         label={layersOpen ? "Hide layers" : "Show layers"}
         onClick={toggleLayers}
@@ -341,7 +341,7 @@ export default function TopBar({
         aria-label="Home"
         // Phones drop the wordmark row-space entirely (Home lives in the More
         // menu there) so undo/redo and the panel toggle stay on screen.
-        className="mx-0.5 hidden shrink-0 select-none items-center gap-2 rounded px-1 hover:opacity-80 sm:mx-1.5 sm:flex"
+        className="mx-0.5 hidden shrink-0 select-none items-center gap-2 rounded px-1 hover:opacity-80 deck:mx-1.5 deck:flex"
       >
         {/* Butter-stick mark — high contrast on the press-blue bar. */}
         <svg width="34" height="22" viewBox="0 0 40 26" fill="none" aria-hidden className="shrink-0">
@@ -394,7 +394,7 @@ export default function TopBar({
         </span>
       )}
 
-      <div className="mx-0.5 hidden h-5 w-px shrink-0 bg-butter-200/20 sm:mx-1.5 sm:block" />
+      <div className="mx-0.5 hidden h-5 w-px shrink-0 bg-butter-200/20 deck:mx-1.5 deck:block" />
 
       {/* Insert group — the single home for adding content (words, image, shapes). */}
       <BarButton label="Add words" text="Text" textEarly onClick={() => setPendingStart("text")}>
@@ -439,7 +439,7 @@ export default function TopBar({
       <ExportMenu open={exportOpen} onOpenChange={setExportOpen} />
       {/* Clean up rides inline from sm up; on phones it lives in the More menu
           so the bar keeps to one un-scrolled row. */}
-      <div className="hidden sm:block">
+      <div className="hidden deck:block">
         <BarButton
           label="Clean up the stitching — fix densities, fill styles, order & seams"
           text="Clean up"
@@ -473,11 +473,11 @@ export default function TopBar({
               <MoreItem icon={Save} label="Save a copy" onClick={() => { saveCopy(); setShowMore(false); }} />
               <div className="my-0.5 h-px bg-ink/15" />
               {/* The wordmark (Home) is hidden on phones — its action lands here. */}
-              <div className="sm:hidden">
+              <div className="deck:hidden">
                 <MoreItem icon={Home} label="Home page" onClick={() => { onHome?.(); setShowMore(false); }} />
               </div>
               {/* Inline from sm up; here on phones (see the bar). */}
-              <div className="sm:hidden">
+              <div className="deck:hidden">
                 <MoreItem icon={Wand2} label="Clean up stitching" onClick={() => { cleanUp(); setShowMore(false); }} />
               </div>
               <MoreItem icon={BadgeCheck} label="Check design" onClick={() => { setShowCheck(true); setShowMore(false); }} />
@@ -487,7 +487,7 @@ export default function TopBar({
         )}
       </div>
 
-      <div className="mx-0.5 hidden h-5 w-px shrink-0 bg-butter-200/20 sm:mx-1.5 sm:block" />
+      <div className="mx-0.5 hidden h-5 w-px shrink-0 bg-butter-200/20 deck:mx-1.5 deck:block" />
 
       <BarButton
         label={pastStates.length ? `Undo (${pastStates.length})` : "Undo"}
@@ -508,13 +508,13 @@ export default function TopBar({
           tidily with everything left-aligned instead of stranding them. */}
       <div className="hidden flex-1 lg:block" />
 
-      <span className="hidden shrink-0 px-1 text-xs text-butter-200/70 sm:inline">
+      <span className="hidden shrink-0 px-1 text-xs text-butter-200/70 deck:inline">
         {project.objects.length} object
         {project.objects.length === 1 ? "" : "s"}
       </span>
 
       {/* Keyboard-shortcut help is meaningless on a phone — hide it there. */}
-      <div className="hidden sm:block">
+      <div className="hidden deck:block">
         <BarButton label="Keyboard shortcuts" onClick={onHelp} align="end">
           <HelpCircle size={18} />
         </BarButton>
@@ -664,8 +664,8 @@ function BarButton({
       // it's the one place nine controls must share a phone's width: 36px below
       // sm (9 × 36 = 324, so the row fits a 344px fold-cover screen), 40px from
       // sm up (both clear WCAG 2.2 target-size with room; height stays 44px).
-      className={`tap-target flex h-9 min-w-9 shrink-0 items-center justify-center gap-1.5 rounded-lg text-butter-100 transition-transform hover:bg-butter-200/15 active:translate-y-px active:bg-butter-200/25 disabled:cursor-not-allowed disabled:text-butter-200/40 disabled:hover:bg-transparent sm:min-w-10 ${
-        text ? "px-1.5 sm:px-2" : "w-9"
+      className={`tap-target flex h-9 min-w-9 shrink-0 items-center justify-center gap-1.5 rounded-lg text-butter-100 transition-transform hover:bg-butter-200/15 active:translate-y-px active:bg-butter-200/25 disabled:cursor-not-allowed disabled:text-butter-200/40 disabled:hover:bg-transparent deck:min-w-10 ${
+        text ? "px-1.5 deck:px-2" : "w-9"
       } ${active ? "bg-butter-200/15 text-butter-200" : ""}`}
     >
       {children}
