@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useEditorStore } from "./editorStore";
+import { isCoarsePointer } from "../lib/transform";
+
+// Captured at import time, before any test mutates the store — this IS the
+// value the initializer computed.
+const initialAspectLocked = useEditorStore.getState().aspectLocked;
 
 describe("editorStore panels", () => {
   beforeEach(() => {
@@ -97,9 +102,12 @@ describe("editorStore aspect lock", () => {
   });
 
   it("defaults FREE outside a touch environment (no matchMedia here)", () => {
-    // The initial value comes from isCoarsePointer(), which is false in this
-    // node test env — desktop muscle memory (free corner resize) is preserved.
-    expect(typeof useEditorStore.getState().aspectLocked).toBe("boolean");
+    // The initial value comes from isCoarsePointer(); this env has no coarse
+    // pointer, so the default must be FREE — desktop muscle memory (free
+    // corner resize) is preserved. Both asserted exactly so a regression in
+    // either the env assumption or the default itself fails loudly.
+    expect(isCoarsePointer()).toBe(false);
+    expect(initialAspectLocked).toBe(false);
   });
 
   it("toggles and sets explicitly", () => {
