@@ -1580,18 +1580,21 @@ export function generateObjectRuns(
         }
         done.add(comp);
         const compTracks = tracks.filter((_, i) => labels[i] === comp);
-        for (const run of routeInkPieces(ulByComp.get(comp) ?? [], cursor, TRAVEL_STITCH, compTracks)) {
+        // Distinct serial salts per routing phase: all three phases walk the
+        // same skeleton chains, and un-salted serials made their connectors
+        // re-punch identical holes (see inkroute's connectorWalk).
+        for (const run of routeInkPieces(ulByComp.get(comp) ?? [], cursor, TRAVEL_STITCH, compTracks, 0)) {
           for (const sub of splitLongTravels(run, travelMax)) {
             const u = dropShortStitches(sub);
             addRun(runs, u, true, regionIdx, true);
             if (u.length) cursor = u[u.length - 1];
           }
         }
-        for (const r of routeInkPieces(mendByComp.get(comp) ?? [], cursor, TRAVEL_STITCH, compTracks)) {
+        for (const r of routeInkPieces(mendByComp.get(comp) ?? [], cursor, TRAVEL_STITCH, compTracks, 1)) {
           addRun(runs, r, false, regionIdx, true);
           if (r.length) cursor = r[r.length - 1];
         }
-        for (const run of routeInkPieces(topByComp.get(comp) ?? [], cursor, TRAVEL_STITCH, compTracks)) {
+        for (const run of routeInkPieces(topByComp.get(comp) ?? [], cursor, TRAVEL_STITCH, compTracks, 2)) {
           for (const sub of splitLongTravels(run, travelMax)) {
             const r = dropShortStitches(sub, minStitch);
             addRun(runs, r, false, regionIdx, true);

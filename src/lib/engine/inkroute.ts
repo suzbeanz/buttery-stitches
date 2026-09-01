@@ -1,6 +1,6 @@
 import type { Path, Point } from "../../types/project";
-import { capSegmentLength, dropShortStitches } from "./resample";
-import { douglasPeucker } from "../trace/simplify";
+import { capSegmentLength, dropShortStitches, resampleByDistance } from "./resample";
+
 
 /**
  * Graph-native routing for a LINE-ART stroke network.
@@ -84,6 +84,14 @@ const CONNECTOR_MIN_STEP_MM = 0.9;
  *  check per step (the greedy walk is O(pieces × dijkstra) otherwise). */
 const CANDIDATE_K = 6;
 
+/** Sharp-corner threshold for the connector WALK (deg): a post-chamfer vertex
+ *  turning this hard is a real junction turn that must keep its own
+ *  penetration; gentler curve samples are walked over at the deviation-budget
+ *  pitch instead of each punching a hole. */
+const WALK_CORNER_DEG = 55;
+/** Floor (mm) for the connector walk's curvature pitch — the jam floor. */
+const WALK_MIN_PITCH_MM = 0.8;
+
 interface NavNode {
   x: number;
   y: number;
@@ -128,6 +136,83 @@ function chamferSharpCorners(path: Path, serial: number): Path {
     out.push({ x: v.x + mx * t, y: v.y + my * t });
   }
   out.push(path[path.length - 1]);
+  return out;
+}
+
+/**
+ * Deviation-budget penetration walk for one connector transit. The old
+ * pipeline (tight-deviation simplify + keep-every-corner thinning + pitch cap)
+ * emitted the chain's NAV-SAMPLE vertices nearly verbatim: every transit of
+ * the same skeleton stretch — and the underlay-, mend- and top-phase routers
+ * all walk the same chains — re-punched IDENTICAL holes to 0.01mm (a corpus
+ * cartoon measured 131 exact top-under-lay hole duplicates on one object,
+ * enough to tip a junction cell to the density-danger ceiling), and junction
+ * curls sewed at 0.16-0.9mm pitch, several times the travel pitch.
+ *
+ * This walk places penetrations by the SAGITTA rule against the connector's
+ * own on-ink deviation budget: chord bow off the chain ≤
+ * {@link CONNECTOR_MAX_DEV_MM}, pitch otherwise the travel pitch, floored at
+ * the jam floor. Genuinely sharp post-chamfer corners (≥
+ * {@link WALK_CORNER_DEG}) keep their own penetration — they carry the route
+ * around a junction; gentler curve samples are walked over. `phaseMm` offsets
+ * the whole walk along the chain, staggered per transit serial, so repeat
+ * transits interleave their holes instead of drilling the same ones.
+ */
+function connectorWalk(chain: Path, pitchMm: number, phaseMm: number): Path {
+  if (chain.length < 2) return chain.map((p) => ({ ...p }));
+  const fineStep = 0.3;
+  const fine = resampleByDistance(chain, fineStep);
+  if (fine.length < 3) return chain.map((p) => ({ ...p }));
+  const turnRad = (i: number): number => {
+    if (i <= 0 || i >= fine.length - 1) return 0;
+    const a = fine[i - 1];
+    const b = fine[i];
+    const c = fine[i + 1];
+    const l1 = dist(a, b);
+    const l2 = dist(b, c);
+    if (l1 < 1e-9 || l2 < 1e-9) return 0;
+    const cos = ((b.x - a.x) * (c.x - b.x) + (b.y - a.y) * (c.y - b.y)) / (l1 * l2);
+    return Math.acos(Math.max(-1, Math.min(1, cos)));
+  };
+  const pitchAt = (i: number): number => {
+    const dTheta = turnRad(i);
+    if (dTheta < 1e-4) return pitchMm;
+    const a = fine[i - 1];
+    const b = fine[i];
+    const c = fine[i + 1];
+    const R = ((dist(a, b) + dist(b, c)) / 2) / dTheta;
+    const pitch = Math.sqrt(8 * R * CONNECTOR_MAX_DEV_MM);
+    return Math.max(WALK_MIN_PITCH_MM, Math.min(pitchMm, pitch));
+  };
+  const cornerRad = (WALK_CORNER_DEG * Math.PI) / 180;
+  const out: Point[] = [{ ...fine[0] }];
+  let need = Math.max(0.3, Math.min(phaseMm, pitchAt(1)));
+  for (let i = 1; i < fine.length; i++) {
+    const a = fine[i - 1];
+    const b = fine[i];
+    const segLen = dist(a, b);
+    if (segLen < 1e-9) continue;
+    // A stitch pending from a straight stretch must not carry its full pitch
+    // INTO a bend — clamp it to the local curvature pitch as the walk enters,
+    // or the entry stitch chords the curve past the deviation budget.
+    need = Math.min(need, pitchAt(i));
+    const dx = (b.x - a.x) / segLen;
+    const dy = (b.y - a.y) / segLen;
+    let off = 0;
+    while (need <= segLen - off + 1e-9) {
+      off += need;
+      out.push({ x: a.x + dx * off, y: a.y + dy * off });
+      need = pitchAt(i);
+    }
+    need -= segLen - off;
+    // A real junction turn keeps its own penetration; spacing restarts there.
+    if (i < fine.length - 1 && turnRad(i) >= cornerRad) {
+      if (dist(out[out.length - 1], b) > 1e-9) out.push({ ...b });
+      need = pitchAt(i + 1);
+    }
+  }
+  const last = fine[fine.length - 1];
+  if (dist(out[out.length - 1], last) > 1e-6) out.push({ ...last });
   return out;
 }
 
@@ -230,6 +315,7 @@ export function routeInkPieces(
   start: Point | null,
   travelPitchMm: number,
   extraTracks: Path[] = [],
+  serialSalt = 0,
 ): Path[] {
   if (pieces.length <= 1) return pieces.map((p) => p.top);
 
@@ -432,17 +518,28 @@ export function routeInkPieces(
         const chain: Point[] = [];
         for (let v = chosenNode; v !== -1; v = parent[v]) chain.push({ x: nodes[v].x, y: nodes[v].y });
         chain.reverse();
-        // Curvature-faithful resample: simplify only within the on-ink
-        // deviation budget (keeps every bend of the skeleton the chain rides),
-        // then split what remains to the travel pitch. A plain pitch resample
-        // chorded curved chains across the open fabric between strokes.
+        // Stagger the junction-corner chamfer per transit, then place
+        // penetrations with the deviation-budget sagitta walk (see
+        // connectorWalk) DIRECTLY on the raw chain: the walk is itself the
+        // deviation-bounded simplifier, and running it on a pre-simplified
+        // chain stacked two full deviation budgets (a 2.5mm-radius arc's
+        // connector chorded 0.57mm off the ink that way). The walk honours
+        // the travel pitch, junction curls don't stack sub-mm holes, and the
+        // serial-staggered phase keeps repeat transits (and the underlay/
+        // mend/top routing phases) off each other's holes.
+        // Serial mixes the per-call emission index with the caller's salt (the
+        // underlay/mend/top routing phases pass distinct salts), so both the
+        // chamfer's mod-3 stagger and the walk phase differ across transits
+        // WITHIN a phase and across the three phases riding the same chains.
+        const serial = out.length + serialSalt * 7919;
+        const phase = 0.25 + 0.9 * ((serial * 0.618034) % 1);
         const run = capSegmentLength(
           dropShortStitches(
-            chamferSharpCorners(douglasPeucker(chain, CONNECTOR_MAX_DEV_MM), out.length),
+            connectorWalk(chamferSharpCorners(chain, serial), travelPitchMm, phase),
             CONNECTOR_MIN_STEP_MM,
-            true, // corners carry the on-ink route — never merge them away
+            true, // sharp walk corners carry the on-ink route — never merge them away
           ),
-          travelPitchMm,
+          travelPitchMm, // min-step merging must never stretch a stitch past the pitch
         );
         if (run.length >= 2) out.push(run);
       }
