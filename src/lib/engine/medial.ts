@@ -5,7 +5,7 @@ import { polygonArea } from "../trace/classify";
 import { resampleByDistance } from "./resample";
 import { douglasPeucker } from "../trace/simplify";
 import { smoothPath } from "../smooth";
-import { autoPullCompMm, autoSatinDensity, staggeredSatin } from "./satin";
+import { autoPullCompMm, autoSatinDensity, levelFanPivots, staggeredSatin } from "./satin";
 import { marchingSquares, simplify } from "../paintbucket";
 
 /** Longest single satin throw (mm) before it is split for safety. */
@@ -1592,20 +1592,20 @@ function buildColumn(
     }
     dense2.push([cl, cr]);
   }
-  // Alternate the leading rail each throw so they chain into a zig-zag; split
-  // any over-wide throw into scattered sub-stitches (split satin, no seam).
-  const pairs: [Point, Point][] = dense2.map(([l, r], j) =>
-    j % 2 === 0 ? [l, r] : [r, l],
-  );
-  const capped = staggeredSatin(pairs, MAX_THROW_MM, true);
+  // Level fan pivots (a bend's shared inner holes become alternating short
+  // stitches — no drilled pivot), then chain the pairs into the all-crossings
+  // zigzag (staggeredSatin's zigzag mode: throw AND return both cross the
+  // column, the commercial topology); split any over-wide throw into scattered
+  // sub-stitches (split satin, no seam).
+  const leveled = levelFanPivots(dense2);
+  const capped = staggeredSatin(leveled, MAX_THROW_MM, true, true);
   if (capped.length < 2) return null;
   // The gate throws: the selector's own (undensified) output, for acceptance
   // coverage — see SatinColumn.gateThrows.
-  const gatePairs: [Point, Point][] = seated.map(([l, r], j) =>
-    j % 2 === 0 ? [l, r] : [r, l],
-  );
   const gateThrows =
-    dense2.length === seated.length ? capped : staggeredSatin(gatePairs, MAX_THROW_MM, true);
+    dense2.length === seated.length
+      ? capped
+      : staggeredSatin(levelFanPivots(seated), MAX_THROW_MM, true, true);
   // Representative stroke width = median rail-to-rail span (drop the edge
   // overshoot we added), used to decide satin-vs-fill upstream.
   const sorted = [...halves].sort((p, q) => p - q);

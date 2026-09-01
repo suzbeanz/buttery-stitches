@@ -4,18 +4,111 @@ import { resampleByCount, splitThrow } from "./resample";
 
 /**
  * Assemble an ordered list of satin throws (each a `[fromRail, toRail]` pair) into
- * one zig-zag penetration path, splitting any throw longer than `maxLen` and
+ * one penetration path, splitting any throw longer than `maxLen` and
  * brick-staggering the splits so a wide ("split satin") column shows no seam and a
- * sharp-corner diagonal is tacked down rather than left loose. The leading rail
- * already alternates in `pairs`, so the down-rail travel between throws is implicit
- * (and short). Shared by hand-drawn, medial, and column-scan satin.
+ * sharp-corner diagonal is tacked down rather than left loose.
+ *
+ * Two chaining modes:
+ *  - `zigzag: false` (legacy — underlay/fill callers): the leading rail already
+ *    alternates in `pairs`, so the down-rail travel between throws is implicit
+ *    (and short). The thread crosses the column ONCE per pair and walks the rail
+ *    between crossings — an open meander, right for a stabilizing pass.
+ *  - `zigzag: true` (top satin): `pairs` arrive in canonical `[left, right]`
+ *    order and the RETURN between consecutive pairs is emitted as a crossing
+ *    stitch too (`right[k] → left[k+1]`), so EVERY segment crosses the column —
+ *    the commercial satin topology. The decoded reference designs sew
+ *    {@link REF_SATIN_CROSSING_FRACTION} of their satin segments as full
+ *    crossings; the legacy meander crossed only half as often for the same
+ *    penetration count, wasting the other half of the thread on little bars
+ *    along the rails — the sewn column showed ground between its throws and a
+ *    stitchy, busy edge (the "scraggly, uneven" look).
  */
-export function staggeredSatin(pairs: [Point, Point][], maxLen: number, scatter = false): Path {
+export function staggeredSatin(
+  pairs: [Point, Point][],
+  maxLen: number,
+  scatter = false,
+  zigzag = false,
+): Path {
   const out: Point[] = [];
-  pairs.forEach(([a, b], k) => {
+  if (!zigzag) {
+    pairs.forEach(([a, b], k) => {
+      const shift = scatter ? scatterShift(k) : undefined;
+      for (const p of splitThrow(a, b, maxLen, k % 2, shift)) out.push(p);
+    });
+    return out;
+  }
+  if (pairs.length === 0) return out;
+  let k = 0;
+  const emit = (a: Point, b: Point, skipFirst: boolean): void => {
     const shift = scatter ? scatterShift(k) : undefined;
-    for (const p of splitThrow(a, b, maxLen, k % 2, shift)) out.push(p);
-  });
+    const pts = splitThrow(a, b, maxLen, k % 2, shift);
+    for (let i = skipFirst ? 1 : 0; i < pts.length; i++) out.push(pts[i]);
+    k++;
+  };
+  emit(pairs[0][0], pairs[0][1], false);
+  for (let i = 1; i < pairs.length; i++) {
+    emit(pairs[i - 1][1], pairs[i][0], true); // the return — a crossing, not a rail walk
+    emit(pairs[i][0], pairs[i][1], true);
+  }
+  return out;
+}
+
+/** Fraction of a commercial satin stretch's segments that fully CROSS the
+ *  column (single-segment throws over consecutive-reversal windows, measured on
+ *  the decoded reference designs: 338/341 on the densest lettering-and-border
+ *  design, 126/130 on the curved-tail cartoon). Our satin must sew the same
+ *  all-crossings topology. */
+export const REF_SATIN_CROSSING_FRACTION = 0.95;
+
+/** Same-rail advance (mm) below which a spoke re-punches the previous hole.
+ *  Set at needle-hole scale (a hole is ~0.1mm): this catches the anti-crossing
+ *  pins (0.05mm forced advance) and exact pivot shares, while the inside of a
+ *  packed curve (0.15-0.3mm advance — legitimate density compensation) keeps
+ *  every penetration; insetting those opened bare slits on a rounded band
+ *  (measured 4.9% bare interior on the C-band fixture at a 0.3mm trigger). */
+const PIVOT_MIN_ADV_MM = 0.12;
+/** How far (mm) a re-punching spoke's endpoint is pulled in toward its partner
+ *  — the hand short-stitch corner treatment, at the fixed depth a digitizer
+ *  uses (a fraction of the throw cut 1-2mm into a wide column and opened bare
+ *  slits along a rounded band's inner arc). Two depths alternate so the moved
+ *  holes spread radially instead of forming a second pile just inside the
+ *  pivot; both are capped for tiny throws. */
+const PIVOT_INSET_A_MM = 0.55;
+const PIVOT_INSET_B_MM = 0.85;
+const PIVOT_INSET_MAX_FRAC = 0.65;
+
+/**
+ * Level fan pivots: wherever consecutive throws share (nearly) one hole on a
+ * rail — a corner fan's pivot, a tight inner curve — pull the re-punching
+ * endpoints IN toward the other rail so the needle doesn't drill one spot.
+ * With the old meander chain the same-rail re-punches were ADJACENT
+ * penetrations and the assembler's 0.3mm min-stitch merged them away; the
+ * all-crossings zigzag interleaves a crossing between them, so without this
+ * a script ligature's fan drilled its pivot hole 8+ times (a measured 26
+ * penetrations in one mm² — density-danger territory). This is also what a
+ * hand digitizer does at a corner: alternate short stitches into the column
+ * instead of packing the inside of the bend.
+ */
+export function levelFanPivots(pairs: [Point, Point][], minAdv = PIVOT_MIN_ADV_MM): [Point, Point][] {
+  const out: [Point, Point][] = pairs.map(([l, r]) => [{ ...l }, { ...r }]);
+  for (const side of [0, 1] as const) {
+    let anchor: Point | null = null;
+    let repunches = 0;
+    for (let k = 0; k < out.length; k++) {
+      const p = out[k][side];
+      const q = out[k][1 - side];
+      const w = distance(p, q);
+      if (anchor && distance(p, anchor) < minAdv && w > minAdv * 2) {
+        const depth = repunches % 2 === 0 ? PIVOT_INSET_A_MM : PIVOT_INSET_B_MM;
+        const inset = Math.min(depth / w, PIVOT_INSET_MAX_FRAC);
+        repunches++;
+        out[k][side] = { x: p.x + (q.x - p.x) * inset, y: p.y + (q.y - p.y) * inset };
+      } else {
+        anchor = p;
+        repunches = 0;
+      }
+    }
+  }
   return out;
 }
 
@@ -485,13 +578,22 @@ export function satinColumn(
       const dp = resampleByCount(drv, dense);
       const op: Path = [];
       let sPrev = -1;
+      // The forced advance is scaled to the DRIVER SAMPLING pitch so the fan's
+      // total spread stays ~FAN_SPREAD_MM per emitted station regardless of how
+      // finely the leg is sampled. Applying the full FAN_SPREAD_MM at every
+      // dense sample (4 per station) advanced the pivot 4x too fast: rounding a
+      // rectangle-border corner it dragged ~2.4mm of the inner rail into the
+      // fan, and the first ~15 throws of the leg sheared up to ~32° off
+      // perpendicular before the nearest-point feet caught back up.
+      const drvStep = polylineLength(drv) / Math.max(1, dense - 1);
+      const adv = FAN_SPREAD_MM * Math.min(1, drvStep / step);
       for (let i = 0; i < dp.length; i++) {
         let s = nearestArc(oth, cumO, dp[i]);
         // Monotone, with a TINY forced advance where consecutive spokes would
         // share one pivot hole — the corner fan spreads over a short arc
         // instead of punching the same penetration many times (thread pile-up).
         // (Bounded by the leg end: the mitre point itself is shared by design.)
-        if (s <= sPrev) s = Math.min(totalO, sPrev + FAN_SPREAD_MM);
+        if (s <= sPrev) s = Math.min(totalO, sPrev + adv);
         sPrev = s;
         op.push(pointAtArc(oth, cumO, s));
       }
@@ -591,10 +693,11 @@ export function satinColumn(
     wl.push(l);
     wr.push(r);
   }
-  // Short stitches smooth the inside of any curve, then alternate the leading
-  // rail so the throws chain into a zig-zag.
-  const short = shortStitchPairs(wl, wr);
-  const pairs: [Point, Point][] = short.map(([l, r], k) => (k % 2 === 0 ? [l, r] : [r, l]));
+  // Short stitches smooth the inside of any curve, and fan pivots are leveled
+  // so a corner fan can't drill one hole. The pairs stay in canonical
+  // [left, right] order — staggeredSatin's zigzag mode chains them so every
+  // segment (throw AND return) crosses the column, the commercial topology.
+  const pairs: [Point, Point][] = levelFanPivots(shortStitchPairs(wl, wr));
 
   // Split cap relative to the column's TYPICAL width: a throw much longer than
   // that is either a genuinely wide column (split satin) or a skewed diagonal
@@ -603,5 +706,5 @@ export function satinColumn(
   // splits are scattered per-throw so wide columns show no seam.
   const medianW = median(pairs.map(([a, b]) => distance(a, b)));
   const cap = Math.min(maxWidth, Math.max(medianW * CORNER_SPLIT_RATIO, MIN_SPLIT_CAP_MM));
-  return staggeredSatin(pairs, cap, true);
+  return staggeredSatin(pairs, cap, true, true);
 }
