@@ -18,8 +18,22 @@ import { distance } from "../geometry";
 const CURVE_SAGITTA_MM = 0.07;
 /** Never shorten below this (mm): curve packing must stay above the jam floor. */
 const CURVE_MIN_PITCH_MM = 0.8;
+/** Largest ratio between NEIGHBOURING stitch lengths. The decoded commercial
+ *  outlines shorten into a bend gradually — their curved running windows hold a
+ *  median adjacent-pitch ratio of 1.05–1.41 per design — while an unramped
+ *  curvature pitch drops 2.5mm → ~1mm in ONE stitch at every curve entry, and
+ *  that abrupt long-short step is what reads as an uneven, scraggly outline.
+ *  The pitch profile is slope-limited so no stitch is more than this factor
+ *  longer than its neighbour. */
+export const REF_RUN_PITCH_RAMP = 1.4;
 
-export function runningStitch(path: Path, stitchLength: number): Path {
+/**
+ * `ramp = false` skips the adjacent-pitch slope limit: BURIED travel
+ * connectors are invisible, and their positions are load-bearing for the
+ * mid-air-crossing geometry the assembler was validated with — the ramp is an
+ * aesthetic easing for VISIBLE lines only.
+ */
+export function runningStitch(path: Path, stitchLength: number, ramp = true): Path {
   if (path.length < 2) return path.map((p) => ({ ...p }));
   // MACHINE-SAFETY floor: a zero, negative, or non-finite pitch makes the walk
   // below never advance (or diverge), placing points until the tab OOMs. Callers
@@ -48,7 +62,7 @@ export function runningStitch(path: Path, stitchLength: number): Path {
     );
     return Math.acos(cos);
   };
-  const pitchAt = (i: number): number => {
+  const rawPitchAt = (i: number): number => {
     const dTheta = turnAt(i);
     if (dTheta < 1e-4) return stitchLength;
     const a = fine[i - 1];
@@ -58,6 +72,25 @@ export function runningStitch(path: Path, stitchLength: number): Path {
     const pitch = Math.sqrt(8 * R * CURVE_SAGITTA_MM);
     return Math.max(CURVE_MIN_PITCH_MM, Math.min(stitchLength, pitch));
   };
+  // RAMP the pitch profile so neighbouring stitches never differ by more than
+  // REF_RUN_PITCH_RAMP: the raw curvature pitch is a step function (full pitch
+  // right up to the bend, short pitch inside it), and sewing that step puts a
+  // long stitch hard against a short one at every curve entry/exit — the
+  // commercial outlines ease in instead. Slope-limit the profile in BOTH
+  // directions at (1 − 1/ramp) mm of pitch per mm of arc: a stitch of length L
+  // then ends where the profile has dropped at most L·(1−1/ramp), so the next
+  // stitch is at least L/ramp — the adjacent ratio stays within the ramp.
+  const pitches = fine.map((_, i) => rawPitchAt(i));
+  if (ramp) {
+    const slope = 1 - 1 / REF_RUN_PITCH_RAMP;
+    for (let i = pitches.length - 2; i >= 0; i--) {
+      pitches[i] = Math.min(pitches[i], pitches[i + 1] + slope * distance(fine[i], fine[i + 1]));
+    }
+    for (let i = 1; i < pitches.length; i++) {
+      pitches[i] = Math.min(pitches[i], pitches[i - 1] + slope * distance(fine[i - 1], fine[i]));
+    }
+  }
+  const pitchAt = (i: number): number => pitches[Math.max(0, Math.min(pitches.length - 1, i))];
   const CORNER_RAD = (28 * Math.PI) / 180; // resampleByDistance's hard-corner rule
 
   // Walk the fine polyline placing penetrations by EXACT interpolation at the

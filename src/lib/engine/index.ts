@@ -624,7 +624,10 @@ function sliverMendRun(patch: Path, stitchLength: number, compactOk = false): Po
       pass.push({ x: ax.cx + ax.ux * t - ax.uy * s, y: ax.cy + ax.uy * t + ax.ux * s });
     }
     if (pass.length < 2) continue;
-    const run = runningStitch(pass, Math.min(stitchLength, 1.8));
+    // No pitch ramp: a mend snakes tight turnarounds through junction wedges —
+    // its stitch positions are load-bearing for the crossing gates, and a
+    // 1-4mm mend has no visible curve entry to ease.
+    const run = runningStitch(pass, Math.min(stitchLength, 1.8), false);
     if (j % 2 === 1) run.reverse();
     all.push(...run);
   }
@@ -2427,7 +2430,9 @@ export function generateDesign(
         travelPath = routeUnderCoverage(prevPoint, start, col, drawOrder.get(object.id) ?? di);
       }
       if (travelPath) {
-        const travel = runningStitch(travelPath, TRAVEL_STITCH);
+        // No pitch ramp on buried travels: they're invisible, and their proven
+        // positions are load-bearing for edge-crossing geometry (running.ts).
+        const travel = runningStitch(travelPath, TRAVEL_STITCH, false);
         for (const pt of travel.slice(1, -1)) {
           out.push({ x: pt.x, y: pt.y, colorId: col, objectId: object.id, travel: true });
         }
