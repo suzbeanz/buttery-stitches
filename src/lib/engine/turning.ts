@@ -95,11 +95,9 @@ function clipAcross(P: Point, n: Point, rings: Path[], half: number): [Point, Po
 const ROW_END_CLEARANCE_MM = 0.55;
 
 /** Cross-row penetration-stagger coherence a turned fill must hold — the same
- *  commercial-derived bar as fill.ts's PRO_TATAMI_STAGGER_COHERENCE (0.94,
- *  measured over six decoded commercial reference designs, turned fills
- *  included; see fill.ts). Duplicated here so the two workstreams' branches
- *  stand alone — unify at integration. */
-export const PRO_TURNED_STAGGER_COHERENCE = 0.94;
+ *  commercial-derived bar as straight tatami (0.94, measured over six decoded
+ *  commercial reference designs, turned fills included; see fill.ts). */
+export { PRO_TATAMI_STAGGER_COHERENCE as PRO_TURNED_STAGGER_COHERENCE } from "./fill";
 
 /**
  * Penetrations from A to B (inclusive of both ends), with the INTERIOR
