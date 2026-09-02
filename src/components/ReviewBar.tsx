@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -8,12 +8,17 @@ import {
   PaintBucket,
   AlignJustify,
   Minus,
+  Plus,
+  SlidersHorizontal,
   type LucideIcon,
 } from "lucide-react";
 import { useEditorStore } from "../store/editorStore";
 import { useProjectStore } from "../store/projectStore";
 import { convertObjectType } from "../lib/objects";
-import type { EmbObject, StitchType } from "../types/project";
+import { styleObject, STITCH_STYLE_OPTIONS, type StitchStyle } from "../lib/stitchStyle";
+import { buildOutline, DEFAULT_OUTLINE_WIDTH } from "../lib/outline";
+import { DEFAULT_PARAMS } from "../types/project";
+import type { EmbObject, EmbObjectParams, StitchType } from "../types/project";
 
 /**
  * Guided region review. After an auto-digitize drops a pile of objects on the
@@ -22,6 +27,14 @@ import type { EmbObject, StitchType } from "../types/project";
  * the existing primitives: the selection highlight frames the current region,
  * `convertObjectType` retypes it, and the `visible` flag is "skip" (already
  * excluded from stitchout). Renders nothing unless a review is active.
+ *
+ * REFINE (optional, per region): a collapsed row of the levers a digitizer
+ * actually reaches for — stitch style (the wizard's per-color options, via the
+ * same `styleObject` mapping), fill angle, density, and a real satin outline
+ * on/off (`buildOutline`, the Properties panel's machinery). Every change is an
+ * ordinary per-object store edit, so it re-styles ONLY the touched region —
+ * other regions' stitches are untouched by construction — and each edit is one
+ * undo step. Accept-all stays one tap: Done / close accept everything as-is.
  */
 
 const TYPE_ICON: Record<StitchType, LucideIcon> = {
@@ -57,6 +70,22 @@ export default function ReviewBar() {
   const colors = useProjectStore((s) => s.project.colors);
   const setSelection = useProjectStore((s) => s.setSelection);
   const updateObject = useProjectStore((s) => s.updateObject);
+  const updateObjectParams = useProjectStore((s) => s.updateObjectParams);
+  const insertObjectsAfter = useProjectStore((s) => s.insertObjectsAfter);
+  const removeObjects = useProjectStore((s) => s.removeObjects);
+
+  // ---- optional per-region refine (collapsed by default) ----
+  const [refineOpen, setRefineOpen] = useState(false);
+  // The style OVERRIDE chosen per region id ("auto" = as traced), plus each
+  // region's pre-override {type, params} so choosing Auto genuinely restores
+  // the trace's own classification. Transient by design (like the review
+  // cursor): it never lands in undo history.
+  const [styleById, setStyleById] = useState<Record<string, StitchStyle>>({});
+  const [styleOriginals, setStyleOriginals] = useState<
+    Record<string, { type: StitchType; params: EmbObjectParams }>
+  >({});
+  // Satin-outline objects added per region id, so the checkbox can remove them.
+  const [outlineIds, setOutlineIds] = useState<Record<string, string[]>>({});
 
   const colorById = useMemo(
     () => new Map(colors.map((c) => [c.id, c])),
@@ -106,12 +135,68 @@ export default function ReviewBar() {
   const toggleKeep = () =>
     updateObject(current.id, { visible: !current.visible });
 
+  // ---- refine handlers (all scoped to current.id — one region, one edit) ----
+  const regionStyle = styleById[current.id] ?? "auto";
+  const setRegionStyle = (s: StitchStyle) => {
+    if (s === regionStyle) return;
+    if (s === "auto") {
+      // Restore the trace's own classification, captured before the first override.
+      const orig = styleOriginals[current.id];
+      if (orig) updateObject(current.id, { type: orig.type, params: orig.params });
+    } else {
+      if (!(current.id in styleOriginals))
+        setStyleOriginals((m) => ({
+          ...m,
+          [current.id]: { type: current.type, params: current.params },
+        }));
+      // The wizard's exact per-color mapping — styleObject never touches paths,
+      // so only type + params flow into the store.
+      const styled = styleObject(current, s);
+      updateObject(current.id, { type: styled.type, params: styled.params });
+    }
+    setStyleById((m) => ({ ...m, [current.id]: s }));
+  };
+
+  // Style overrides apply to traced FILL regions (running is covered by the type
+  // switch; a true satin rail pair has no ring geometry for the fill styles).
+  const styleable = current.type === "fill" || regionStyle !== "auto";
+  const showAngle =
+    current.type === "fill" && current.params.flowPath == null && current.params.directionDeg == null;
+  const showDensity = current.type === "fill" || current.type === "satin";
+
+  // Real satin outline on/off — the Properties panel's buildOutline machinery,
+  // inserted right after this region (and removable). Sewn in the region's own
+  // thread so the toggle never adds a color change.
+  const liveOutlineIds = (outlineIds[current.id] ?? []).filter((id) =>
+    objects.some((o) => o.id === id),
+  );
+  const hasOutline = liveOutlineIds.length > 0;
+  const toggleOutline = () => {
+    if (hasOutline) {
+      removeObjects(liveOutlineIds);
+      setOutlineIds((m) => ({ ...m, [current.id]: [] }));
+    } else {
+      const built = buildOutline(current.paths, DEFAULT_OUTLINE_WIDTH, current.colorId);
+      if (built.length === 0) return;
+      insertObjectsAfter(current.id, built);
+      // insertObjectsAfter selects what it inserted — keep the review's frame
+      // on the region being reviewed.
+      setSelection([current.id]);
+      setOutlineIds((m) => ({ ...m, [current.id]: built.map((o) => o.id) }));
+    }
+  };
+
+  const round2 = (v: number) => Math.round(v * 100) / 100;
+  const density = current.params.density ?? DEFAULT_PARAMS.density;
+  const angle = current.params.angle ?? DEFAULT_PARAMS.angle;
+
   return (
-    // Phones: a full-width two-row sheet — identity (progress · name · keep)
-    // over actions (type · nav · close) — because the old single flex-wrap row
-    // broke into 2-3 ragged rows over the exact region being reviewed. From sm
-    // up both wrappers dissolve (`sm:contents`) and the classic one-row bar is
-    // back, DOM unchanged.
+    // Phones: a full-width sheet — identity (progress · name · keep · refine)
+    // over actions (type · nav · close), plus the optional refine row — because
+    // the old single flex-wrap row broke into 2-3 ragged rows over the exact
+    // region being reviewed. From sm up the two core wrappers dissolve
+    // (`sm:contents`) into the classic one-row bar; the refine row wraps onto
+    // its own full-width line (`sm:basis-full`).
     <div
       role="group"
       aria-label="Review regions"
@@ -144,6 +229,25 @@ export default function ReviewBar() {
           {current.visible ? <Eye size={14} /> : <EyeOff size={14} />}
           {current.visible ? "Skip" : "Skipped"}
         </button>
+
+        {/* Optional per-region refine: style · angle · density · outline. */}
+        {(styleable || showDensity) && (
+          <button
+            onClick={() => setRefineOpen((v) => !v)}
+            aria-expanded={refineOpen}
+            aria-label="Refine stitches"
+            data-tip="Refine stitches"
+            data-tip-side="top"
+            // Edge button: end-anchor the tooltip so it can't spill past the
+            // sheet and horizontally scroll the whole shell on a phone.
+            data-tip-align="end"
+            className={`tap-target grid h-8 w-8 shrink-0 place-items-center rounded-sm border-2 border-ink ${
+              refineOpen ? "bg-ink text-cream" : "bg-cream text-ink hover:bg-butter-200"
+            }`}
+          >
+            <SlidersHorizontal size={14} />
+          </button>
+        )}
       </div>
 
       <div className="flex items-center justify-between gap-2 sm:contents">
@@ -205,13 +309,117 @@ export default function ReviewBar() {
         <button
           onClick={endReview}
           aria-label="Close review"
-          data-tip="Close"
+          data-tip="Accept all & close"
           data-tip-side="top"
+          // Edge button: end-anchor the (always-present, transparent) tooltip
+          // box so it can't widen the shell's scrollable area on a phone.
+          data-tip-align="end"
           className="tap-target grid h-7 w-7 place-items-center rounded-sm text-navy/60 hover:bg-butter-200 hover:text-ink"
         >
           <X size={15} />
         </button>
       </div>
+
+      {/* REFINE row — live per-region stitch controls. Each change writes only
+          this region's object, so the rest of the design never re-styles. */}
+      {refineOpen && (styleable || showDensity) && (
+        <div
+          role="group"
+          aria-label="Refine region stitches"
+          className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-ink/15 pt-2 sm:basis-full"
+        >
+          {styleable && (
+            <label className="flex min-w-0 items-center gap-1.5 text-xs text-navy">
+              <span className="font-label text-[10px] font-semibold uppercase tracking-wide text-navy/60">
+                Style
+              </span>
+              {/* Width-capped: the 16px coarse-pointer font would otherwise
+                  push this row past the phone sheet's edge. */}
+              <select
+                value={regionStyle}
+                onChange={(e) => setRegionStyle(e.target.value as StitchStyle)}
+                aria-label="Region stitch style"
+                className="tap-target w-full max-w-[8.5rem] appearance-none rounded-sm border-2 border-ink/30 bg-cream px-1.5 py-1 text-xs text-navy outline-none focus:ring-1 focus:ring-ink/40"
+              >
+                {STITCH_STYLE_OPTIONS.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {showAngle && (
+            <MiniStepper
+              label="Angle"
+              display={`${Math.round(angle)}°`}
+              onStep={(dir) => updateObjectParams(current.id, { angle: round2(angle + dir * 5) })}
+            />
+          )}
+
+          {showDensity && (
+            <MiniStepper
+              label="Density"
+              display={density.toFixed(2)}
+              onStep={(dir) =>
+                updateObjectParams(current.id, {
+                  density: Math.max(0.1, round2(density + dir * 0.05)),
+                })
+              }
+            />
+          )}
+
+          {current.type === "fill" && (
+            <label className="tap-target flex items-center gap-1.5 text-xs text-navy">
+              <input
+                type="checkbox"
+                checked={hasOutline}
+                onChange={toggleOutline}
+                aria-label="Satin outline"
+                className="accent-ink"
+              />
+              Outline
+            </label>
+          )}
+        </div>
+      )}
     </div>
+  );
+}
+
+/** A compact −/value/+ stepper for the refine row (finger-sized buttons). */
+function MiniStepper({
+  label,
+  display,
+  onStep,
+}: {
+  label: string;
+  display: string;
+  onStep: (dir: 1 | -1) => void;
+}) {
+  return (
+    <span className="flex items-center gap-1 text-xs text-navy">
+      <span className="font-label text-[10px] font-semibold uppercase tracking-wide text-navy/60">
+        {label}
+      </span>
+      <button
+        type="button"
+        onClick={() => onStep(-1)}
+        aria-label={`Decrease ${label.toLowerCase()}`}
+        className="tap-target grid h-7 w-7 place-items-center rounded-sm border-2 border-ink/70 text-ink hover:bg-butter-200"
+      >
+        <Minus size={13} />
+      </button>
+      <span className="w-10 text-center font-mono tabular-nums">{display}</span>
+      <button
+        type="button"
+        onClick={() => onStep(1)}
+        aria-label={`Increase ${label.toLowerCase()}`}
+        className="tap-target grid h-7 w-7 place-items-center rounded-sm border-2 border-ink/70 text-ink hover:bg-butter-200"
+      >
+        <Plus size={13} />
+      </button>
+    </span>
   );
 }
