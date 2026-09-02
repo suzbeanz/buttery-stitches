@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AlertTriangle, Check, ChevronDown, Eye, EyeOff, Minus, Plus } from "lucide-react";
-import type { EmbObject, Hoop, Project, ThreadColor } from "../types/project";
+import type { EmbObject, FabricType, Hoop, Project, ThreadColor } from "../types/project";
+import { FABRICS } from "../types/project";
 import { loadImageData } from "../lib/image";
 import {
   imageDataToObjects,
@@ -31,6 +32,8 @@ import { matchColorsToChart } from "../lib/thread/match";
 import { THREAD_CHARTS } from "../lib/thread/catalog";
 import { pathsBounds } from "../lib/geometry";
 import { polygonArea } from "../lib/trace/classify";
+import { styleObject, SKETCH_DENSITY, STITCH_STYLE_OPTIONS, type StitchStyle } from "../lib/stitchStyle";
+import { priorityDefaults, applyPriorityParams, type DigitizePriority } from "../lib/digitizePriority";
 import { useEscapeToClose, useDialogFocus } from "./useEscapeToClose";
 import { logError } from "../lib/log";
 
@@ -58,9 +61,6 @@ const RETRACE_DEBOUNCE_MS = 250;
 const MIN_COLORS = 2;
 const MAX_COLORS = 12;
 
-/** Per-color stitch style the user can force in the dialog. */
-type StitchStyle = "auto" | "satin" | "outline" | "sketch" | "crosshatch" | "fur";
-
 /** How the image becomes stitches (Image-step choice, auto-preselected). */
 type DigitizeMethod = "standard" | "lineart" | "fur";
 
@@ -68,27 +68,10 @@ type DigitizeMethod = "standard" | "lineart" | "fur";
  *  sketch rows of the hand-drawn commercial style (fabric shows through). */
 type FillLook = "solid" | "sketch";
 
-/** Open sketch rows want much wider spacing than a solid fill — the measured
- *  commercial "light fill" band. */
-const SKETCH_DENSITY = 0.8;
 /** Faces below this area keep their solid fill even in the sketch look: the
  *  reference designs satin their small details (a rat's feet, an eye) — two
  *  sketch rows across a tiny face read broken, not textured. */
 const SKETCH_MIN_FACE_MM2 = 30;
-
-/** Apply a per-color style override to an object (no-op for "auto"). Satin/running
- *  survive the apply-time fixStitches pass, so the choice sticks. */
-function styleObject(o: EmbObject, style: StitchStyle): EmbObject {
-  if (style === "satin") return { ...o, type: "fill", params: { ...o.params, fillStyle: "satin" } };
-  if (style === "outline") return { ...o, type: "running" };
-  if (style === "sketch" || style === "crosshatch")
-    return { ...o, type: "fill", params: { ...o.params, fillStyle: style, density: SKETCH_DENSITY } };
-  // Per-color fur: unlocks per-region turning + the knockdown exemption. (The
-  // trace-time fur pipeline — dark→light ordering, baked shade overlaps — is
-  // the Fur METHOD's job; this is the à-la-carte version for one color.)
-  if (style === "fur") return { ...o, type: "fill", params: { ...o.params, fillStyle: "fur" } };
-  return o;
-}
 
 const rgbToHex = (rgb: [number, number, number]) =>
   "#" + rgb.map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, "0")).join("");
@@ -102,12 +85,16 @@ export default function AutoDigitizeDialog({
   file,
   hoop,
   hasExistingWork = false,
+  initialFabric,
   onApply,
   onClose,
 }: {
   file: File;
   hoop: Hoop;
   hasExistingWork?: boolean;
+  /** The studio's current fabric, so the wizard's fabric question starts from
+   *  (and preserves) it. Undefined = never chosen anywhere yet. */
+  initialFabric?: FabricType;
   onApply: (project: Project) => void;
   onClose: () => void;
 }) {
@@ -138,7 +125,18 @@ export default function AutoDigitizeDialog({
   const [furOverlap, setFurOverlap] = useState(0.9);
   const [removeBackground, setRemoveBackground] = useState(true);
   const [detail, setDetail] = useState<DigitizeDetail>("balanced");
+  const [userSetDetail, setUserSetDetail] = useState(false);
   const [recognizeText, setRecognizeText] = useState(false);
+  const [userSetRecognize, setUserSetRecognize] = useState(false);
+  // UP-FRONT QUESTIONS (small and skippable — sensible defaults, never block
+  // the one-click path). Fabric flows into the applied project so the engine's
+  // existing fabric profile (density/pull/underlay multipliers) picks it up;
+  // undefined = never chosen anywhere, and the key is then omitted so the
+  // untouched auto path stays byte-identical. The priority biases the wizard's
+  // SUGGESTED defaults via one pure function (lib/digitizePriority) — an
+  // explicit user choice always wins over the bias.
+  const [fabric, setFabric] = useState<FabricType | undefined>(initialFabric);
+  const [priority, setPriority] = useState<DigitizePriority>("balanced");
   // Text-retype assist: detected text-like clusters + the string the user types
   // for each. Typed clusters are replaced with crisp authored lettering — the
   // professional move for text OCR can't read (small, stylized, rotated).
@@ -281,14 +279,26 @@ export default function AutoDigitizeDialog({
   useEffect(() => {
     if (!imageData || userSetColors) return;
     if (method === "lineart" && lineArt?.isLineArt) {
+      // Face-exact structural count — the priority bias never trims it (dropping
+      // a face color deletes a real cartoon feature, not "a stitch saving").
       setNumColors(Math.max(MIN_COLORS, Math.min(MAX_COLORS, lineArt.suggestedColors)));
       return;
     }
     // Fur needs room for the shade ladder: the commercial norm is 4 fur shades
-    // plus at least one detail color, so floor the suggestion at 5.
+    // plus at least one detail color, so floor the suggestion at 5. The floor
+    // re-applies AFTER the priority bias so economy can never starve the ladder.
     const floor = method === "fur" ? 5 : MIN_COLORS;
-    setNumColors(Math.max(floor, suggestColorCount(imageData, MIN_COLORS, MAX_COLORS)));
-  }, [imageData, userSetColors, method, lineArt]);
+    const base = Math.max(floor, suggestColorCount(imageData, MIN_COLORS, MAX_COLORS));
+    setNumColors(Math.max(floor, priorityDefaults(priority, base).colorCount));
+  }, [imageData, userSetColors, method, lineArt, priority]);
+
+  // The priority question steers the DEFAULT detail level and text-recognition
+  // choice — but only until the user touches those controls themselves.
+  useEffect(() => {
+    const d = priorityDefaults(priority, MIN_COLORS); // colorCount unused here
+    if (!userSetDetail) setDetail(d.detail);
+    if (!userSetRecognize) setRecognizeText(d.recognizeText);
+  }, [priority, userSetDetail, userSetRecognize]);
 
   // LIVE re-trace: whenever the image or any setting changes, re-digitize after a
   // short debounce so dragging the stepper doesn't trace on every tick. The trace
@@ -537,18 +547,26 @@ export default function AutoDigitizeDialog({
   function apply() {
     if (!result) return;
     const colors = result.colors.filter((c) => keptIds.has(c.id));
+    // The priority's density/outline defaults stamp onto plain solid fills only
+    // (pure, identity for "balanced" — see lib/digitizePriority), AFTER the
+    // style overrides so an explicit sketch/fur density always wins.
+    const bias = priorityDefaults(priority, numColors);
     const objects = objectsWithText
       .filter((o) => keptIds.has(o.colorId) && !excludedIds.has(o.id))
       // An explicit KEEP is a decision — clear the flag so Check design never
       // re-nags about an object the user already ruled on.
       .map((o) => (o.suspectedBackground ? { ...o, suspectedBackground: undefined } : o))
-      .map((o) => styleObject(lookStyled(o), styleById[o.colorId] ?? "auto"));
+      .map((o) => styleObject(lookStyled(o), styleById[o.colorId] ?? "auto"))
+      .map((o) => applyPriorityParams(o, bias));
     if (objects.length === 0) return;
     const project: Project = {
       version: 1,
       widthMm: hoop.wMm,
       heightMm: hoop.hMm,
       hoop: { ...hoop },
+      // Only include the fabric when one was ever chosen (here or already in
+      // the studio) — an untouched question leaves the project byte-identical.
+      ...(fabric !== undefined ? { fabric } : {}),
       colors,
       objects,
     };
@@ -677,6 +695,73 @@ export default function AutoDigitizeDialog({
             </p>
           </div>
         )}
+
+        {/* UP-FRONT QUESTIONS — what a digitizer would ask before tracing:
+            what it's sewn onto, and what to optimize for. Small, prefilled and
+            skippable; the one-click path never waits on them. */}
+        <fieldset className="mb-3 rounded-sm border-2 border-ink/15 bg-butter-50 p-3">
+          <legend className="px-1 font-label text-[10px] font-semibold uppercase tracking-wide text-navy/50">
+            Your project
+          </legend>
+
+          <label className="mb-1 flex items-center justify-between gap-2">
+            <span className="text-sm text-navy">Fabric</span>
+            <select
+              value={fabric ?? "woven"}
+              onChange={(e) => setFabric(e.target.value as FabricType)}
+              aria-label="Fabric"
+              className="appearance-none rounded-sm border-2 border-ink/30 bg-cream px-2 py-1 text-sm text-navy outline-none focus:ring-1 focus:ring-ink/40"
+            >
+              {(Object.keys(FABRICS) as FabricType[]).map((id) => (
+                <option key={id} value={id}>
+                  {FABRICS[id].name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="mb-3 text-[11px] text-navy/55">
+            What you&apos;ll stitch onto. Stretchy or textured fabric automatically gets tighter
+            rows, more pull compensation and heavier underlay.
+          </p>
+
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+            <span className="text-sm text-navy">What matters most</span>
+            <div
+              className="inline-flex flex-wrap overflow-hidden rounded-sm border-2 border-ink/30"
+              role="group"
+              aria-label="What matters most"
+            >
+              {(
+                [
+                  ["balanced", "Balanced"],
+                  ["lettering", "Crisp lettering"],
+                  ["coverage", "Solid coverage"],
+                  ["economy", "Fewer stitches"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => setPriority(value)}
+                  aria-pressed={priority === value}
+                  className={`px-2.5 py-1 font-label text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ink ${
+                    priority === value ? "bg-ink text-cream" : "bg-cream text-navy/70 hover:bg-butter-200"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <p className="text-[11px] text-navy/55">
+            {priority === "lettering"
+              ? "Traces fine detail and re-sets any words as clean satin type."
+              : priority === "coverage"
+                ? "Packs the rows a touch tighter so fills sew fully covered on the first try."
+                : priority === "economy"
+                  ? "Bolder, simpler trace with lighter fills — fewer colors, thread stops and stitches."
+                  : "A good middle ground — the suggested settings below stay as detected."}
+          </p>
+        </fieldset>
 
         {/* DIGITIZING METHOD — always visible for rasters, so the choice isn't
             buried in a warning banner. Auto-detection preselects Line art for
@@ -814,7 +899,10 @@ export default function AutoDigitizeDialog({
               {([["smooth", "Smoother"], ["balanced", "Balanced"], ["detailed", "Detailed"]] as const).map(([value, label]) => (
                 <button
                   key={value}
-                  onClick={() => setDetail(value)}
+                  onClick={() => {
+                    setUserSetDetail(true);
+                    setDetail(value);
+                  }}
                   aria-pressed={detail === value}
                   className={`px-3 py-1 font-label text-[11px] font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ink ${
                     detail === value ? "bg-ink text-cream" : "bg-cream text-navy/70 hover:bg-butter-200"
@@ -839,7 +927,15 @@ export default function AutoDigitizeDialog({
           </p>
 
           <label className="flex items-center gap-2 text-sm text-navy">
-            <input type="checkbox" checked={recognizeText} onChange={(e) => setRecognizeText(e.target.checked)} className="accent-ink" />
+            <input
+              type="checkbox"
+              checked={recognizeText}
+              onChange={(e) => {
+                setUserSetRecognize(true);
+                setRecognizeText(e.target.checked);
+              }}
+              className="accent-ink"
+            />
             Recognize text as lettering
           </label>
           <p className="ml-6 text-[11px] text-navy/55">
@@ -973,12 +1069,11 @@ export default function AutoDigitizeDialog({
                         aria-label={`Stitch style for ${c.name ?? rgbStr}`}
                         className="shrink-0 appearance-none rounded-sm border border-ink/30 bg-cream px-1.5 py-0.5 text-[11px] text-navy outline-none focus:ring-1 focus:ring-ink/40"
                       >
-                        <option value="auto">Auto</option>
-                        <option value="satin">Satin</option>
-                        <option value="outline">Outline</option>
-                        <option value="sketch">Sketch</option>
-                        <option value="crosshatch">Crosshatch</option>
-                        <option value="fur">Fur</option>
+                        {STITCH_STYLE_OPTIONS.map((s) => (
+                          <option key={s.value} value={s.value}>
+                            {s.label}
+                          </option>
+                        ))}
                       </select>
                     )}
                     <button

@@ -64,6 +64,9 @@ vi.mock("../lib/trace/svgParse", () => ({
     textCount: 2,
   })),
 }));
+// OCR loads a ~2MB tesseract worker — never in jsdom. The lettering-priority
+// tests flip "Recognize text" on, which would otherwise reach for it.
+vi.mock("../lib/trace/ocr", () => ({ ocrWords: vi.fn(async () => []) }));
 // jsdom can't fetch the font — load a real .ttf from disk so the text-retype
 // path actually places lettering (keeps the other tests' fonts.ts constants).
 vi.mock("../lib/text/fonts", async (importActual) => {
@@ -645,6 +648,110 @@ describe("AutoDigitizeDialog (wizard)", () => {
     expect(project.colors.map((c) => c.id)).toEqual(["cw", "cw2", "cink"]);
     const last = project.objects[project.objects.length - 1];
     expect(last.params.lineArt).toBe(true);
+  });
+
+  // ── Up-front questions (fabric + "what matters most") ────────────────────
+
+  it("untouched questions leave the auto path byte-identical: no fabric key, same object references", async () => {
+    const onApply = renderDialog();
+    await toColors();
+    const project = await addArtwork(onApply);
+    // REGRESSION GUARD for the one-click path: skipping both questions must
+    // change NOTHING — no fabric key sneaks in, and the applied objects carry
+    // the trace's exact data (no re-styling, no param stamps) byte for byte.
+    expect("fabric" in project).toBe(false);
+    expect(JSON.stringify(project.objects)).toBe(JSON.stringify(OBJECTS));
+  });
+
+  it("the fabric answer lands on the applied project for the engine's fabric profile", async () => {
+    const onApply = renderDialog();
+    await waitForTrace();
+    fireEvent.change(screen.getByLabelText("Fabric"), { target: { value: "knit" } });
+    await toColors();
+    const project = await addArtwork(onApply);
+    expect(project.fabric).toBe("knit");
+  });
+
+  it("the studio's existing fabric choice is preserved through a re-digitize", async () => {
+    const onApply = vi.fn();
+    const file = new File([new Uint8Array([1, 2, 3])], "logo.png", { type: "image/png" });
+    render(
+      <AutoDigitizeDialog
+        file={file}
+        hoop={HOOP}
+        initialFabric="pile"
+        onApply={onApply}
+        onClose={vi.fn()}
+      />,
+    );
+    await toColors();
+    const project = await addArtwork(onApply);
+    // The wizard replaces the whole project — losing a previously chosen fabric
+    // would silently change the sew-out. It rides through untouched.
+    expect(project.fabric).toBe("pile");
+  });
+
+  it("Crisp lettering biases detail to Detailed and turns text recognition on", async () => {
+    renderDialog();
+    await waitForTrace();
+    fireEvent.click(screen.getByRole("button", { name: "Crisp lettering" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Detailed" }).getAttribute("aria-pressed")).toBe("true"),
+    );
+    expect(
+      (screen.getByRole("checkbox", { name: /Recognize text as lettering/ }) as HTMLInputElement).checked,
+    ).toBe(true);
+    // …and the biased detail actually reaches the tracer.
+    await waitFor(() =>
+      expect(vi.mocked(imageDataToObjects).mock.calls.at(-1)?.[2]?.detail).toBe("detailed"),
+    );
+  });
+
+  it("Fewer stitches biases to a smoother trace, one fewer color, lighter open fills", async () => {
+    const onApply = renderDialog();
+    await waitForTrace();
+    fireEvent.click(screen.getByRole("button", { name: "Fewer stitches" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Smoother" }).getAttribute("aria-pressed")).toBe("true"),
+    );
+    // suggestColorCount mocks 4 → economy trims to 3, and the trace re-runs at 3.
+    await waitFor(() => expect(vi.mocked(imageDataToObjects).mock.calls.at(-1)?.[1]).toBe(3));
+    await toColors();
+    const project = await addArtwork(onApply);
+    for (const o of project.objects) {
+      expect(o.params.density).toBe(0.35);
+      expect(o.params.outline).toBe(false);
+    }
+  });
+
+  it("Solid coverage stamps tighter density on plain fills only", async () => {
+    const stroke = {
+      ...obj("s1", "c1", 60),
+      name: "Red outline",
+      params: { fillStyle: "satin" as const, lineArt: true },
+    };
+    vi.mocked(imageDataToObjects).mockReturnValue({ colors: COLORS, objects: [...OBJECTS, stroke] });
+    const onApply = renderDialog();
+    await waitForTrace("4");
+    fireEvent.click(screen.getByRole("button", { name: "Solid coverage" }));
+    await toColors("4");
+    const project = await addArtwork(onApply);
+    const plain = project.objects.filter((o) => !o.params.lineArt);
+    expect(plain.length).toBeGreaterThan(0);
+    for (const o of plain) expect(o.params.density).toBe(0.27);
+    // The line-art stroke network keeps its own spacing.
+    const ink = project.objects.find((o) => o.params.lineArt)!;
+    expect(ink.params.density).toBeUndefined();
+  });
+
+  it("an explicit detail choice survives a later priority change — bias never fights the user", async () => {
+    renderDialog();
+    await waitForTrace();
+    fireEvent.click(screen.getByRole("button", { name: "Detailed" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fewer stitches" }));
+    // Economy's smooth default must NOT override the user's Detailed.
+    expect(screen.getByRole("button", { name: "Detailed" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Smoother" }).getAttribute("aria-pressed")).toBe("false");
   });
 
   it("an SVG with <text> shows the Text-tool notice; rasters never do", async () => {
