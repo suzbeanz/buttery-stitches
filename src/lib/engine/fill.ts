@@ -513,7 +513,7 @@ function staggerOffset(k: number): number {
  *  of the merge floor (MIN_STITCH_LENGTH in resample.ts). A hair above that
  *  0.5mm floor — the row is built in a rotated frame, and an exactly-0.5mm
  *  segment lands a rounding hair under the floor after rotating back. */
-const ROW_END_CLEARANCE_MM = 0.55;
+export const ROW_END_CLEARANCE_MM = 0.55;
 
 /**
  * Penetrations across one row span. Interior penetrations sit on a

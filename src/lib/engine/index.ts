@@ -1028,10 +1028,10 @@ export function generateObjectRuns(
     // Motif run: repeat a decorative motif along the line instead of a plain run.
     if (p.motifRun && p.motifRun !== "none") {
       const strokes = motifRunAlong(object.paths[0] ?? [], { motifId: p.motifRun, sizeMm: p.motifSizeMm });
-      for (const stroke of strokes) addRun(runs, dropShortStitches(runningStitch(stroke, stitchLength), undefined, true), false);
+      for (const stroke of strokes) addRun(runs, dropShortStitches(runningStitch(stroke, stitchLength, true), undefined, true), false);
       return runs;
     }
-    const line = dropShortStitches(runningStitch(object.paths[0] ?? [], stitchLength), undefined, true);
+    const line = dropShortStitches(runningStitch(object.paths[0] ?? [], stitchLength, true), undefined, true);
     // Bean / triple stitch: retrace the line N times (forward/back/forward) for a
     // bold, durable outline. The repeats land in the same holes but are never
     // CONSECUTIVE (the turnarounds skip the shared vertex), so they survive the
@@ -1321,9 +1321,9 @@ export function generateObjectRuns(
             ? // SPARKLE: one sparse pass down the centerline, always — the fur
               // mode's highlight streaks are light single strokes glinting over
               // the coat, never a bean retrace or a solid satin bar.
-              runningStitch(c.centerline, stitchLength)
+              runningStitch(c.centerline, stitchLength, true)
             : c.widthMm < LINE_ART_SATIN_MIN_MM
-              ? beanPath(runningStitch(c.centerline, stitchLength), LINE_ART_BEAN_REPEATS)
+              ? beanPath(runningStitch(c.centerline, stitchLength, true), LINE_ART_BEAN_REPEATS)
               : widen(c),
         );
         tatamiNoBareTravel = true; // a fill: order for shortest travel, never slash a bare gap
@@ -1338,7 +1338,7 @@ export function generateObjectRuns(
         tops = keep.map((c) =>
           c.widthMm < runMax
             ? beanPath(
-                deloopRun(runningStitch(c.centerline, Math.min(stitchLength, HAIRLINE_RUN_STITCH_MM))),
+                deloopRun(runningStitch(c.centerline, Math.min(stitchLength, HAIRLINE_RUN_STITCH_MM), true)),
                 LINE_ART_BEAN_REPEATS,
               )
             : c.throws,

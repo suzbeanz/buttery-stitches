@@ -94,7 +94,7 @@ describe("satin crossing topology (all-crossings zigzag)", () => {
   it("zigzag mode keeps every penetration of the legacy meander (same holes)", () => {
     const pairs: [Point, Point][] = [];
     for (let i = 0; i <= 20; i++) pairs.push([{ x: i * 0.4, y: 0 }, { x: i * 0.4, y: 3 }]);
-    const zz = staggeredSatin(pairs, 7, false, true);
+    const zz = staggeredSatin(pairs, 7, { zigzag: true });
     // Same penetration count as pairs demand (2 per station), no rail walks.
     expect(zz.length).toBe(42);
     for (let i = 1; i < zz.length; i++) {

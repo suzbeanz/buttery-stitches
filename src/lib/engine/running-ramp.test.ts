@@ -27,7 +27,7 @@ function sCurve(): Path {
 
 describe("running-stitch pitch ramp (curve entry/exit continuity)", () => {
   it("adjacent stitch lengths never jump past the commercial ramp", () => {
-    const out = runningStitch(sCurve(), 2.5);
+    const out = runningStitch(sCurve(), 2.5, true);
     expect(out.length).toBeGreaterThan(20);
     const lens: number[] = [];
     for (let i = 1; i < out.length; i++) {
@@ -46,7 +46,7 @@ describe("running-stitch pitch ramp (curve entry/exit continuity)", () => {
   });
 
   it("still shortens inside the bend and keeps full pitch on the straights", () => {
-    const out = runningStitch(sCurve(), 2.5);
+    const out = runningStitch(sCurve(), 2.5, true);
     const curveLens: number[] = [];
     const straightLens: number[] = [];
     for (let i = 1; i < out.length; i++) {

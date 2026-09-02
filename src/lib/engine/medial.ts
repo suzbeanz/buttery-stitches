@@ -1598,14 +1598,14 @@ function buildColumn(
   // column, the commercial topology); split any over-wide throw into scattered
   // sub-stitches (split satin, no seam).
   const leveled = levelFanPivots(dense2);
-  const capped = staggeredSatin(leveled, MAX_THROW_MM, true, true);
+  const capped = staggeredSatin(leveled, MAX_THROW_MM, { scatter: true, zigzag: true });
   if (capped.length < 2) return null;
   // The gate throws: the selector's own (undensified) output, for acceptance
   // coverage — see SatinColumn.gateThrows.
   const gateThrows =
     dense2.length === seated.length
       ? capped
-      : staggeredSatin(levelFanPivots(seated), MAX_THROW_MM, true, true);
+      : staggeredSatin(levelFanPivots(seated), MAX_THROW_MM, { scatter: true, zigzag: true });
   // Representative stroke width = median rail-to-rail span (drop the edge
   // overshoot we added), used to decide satin-vs-fill upstream.
   const sorted = [...halves].sort((p, q) => p - q);

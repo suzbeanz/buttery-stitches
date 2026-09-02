@@ -26,8 +26,7 @@ import { resampleByCount, splitThrow } from "./resample";
 export function staggeredSatin(
   pairs: [Point, Point][],
   maxLen: number,
-  scatter = false,
-  zigzag = false,
+  { scatter = false, zigzag = false }: { scatter?: boolean; zigzag?: boolean } = {},
 ): Path {
   const out: Point[] = [];
   if (!zigzag) {
@@ -706,5 +705,5 @@ export function satinColumn(
   // splits are scattered per-throw so wide columns show no seam.
   const medianW = median(pairs.map(([a, b]) => distance(a, b)));
   const cap = Math.min(maxWidth, Math.max(medianW * CORNER_SPLIT_RATIO, MIN_SPLIT_CAP_MM));
-  return staggeredSatin(pairs, cap, true, true);
+  return staggeredSatin(pairs, cap, { scatter: true, zigzag: true });
 }

@@ -28,12 +28,13 @@ const CURVE_MIN_PITCH_MM = 0.8;
 export const REF_RUN_PITCH_RAMP = 1.4;
 
 /**
- * `ramp = false` skips the adjacent-pitch slope limit: BURIED travel
- * connectors are invisible, and their positions are load-bearing for the
- * mid-air-crossing geometry the assembler was validated with — the ramp is an
- * aesthetic easing for VISIBLE lines only.
+ * `ramp = true` opts INTO the adjacent-pitch slope limit — an aesthetic easing
+ * for VISIBLE lines (outlines, sketch strokes, line art). It stays off by
+ * default because most callers sew buried or covered passes (underlay,
+ * travel, appliqué placement, edge walks) whose proven positions are
+ * load-bearing for coverage and mid-air-crossing geometry.
  */
-export function runningStitch(path: Path, stitchLength: number, ramp = true): Path {
+export function runningStitch(path: Path, stitchLength: number, ramp = false): Path {
   if (path.length < 2) return path.map((p) => ({ ...p }));
   // MACHINE-SAFETY floor: a zero, negative, or non-finite pitch makes the walk
   // below never advance (or diverge), placing points until the tab OOMs. Callers

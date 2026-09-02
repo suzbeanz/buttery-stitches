@@ -1,6 +1,6 @@
 import type { Path, Point } from "../../types/project";
 import { medialColumns, satinCoverage, skeletonBranches } from "./medial";
-import { orientByDepth, MIN_FILL_DENSITY, FILL_STITCH_LENGTH, type FillOptions } from "./fill";
+import { orientByDepth, MIN_FILL_DENSITY, FILL_STITCH_LENGTH, ROW_END_CLEARANCE_MM, type FillOptions } from "./fill";
 import { resampleByDistance } from "./resample";
 import { distance, polylineLength } from "../geometry";
 import { polygonArea, polygonPerimeter } from "../trace/classify";
@@ -89,10 +89,9 @@ function clipAcross(P: Point, n: Point, rings: Path[], half: number): [Point, Po
   return [at(lo), at(hi)];
 }
 
-/** Keep the last interior penetration at least this far (mm) from a row's exact
- *  end — mirrors fill.ts's ROW_END_CLEARANCE_MM so the short-stitch merge can
- *  never eat a boundary penetration. */
-const ROW_END_CLEARANCE_MM = 0.55;
+// ROW_END_CLEARANCE_MM (imported above) keeps the last interior penetration
+// clear of a row's exact end — fill.ts's constant, shared so the short-stitch
+// merge safety invariant can never drift between straight and turned fills.
 
 /** Cross-row penetration-stagger coherence a turned fill must hold — the same
  *  commercial-derived bar as straight tatami (0.94, measured over six decoded
