@@ -131,6 +131,19 @@ export default function ReviewBar() {
   const setType = (type: StitchType) => {
     if (type === current.type) return;
     updateObject(current.id, convertObjectType(current, type));
+    // An explicit retype CONVERTS the geometry, so any refine style override
+    // and its captured original are stale: a later style pick would run
+    // styleObject on non-fill geometry (flipping type without converting
+    // paths), and Auto-restore would stamp pre-retype params onto converted
+    // paths. The region reads as Auto again after a retype.
+    setStyleById((m) => {
+      const { [current.id]: _gone, ...rest } = m;
+      return rest;
+    });
+    setStyleOriginals((m) => {
+      const { [current.id]: _gone, ...rest } = m;
+      return rest;
+    });
   };
   const toggleKeep = () =>
     updateObject(current.id, { visible: !current.visible });

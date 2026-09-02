@@ -157,6 +157,26 @@ describe("ReviewBar", () => {
     expect(objById(ids[0]).params.fillStyle).toBeUndefined();
   });
 
+  it("an explicit retype clears any style override — no stale styling of converted geometry", () => {
+    const ids = seed(1);
+    startReview(ids, 0);
+    render(<ReviewBar />);
+    openRefine();
+    // Override the fill region's style, then retype it via the Stitch Type
+    // switch. convertObjectType converts the GEOMETRY, so the override and its
+    // captured original are stale: without clearing them, the style select
+    // stayed visible and a later pick ran styleObject on non-fill geometry.
+    const select = screen.getByLabelText("Region stitch style") as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: "fur" } });
+    expect(objById(ids[0]).params.fillStyle).toBe("fur");
+    fireEvent.click(screen.getByRole("button", { name: "Running" }));
+    const o = objById(ids[0]);
+    expect(o.type).toBe("running"); // convertObjectType's output stands
+    // The override is gone: the region reads as Auto, and for a non-fill type
+    // the style select is not offered at all (the safe state).
+    expect(screen.queryByLabelText("Region stitch style")).toBeNull();
+  });
+
   it("angle and density steppers edit only the current region's params", () => {
     const ids = seed(2);
     startReview(ids, 0);
