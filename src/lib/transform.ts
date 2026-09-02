@@ -17,18 +17,49 @@ export interface MmSpace {
   toMm: (xPx: number, yPx: number) => Point;
 }
 
+// Latch: a real touch event proves a finger-first device even when the media
+// queries misreport (privacy browsers spoof capability queries against
+// fingerprinting; some WebViews answer neither "coarse" nor "fine").
+let sawTouchInput = false;
+
+/** Record that a real touch happened (the canvas calls this on touchstart).
+ *  From then on isCoarsePointer() is true no matter what matchMedia claims. */
+export function noteTouchInput(): void {
+  sawTouchInput = true;
+}
+
+/** Test-only: clear the touch latch so isCoarsePointer() re-derives. */
+export function resetTouchInputForTests(): void {
+  sawTouchInput = false;
+}
+
 /**
  * True on touch-first devices (phones/tablets), where the primary pointer is a
  * finger. Drives the transform defaults: bigger handle hit areas and
  * corner-resize locking aspect ratio. Guarded so it's safely false in
  * SSR/jsdom/test environments without matchMedia.
+ *
+ * Robust against a lying matchMedia: privacy browsers (e.g. DuckDuckGo's
+ * fingerprinting shields) can answer FALSE to every capability query, which
+ * once left real iPhones with desktop transform defaults — free corner resize
+ * and 9px un-padded anchors. A definitive "coarse" or "fine" answer is
+ * trusted; anything else falls back to touch capability, and any observed
+ * touch (noteTouchInput) settles it for good.
  */
 export function isCoarsePointer(): boolean {
+  if (sawTouchInput) return true;
   try {
+    if (typeof window === "undefined") return false;
+    if (typeof window.matchMedia === "function") {
+      if (window.matchMedia("(pointer: coarse)").matches) return true;
+      // A working matchMedia that answers "fine" is a real desktop pointer
+      // (touchscreen laptops land here too — they have a mouse/trackpad).
+      if (window.matchMedia("(pointer: fine)").matches) return false;
+    }
+    // matchMedia absent, broken, or spoofed (all queries false): fall back to
+    // touch capability.
     return (
-      typeof window !== "undefined" &&
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(pointer: coarse)").matches
+      "ontouchstart" in window || (window.navigator?.maxTouchPoints ?? 0) > 0
     );
   } catch {
     return false;

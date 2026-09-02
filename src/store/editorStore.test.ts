@@ -119,3 +119,39 @@ describe("editorStore aspect lock", () => {
     expect(useEditorStore.getState().aspectLocked).toBe(true);
   });
 });
+
+describe("editorStore adoptCoarsePointer (first-touch upgrade)", () => {
+  beforeEach(() => {
+    useEditorStore.setState({
+      aspectLocked: false,
+      aspectLockedExplicit: false,
+      coarsePointer: false,
+    });
+  });
+
+  it("a first real touch flips the device to coarse AND locks aspect", () => {
+    // The shipped DDG/iPhone failure: media queries misreported at startup, so
+    // the store booted with desktop defaults on a touch device.
+    useEditorStore.getState().adoptCoarsePointer();
+    const s = useEditorStore.getState();
+    expect(s.coarsePointer).toBe(true);
+    expect(s.aspectLocked).toBe(true);
+  });
+
+  it("never overrides a lock state the user chose explicitly", () => {
+    useEditorStore.getState().toggleAspectLock(); // user: lock ON
+    useEditorStore.getState().toggleAspectLock(); // user: lock OFF (explicit)
+    useEditorStore.getState().adoptCoarsePointer();
+    const s = useEditorStore.getState();
+    expect(s.coarsePointer).toBe(true);
+    expect(s.aspectLocked).toBe(false); // user's choice stands
+  });
+
+  it("is idempotent once coarse", () => {
+    useEditorStore.getState().adoptCoarsePointer();
+    useEditorStore.getState().setAspectLocked(false); // later user choice
+    useEditorStore.getState().adoptCoarsePointer(); // e.g. every touchstart
+    expect(useEditorStore.getState().aspectLocked).toBe(false);
+    expect(useEditorStore.getState().coarsePointer).toBe(true);
+  });
+});

@@ -96,6 +96,15 @@ interface EditorState {
    * stretch one axis regardless.
    */
   aspectLocked: boolean;
+  /** The user explicitly chose a lock state — never second-guess it later. */
+  aspectLockedExplicit: boolean;
+  /**
+   * Finger-first device: fat transform-handle hit pads and the aspect-lock
+   * default above. Seeded from media queries at startup, but those can lie
+   * (privacy browsers spoof capability queries), so the canvas upgrades this
+   * via adoptCoarsePointer() on the first real touch.
+   */
+  coarsePointer: boolean;
   /** snap moving/resizing objects to the hoop and other objects (default on). */
   snapEnabled: boolean;
   /** draw alignment guide lines while dragging (default on). */
@@ -153,6 +162,12 @@ interface EditorState {
   toggleSmooth: () => void;
   setAspectLocked: (locked: boolean) => void;
   toggleAspectLock: () => void;
+  /**
+   * A real touch arrived: this IS a touch device, whatever the startup media
+   * queries said. Flips coarsePointer and — unless the user already chose a
+   * lock state — the touch aspect-lock default too. Idempotent.
+   */
+  adoptCoarsePointer: () => void;
   toggleSnap: () => void;
   toggleGuides: () => void;
   toggleRealistic: () => void;
@@ -196,6 +211,8 @@ export const useEditorStore = create<EditorState>((set) => ({
   rulerUnit: "inch",
   smooth: false,
   aspectLocked: isCoarsePointer(),
+  aspectLockedExplicit: false,
+  coarsePointer: isCoarsePointer(),
   snapEnabled: true,
   guidesEnabled: true,
   realistic: true,
@@ -231,8 +248,19 @@ export const useEditorStore = create<EditorState>((set) => ({
   setRulerUnit: (unit) => set({ rulerUnit: unit }),
   setSmooth: (smooth) => set({ smooth }),
   toggleSmooth: () => set((s) => ({ smooth: !s.smooth })),
-  setAspectLocked: (aspectLocked) => set({ aspectLocked }),
-  toggleAspectLock: () => set((s) => ({ aspectLocked: !s.aspectLocked })),
+  setAspectLocked: (aspectLocked) =>
+    set({ aspectLocked, aspectLockedExplicit: true }),
+  toggleAspectLock: () =>
+    set((s) => ({ aspectLocked: !s.aspectLocked, aspectLockedExplicit: true })),
+  adoptCoarsePointer: () =>
+    set((s) =>
+      s.coarsePointer
+        ? {}
+        : {
+            coarsePointer: true,
+            ...(s.aspectLockedExplicit ? {} : { aspectLocked: true }),
+          },
+    ),
   toggleSnap: () => set((s) => ({ snapEnabled: !s.snapEnabled })),
   toggleGuides: () => set((s) => ({ guidesEnabled: !s.guidesEnabled })),
   toggleRealistic: () => set((s) => ({ realistic: !s.realistic })),

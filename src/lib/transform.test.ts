@@ -1,6 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   isCoarsePointer,
+  noteTouchInput,
+  resetTouchInputForTests,
   effectiveKeepRatio,
   meanScaleOf,
   bakeMatrixOnPaths,
@@ -43,8 +45,54 @@ describe("effectiveKeepRatio", () => {
 });
 
 describe("isCoarsePointer", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    resetTouchInputForTests();
+  });
+
+  /** A window whose matchMedia answers per `answers` (missing key = false). */
+  const fakeWindow = (
+    answers: Record<string, boolean>,
+    extras: Record<string, unknown> = {},
+  ) => ({
+    matchMedia: (q: string) => ({ matches: answers[q] ?? false }),
+    navigator: { maxTouchPoints: 0 },
+    ...extras,
+  });
+
   it("is safely false without a browser matchMedia", () => {
     expect(isCoarsePointer()).toBe(false);
+  });
+
+  it("trusts a definitive coarse or fine answer", () => {
+    vi.stubGlobal("window", fakeWindow({ "(pointer: coarse)": true }));
+    expect(isCoarsePointer()).toBe(true);
+    // A touchscreen LAPTOP answers fine (mouse primary) — stays desktop even
+    // though it also has touch points.
+    vi.stubGlobal(
+      "window",
+      fakeWindow({ "(pointer: fine)": true }, { navigator: { maxTouchPoints: 10 }, ontouchstart: null }),
+    );
+    expect(isCoarsePointer()).toBe(false);
+  });
+
+  it("falls back to touch capability when matchMedia answers neither (spoofed)", () => {
+    // DDG-style fingerprinting shields: every capability query is false on a
+    // real iPhone. Touch support must still win.
+    vi.stubGlobal("window", fakeWindow({}, { ontouchstart: null }));
+    expect(isCoarsePointer()).toBe(true);
+    vi.stubGlobal("window", fakeWindow({}, { navigator: { maxTouchPoints: 5 } }));
+    expect(isCoarsePointer()).toBe(true);
+    // No touch capability either → genuinely a desktop with an odd matchMedia.
+    vi.stubGlobal("window", fakeWindow({}));
+    expect(isCoarsePointer()).toBe(false);
+  });
+
+  it("a real observed touch latches coarse for good", () => {
+    vi.stubGlobal("window", fakeWindow({ "(pointer: fine)": true }));
+    expect(isCoarsePointer()).toBe(false);
+    noteTouchInput(); // a finger actually touched the canvas
+    expect(isCoarsePointer()).toBe(true);
   });
 });
 

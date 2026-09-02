@@ -16,6 +16,7 @@ import { cloneObject } from "./lib/objects";
 import { downloadProject } from "./lib/embproj";
 import { loadAutosave, saveAutosave } from "./lib/autosave";
 import { toast } from "./store/toastStore";
+import { isCoarsePointer } from "./lib/transform";
 
 /** How far (mm) a pasted or duplicated object is offset so it doesn't hide the original. */
 const PASTE_OFFSET_MM = 3;
@@ -185,7 +186,7 @@ function Studio({ onHome, saveStatus }: { onHome: () => void; saveStatus: SaveSt
   const objectCount = useProjectStore((s) => s.project.objects.length);
   useEffect(() => {
     if (objectCount === 0) return;
-    if (!window.matchMedia?.("(pointer: coarse)").matches) return;
+    if (!isCoarsePointer()) return; // robust: matchMedia can lie (privacy browsers)
     try {
       if (localStorage.getItem("bs-longpress-hint") === "seen") return;
       localStorage.setItem("bs-longpress-hint", "seen");

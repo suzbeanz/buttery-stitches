@@ -44,7 +44,7 @@ import { cloneObject } from "../lib/objects";
 import { relayoutTextObject, nextSizeMm } from "../lib/text/relayout";
 import { snap } from "../lib/snap";
 import {
-  isCoarsePointer,
+  noteTouchInput,
   effectiveKeepRatio,
   meanScaleOf,
   bakeMatrixOnPaths,
@@ -89,18 +89,15 @@ const JOIN_SNAP_MM = 3; // snap the closing end of a fill polygon to its start
 const HOOP_BAND = 14; // px thickness of the hoop frame in the mockup
 const HOOP_MARGIN = 18; // px of fabric/plastic between the stitch field and the frame opening
 
-// Touch-first device (finger = primary pointer): bigger transform-handle and
+// Touch-first sizing (finger = primary pointer): bigger transform-handle and
 // node-handle hit areas, and corner resize defaults to keeping aspect ratio.
-const COARSE = isCoarsePointer();
+// The live COARSE flag itself is editorStore.coarsePointer — seeded from
+// isCoarsePointer() and upgraded on the first real touch (privacy browsers can
+// spoof the capability media queries, which once left real iPhones with these
+// desktop sizes) — so components subscribe to it instead of a module constant.
 // Finger pad: minimum square touch target for transformer anchors and node
 // handles on coarse pointers (Apple HIG 44pt / Material 48dp territory).
 const TOUCH_TARGET = 44;
-// Transformer anchor visual size — a touch more visible under a finger, still
-// the same cream/navy chip on desktop.
-const ANCHOR_SIZE = COARSE ? 14 : 9;
-// The rotate handle hangs this far above the box; pushed out on touch so the
-// finger pads of the rotater and the top-center anchor don't collide.
-const ROTATE_OFFSET = COARSE ? 56 : 50;
 
 const C = {
   cream: "#F6EFCB", // wrapper-cream paper, the canvas surround
@@ -177,6 +174,15 @@ export default function CanvasStage() {
   const guidesEnabled = useEditorStore((s) => s.guidesEnabled); // workspace gridlines
   // Corner-resize aspect lock (touch default: locked; desktop default: free).
   const aspectLocked = useEditorStore((s) => s.aspectLocked);
+  // Finger-first device (live: upgraded by the first real touch when the
+  // startup media queries misreport — see adoptCoarsePointer).
+  const COARSE = useEditorStore((s) => s.coarsePointer);
+  // Transformer anchor visual size — a touch more visible under a finger,
+  // still the same cream/navy chip on desktop.
+  const ANCHOR_SIZE = COARSE ? 14 : 9;
+  // The rotate handle hangs this far above the box; pushed out on touch so the
+  // finger pads of the rotater and the top-center anchor don't collide.
+  const ROTATE_OFFSET = COARSE ? 56 : 50;
 
   // Viewport zoom (1 = fit-to-workspace) and pan (px), shared by edit + stitch.
   const [zoom, setZoom] = useState(1);
@@ -552,9 +558,12 @@ export default function CanvasStage() {
     const end = () => finishPencilRef.current();
     window.addEventListener("mouseup", end);
     window.addEventListener("touchend", end);
+    // iOS fires touchcancel (not touchend) when a system gesture interrupts.
+    window.addEventListener("touchcancel", end);
     return () => {
       window.removeEventListener("mouseup", end);
       window.removeEventListener("touchend", end);
+      window.removeEventListener("touchcancel", end);
     };
   }, []);
 
@@ -648,9 +657,12 @@ export default function CanvasStage() {
     const end = () => finishShapeRef.current();
     window.addEventListener("mouseup", end);
     window.addEventListener("touchend", end);
+    // iOS fires touchcancel (not touchend) when a system gesture interrupts.
+    window.addEventListener("touchcancel", end);
     return () => {
       window.removeEventListener("mouseup", end);
       window.removeEventListener("touchend", end);
+      window.removeEventListener("touchcancel", end);
     };
   }, []);
 
@@ -897,6 +909,11 @@ export default function CanvasStage() {
   }
 
   function onTouchStart(e: Konva.KonvaEventObject<TouchEvent>) {
+    // A real touch proves a finger-first device: latch the detector and
+    // upgrade the transform defaults (fat anchor pads, aspect-locked corners)
+    // if the startup media queries misreported. No-op once coarse.
+    noteTouchInput();
+    useEditorStore.getState().adoptCoarsePointer();
     const stage = e.target.getStage();
     if (!stage) return;
     if (e.evt.touches.length >= 2) {
@@ -1150,9 +1167,13 @@ export default function CanvasStage() {
     };
     window.addEventListener("mouseup", onUp);
     window.addEventListener("touchend", onUp);
+    // iOS fires touchcancel (not touchend) when a system gesture interrupts —
+    // without this the marquee rubber-band could stay stuck on screen.
+    window.addEventListener("touchcancel", onUp);
     return () => {
       window.removeEventListener("mouseup", onUp);
       window.removeEventListener("touchend", onUp);
+      window.removeEventListener("touchcancel", onUp);
     };
   }, []);
 
@@ -2348,6 +2369,8 @@ const ObjectShape = memo(function ObjectShape({
     [allBounds, object.id],
   );
   const snapEnabled = useEditorStore((s) => s.snapEnabled);
+  // Finger-first hit sizing (live — see adoptCoarsePointer).
+  const COARSE = useEditorStore((s) => s.coarsePointer);
   // px per mm — for converting a snap offset (mm) back to canvas pixels.
   const scalePx = px(1) - px(0);
   const stroke = color ? `rgb(${color.rgb.join(",")})` : "#888";
