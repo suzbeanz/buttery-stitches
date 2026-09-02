@@ -126,20 +126,33 @@ describe("medialSatin", () => {
   });
 
   it("keeps the satin column dense around a curve (density compensation)", () => {
-    // A circular annulus (a clean curved stroke). With density compensation the
-    // outer rail's gap between throws stays near the stitch spacing instead of
-    // fanning open — so the convex edge has no gaps. The advances between throws
-    // (the even-indexed segments of the L,R,R,L,… chain) are the rail gaps.
+    // An annulus (a clean bent stroke). With density compensation the outer
+    // rail's gap between penetrations stays near the stitch spacing instead of
+    // fanning open — so the convex edge has no gaps. The satin chain is an
+    // all-crossings zigzag, so the outer-edge penetrations are the chain points
+    // landing near the outer rail; walk them in sew order and bound their gaps.
     const density = 0.4;
     const runs = medialSatin(ring(24, 3), { density });
-    let maxRailGap = 0;
+    // Collect the penetrations landing on each straight stretch of the outer
+    // rail (the rail sits at 12 ± overshoot; corners are the mitre/fan's job —
+    // guarded by the satin-corner suite — so stay 1.5mm off the vertices) and
+    // bound the sorted gaps along each edge.
+    const outerBand = 11.5;
+    const cornerPad = 10.5;
+    const edges: number[][] = [[], [], [], []]; // +x, -x, +y, -y edges (coord along edge)
     for (const run of runs) {
-      for (let i = 2; i < run.length; i += 2) {
-        maxRailGap = Math.max(
-          maxRailGap,
-          Math.hypot(run[i].x - run[i - 1].x, run[i].y - run[i - 1].y),
-        );
+      for (const p of run) {
+        if (p.x > outerBand && Math.abs(p.y) < cornerPad) edges[0].push(p.y);
+        if (p.x < -outerBand && Math.abs(p.y) < cornerPad) edges[1].push(p.y);
+        if (p.y > outerBand && Math.abs(p.x) < cornerPad) edges[2].push(p.x);
+        if (p.y < -outerBand && Math.abs(p.x) < cornerPad) edges[3].push(p.x);
       }
+    }
+    let maxRailGap = 0;
+    for (const edge of edges) {
+      expect(edge.length).toBeGreaterThan(10);
+      edge.sort((a, b) => a - b);
+      for (let i = 1; i < edge.length; i++) maxRailGap = Math.max(maxRailGap, edge[i] - edge[i - 1]);
     }
     // Comfortably bounded (a fixed-spacing satin would fan to several × density).
     expect(maxRailGap).toBeLessThanOrEqual(density * 2.5);

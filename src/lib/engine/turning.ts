@@ -1,6 +1,6 @@
 import type { Path, Point } from "../../types/project";
 import { medialColumns, satinCoverage, skeletonBranches } from "./medial";
-import { orientByDepth, MIN_FILL_DENSITY, FILL_STITCH_LENGTH, type FillOptions } from "./fill";
+import { orientByDepth, MIN_FILL_DENSITY, FILL_STITCH_LENGTH, ROW_END_CLEARANCE_MM, type FillOptions } from "./fill";
 import { resampleByDistance } from "./resample";
 import { distance, polylineLength } from "../geometry";
 import { polygonArea, polygonPerimeter } from "../trace/classify";
@@ -89,16 +89,58 @@ function clipAcross(P: Point, n: Point, rings: Path[], half: number): [Point, Po
   return [at(lo), at(hi)];
 }
 
-/** Penetrations from A to B every `stitch` mm (inclusive of both ends). */
-function alongRow(A: Point, B: Point, stitch: number): Point[] {
+// ROW_END_CLEARANCE_MM (imported above) keeps the last interior penetration
+// clear of a row's exact end — fill.ts's constant, shared so the short-stitch
+// merge safety invariant can never drift between straight and turned fills.
+
+/** Cross-row penetration-stagger coherence a turned fill must hold — the same
+ *  commercial-derived bar as straight tatami (0.94, measured over six decoded
+ *  commercial reference designs, turned fills included; see fill.ts). */
+export { PRO_TATAMI_STAGGER_COHERENCE as PRO_TURNED_STAGGER_COHERENCE } from "./fill";
+
+/**
+ * Penetrations from A to B (inclusive of both ends), with the INTERIOR
+ * penetrations on a SPINE-ANCHORED arc lattice: positions `(n + phase)·stitch`
+ * measured from the row's spine crossing `P`, not an even division of the
+ * row's own length. An evenly-divided row re-derives its pitch from its own
+ * boundary-to-boundary length, so adjacent rows of a curved band drift phase
+ * against each other and the fill's split pattern reads as penetration noise
+ * (measured stagger coherence 0.165 on a corpus arch region vs the
+ * commercial references' {@link PRO_TURNED_STAGGER_COHERENCE}). Anchoring the
+ * lattice to the spine keeps the brick repeating ALONG the sweep — the turned
+ * analog of fill.ts's region-global lattice. Boundary crossings still land
+ * exactly on the row ends; a lattice point crowding either end slides to the
+ * end-clearance (or drops on a too-short row), mirroring fill.ts's rules.
+ */
+function alongRow(A: Point, B: Point, P: Point, stitch: number, phase01: number): Point[] {
   const L = distance(A, B);
-  const n = Math.max(1, Math.round(L / stitch));
-  const out: Point[] = [];
-  for (let k = 0; k <= n; k++) {
-    const t = k / n;
-    out.push({ x: A.x + (B.x - A.x) * t, y: A.y + (B.y - A.y) * t });
+  if (L < 1e-9) return [{ ...A }, { ...B }];
+  const ux = (B.x - A.x) / L;
+  const uy = (B.y - A.y) / L;
+  const s0 = (P.x - A.x) * ux + (P.y - A.y) * uy; // spine anchor along the row
+  const hi = L - ROW_END_CLEARANCE_MM;
+  const ss: number[] = [];
+  // First lattice point at/after the row start; one inside the clearance
+  // slides OUT to it (staying on-lattice for the rest of the row).
+  const n = Math.ceil((0 - s0) / stitch - phase01 - 1e-9);
+  let s = s0 + (n + phase01) * stitch;
+  if (s < ROW_END_CLEARANCE_MM) {
+    const slid = ROW_END_CLEARANCE_MM;
+    if (s + stitch - slid >= ROW_END_CLEARANCE_MM && slid < L - 1e-6) ss.push(slid);
+    s += stitch;
   }
-  return out;
+  while (s < L - 1e-6) {
+    ss.push(s);
+    s += stitch;
+  }
+  // A last interior point crowding the end slides back to the clearance (or is
+  // dropped when the row is too short to hold both).
+  if (ss.length > 0 && L - ss[ss.length - 1] < ROW_END_CLEARANCE_MM) {
+    const prev = ss.length > 1 ? ss[ss.length - 2] : 0;
+    if (hi > prev + 1e-6) ss[ss.length - 1] = hi;
+    else ss.pop();
+  }
+  return [{ ...A }, ...ss.map((v) => ({ x: A.x + ux * v, y: A.y + uy * v })), { ...B }];
 }
 
 /** Nonzero-winding inside test over consistently-oriented rings. */
@@ -267,7 +309,8 @@ function marchSpine(
   const lineTurn = (a: Point, b: Point) =>
     Math.acos(Math.min(1, Math.abs(a.x * b.x + a.y * b.y))) * (180 / Math.PI);
 
-  for (const span of spans) {
+  for (let si = 0; si < spans.length; si++) {
+    const span = spans[si];
     if (!span || (medianL > 0 && span.L > maxL)) {
       flush(); // a gap or degenerate cap row ends the continuous run
       continue;
@@ -287,7 +330,9 @@ function marchSpine(
     const c = Math.min(comp, L / 2);
     const A = { x: span.A.x - ux * c, y: span.A.y - uy * c };
     const B = { x: span.B.x + ux * c, y: span.B.y + uy * c };
-    let row = alongRow(A, B, stitch);
+    // Spine-anchored lattice with the 1/4-brick phased by STATION index, so
+    // the split pattern repeats along the sweep even across run breaks.
+    let row = alongRow(A, B, stations[si], stitch, (si % 4) / 4);
     // Serpentine by NEAREST end (robust to the perpendicular flipping side): start
     // each row at whichever end is closer to where the last one finished.
     if (lastPt && distance(lastPt, row[row.length - 1]) < distance(lastPt, row[0])) {

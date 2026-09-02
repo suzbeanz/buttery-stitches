@@ -624,7 +624,10 @@ function sliverMendRun(patch: Path, stitchLength: number, compactOk = false): Po
       pass.push({ x: ax.cx + ax.ux * t - ax.uy * s, y: ax.cy + ax.uy * t + ax.ux * s });
     }
     if (pass.length < 2) continue;
-    const run = runningStitch(pass, Math.min(stitchLength, 1.8));
+    // No pitch ramp: a mend snakes tight turnarounds through junction wedges —
+    // its stitch positions are load-bearing for the crossing gates, and a
+    // 1-4mm mend has no visible curve entry to ease.
+    const run = runningStitch(pass, Math.min(stitchLength, 1.8), false);
     if (j % 2 === 1) run.reverse();
     all.push(...run);
   }
@@ -1025,10 +1028,10 @@ export function generateObjectRuns(
     // Motif run: repeat a decorative motif along the line instead of a plain run.
     if (p.motifRun && p.motifRun !== "none") {
       const strokes = motifRunAlong(object.paths[0] ?? [], { motifId: p.motifRun, sizeMm: p.motifSizeMm });
-      for (const stroke of strokes) addRun(runs, dropShortStitches(runningStitch(stroke, stitchLength), undefined, true), false);
+      for (const stroke of strokes) addRun(runs, dropShortStitches(runningStitch(stroke, stitchLength, true), undefined, true), false);
       return runs;
     }
-    const line = dropShortStitches(runningStitch(object.paths[0] ?? [], stitchLength), undefined, true);
+    const line = dropShortStitches(runningStitch(object.paths[0] ?? [], stitchLength, true), undefined, true);
     // Bean / triple stitch: retrace the line N times (forward/back/forward) for a
     // bold, durable outline. The repeats land in the same holes but are never
     // CONSECUTIVE (the turnarounds skip the shared vertex), so they survive the
@@ -1318,9 +1321,9 @@ export function generateObjectRuns(
             ? // SPARKLE: one sparse pass down the centerline, always — the fur
               // mode's highlight streaks are light single strokes glinting over
               // the coat, never a bean retrace or a solid satin bar.
-              runningStitch(c.centerline, stitchLength)
+              runningStitch(c.centerline, stitchLength, true)
             : c.widthMm < LINE_ART_SATIN_MIN_MM
-              ? beanPath(runningStitch(c.centerline, stitchLength), LINE_ART_BEAN_REPEATS)
+              ? beanPath(runningStitch(c.centerline, stitchLength, true), LINE_ART_BEAN_REPEATS)
               : widen(c),
         );
         tatamiNoBareTravel = true; // a fill: order for shortest travel, never slash a bare gap
@@ -1335,7 +1338,7 @@ export function generateObjectRuns(
         tops = keep.map((c) =>
           c.widthMm < runMax
             ? beanPath(
-                deloopRun(runningStitch(c.centerline, Math.min(stitchLength, HAIRLINE_RUN_STITCH_MM))),
+                deloopRun(runningStitch(c.centerline, Math.min(stitchLength, HAIRLINE_RUN_STITCH_MM), true)),
                 LINE_ART_BEAN_REPEATS,
               )
             : c.throws,
@@ -1577,18 +1580,21 @@ export function generateObjectRuns(
         }
         done.add(comp);
         const compTracks = tracks.filter((_, i) => labels[i] === comp);
-        for (const run of routeInkPieces(ulByComp.get(comp) ?? [], cursor, TRAVEL_STITCH, compTracks)) {
+        // Distinct serial salts per routing phase: all three phases walk the
+        // same skeleton chains, and un-salted serials made their connectors
+        // re-punch identical holes (see inkroute's connectorWalk).
+        for (const run of routeInkPieces(ulByComp.get(comp) ?? [], cursor, TRAVEL_STITCH, compTracks, 0)) {
           for (const sub of splitLongTravels(run, travelMax)) {
             const u = dropShortStitches(sub);
             addRun(runs, u, true, regionIdx, true);
             if (u.length) cursor = u[u.length - 1];
           }
         }
-        for (const r of routeInkPieces(mendByComp.get(comp) ?? [], cursor, TRAVEL_STITCH, compTracks)) {
+        for (const r of routeInkPieces(mendByComp.get(comp) ?? [], cursor, TRAVEL_STITCH, compTracks, 1)) {
           addRun(runs, r, false, regionIdx, true);
           if (r.length) cursor = r[r.length - 1];
         }
-        for (const run of routeInkPieces(topByComp.get(comp) ?? [], cursor, TRAVEL_STITCH, compTracks)) {
+        for (const run of routeInkPieces(topByComp.get(comp) ?? [], cursor, TRAVEL_STITCH, compTracks, 2)) {
           for (const sub of splitLongTravels(run, travelMax)) {
             const r = dropShortStitches(sub, minStitch);
             addRun(runs, r, false, regionIdx, true);
@@ -2427,7 +2433,9 @@ export function generateDesign(
         travelPath = routeUnderCoverage(prevPoint, start, col, drawOrder.get(object.id) ?? di);
       }
       if (travelPath) {
-        const travel = runningStitch(travelPath, TRAVEL_STITCH);
+        // No pitch ramp on buried travels: they're invisible, and their proven
+        // positions are load-bearing for edge-crossing geometry (running.ts).
+        const travel = runningStitch(travelPath, TRAVEL_STITCH, false);
         for (const pt of travel.slice(1, -1)) {
           out.push({ x: pt.x, y: pt.y, colorId: col, objectId: object.id, travel: true });
         }

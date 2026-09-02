@@ -562,7 +562,8 @@ describe("tatamiFill", () => {
   it("staggers rows over a 4-row brick (no 2-row moiré), deterministically", () => {
     // First interior penetration of each row, relative to the row start (x=0):
     // its x mod the stitch length is the row's stagger offset. A 1/2 brick has
-    // only two distinct offsets; the 1/4 + jitter pattern has many.
+    // only two distinct offsets; the 1/4 brick on the region-global lattice
+    // has four.
     const out = tatamiFill([square], { density: 1.5, angle: 0, stitchLength: 4 });
     const offsets = new Set(
       out.filter((p) => p.x > 0.01 && p.x < 4).map((p) => Math.round((p.x % 4) * 100) / 100),
