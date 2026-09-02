@@ -173,8 +173,14 @@ export default function ReviewBar() {
   // Style overrides apply to traced FILL regions (running is covered by the type
   // switch; a true satin rail pair has no ring geometry for the fill styles).
   const styleable = current.type === "fill" || regionStyle !== "auto";
+  // Angle is offered only when the BASE angle actually drives the fill: any
+  // painted direction overrides it (precedence: angleGuides ≥2 > flowPath >
+  // directionDeg > base angle — see EmbObjectParams).
   const showAngle =
-    current.type === "fill" && current.params.flowPath == null && current.params.directionDeg == null;
+    current.type === "fill" &&
+    (current.params.angleGuides?.length ?? 0) < 2 &&
+    current.params.flowPath == null &&
+    current.params.directionDeg == null;
   const showDensity = current.type === "fill" || current.type === "satin";
 
   // Real satin outline on/off — the Properties panel's buildOutline machinery,

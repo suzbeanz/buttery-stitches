@@ -157,6 +157,27 @@ describe("ReviewBar", () => {
     expect(objById(ids[0]).params.fillStyle).toBeUndefined();
   });
 
+  it("hides the Angle stepper when a painted direction overrides the base angle", () => {
+    const ids = seed(1);
+    // angleGuides (>=2) take precedence over the base angle, so an Angle edit
+    // would be a dead control — the stepper must not be offered.
+    useProjectStore.getState().updateObject(ids[0], {
+      params: {
+        ...useProjectStore.getState().project.objects.find((o) => o.id === ids[0])!.params,
+        angleGuides: [
+          [0, 0, 0],
+          [10, 10, 90],
+        ],
+      },
+    });
+    startReview(ids, 0);
+    render(<ReviewBar />);
+    openRefine();
+    expect(screen.queryByRole("button", { name: "Increase angle" })).toBeNull();
+    // Density is still offered — only the angle control is direction-driven.
+    expect(screen.getByRole("button", { name: "Increase density" })).toBeTruthy();
+  });
+
   it("an explicit retype clears any style override — no stale styling of converted geometry", () => {
     const ids = seed(1);
     startReview(ids, 0);
