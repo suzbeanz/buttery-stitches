@@ -249,8 +249,10 @@ export default function ReviewBar() {
           {current.visible ? "Skip" : "Skipped"}
         </button>
 
-        {/* Optional per-region refine: style · angle · density · outline. */}
-        {(styleable || showDensity) && (
+        {/* Optional per-region refine: style · angle · density · outline.
+            Stays offered while an inserted outline exists (whatever the
+            region's type) so it can always be reopened to remove it. */}
+        {(styleable || showDensity || hasOutline) && (
           <button
             onClick={() => setRefineOpen((v) => !v)}
             aria-expanded={refineOpen}

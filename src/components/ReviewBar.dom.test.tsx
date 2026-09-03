@@ -195,6 +195,21 @@ describe("ReviewBar", () => {
     expect(useProjectStore.getState().project.objects.length).toBe(before - 1);
   });
 
+  it("the Refine button itself survives a retype while an outline exists", () => {
+    const ids = seed(1);
+    startReview(ids, 0);
+    render(<ReviewBar />);
+    openRefine();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Satin outline" }));
+    // Collapse refine, then retype away from fill: the Refine toggle must stay
+    // offered so the row can be reopened to remove the inserted outline.
+    fireEvent.click(screen.getByRole("button", { name: "Refine stitches" }));
+    fireEvent.click(screen.getByRole("button", { name: "Running" }));
+    const refine = screen.getByRole("button", { name: "Refine stitches" });
+    fireEvent.click(refine);
+    expect(screen.getByRole("checkbox", { name: "Satin outline" })).toBeTruthy();
+  });
+
   it("an explicit retype clears any style override — no stale styling of converted geometry", () => {
     const ids = seed(1);
     startReview(ids, 0);

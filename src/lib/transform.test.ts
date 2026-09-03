@@ -79,7 +79,9 @@ describe("isCoarsePointer", () => {
   it("falls back to touch capability when matchMedia answers neither (spoofed)", () => {
     // DDG-style fingerprinting shields: every capability query is false on a
     // real iPhone. Touch support must still win.
-    vi.stubGlobal("window", fakeWindow({}, { ontouchstart: null }));
+    // ontouchstart is only consulted when maxTouchPoints is NOT exposed —
+    // override the helper's default navigator so that path actually runs.
+    vi.stubGlobal("window", fakeWindow({}, { ontouchstart: null, navigator: {} }));
     expect(isCoarsePointer()).toBe(true);
     vi.stubGlobal("window", fakeWindow({}, { navigator: { maxTouchPoints: 5 } }));
     expect(isCoarsePointer()).toBe(true);

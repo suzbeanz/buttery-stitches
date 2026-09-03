@@ -57,10 +57,13 @@ export function isCoarsePointer(): boolean {
       if (window.matchMedia("(pointer: fine)").matches) return false;
     }
     // matchMedia absent, broken, or spoofed (all queries false): fall back to
-    // touch capability.
-    return (
-      "ontouchstart" in window || (window.navigator?.maxTouchPoints ?? 0) > 0
-    );
+    // touch capability. Prefer maxTouchPoints — it reports actual touch
+    // hardware. "ontouchstart" only signals touch-EVENT support, which some
+    // non-touch desktops expose, so it is consulted only when maxTouchPoints
+    // itself is not exposed (ancient/exotic engines).
+    const mtp = window.navigator?.maxTouchPoints;
+    if (typeof mtp === "number") return mtp > 0;
+    return "ontouchstart" in window;
   } catch {
     return false;
   }

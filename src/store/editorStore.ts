@@ -253,13 +253,19 @@ export const useEditorStore = create<EditorState>((set) => ({
   toggleAspectLock: () =>
     set((s) => ({ aspectLocked: !s.aspectLocked, aspectLockedExplicit: true })),
   adoptCoarsePointer: () =>
-    set((s) =>
-      s.coarsePointer
-        ? {}
-        : {
-            coarsePointer: true,
-            ...(s.aspectLockedExplicit ? {} : { aspectLocked: true }),
-          },
+    // Called on every touchstart, so the already-coarse path must be a TRUE
+    // no-op: replace=true with the same state reference skips notifying
+    // subscribers (a merged {} still produces a fresh object and rerenders).
+    set(
+      (s) =>
+        s.coarsePointer
+          ? s
+          : {
+              ...s,
+              coarsePointer: true,
+              ...(s.aspectLockedExplicit ? {} : { aspectLocked: true }),
+            },
+      true,
     ),
   toggleSnap: () => set((s) => ({ snapEnabled: !s.snapEnabled })),
   toggleGuides: () => set((s) => ({ guidesEnabled: !s.guidesEnabled })),
