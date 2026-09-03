@@ -486,7 +486,14 @@ export function fixStitchesWithReport(project: Project): { project: Project; rep
  *    `trapMm` inside the higher's edge — stopping colours stacking into a ridge.
  * Both are no-ops for an isolated fill, so they never hurt a clean design.
  */
-function knockdownPass(objects: EmbObject[], trapMm = 0.35): EmbObject[] {
+export function knockdownPass(
+  objects: EmbObject[],
+  trapMm = 0.35,
+  // Clean-up grows abutting seams too (seamTrap); the stitch-time caller
+  // passes false because generateDesign's own underlapObjects already grows
+  // color seams — doing both stacks density along every boundary.
+  growSeams = true,
+): EmbObject[] {
   // PATHOLOGICAL-INPUT GUARD: seamTrap + knockdown are O(n²) polygon-boolean ops
   // over every object pair. A clean design has tens of objects; a photo/noisy
   // scan shatters into hundreds, where this takes minutes and freezes the tab
@@ -518,7 +525,7 @@ function knockdownPass(objects: EmbObject[], trapMm = 0.35): EmbObject[] {
     const higher = objects.slice(i + 1).filter(causesKnockdown).map((h) => h.paths);
     if (higher.length === 0) return o;
     // Grow under abutting neighbours first, then trim overlaps to the trap width.
-    const trapped = seamTrap(o.paths, higher, trapMm);
+    const trapped = growSeams ? seamTrap(o.paths, higher, trapMm) : o.paths;
     const trimmed = knockdown(trapped, higher, trapMm);
     if (trimmed.length === 0) return o;
     // Re-evaluate the broad fill style on the NEW geometry: a circle carved into a

@@ -8,6 +8,7 @@ import type {
 import { resolveParams, fabricProfile } from "../../types/project";
 import { effectiveProfile } from "./profile";
 import { underlapObjects } from "../trace/underlap";
+import { knockdownPass } from "../fix";
 import { distance, railsFromCenterline, pathsBounds, offsetPolyline } from "../geometry";
 import { runningStitch } from "./running";
 import { autoPullCompMm, satinColumn } from "./satin";
@@ -2011,10 +2012,22 @@ export function generateDesign(
   // (exactly how the professional packages do overlap). Doing it here, not at
   // import, gives every project the same seam guarantee: hand-drawn, traced,
   // SVG or legacy files alike.
+  // KNOCKDOWN at stitch time, for the same reason and on the same clones:
+  // SVG import (and any layered drawing) emits shapes in paint order and
+  // defers overlap resolution to us — without it, a red field sews at FULL
+  // density under the white cross painted over it, and the stacked layers
+  // jam the machine (a real sew-out did). Later broad fills carve out of
+  // earlier fills down to the 0.35mm trap seam. Idempotent with the studio's
+  // Clean-up pass (carving already-carved geometry is a no-op) and guarded
+  // for pathological object counts inside knockdownPass itself.
   const seamProofed = underlapObjects(
-    project.objects
-      .filter((o) => o.visible)
-      .map((o) => ({ ...o, paths: o.paths.map((ring) => ring.map((p) => ({ ...p }))) })),
+    knockdownPass(
+      project.objects
+        .filter((o) => o.visible)
+        .map((o) => ({ ...o, paths: o.paths.map((ring) => ring.map((p) => ({ ...p }))) })),
+      undefined,
+      false, // underlapObjects below grows the seams; here we only carve
+    ),
   );
   // Does this object sew ON TOP of an earlier object's region? (Satin over
   // stitching needs a heavier footing — see generateObjectRuns.) Sampled ring
