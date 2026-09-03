@@ -23,6 +23,7 @@ import { cloneObject } from "../lib/objects";
 import { splitRegionComponents } from "../lib/regions";
 import { toast } from "../store/toastStore";
 import { clampMenu } from "./contextMenuLayout";
+import { isCoarsePointer } from "../lib/transform";
 
 /** Paste/duplicate offset (mm) so copies don't land exactly on the original. */
 const OFFSET_MM = 3;
@@ -122,7 +123,8 @@ export default function ContextMenu({
 
   // Clamp so the menu stays on-screen near every edge (the container also scrolls
   // via max-height below as a backstop on short screens).
-  const coarse = typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
+  // Robust detection (matchMedia can lie in privacy browsers) — lib helper.
+  const coarse = isCoarsePointer();
   const { left, top, maxHeight } = clampMenu(x, y, items.length, window.innerWidth, window.innerHeight, coarse);
 
   return (

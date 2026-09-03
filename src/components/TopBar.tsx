@@ -572,6 +572,7 @@ export default function TopBar({
               file={imageFile}
               hoop={project.hoop}
               hasExistingWork={project.objects.length > 0}
+              initialFabric={project.fabric}
               onApply={applyDigitized}
               onClose={() => setImageFile(null)}
             />
