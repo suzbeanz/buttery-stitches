@@ -341,7 +341,7 @@ export default function ReviewBar() {
 
       {/* REFINE row — live per-region stitch controls. Each change writes only
           this region's object, so the rest of the design never re-styles. */}
-      {refineOpen && (styleable || showDensity) && (
+      {refineOpen && (styleable || showDensity || hasOutline) && (
         <div
           role="group"
           aria-label="Refine region stitches"
@@ -389,7 +389,10 @@ export default function ReviewBar() {
             />
           )}
 
-          {current.type === "fill" && (
+          {/* Offered for fills — but ALWAYS while an inserted outline exists,
+              whatever the region's current type: retyping away from fill must
+              never orphan an outline with no way to remove it. */}
+          {(current.type === "fill" || hasOutline) && (
             <label className="tap-target flex items-center gap-1.5 text-xs text-navy">
               <input
                 type="checkbox"

@@ -178,6 +178,23 @@ describe("ReviewBar", () => {
     expect(screen.getByRole("button", { name: "Increase density" })).toBeTruthy();
   });
 
+  it("the Outline toggle survives a retype while its outline exists — never orphaned", () => {
+    const ids = seed(1);
+    startReview(ids, 0);
+    render(<ReviewBar />);
+    openRefine();
+    // Insert an outline for the fill region, then retype the region away from
+    // fill. The checkbox must stay offered so the inserted outline remains
+    // removable — hiding it would orphan the outline objects.
+    fireEvent.click(screen.getByRole("checkbox", { name: "Satin outline" }));
+    const before = useProjectStore.getState().project.objects.length;
+    fireEvent.click(screen.getByRole("button", { name: "Running" }));
+    const box = screen.getByRole("checkbox", { name: "Satin outline" });
+    expect(box).toBeTruthy();
+    fireEvent.click(box); // and removing it still works post-retype
+    expect(useProjectStore.getState().project.objects.length).toBe(before - 1);
+  });
+
   it("an explicit retype clears any style override — no stale styling of converted geometry", () => {
     const ids = seed(1);
     startReview(ids, 0);
