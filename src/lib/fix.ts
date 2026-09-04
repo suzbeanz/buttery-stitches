@@ -522,7 +522,28 @@ export function knockdownPass(
     h.paths.reduce((s, r) => s + Math.abs(polygonArea(r)), 0) > STACK_MAX_FEATURE_MM2;
   return objects.map((o, i) => {
     if (o.type !== "fill" || o.params.applique || o.paths.length === 0) return o;
-    const higher = objects.slice(i + 1).filter(causesKnockdown).map((h) => h.paths);
+    // Only later fills whose BOUNDS actually reach this one (padded by the
+    // trap width) can carve or trap it. knockdown() rasterizes a grid sized
+    // to the union of every shape it's handed, so distant unrelated motifs
+    // would inflate the grid for nothing — and could trip its MAX_CELLS
+    // early-out on a large multi-motif layout, silently skipping a carve.
+    const ob = pathsBounds(o.paths);
+    if (!ob) return o;
+    const nearThis = (paths: Path[]): boolean => {
+      const hb = pathsBounds(paths);
+      return (
+        !!hb &&
+        hb.minX <= ob.maxX + trapMm &&
+        hb.maxX >= ob.minX - trapMm &&
+        hb.minY <= ob.maxY + trapMm &&
+        hb.maxY >= ob.minY - trapMm
+      );
+    };
+    const higher = objects
+      .slice(i + 1)
+      .filter(causesKnockdown)
+      .map((h) => h.paths)
+      .filter(nearThis);
     if (higher.length === 0) return o;
     // Grow under abutting neighbours first, then trim overlaps to the trap width.
     const trapped = growSeams ? seamTrap(o.paths, higher, trapMm) : o.paths;

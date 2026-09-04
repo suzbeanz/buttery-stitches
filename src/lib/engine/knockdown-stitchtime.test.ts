@@ -3,6 +3,7 @@ import type { Project } from "../../types/project";
 import { createEmptyProject } from "../project";
 import { makeObjectFromPaths } from "../objects";
 import { generateDesign } from "./index";
+import { knockdownPass } from "../fix";
 import { buildDensityMap, hotCells } from "./densitymap";
 
 /**
@@ -91,6 +92,24 @@ describe("knockdown at stitch time (the jammed-flag class)", () => {
     const lastRed = ids.lastIndexOf(p.objects[0].id);
     const firstWhite = ids.indexOf(p.objects[1].id);
     expect(firstWhite).toBeGreaterThan(lastRed);
+  });
+
+  it("a distant later fill never enters the carve (bbox prefilter)", () => {
+    const p = createEmptyProject();
+    p.colors = [
+      { id: "red", rgb: [200, 16, 46] },
+      { id: "white", rgb: [255, 255, 255] },
+    ];
+    // Two motifs far apart: the later white square cannot reach the red one,
+    // so the red object must come through the pass by REFERENCE (untouched) —
+    // the prefilter drops the distant shape before any raster work.
+    p.objects = [
+      makeObjectFromPaths("fill", [rect(0, 0, 20, 20)], "red"),
+      makeObjectFromPaths("fill", [rect(120, 120, 20, 20)], "white"),
+    ];
+    const out = knockdownPass(p.objects);
+    expect(out[0]).toBe(p.objects[0]);
+    expect(out[1]).toBe(p.objects[1]);
   });
 
   it("an isolated fill is untouched by the pass (no-op guarantee)", () => {
