@@ -11,7 +11,7 @@ import { underlapObjects } from "../trace/underlap";
 import { knockdownPass } from "../fix";
 import { distance, railsFromCenterline, pathsBounds, offsetPolyline } from "../geometry";
 import { runningStitch } from "./running";
-import { autoPullCompMm, satinColumn } from "./satin";
+import { autoPullCompMm, fillFromWideSatin, satinColumn } from "./satin";
 import { tatamiFill, tatamiConcaveRuns, multiBlendFill, motifFill, motifRunAlong, carvePoints, splitFillRegions, autoFillAngleForRegions, autoFillAngle } from "./fill";
 import { contourFill } from "./contour";
 import { medialColumns, columnsFromCenterlines, satinCoverage, residualRegions, type SatinColumn } from "./medial";
@@ -2024,7 +2024,13 @@ export function generateDesign(
     knockdownPass(
       project.objects
         .filter((o) => o.visible)
-        .map((o) => ({ ...o, paths: o.paths.map((ring) => ring.map((p) => ({ ...p }))) })),
+        .map((o) => ({ ...o, paths: o.paths.map((ring) => ring.map((p) => ({ ...p }))) }))
+        // An over-wide satin column (an SVG-stroked flag bar, a hand-drawn
+        // band) sews as the FILL of its band region: as "satin" it kept the
+        // knockdown exemption meant for narrow details, so a full-density
+        // field sewed on beneath it and a second bar over that — three
+        // stacked coverage layers on a real sew-out, the jam's second form.
+        .map(fillFromWideSatin),
       undefined,
       false, // underlapObjects below grows the seams; here we only carve
     ),

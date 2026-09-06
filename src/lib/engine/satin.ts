@@ -1,4 +1,4 @@
-import type { Path, Point } from "../../types/project";
+import type { EmbObject, Path, Point } from "../../types/project";
 import { distance, polylineLength } from "../geometry";
 import { resampleByCount, splitThrow } from "./resample";
 
@@ -182,6 +182,52 @@ export const SATIN_MAX_WIDTH = 7;
  *  so a thin spot fills solid instead of breaking. Columns thin along their whole
  *  length are routed to a running/bean line upstream by the type classifier. */
 export const MIN_SEWABLE_SATIN_WIDTH = 1.0;
+
+/** Mean rail gap (mm) of a satin column — its sewn width, sampled at matched
+ *  arc fractions (the same estimate satinColumn's auto-density uses). */
+export function satinMeanWidthMm(left: Path, right: Path): number {
+  if (left.length < 2 || right.length < 2) return 0;
+  const wn = 8;
+  const lw = resampleByCount(left, wn);
+  const rw = resampleByCount(right, wn);
+  let wsum = 0;
+  for (let i = 0; i < wn; i++) wsum += distance(lw[i], rw[i]);
+  return wsum / wn;
+}
+
+/** The closed region a satin column covers: the band between its rails — one
+ *  ring for an open column, an even-odd annulus (outer + inner ring) when both
+ *  rails close on themselves (a stroked circle/frame). */
+export function satinBandRings(left: Path, right: Path): Path[] {
+  const copy = (p: Path): Path => p.map((q) => ({ ...q }));
+  if (isClosedRail(left) && isClosedRail(right)) return [copy(left), copy(right)];
+  return [[...copy(left), ...copy(right).reverse()]];
+}
+
+/**
+ * An over-wide satin "column" IS a fill: past {@link SATIN_MAX_WIDTH} no single
+ * throw sews it (split satin scatters mid-column penetrations), the band reads
+ * as an area — and, critically, the knockdown exemption satin enjoys (a narrow
+ * detail NEEDS the fill beneath it) stops being true. A real sew-out proved it:
+ * an SVG flag's 16.7mm stroked cross imported as satin kept the full-density
+ * field sewing underneath, with a navy bar over BOTH — three stacked coverage
+ * layers, and the machine jammed. Converting the object to a fill of its band
+ * region lets the stitch-time knockdown/underlap machinery treat it as the
+ * broad area it is. Narrow columns (and satin lettering) return unchanged, by
+ * the SAME reference, so callers can rely on the no-op.
+ */
+export function fillFromWideSatin(o: EmbObject): EmbObject {
+  if (o.type !== "satin" || o.text || o.paths.length < 2) return o;
+  const [left, right] = o.paths;
+  if (left.length < 2 || right.length < 2) return o;
+  if (satinMeanWidthMm(left, right) <= SATIN_MAX_WIDTH) return o;
+  // The band's fill style is the engine's auto call: a carried "satin" style
+  // would re-enter the medial satin renderer AND the knockdown exemption this
+  // conversion exists to leave behind.
+  const params = { ...o.params };
+  delete params.fillStyle;
+  return { ...o, type: "fill", paths: satinBandRings(left, right), params };
+}
 
 /** Row-gap floor (mm) for auto-spacing — matches the engine's machine-safety
  *  density floor, so tightening wide columns never bunches thread. */
@@ -546,12 +592,8 @@ export function satinColumn(
   const R = push > 0 && !closed ? trimEnds(right, push) : right;
 
   // Estimate the column width to auto-tighten spacing on wide columns.
-  const wn = 8;
-  const lw = resampleByCount(L, wn);
-  const rw = resampleByCount(R, wn);
-  let wsum = 0;
-  for (let i = 0; i < wn; i++) wsum += distance(lw[i], rw[i]);
-  const step = Math.max(0.05, autoSatinDensity(density, wsum / wn));
+  const meanW = satinMeanWidthMm(L, R);
+  const step = Math.max(0.05, autoSatinDensity(density, meanW));
 
   // Sample a leg's two rails matched by WITHIN-LEG arc fraction and choose
   // throw positions so neither rail's gap between throws exceeds the spacing.
@@ -631,7 +673,7 @@ export function satinColumn(
   const cumL = cumArc(L);
   const cumR = cumArc(R);
   const closedBoth = isClosedRail(L) && isClosedRail(R);
-  const splits = cornerSplits(L, R, cumL, cumR, closedBoth, wsum / wn);
+  const splits = cornerSplits(L, R, cumL, cumR, closedBoth, meanW);
   if (splits) {
     const totalL = cumL[cumL.length - 1];
     const totalR = cumR[cumR.length - 1];

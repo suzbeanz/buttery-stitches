@@ -14,6 +14,7 @@ import type { EmbObject, Path, ThreadColor } from "../../types/project";
 import { newId } from "../id";
 import { makeObjectFromPaths } from "../objects";
 import { railsFromCenterline, pointInRing, pathsBounds } from "../geometry";
+import { SATIN_MAX_WIDTH, satinBandRings } from "../engine/satin";
 import { booleanOp } from "../boolean";
 import { douglasPeucker } from "./simplify";
 import { polygonArea } from "./classify";
@@ -367,9 +368,18 @@ export function svgShapesToObjects(shapes: SvgShape[], opts: SvgImportOptions): 
     const cid = colorIdFor(finalFill(s.fill));
     const cname = colors.find((c) => c.id === cid)?.name;
     if (s.satin) {
-      // Each stroked sub-path is its own satin column (left/right rails).
+      // Each stroked sub-path is its own satin column (left/right rails) —
+      // except an over-wide stroke, which no satin throw can sew: that band is
+      // a FILL region, and importing it as "satin" also kept it out of the
+      // knockdown pass (a 16.7mm stroked flag bar left the field sewing at
+      // full density beneath it — stacked layers that jammed a real machine).
+      const wide = s.satin.widthMm > SATIN_MAX_WIDTH;
       for (const [left, right] of s.satin.rails) {
-        objects.push(makeObjectFromPaths("satin", [left, right], cid, cname));
+        objects.push(
+          wide
+            ? makeObjectFromPaths("fill", satinBandRings(left, right), cid, cname)
+            : makeObjectFromPaths("satin", [left, right], cid, cname),
+        );
       }
       continue;
     }
