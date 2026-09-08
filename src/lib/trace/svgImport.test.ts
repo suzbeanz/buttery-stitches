@@ -266,6 +266,26 @@ describe("svgShapesToObjects", () => {
     expect(sep).toBeCloseTo(6 * 0.92, 1);
   });
 
+  it("imports an over-wide stroke as a band FILL, not a satin column", () => {
+    // 18 units × 0.92 ≈ 16.6mm — the sewn flag's white cross bar. As "satin"
+    // this band skipped knockdown and the field beneath sewed at full density
+    // (three stacked coverage layers on a real machine). Past the satin width
+    // ceiling the stroke's band is the fill region it really is.
+    const shapes: SvgShape[] = [
+      {
+        rings: [],
+        fill: [255, 255, 255],
+        stroke: { centerlines: [[{ x: 10, y: 50 }, { x: 90, y: 50 }]], widthUnits: 18, closed: [false] },
+      },
+    ];
+    const res = svgShapesToObjects(shapes, { contentW: 100, contentH: 100, hoopWmm: 100, hoopHmm: 100 });
+    expect(res.objects.length).toBe(1);
+    expect(res.objects[0].type).toBe("fill");
+    expect(res.objects[0].paths.length).toBe(1); // one closed band ring
+    const b = pathsBounds(res.objects[0].paths)!;
+    expect(b.maxY - b.minY).toBeCloseTo(18 * 0.92, 1); // band spans the stroke width
+  });
+
   it("names colours by hue and keeps distinct fills apart", () => {
     const shapes: SvgShape[] = [
       { rings: [square(0, 0, 50)], fill: [20, 120, 40] },

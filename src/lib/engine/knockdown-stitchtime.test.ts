@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { Project } from "../../types/project";
+import type { EmbObject, Path, Project } from "../../types/project";
 import { createEmptyProject } from "../project";
 import { makeObjectFromPaths } from "../objects";
 import { generateDesign } from "./index";
@@ -122,5 +122,122 @@ describe("knockdown at stitch time (the jammed-flag class)", () => {
       (s) => !s.jump && !s.trim && (s.x < -1 || s.x > 31 || s.y < -1 || s.y > 21),
     );
     expect(out).toEqual([]);
+  });
+});
+
+/**
+ * The jam's SECOND form, from the very next real sew-out attempt: the same flag
+ * imported from SVG, whose stroked cross arrived as WIDE SATIN COLUMNS (16.7mm
+ * white, 8.4mm navy rails). Satin is exempt from knockdown — a narrow border or
+ * letter NEEDS the fill beneath it — so the red field sewed at full density
+ * under the white band, and the white band at full width under the navy band:
+ * measured 1,694 red penetrations under the white bars and 1,035 white under
+ * the navy, three stacked coverage layers at the cross centre. The engine now
+ * sews an over-wide satin column as the FILL of its band region, which brings
+ * it back inside the knockdown/underlap machinery.
+ */
+function satinFlagProject(): Project {
+  const p = createEmptyProject();
+  p.colors = [
+    { id: "red", rgb: [186, 12, 47] },
+    { id: "white", rgb: [255, 255, 255] },
+    { id: "navy", rgb: [0, 32, 91] },
+  ];
+  const hRails = (y0: number, y1: number): Path[] => [
+    [{ x: 4, y: y0 }, { x: 96, y: y0 }],
+    [{ x: 4, y: y1 }, { x: 96, y: y1 }],
+  ];
+  const vRails = (x0: number, x1: number): Path[] => [
+    [{ x: x0, y: 16.5 }, { x: x0, y: 83.5 }],
+    [{ x: x1, y: 16.5 }, { x: x1, y: 83.5 }],
+  ];
+  const satin = (paths: Path[], colorId: string): EmbObject => ({
+    ...makeObjectFromPaths("satin", paths, colorId),
+    params: { density: 0.4, pullComp: 0.2, underlay: true },
+  });
+  p.objects = [
+    { ...makeObjectFromPaths("fill", [rect(4, 16.5, 92, 67)], "red"), params: { density: 0.32, underlay: true } },
+    satin(hRails(41.6, 58.4), "white"), // 16.8mm-wide horizontal band
+    satin(vRails(29.1, 45.8), "white"), // 16.7mm-wide vertical band
+    satin(hRails(45.8, 54.2), "navy"), // 8.4mm navy over the white
+    satin(vRails(33.3, 41.6), "navy"),
+  ];
+  return p;
+}
+
+/** Inside any of the given axis-aligned bands, more than `inset` from its edges. */
+function insideBands(
+  p: { x: number; y: number },
+  bands: { x0: number; x1: number; y0: number; y1: number }[],
+  inset: number,
+): boolean {
+  return bands.some(
+    (b) => p.x > b.x0 + inset && p.x < b.x1 - inset && p.y > b.y0 + inset && p.y < b.y1 - inset,
+  );
+}
+
+describe("wide satin bands knock down what they cover (the jammed-flag class, satin form)", () => {
+  const whiteBands = [
+    { x0: 4, x1: 96, y0: 41.6, y1: 58.4 },
+    { x0: 29.1, x1: 45.8, y0: 16.5, y1: 83.5 },
+  ];
+  const navyBands = [
+    { x0: 4, x1: 96, y0: 45.8, y1: 54.2 },
+    { x0: 33.3, x1: 41.6, y0: 16.5, y1: 83.5 },
+  ];
+  const pens = (design: ReturnType<typeof generateDesign>, ids: string[]) =>
+    design.filter((s) => !s.jump && !s.trim && !s.travel && ids.includes(s.objectId ?? ""));
+
+  it("the field never sews at full density under a wide satin band", () => {
+    const p = satinFlagProject();
+    const design = generateDesign(p);
+    const red = pens(design, [p.objects[0].id]);
+    // Same allowance as the fill-flag test: trap seam + underlap growth +
+    // pull-comp legitimately place red within ~2mm of a band edge.
+    const buried = red.filter((s) => insideBands(s, whiteBands, TRAP_MM + 1.65));
+    expect(red.length).toBeGreaterThan(1000); // the field genuinely sewed
+    // Unfixed this was ~25% of the red block (1,694 of 6,729 on the sewn file).
+    expect(buried.length).toBeLessThan(red.length * 0.02);
+  });
+
+  it("a wide satin band never sews at full width under a wide satin band above it", () => {
+    const p = satinFlagProject();
+    const design = generateDesign(p);
+    const white = pens(design, [p.objects[1].id, p.objects[2].id]);
+    const buried = white.filter((s) => insideBands(s, navyBands, TRAP_MM + 1.65));
+    expect(white.length).toBeGreaterThan(500);
+    // Unfixed this was ~27% of the white (1,035 of 3,886 on the sewn file).
+    expect(buried.length).toBeLessThan(white.length * 0.02);
+  });
+
+  it("a NARROW satin detail keeps its base fill (the exemption it exists for)", () => {
+    const p = createEmptyProject();
+    p.colors = [
+      { id: "red", rgb: [200, 16, 46] },
+      { id: "white", rgb: [255, 255, 255] },
+    ];
+    // A 3mm satin stripe across a red field: the classic border-on-fill case.
+    // Carving the field out from under it would leave bare fabric flanking the
+    // column wherever registration shifts — the fill must stay solid beneath.
+    p.objects = [
+      makeObjectFromPaths("fill", [rect(0, 0, 60, 40)], "red"),
+      {
+        ...makeObjectFromPaths(
+          "satin",
+          [
+            [{ x: 0, y: 18.5 }, { x: 60, y: 18.5 }],
+            [{ x: 0, y: 21.5 }, { x: 60, y: 21.5 }],
+          ],
+          "white",
+        ),
+        params: { density: 0.4, pullComp: 0.2 },
+      },
+    ];
+    const design = generateDesign(p);
+    const red = pens(design, [p.objects[0].id]);
+    const underStripe = red.filter((s) => s.x > 5 && s.x < 55 && s.y > 18.7 && s.y < 21.3);
+    // The field sews straight through under the narrow column — a 50×2.6mm
+    // window of 0.32mm-row fill holds hundreds of penetrations.
+    expect(underStripe.length).toBeGreaterThan(100);
   });
 });
